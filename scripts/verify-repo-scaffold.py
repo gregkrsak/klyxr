@@ -7,6 +7,7 @@ root = Path(__file__).resolve().parents[1]
 readme = (root / "README.md").read_text(encoding="utf-8")
 
 expected_workflows = ["build.yml", "tests.yml", "verify.yml", "docs.yml"]
+repo_slug = "gregkrsak/klyxr"
 
 errors = []
 
@@ -17,8 +18,8 @@ for workflow in expected_workflows:
 
 # README must use live GitHub Actions badges for every workflow.
 for workflow in expected_workflows:
-    badge_url = f"https://github.com/klyxr/klyxr/actions/workflows/{workflow}/badge.svg"
-    action_url = f"https://github.com/klyxr/klyxr/actions/workflows/{workflow}"
+    badge_url = f"https://github.com/{repo_slug}/actions/workflows/{workflow}/badge.svg"
+    action_url = f"https://github.com/{repo_slug}/actions/workflows/{workflow}"
     if badge_url not in readme:
         errors.append(f"README missing live badge URL for {workflow}")
     if action_url not in readme:

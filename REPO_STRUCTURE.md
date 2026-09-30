@@ -1,6 +1,6 @@
 # Klyxr Repository Structure
 
-This scaffold is the intended initial structure for the main `klyxr/klyxr` repository.
+This scaffold is the intended initial structure for the Klyxr repository. Current GitHub home: `gregkrsak/klyxr`. The repository may later move to a dedicated Klyxr organization.
 
 ```text
 klyxr/

@@ -1,23 +1,57 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="260" viewBox="0 0 1040 260">
-<defs>
-  <linearGradient id="g1" x1="0" y1="0" x2="1" y2="0">
-    <stop offset="0%" stop-color="#00E5FF"/><stop offset="100%" stop-color="#3B82F6"/>
-  </linearGradient>
-  <linearGradient id="g2" x1="0" y1="0" x2="1" y2="0">
-    <stop offset="0%" stop-color="#3B82F6"/><stop offset="100%" stop-color="#8B5CF6"/>
-  </linearGradient>
-</defs>
-<rect width="1040" height="260" rx="26" fill="#0A0E14"/>
-<text x="520" y="44" text-anchor="middle" fill="#E5ECF7" font-family="Arial, sans-serif" font-size="19" font-weight="700">ONE LANGUAGE. THREE ASSURANCE LEVELS.</text>
-<line x1="250" y1="130" x2="790" y2="130" stroke="#24324A" stroke-width="8" stroke-linecap="round"/>
-<circle cx="220" cy="130" r="64" fill="#111827" stroke="#00E5FF" stroke-width="3"/>
-<circle cx="520" cy="130" r="64" fill="#111827" stroke="#3B82F6" stroke-width="3"/>
-<circle cx="820" cy="130" r="64" fill="#111827" stroke="#8B5CF6" stroke-width="3"/>
-<text x="220" y="124" text-anchor="middle" fill="#00E5FF" font-family="Arial, sans-serif" font-size="20" font-weight="800">SAFE</text>
-<text x="220" y="150" text-anchor="middle" fill="#93A4BF" font-family="Arial, sans-serif" font-size="12">ownership + memory safety</text>
-<text x="520" y="124" text-anchor="middle" fill="#3B82F6" font-family="Arial, sans-serif" font-size="20" font-weight="800">CHECKED</text>
-<text x="520" y="150" text-anchor="middle" fill="#93A4BF" font-family="Arial, sans-serif" font-size="12">contracts enforced</text>
-<text x="820" y="124" text-anchor="middle" fill="#A78BFA" font-family="Arial, sans-serif" font-size="20" font-weight="800">VERIFIED</text>
-<text x="820" y="150" text-anchor="middle" fill="#93A4BF" font-family="Arial, sans-serif" font-size="12">declared properties proven</text>
-<text x="520" y="222" text-anchor="middle" fill="#73809C" font-family="ui-monospace, monospace" font-size="13">increase assurance where consequences justify it</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="410" viewBox="0 0 1200 410" role="img" aria-labelledby="title desc">
+  <title id="title">Safe to checked to verified</title>
+  <desc id="desc">Three large panels show Klyxr's escalating assurance model from safe, to checked, to verified.</desc>
+
+  <defs>
+    <linearGradient id="flow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#65F3FF"/>
+      <stop offset="50%" stop-color="#6F8CFF"/>
+      <stop offset="100%" stop-color="#9C77FF"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="410" rx="28" fill="#0A0D14"/>
+
+  <text x="600" y="62" text-anchor="middle" fill="#EDF2FF"
+        font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="800">
+    ONE LANGUAGE. THREE ASSURANCE LEVELS.
+  </text>
+  <text x="600" y="98" text-anchor="middle" fill="#96A3BD"
+        font-family="Arial, Helvetica, sans-serif" font-size="20">
+    Increase assurance where the consequences justify it.
+  </text>
+
+  <line x1="270" y1="226" x2="930" y2="226" stroke="url(#flow)" stroke-width="10" stroke-linecap="round" opacity="0.65"/>
+
+  <!-- SAFE -->
+  <rect x="80" y="145" width="300" height="170" rx="26" fill="#111827" stroke="#65F3FF" stroke-width="3"/>
+  <text x="230" y="208" text-anchor="middle" fill="#65F3FF"
+        font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800">SAFE</text>
+  <text x="230" y="248" text-anchor="middle" fill="#EDF2FF"
+        font-family="Arial, Helvetica, sans-serif" font-size="21">ownership + memory safety</text>
+  <text x="230" y="282" text-anchor="middle" fill="#96A3BD"
+        font-family="Arial, Helvetica, sans-serif" font-size="18">language-enforced foundation</text>
+
+  <!-- CHECKED -->
+  <rect x="450" y="145" width="300" height="170" rx="26" fill="#111827" stroke="#6F8CFF" stroke-width="3"/>
+  <text x="600" y="208" text-anchor="middle" fill="#7FA0FF"
+        font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800">CHECKED</text>
+  <text x="600" y="248" text-anchor="middle" fill="#EDF2FF"
+        font-family="Arial, Helvetica, sans-serif" font-size="21">contracts enforced</text>
+  <text x="600" y="282" text-anchor="middle" fill="#96A3BD"
+        font-family="Arial, Helvetica, sans-serif" font-size="18">runtime assurance where useful</text>
+
+  <!-- VERIFIED -->
+  <rect x="820" y="145" width="300" height="170" rx="26" fill="#111827" stroke="#9C77FF" stroke-width="3"/>
+  <text x="970" y="208" text-anchor="middle" fill="#B99DFF"
+        font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800">VERIFIED</text>
+  <text x="970" y="248" text-anchor="middle" fill="#EDF2FF"
+        font-family="Arial, Helvetica, sans-serif" font-size="21">declared properties proven</text>
+  <text x="970" y="282" text-anchor="middle" fill="#96A3BD"
+        font-family="Arial, Helvetica, sans-serif" font-size="18">static proof under assumptions</text>
+
+  <text x="600" y="366" text-anchor="middle" fill="#73809C"
+        font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">
+    SAME LANGUAGE  •  ESCALATING ASSURANCE  •  NO SECOND DIALECT
+  </text>
 </svg>
