@@ -1,0 +1,16 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  design-verification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify canonical design examples are present
+        run: |
+          grep -q "requires amount <= battery.charge" examples/battery.klx
+          grep -q "ensures battery.charge ==" examples/battery.klx
+          grep -q "heap, blocking" examples/effects.klx
