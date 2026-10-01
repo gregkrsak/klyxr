@@ -239,11 +239,17 @@ The MVP should demonstrate the difference between memory safety and application-
 ## 17. Current executable prototype
 
 The first compiler slice is implemented in Rust, with its toolchain pinned to
-1.80.0. It follows source → lexer/parser → AST → semantic validation → specialized
-integer contract proof → diagnostics. HIR, MIR, VIR, general ownership/effect
-analysis, SMT integration, and code generation are not yet implemented. This
-temporary path is a bounded prototype of the architecture, not a replacement for
-KD-012's direction.
+1.80.0. It follows source → lexer → parser → AST → explicit name resolution →
+typed HIR → specialized integer contract proof → diagnostics. The resolver and
+HIR implement KD-012's semantic boundary for this subset. Strongly typed IDs
+identify range types, records, fields, functions, parameters, and top-level
+bindings within one compilation. HIR references carry canonical types and IDs;
+source names and spans remain diagnostic metadata. Nominal range compatibility
+uses range IDs, and verification performs no textual declaration lookup.
+
+MIR, VIR, general ownership/effect analysis, SMT integration, and code generation
+are not yet implemented. This bounded implementation does not settle broader HIR,
+module, coercion, or generalized arithmetic design.
 
 The AST retains supported postconditions and subtraction statements; no function
 body or contract is silently skipped. Ordered construction/call statements form a
@@ -262,5 +268,5 @@ Empty admissible domains are explicitly rejected by this prototype.
 
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
-invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006,
+invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
 KD-013, KD-014, KD-015, KD-017, DP-008, DP-009, and OQ-018 through OQ-020.

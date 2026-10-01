@@ -39,8 +39,7 @@ pub struct VerifiedFunction {
     pub state_type: String,
     pub amount_param: String,
     pub amount_type: String,
-    pub required_field: String,
-    pub requires_span: Span,
+    pub precondition: Precondition,
     pub postcondition: Postcondition,
     pub body: Vec<Subtract>,
 }
@@ -49,6 +48,13 @@ pub struct VerifiedFunction {
 pub struct FieldAccess {
     pub binding: String,
     pub field: String,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Precondition {
+    pub amount: String,
+    pub state: FieldAccess,
     pub span: Span,
 }
 
