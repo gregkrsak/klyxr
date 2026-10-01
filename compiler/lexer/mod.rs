@@ -17,6 +17,9 @@ pub enum TokenKind {
     Record,
     Verified,
     Fn,
+    Return,
+    Bool,
+    Arrow,
     Requires,
     Ensures,
     Let,
@@ -136,6 +139,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                     "record" => TokenKind::Record,
                     "verified" => TokenKind::Verified,
                     "fn" | "function" => TokenKind::Fn,
+                    "return" => TokenKind::Return,
+                    "bool" => TokenKind::Bool,
                     "requires" => TokenKind::Requires,
                     "ensures" => TokenKind::Ensures,
                     "let" => TokenKind::Let,
@@ -181,6 +186,11 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             }
             b'.' if i + 1 < bytes.len() && bytes[i + 1] == b'.' => {
                 push_two(&mut tokens, TokenKind::DotDot, line, column, i);
+                i += 2;
+                column += 2;
+            }
+            b'-' if i + 1 < bytes.len() && bytes[i + 1] == b'>' => {
+                push_two(&mut tokens, TokenKind::Arrow, line, column, i);
                 i += 2;
                 column += 2;
             }

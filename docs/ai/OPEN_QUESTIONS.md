@@ -107,4 +107,28 @@ Still open:
 - conversions between constrained types;
 - units/dimension-aware arithmetic.
 
-KED-003 does not settle these questions implicitly.
+KED-003 and KED-004 do not settle these questions implicitly.
+
+
+## OQ-022 — General function and local-value semantics
+
+KED-004 establishes only a straight-line value-function core.
+
+Still open:
+
+- whether unqualified `fn` is the final surface spelling of the base `safe` assurance level;
+- explicit `safe fn` syntax, if any;
+- unit/no-value function return semantics;
+- early returns and multiple control-flow return paths;
+- mutable locals and assignment;
+- expression-bodied function shorthand;
+- contextual integer-literal typing at bindings, arguments, and returns;
+- general record/reference parameters and returns;
+- function values, closures, and higher-order calls;
+- function overloading;
+- interaction of calls with ownership/moves/borrows;
+- runtime enforcement of constrained return values outside verified code.
+
+OQ-019 remains authoritative for mixed `safe` / `checked` / `verified` call
+boundaries. OQ-021 remains authoritative for unresolved constrained arithmetic
+and literal-conversion rules.

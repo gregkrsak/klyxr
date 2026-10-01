@@ -1,58 +1,62 @@
-//! Expression type legality. Input references are resolved IDs; no name lookup occurs here.
+//! Expression and value-flow type legality. All semantic references are resolved IDs.
 use crate::{
     diagnostics::Diagnostic,
     hir::{
-        BinaryOp, ExprKind, ExprType, ParameterType, Program, Subtract, TypedExpr, VerifiedFunction,
+        self, BinaryOp, ExprKind, ExprType, ParameterType, Program, Subtract, TypedExpr, ValueType,
+        VerifiedFunction,
     },
-    resolve::{ResolvedExpr, ResolvedExprKind, ResolvedProgram},
+    lexer::Span,
+    resolve::{
+        ResolvedExpr, ResolvedExprKind, ResolvedFunction, ResolvedParameterType, ResolvedProgram,
+        ResolvedValueStatement, ResolvedValueType,
+    },
 };
-
 type TypeResult<T> = Result<T, Box<Diagnostic>>;
 
-/// Type-check resolved expressions and publish canonical, read-only typed HIR.
+/// Type-check declarations, expressions and straight-line value flow; publish canonical HIR.
 pub fn check(resolved: ResolvedProgram) -> Result<Program, Vec<Diagnostic>> {
     let mut program = resolved.declarations;
+    for parameter in resolved.parameters {
+        let ty = match parameter.ty {
+            ResolvedParameterType::MutableRecord(id) => ParameterType::MutableRecord(id),
+            ResolvedParameterType::Range(id) => ParameterType::Range(id),
+            ResolvedParameterType::Value(ty) => ParameterType::Value(
+                value_type(&program, ty, parameter.span).map_err(|e| vec![*e])?,
+            ),
+        };
+        program.parameters.push(hir::Parameter {
+            id: parameter.id,
+            function: parameter.function,
+            name: parameter.name,
+            ty,
+            span: parameter.span,
+        });
+    }
+    // Validate all return declarations before bodies, including forward/recursive callees.
+    for function in &resolved.functions {
+        if let ResolvedFunction::Ordinary(f) = function {
+            value_type(&program, f.return_type, f.span).map_err(|e| vec![*e])?;
+        }
+    }
     let mut diagnostics = Vec::new();
-    for function in resolved.functions {
-        let result = (|| {
-            let requires = expression(&program, function.requires)?;
-            contract(&requires, "requires")?;
-            let ensures = expression(&program, function.ensures)?;
-            contract(&ensures, "ensures")?;
-            let mut body = Vec::new();
-            for statement in function.body {
-                let operand = expression(&program, statement.operand)?;
-                let target = ExprType::Range(statement.target.ty);
-                if operand.ty != target && operand.ty != ExprType::IntegerLiteral {
-                    return Err(incompatible(
-                        &program,
-                        statement.span,
-                        "subtract-assignment",
-                        target,
-                        operand.ty,
-                    ));
-                }
-                body.push(Subtract {
-                    target: statement.target,
-                    operand,
-                    span: statement.span,
-                });
+    for function in &resolved.functions {
+        let result = match function {
+            ResolvedFunction::Verified(f) => {
+                verified_function(&program, &resolved.functions, f).map(hir::Function::Verified)
             }
-            Ok(VerifiedFunction {
-                id: function.id,
-                name: function.name,
-                span: function.span,
-                state_param: function.state_param,
-                state_type: function.state_type,
-                amount_param: function.amount_param,
-                requires,
-                ensures,
-                body,
-            })
-        })();
+            ResolvedFunction::Ordinary(f) => {
+                value_function(&mut program, &resolved.functions, f).map(hir::Function::Ordinary)
+            }
+        };
         match result {
             Ok(function) => program.functions.push(function),
-            Err(error) => diagnostics.push(*error),
+            Err(error) => {
+                diagnostics.push(*error);
+                // Failed local typing leaves no publishable local table; do not inspect it.
+                if matches!(function, ResolvedFunction::Ordinary(_)) {
+                    return Err(diagnostics);
+                }
+            }
         }
     }
     if diagnostics.is_empty() {
@@ -60,6 +64,146 @@ pub fn check(resolved: ResolvedProgram) -> Result<Program, Vec<Diagnostic>> {
     } else {
         Err(diagnostics)
     }
+}
+fn verified_function(
+    program: &Program,
+    functions: &[ResolvedFunction],
+    f: &crate::resolve::ResolvedVerifiedFunction,
+) -> TypeResult<VerifiedFunction> {
+    let requires = expression(program, functions, &f.requires)?;
+    contract(&requires, "requires")?;
+    let ensures = expression(program, functions, &f.ensures)?;
+    contract(&ensures, "ensures")?;
+    let mut body = Vec::new();
+    for statement in &f.body {
+        let operand = expression(program, functions, &statement.operand)?;
+        let target = ExprType::Range(statement.target.ty);
+        if operand.ty != target && operand.ty != ExprType::IntegerLiteral {
+            return Err(incompatible(
+                program,
+                statement.span,
+                "subtract-assignment",
+                target,
+                operand.ty,
+            ));
+        }
+        body.push(Subtract {
+            target: statement.target.clone(),
+            operand,
+            span: statement.span,
+        });
+    }
+    Ok(VerifiedFunction {
+        id: f.id,
+        name: f.name.clone(),
+        span: f.span,
+        state_param: f.state_param,
+        state_type: f.state_type,
+        amount_param: f.amount_param,
+        requires,
+        ensures,
+        body,
+    })
+}
+fn value_function(
+    program: &mut Program,
+    functions: &[ResolvedFunction],
+    f: &crate::resolve::ResolvedValueFunction,
+) -> TypeResult<hir::ValueFunction> {
+    let return_type = value_type(program, f.return_type, f.span)?;
+    if !matches!(f.body.last(), Some(ResolvedValueStatement::Return { .. })) {
+        return Err(Diagnostic::semantic(
+            f.span,
+            "value-returning Klyxr functions require `return expression;`",
+            "add an explicit final return; implicit block-tail returns are not supported",
+        )
+        .into());
+    }
+    let mut body = Vec::new();
+    for (index, statement) in f.body.iter().enumerate() {
+        body.push(match statement {
+                        ResolvedValueStatement::Let { id, function, name, initializer, span } => {
+                            let initializer = expression(program, functions, initializer)?;
+                            let ty = match initializer.ty {
+                                ExprType::Bool => ValueType::Bool,
+                                ExprType::Range(id) => ValueType::Range(id),
+                                ExprType::IntegerLiteral => {
+                            return Err(Diagnostic::semantic(
+                                initializer.span,
+                                "integer literal cannot materialize as a local value",
+                                "general integer/literal materialization is unresolved; use a concrete bool or named range expression",
+                            ).into());
+                        }
+                            };
+                            program.locals.push(hir::Local { id: *id, function: *function, name: name.clone(), ty, span: *span });
+                            hir::ValueStatement::Let { local: *id, initializer, span: *span }
+                        }
+                        ResolvedValueStatement::Return { value, span } => {
+                            if index + 1 != f.body.len() {
+                                return Err(Diagnostic::semantic(
+                            *span,
+                            "return must be the final statement",
+                            "early or multiple returns are not supported",
+                        ).into());
+                            }
+                            let value = expression(program, functions, value)?;
+                            exact_value(program, &value, return_type, "return")?;
+                            hir::ValueStatement::Return { value, span: *span }
+                        }
+                    });
+    }
+    Ok(hir::ValueFunction {
+        id: f.id,
+        name: f.name.clone(),
+        parameters: f.parameters.clone(),
+        return_type,
+        body,
+        span: f.span,
+    })
+}
+fn value_type(program: &Program, ty: ResolvedValueType, span: Span) -> TypeResult<ValueType> {
+    match ty {
+        ResolvedValueType::Bool => Ok(ValueType::Bool),
+        ResolvedValueType::Range(id) => Ok(ValueType::Range(id)),
+        ResolvedValueType::Record(id) => Err(Diagnostic::semantic(
+            span,
+            format!(
+                "record type `{}` is not permitted in an ordinary value signature",
+                program.record(id).name
+            ),
+            "ordinary parameters and returns support only bool and named ranges",
+        )
+        .into()),
+    }
+}
+fn exact_value(
+    program: &Program,
+    expression: &TypedExpr,
+    expected: ValueType,
+    boundary: &str,
+) -> TypeResult<()> {
+    let expected = ExprType::from(expected);
+    if expression.ty == expected {
+        return Ok(());
+    }
+    let nominal =
+        matches!((expected, expression.ty), (ExprType::Range(a), ExprType::Range(b)) if a != b);
+    let message = if nominal {
+        format!("{boundary} type mismatch between distinct named ranges")
+    } else {
+        format!("{boundary} type mismatch")
+    };
+    Err(Diagnostic::semantic(
+        expression.span,
+        message,
+        format!(
+            "expected {}, found {}; value boundaries require exact concrete types; \
+             integer literals do not implicitly convert to named ranges",
+            display_type(program, expected),
+            display_type(program, expression.ty),
+        ),
+    )
+    .into())
 }
 fn contract(expression: &TypedExpr, name: &str) -> TypeResult<()> {
     if expression.ty != ExprType::Bool {
@@ -148,38 +292,94 @@ fn binary_type(
         )),
     }
 }
-fn expression(program: &Program, input: ResolvedExpr) -> TypeResult<TypedExpr> {
+fn expression(
+    program: &Program,
+    functions: &[ResolvedFunction],
+    input: &ResolvedExpr,
+) -> TypeResult<TypedExpr> {
     let span = input.span;
-    let (kind, ty) = match input.kind {
-        ResolvedExprKind::BoolLiteral(value) => (ExprKind::BoolLiteral(value), ExprType::Bool),
+    let (kind, ty) = match &input.kind {
+        ResolvedExprKind::BoolLiteral(value) => (ExprKind::BoolLiteral(*value), ExprType::Bool),
         ResolvedExprKind::IntegerLiteral(value) => {
-            (ExprKind::IntegerLiteral(value), ExprType::IntegerLiteral)
+            (ExprKind::IntegerLiteral(*value), ExprType::IntegerLiteral)
         }
         ResolvedExprKind::Parameter(id) => {
-            let parameter = program.parameter(id);
-            let ParameterType::Range(ty) = parameter.ty else {
+            let parameter = program.parameter(*id);
+            let ty = match parameter.ty {
+                ParameterType::Range(id) => ExprType::Range(id),
+                ParameterType::Value(ty) => ty.into(),
+                ParameterType::MutableRecord(_) => {
+                    return Err(Diagnostic::semantic(
+                        span,
+                        format!(
+                            "record parameter `{}` is not a numeric expression",
+                            parameter.name
+                        ),
+                        "use its declared constrained field",
+                    )
+                    .into())
+                }
+            };
+            (ExprKind::Parameter(*id), ty)
+        }
+        ResolvedExprKind::Local(id) => (ExprKind::Local(*id), program.local(*id).ty.into()),
+        ResolvedExprKind::Call {
+            function,
+            arguments,
+        } => {
+            let ResolvedFunction::Ordinary(callee) = &functions[function.0] else {
                 return Err(Diagnostic::semantic(
                     span,
-                    format!(
-                        "record parameter `{}` is not a numeric expression",
-                        parameter.name
-                    ),
-                    "use its declared constrained field",
+                    "ordinary call requires an ordinary value function",
+                    "mixed-assurance calls are not supported",
                 )
                 .into());
             };
-            (ExprKind::Parameter(id), ExprType::Range(ty))
+            if arguments.len() != callee.parameters.len() {
+                return Err(Diagnostic::semantic(
+                    span,
+                    format!("wrong argument count for `{}`", callee.name),
+                    format!(
+                        "expected {} arguments, found {}",
+                        callee.parameters.len(),
+                        arguments.len()
+                    ),
+                )
+                .into());
+            }
+            let mut typed = Vec::new();
+            for (argument, parameter) in arguments.iter().zip(&callee.parameters) {
+                let argument = expression(program, functions, argument)?;
+                let ParameterType::Value(expected) = program.parameter(*parameter).ty else {
+                    return Err(Diagnostic::semantic(
+                        span,
+                        "invalid ordinary parameter type",
+                        "ordinary signatures require bool or named ranges",
+                    )
+                    .into());
+                };
+                exact_value(program, &argument, expected, "call argument")?;
+                typed.push(argument);
+            }
+            let ty = value_type(program, callee.return_type, callee.span)?.into();
+            (
+                ExprKind::Call {
+                    function: *function,
+                    arguments: typed,
+                },
+                ty,
+            )
         }
         ResolvedExprKind::FieldAccess(access) => {
             let ty = ExprType::Range(access.ty);
-            (ExprKind::FieldAccess(access), ty)
+            (ExprKind::FieldAccess(access.clone()), ty)
         }
         ResolvedExprKind::OldField(access) => {
             let ty = ExprType::Range(access.ty);
-            (ExprKind::OldField(access), ty)
+            (ExprKind::OldField(access.clone()), ty)
         }
         ResolvedExprKind::Unary { op, operand } => {
-            let operand = expression(program, *operand)?;
+            let operand = expression(program, functions, operand)?;
             if operand.ty != ExprType::Bool {
                 return Err(Diagnostic::semantic(
                     span,
@@ -190,19 +390,19 @@ fn expression(program: &Program, input: ResolvedExpr) -> TypeResult<TypedExpr> {
             }
             (
                 ExprKind::Unary {
-                    op,
+                    op: *op,
                     operand: Box::new(operand),
                 },
                 ExprType::Bool,
             )
         }
         ResolvedExprKind::Binary { op, left, right } => {
-            let left = expression(program, *left)?;
-            let right = expression(program, *right)?;
-            let ty = binary_type(program, span, op, left.ty, right.ty)?;
+            let left = expression(program, functions, left)?;
+            let right = expression(program, functions, right)?;
+            let ty = binary_type(program, span, *op, left.ty, right.ty)?;
             (
                 ExprKind::Binary {
-                    op,
+                    op: *op,
                     left: Box::new(left),
                     right: Box::new(right),
                 },
@@ -226,7 +426,7 @@ mod tests {
         for declaration in &mut resolved.declarations.ranges {
             declaration.name = "display".into();
         }
-        for parameter in &mut resolved.declarations.parameters {
+        for parameter in &mut resolved.parameters {
             parameter.name = "display".into();
         }
         for field in &mut resolved.declarations.fields {
@@ -234,7 +434,9 @@ mod tests {
         }
         let program = check(resolved).unwrap();
         assert_eq!(
-            program.functions()[0].body[0].operand.ty,
+            program.functions()[0].as_verified().unwrap().body[0]
+                .operand
+                .ty,
             ExprType::Range(range)
         );
         assert!(verify_report(&program).diagnostics.is_empty());
@@ -265,5 +467,60 @@ mod tests {
             assert!(errors[0].message.contains("incompatible named range types"));
             assert!(errors[0].message.contains("`display` and `display`"));
         }
+    }
+    #[test]
+    fn value_flow_typing_uses_function_parameter_and_local_ids_after_metadata_renaming() {
+        let source = "type Percent = range 0..100; type Other = range 0..100; fn identity(value: Percent) -> Percent { let result = value; return result; } fn wrapped(value: Percent) -> Percent { let first = identity(value); let second = first - 0; return second; }";
+        fn rename(resolved: &mut ResolvedProgram) {
+            for range in &mut resolved.declarations.ranges {
+                range.name = "display".into();
+            }
+            for parameter in &mut resolved.parameters {
+                parameter.name = "display".into();
+            }
+            for f in &mut resolved.functions {
+                if let ResolvedFunction::Ordinary(f) = f {
+                    f.name = "display".into();
+                    for statement in &mut f.body {
+                        if let ResolvedValueStatement::Let { name, .. } = statement {
+                            *name = "display".into();
+                        }
+                    }
+                }
+            }
+        }
+        let mut resolved = resolve::resolve(&parse_source(source).unwrap()).unwrap();
+        rename(&mut resolved);
+        let program = check(resolved).unwrap();
+        let identity = program.functions()[0].as_ordinary().unwrap();
+        let wrapped = program.functions()[1].as_ordinary().unwrap();
+        let hir::ValueStatement::Let { initializer, .. } = &wrapped.body[0] else {
+            panic!("let")
+        };
+        let ExprKind::Call {
+            function,
+            arguments,
+        } = &initializer.kind
+        else {
+            panic!("call")
+        };
+        assert_eq!(*function, identity.id);
+        assert_eq!(
+            arguments[0].kind,
+            ExprKind::Parameter(wrapped.parameters[0])
+        );
+        assert_eq!(initializer.ty, ExprType::Range(program.ranges()[0].id));
+        let hir::ValueStatement::Return { value, .. } = wrapped.body.last().unwrap() else {
+            panic!("return")
+        };
+        assert_eq!(value.kind, ExprKind::Local(program.locals()[2].id));
+        assert_eq!(program.local(program.locals()[2].id).function, wrapped.id);
+        assert_eq!(program.functions()[0].name(), program.functions()[1].name());
+        let bad = source.replace("fn wrapped(value: Percent)", "fn wrapped(value: Other)");
+        let mut resolved = resolve::resolve(&parse_source(&bad).unwrap()).unwrap();
+        rename(&mut resolved);
+        let errors = check(resolved).unwrap_err();
+        assert!(errors[0].message.contains("distinct named ranges"));
+        assert!(errors[0].required.contains("display"));
     }
 }

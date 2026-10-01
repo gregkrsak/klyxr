@@ -26,7 +26,11 @@ fn declarations_and_all_function_references_have_canonical_identities() {
     let program = compile_source(SOURCE).unwrap();
     let percent = program.ranges()[1].id;
     assert_ne!(program.ranges()[0].id, percent);
-    for (record, function) in program.records().iter().zip(program.functions()) {
+    for (record, function) in program
+        .records()
+        .iter()
+        .zip(program.functions().iter().map(|f| f.as_verified().unwrap()))
+    {
         let field = program.field(record.field);
         assert_eq!(field.record, record.id);
         assert_eq!(field.ty, percent);
@@ -92,12 +96,20 @@ fn declarations_and_all_function_references_have_canonical_identities() {
     }
     assert_ne!(program.records()[0].field, program.records()[1].field);
     assert_ne!(
-        program.functions()[0].state_param,
-        program.functions()[1].state_param
+        program.functions()[0].as_verified().unwrap().state_param,
+        program.functions()[1].as_verified().unwrap().state_param
     );
     assert_ne!(
-        program.functions()[0].amount_param.parameter,
-        program.functions()[1].amount_param.parameter
+        program.functions()[0]
+            .as_verified()
+            .unwrap()
+            .amount_param
+            .parameter,
+        program.functions()[1]
+            .as_verified()
+            .unwrap()
+            .amount_param
+            .parameter
     );
 }
 
@@ -115,7 +127,10 @@ fn ordered_construction_and_calls_resolve_to_the_correct_entities() {
         let Statement::Call(call) = &program.statements()[index * 2 + 1] else {
             panic!("expected call")
         };
-        assert_eq!(call.function, program.functions()[index].id);
+        assert_eq!(
+            call.function,
+            program.functions()[index].as_verified().unwrap().id
+        );
         assert_eq!(call.binding, binding.id);
     }
     let result = verify_report(&program);
@@ -149,7 +164,7 @@ fn parsing_preserves_unresolved_precondition_names_and_spans() {
         "requires missing <= other.charge",
     );
     let ast = parse_source(&source).unwrap();
-    let requires = &ast.functions[0].requires;
+    let requires = &ast.functions[0].as_verified().unwrap().requires;
     let klyxr_compiler::ast::ExprKind::Binary { left, right, .. } = &requires.kind else {
         panic!("expected comparison")
     };
@@ -202,7 +217,10 @@ fn existing_separate_function_type_and_binding_scopes_are_preserved() {
         .replace("first", "Percent");
     let program = compile_source(&source).unwrap();
     assert_eq!(program.ranges()[1].name, "Percent");
-    assert_eq!(program.functions()[0].name, "Percent");
+    assert_eq!(
+        program.functions()[0].as_verified().unwrap().name,
+        "Percent"
+    );
     assert_eq!(program.bindings()[0].name, "Percent");
     assert!(verify_report(&program).diagnostics.is_empty());
 }
@@ -213,7 +231,7 @@ fn public_collection_views_and_id_lookups_expose_the_same_entities() {
     let ranges: &[RangeType] = program.ranges();
     let records: &[Record] = program.records();
     let fields: &[Field] = program.fields();
-    let functions: &[VerifiedFunction] = program.functions();
+    let functions: &[Function] = program.functions();
     let parameters: &[Parameter] = program.parameters();
     let bindings: &[RecordBinding] = program.bindings();
     let statements: &[Statement] = program.statements();
@@ -234,7 +252,7 @@ fn public_collection_views_and_id_lookups_expose_the_same_entities() {
         assert_eq!(program.field(field.id), field);
     }
     for function in functions {
-        assert_eq!(program.function(function.id), function);
+        assert_eq!(program.function(function.id()), function);
     }
     for parameter in parameters {
         assert_eq!(program.parameter(parameter.id), parameter);

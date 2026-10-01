@@ -40,7 +40,7 @@ fn expression_precedence_and_source_structure_are_explicit() {
         "",
     );
     let ast = parse_source(&text).unwrap();
-    let expression = &ast.functions[0].requires;
+    let expression = &ast.functions[0].as_verified().unwrap().requires;
     let (not, and) = ast_binary(expression, Or);
     assert!(matches!(
         not.kind,
@@ -65,7 +65,11 @@ fn expression_precedence_and_source_structure_are_explicit() {
         "!false || true && amount - 1 - 2 <= battery.charge == true"
     );
     assert_eq!(
-        compile_source(&text).unwrap().functions()[0].requires.ty,
+        compile_source(&text).unwrap().functions()[0]
+            .as_verified()
+            .unwrap()
+            .requires
+            .ty,
         hir::ExprType::Bool
     );
 }
@@ -77,11 +81,14 @@ fn parentheses_and_boolean_associativity_preserve_grouping() {
         ("true && false && true", ast::BinaryOp::And),
     ] {
         let ast = parse_source(&source(text, ENSURES, "")).unwrap();
-        let (left, _) = ast_binary(&ast.functions[0].requires, op);
+        let (left, _) = ast_binary(&ast.functions[0].as_verified().unwrap().requires, op);
         ast_binary(left, op);
     }
     let ast = parse_source(&source("(true || false) && true", ENSURES, "")).unwrap();
-    let (left, _) = ast_binary(&ast.functions[0].requires, ast::BinaryOp::And);
+    let (left, _) = ast_binary(
+        &ast.functions[0].as_verified().unwrap().requires,
+        ast::BinaryOp::And,
+    );
     ast_binary(left, ast::BinaryOp::Or);
     let program = compile_source(&source(
         "(((amount))) <= ((battery.charge))",
@@ -118,7 +125,9 @@ fn signed_literals_remain_i64_constants_not_unary_numeric_expressions() {
         "battery.charge -= -5;",
     ))
     .unwrap();
-    let hir::ExprKind::Binary { left, right, .. } = &program.functions()[0].requires.kind else {
+    let hir::ExprKind::Binary { left, right, .. } =
+        &program.functions()[0].as_verified().unwrap().requires.kind
+    else {
         panic!("expected comparison")
     };
     assert_eq!(left.kind, hir::ExprKind::IntegerLiteral(i64::MIN));
@@ -149,7 +158,7 @@ fn expression_references_resolve_before_type_checking() {
         ));
     }
     let program = compile_source(&source(REQUIRES, ENSURES, "battery.charge -= amount;")).unwrap();
-    let function = &program.functions()[0];
+    let function = &program.functions()[0].as_verified().unwrap();
     let hir::ExprKind::Binary { right, .. } = &function.ensures.kind else {
         panic!("expected equality")
     };
@@ -182,7 +191,10 @@ fn boolean_operators_require_boolean_operands() {
         "!(amount <= battery.charge)",
     ] {
         let program = compile_source(&source(expression, "true", "")).unwrap();
-        assert_eq!(program.functions()[0].requires.ty, hir::ExprType::Bool);
+        assert_eq!(
+            program.functions()[0].as_verified().unwrap().requires.ty,
+            hir::ExprType::Bool
+        );
     }
     for expression in [
         "amount && true",
@@ -244,6 +256,8 @@ fn same_range_and_literal_operators_compute_canonical_types() {
             compile_source(&source(expression, ENSURES, ""))
                 .unwrap()
                 .functions()[0]
+                .as_verified()
+                .unwrap()
                 .requires
                 .ty,
             hir::ExprType::Bool
@@ -256,7 +270,7 @@ fn same_range_and_literal_operators_compute_canonical_types() {
             &format!("battery.charge -= {rhs};"),
         ))
         .unwrap();
-        let operand = &program.functions()[0].body[0].operand;
+        let operand = &program.functions()[0].as_verified().unwrap().body[0].operand;
         assert_eq!(
             operand.ty,
             if rhs == "5" {
@@ -383,11 +397,13 @@ fn well_typed_richer_expressions_reach_only_the_verifier_support_boundary() {
         );
         assert!(error.required.contains(role));
         let expr_span = if role == "requires expression" {
-            program.functions()[0].requires.span
+            program.functions()[0].as_verified().unwrap().requires.span
         } else if role == "ensures expression" {
-            program.functions()[0].ensures.span
+            program.functions()[0].as_verified().unwrap().ensures.span
         } else {
-            program.functions()[0].body[0].operand.span
+            program.functions()[0].as_verified().unwrap().body[0]
+                .operand
+                .span
         };
         assert_eq!(error.span, expr_span);
         assert!(error
@@ -413,7 +429,7 @@ fn typed_subtraction_does_not_establish_range_or_overflow_safety() {
 }
 
 #[test]
-fn prohibited_operators_and_expression_calls_are_not_introduced() {
+fn prohibited_operators_and_verified_expression_calls_remain_rejected() {
     for expression in [
         "amount + 1",
         "amount * 1",
@@ -426,11 +442,18 @@ fn prohibited_operators_and_expression_calls_are_not_introduced() {
         "amount +% 1",
         "amount +? 1",
         "amount +^ 1",
-        "consume(amount)",
     ] {
         assert!(
             parse_source(&source(expression, ENSURES, "")).is_err(),
             "{expression}"
         );
     }
+    let Err(FrontendError::Resolve(errors)) =
+        compile_source(&source("consume(amount)", ENSURES, ""))
+    else {
+        panic!("verified expression calls must remain rejected")
+    };
+    assert!(errors[0]
+        .message
+        .contains("only between ordinary value functions"));
 }

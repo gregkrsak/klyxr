@@ -70,3 +70,21 @@ fn usage_and_io_errors_return_two() {
     }
     assert!(run(&["--version"]).status.success());
 }
+
+#[test]
+fn ordinary_functions_report_typing_without_execution_or_proof() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("value_flow.klx")]);
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(
+            text.starts_with("checked ordinary value functions; no verified function contracts:")
+        );
+        assert!(text.contains("ordinary value functions type-checked: 6"));
+        assert!(text.contains("not executed or verified; constrained results are not proven"));
+        assert!(text.contains("function bodies proven: 0"));
+        assert!(text.contains("calls checked: 0"));
+        assert!(!text.contains("verified supported integer contracts"));
+    }
+}

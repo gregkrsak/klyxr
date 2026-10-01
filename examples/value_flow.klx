@@ -1,0 +1,29 @@
+// Ordinary functions are type-checked frontend examples, not executed or proven.
+type Percent = range 0..100;
+
+fn remaining(current: Percent, used: Percent) -> Percent {
+    let result = current - used;
+    return result;
+}
+
+function wrapped(current: Percent, used: Percent) -> Percent {
+    let result = remaining(current, used);
+    return result;
+}
+
+fn can_use(current: Percent, used: Percent) -> bool {
+    let enough = used <= current;
+    return enough;
+}
+
+fn first(value: Percent) -> Percent {
+    return second(value);
+}
+
+fn second(value: Percent) -> Percent {
+    return value;
+}
+
+fn enabled() -> bool {
+    return true;
+}

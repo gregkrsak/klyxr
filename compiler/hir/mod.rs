@@ -1,4 +1,4 @@
-//! Resolved, typed representation of the one-field integer prototype only.
+//! Resolved, typed representation of the supported expression/value-flow and one-field integer prototype.
 //! IDs are compilation-local indices into the canonical tables owned by Program.
 //! Public inspection is read-only; compiler-internal mutation must preserve identity
 //! and reference invariants. Names and spans are diagnostic metadata.
@@ -16,13 +16,15 @@ id!(FieldId);
 id!(FunctionId);
 id!(ParameterId);
 id!(BindingId);
+id!(LocalId);
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Program {
     pub(crate) ranges: Vec<RangeType>,
     pub(crate) records: Vec<Record>,
     pub(crate) fields: Vec<Field>,
-    pub(crate) functions: Vec<VerifiedFunction>,
+    pub(crate) functions: Vec<Function>,
+    pub(crate) locals: Vec<Local>,
     pub(crate) parameters: Vec<Parameter>,
     pub(crate) bindings: Vec<RecordBinding>,
     pub(crate) statements: Vec<Statement>,
@@ -38,8 +40,14 @@ impl Program {
     pub fn fields(&self) -> &[Field] {
         &self.fields
     }
-    pub fn functions(&self) -> &[VerifiedFunction] {
+    pub fn functions(&self) -> &[Function] {
         &self.functions
+    }
+    pub fn locals(&self) -> &[Local] {
+        &self.locals
+    }
+    pub fn local(&self, id: LocalId) -> &Local {
+        &self.locals[id.0]
     }
     pub fn parameters(&self) -> &[Parameter] {
         &self.parameters
@@ -60,7 +68,7 @@ impl Program {
     pub fn field(&self, id: FieldId) -> &Field {
         &self.fields[id.0]
     }
-    pub fn function(&self, id: FunctionId) -> &VerifiedFunction {
+    pub fn function(&self, id: FunctionId) -> &Function {
         &self.functions[id.0]
     }
     pub fn parameter(&self, id: ParameterId) -> &Parameter {
@@ -98,6 +106,7 @@ pub struct Field {
 pub enum ParameterType {
     MutableRecord(RecordId),
     Range(RangeTypeId),
+    Value(ValueType),
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Parameter {
@@ -137,6 +146,11 @@ pub enum ExprKind {
     BoolLiteral(bool),
     IntegerLiteral(i64),
     Parameter(ParameterId),
+    Local(LocalId),
+    Call {
+        function: FunctionId,
+        arguments: Vec<TypedExpr>,
+    },
     FieldAccess(FieldAccess),
     OldField(FieldAccess),
     Unary {
@@ -155,6 +169,82 @@ pub struct Subtract {
     pub operand: TypedExpr,
     pub span: Span,
 }
+/// Declared/materialized values deliberately exclude IntegerLiteral.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValueType {
+    Bool,
+    Range(RangeTypeId),
+}
+impl From<ValueType> for ExprType {
+    fn from(ty: ValueType) -> Self {
+        match ty {
+            ValueType::Bool => Self::Bool,
+            ValueType::Range(id) => Self::Range(id),
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Local {
+    pub id: LocalId,
+    pub function: FunctionId,
+    pub name: String,
+    pub ty: ValueType,
+    pub span: Span,
+}
+/// One canonical FunctionId space in source declaration order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Function {
+    Ordinary(ValueFunction),
+    Verified(VerifiedFunction),
+}
+impl Function {
+    pub fn id(&self) -> FunctionId {
+        match self {
+            Self::Ordinary(f) => f.id,
+            Self::Verified(f) => f.id,
+        }
+    }
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Ordinary(f) => &f.name,
+            Self::Verified(f) => &f.name,
+        }
+    }
+    pub fn as_verified(&self) -> Option<&VerifiedFunction> {
+        match self {
+            Self::Verified(f) => Some(f),
+            Self::Ordinary(_) => None,
+        }
+    }
+    pub fn as_ordinary(&self) -> Option<&ValueFunction> {
+        match self {
+            Self::Ordinary(f) => Some(f),
+            Self::Verified(_) => None,
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValueFunction {
+    pub id: FunctionId,
+    pub name: String,
+    pub parameters: Vec<ParameterId>,
+    pub return_type: ValueType,
+    pub body: Vec<ValueStatement>,
+    pub span: Span,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValueStatement {
+    Let {
+        local: LocalId,
+        initializer: TypedExpr,
+        span: Span,
+    },
+    Return {
+        value: TypedExpr,
+        span: Span,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VerifiedFunction {
     pub id: FunctionId,
@@ -227,7 +317,10 @@ verified function drain(battery: &mutable Other, amount: Percent)
             field.name = "display".into();
         }
         for function in &mut program.functions {
-            function.name = "display".into();
+            match function {
+                super::Function::Verified(f) => f.name = "display".into(),
+                super::Function::Ordinary(f) => f.name = "display".into(),
+            }
         }
         for parameter in &mut program.parameters {
             parameter.name = "display".into();
@@ -252,5 +345,39 @@ verified function drain(battery: &mutable Other, amount: Percent)
             report.diagnostics[0].message,
             "record argument type mismatch"
         );
+    }
+    #[test]
+    fn ordinary_metadata_changes_preserve_canonical_local_and_call_references() {
+        let mut program = compile_source(include_str!("../../examples/value_flow.klx")).unwrap();
+        let original = program.clone();
+        for function in &mut program.functions {
+            if let super::Function::Ordinary(f) = function {
+                f.name = "display".into();
+            }
+        }
+        for local in &mut program.locals {
+            local.name = "display".into();
+        }
+        for parameter in &mut program.parameters {
+            parameter.name = "display".into();
+        }
+        for (before, after) in original.functions().iter().zip(program.functions()) {
+            let before = before.as_ordinary().unwrap();
+            let after = after.as_ordinary().unwrap();
+            assert_eq!(before.id, after.id);
+            assert_eq!(before.parameters, after.parameters);
+            assert_eq!(before.body, after.body);
+        }
+        for local in program.locals() {
+            assert_eq!(
+                program.local(local.id).function,
+                original.local(local.id).function
+            );
+            assert_eq!(program.local(local.id).ty, original.local(local.id).ty);
+        }
+        let report = verify_report(&program);
+        assert!(report.diagnostics.is_empty());
+        assert_eq!(report.functions_proven, 0);
+        assert_eq!(report.calls_checked, 0);
     }
 }

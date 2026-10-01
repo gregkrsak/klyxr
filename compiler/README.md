@@ -2,7 +2,7 @@
 
 This Rust implementation is an executable **prototype**, not a general-purpose
 Klyxr compiler. It implements a restricted source → lexer → parser → AST →
-name resolution → expression type checking → typed HIR → integer contract proof
+name resolution → expression and value-flow type checking → typed HIR → integer contract proof
 → diagnostic path.
 
 ## Run it
@@ -22,9 +22,12 @@ cargo clippy --locked --workspace --all-targets -- -D warnings
 `check` and `verify` currently run the same restricted semantic and proof passes.
 These commands are not implementations of the `safe` and `checked` assurance
 levels. Success reports the proof scope and counts. Declaration-only inputs
-explicitly report that there are no function contracts to verify.
+explicitly report that there are no function contracts to verify. Ordinary-only
+inputs report their type-checked function count and explicitly state that they
+are not executed or verified; constrained results are not proven. In mixed inputs,
+only verified mutation functions contribute to the proof counts.
 
-Exit codes: `0` for supported obligations established, `1` for source/semantic/
+Exit codes: `0` for frontend acceptance and any supported verified obligations established, `1` for source/semantic/
 proof failure, `2` for command usage or file-reading errors.
 
 ## Supported grammar
@@ -53,10 +56,74 @@ across the input; record bindings must be constructed before their use. Duplicat
 names in a declaration namespace or the binding scope are rejected; shadowing
 is outside this prototype. Passing an immutable binding to `&mut` is an error.
 
+## Ordinary value functions (KED-004)
+
+```klyxr
+type Percent = range 0..100;
+
+fn remaining(current: Percent, used: Percent) -> Percent {
+    let result = current - used;
+    return result;
+}
+
+function wrapped(current: Percent, used: Percent) -> Percent {
+    return remaining(current, used);
+}
+
+fn can_use(current: Percent, used: Percent) -> bool {
+    let enough = used <= current;
+    return enough;
+}
+```
+
+See `examples/value_flow.klx` for these flows and a forward call.
+
+Ordinary functions accept zero or more named immutable parameters, each typed as
+built-in source `bool` (semantic `Bool`) or a declared named range. The explicit
+`-> Type` return declaration permits only those same types. `bool` is a reserved
+built-in type token, so user range/record declarations cannot redefine it. Ordinary
+record/reference interfaces, unit, generics, and inferred return types are rejected.
+
+The body contains immutable `let name = expression;` locals followed by exactly
+one final **`return expression;`**. Its semicolon is mandatory. Klyxr deliberately
+rejects implicit block tails, with or without a semicolon (KD-019). Missing returns
+are type errors; bare tails and statements after return receive explicit parser
+diagnostics. No general expression statements, early/multiple returns, local
+annotations, `let mut`/`let mutable`, or reassignment are implemented. The existing
+top-level mutable record harness is unchanged.
+
+Parameters are visible at entry; a local enters scope after its initializer is
+resolved. Later locals and the return can reference earlier locals. Self-reference,
+use before declaration, parameter/local duplicates, shadowing, and cross-function
+scope leakage are resolution errors. Initializers propagate their concrete Bool
+or named range type. `let five = 5;` is a type error: the internal IntegerLiteral
+category has no settled value-materialization rule. `let result = amount - 5;`
+is valid because the existing subtraction rule computes a concrete range type.
+
+Ordinary calls are expressions, including nested calls and operator operands.
+Complete signatures are collected before bodies, so forward and direct/indirect
+recursive calls resolve. No termination or recursion policy is introduced. Calls
+require exact arity and exact concrete argument types; their result has the declared
+return type. Returns likewise require exact concrete types. Distinct ranges cannot
+be passed or returned implicitly even with identical bounds. Bare integer literals
+cannot satisfy a range parameter or return type, while Bool literals already type
+as Bool. Generalized contextual literal conversion remains open under OQ-021.
+
+Ordinary functions are **frontend semantic work only**: parsed, resolved, and
+type-checked, with no execution, code generation, range proof, or runtime checks.
+For example, `return current - used;` can type as Percent without establishing
+that every result meets Percent's bounds. The verifier ignores ordinary functions
+as proof targets. Plain `fn` does not yet implement the full `safe` assurance model,
+and repeated value uses imply no future Copy/move rule. Ownership remains future
+work under KD-004. Ordinary calls may target only ordinary functions; verified
+contracts/body expressions cannot call functions, and top-level harness calls may
+target only verified functions. These rejections leave OQ-019 unresolved.
+
 ## Core expressions and types (KED-003)
 
 Primary expressions are `true`, `false`, signed i64 literals, parameters,
-`state.field`, `old(state.field)`, and parenthesized expressions. A record parameter
+`state.field`, `old(state.field)`, and parenthesized expressions. Ordinary functions additionally support locals and
+ordinary calls. A record parameter
 by itself is not a numeric expression. `old(...)` is allowed only in `ensures`
 and only for the current mutable state field. Parentheses around that exact field
 are permitted; arbitrary snapshots, nested objects, and aliases are not.
@@ -65,7 +132,7 @@ Only these operators are implemented, in order from highest to lowest precedence
 
 | Form | Associativity |
 |---|---|
-| Primary / `old(...)` | Grouping |
+| Primary / calls / `old(...)` | Grouping |
 | `!` | Prefix Boolean negation |
 | `-` | Left |
 | `<=` | Non-associative |
@@ -97,8 +164,8 @@ subtraction combinations are enabled; literal-minus-range and literal-minus-lite
 are rejected. No generalized coercion or arithmetic system is introduced.
 
 A `Range(T)` result type does **not** prove overflow safety or membership in T's
-bounds. Those remain verification obligations. A well-typed expression can still
-be outside this prototype verifier's supported subset.
+bounds. Those require proof or a future runtime enforcement rule; ordinary functions
+add neither. A well-typed expression can still be outside this prototype verifier's supported subset.
 
 ## Front-end architecture and API
 
@@ -112,22 +179,33 @@ still normalize in the lexer.
 (`Lex`, `Parse`, `Resolve`, or `Type`). Compilation does not prove numerical
 obligations. `resolve` now returns an opaque `ResolvedProgram`, consumed by
 `types::check`; it no longer publishes typed HIR by itself. The resolver identifies
-names and fields, while `compiler/types` owns operator legality, nominal
-compatibility, result types, Boolean contracts, and subtract-assignment typing.
+names, fields, callees, and source-ordered local scope. It resolves type names to
+canonical type references. `compiler/types` validates concrete declared value types,
+operator legality, nominal compatibility, result types, Boolean contracts,
+subtract-assignment, initializer propagation, call arguments, and explicit returns.
 The type layer performs no textual source-name lookup.
 
 The resolver collects the complete range/record/function declaration sets before
 lowering references. Range and record names share the existing type namespace;
-functions have their existing separate namespace. Binding lookup proceeds in
-statement order and rejects use before construction and duplicate bindings.
+ordinary and verified functions share the existing separate function namespace.
+Binding lookup proceeds in statement order and rejects use before construction and duplicate bindings.
 No namespace, import, alias, or shadowing feature is introduced.
 
 Typed HIR has separate `RangeTypeId`, `RecordId`, `FieldId`, `FunctionId`,
-`ParameterId`, and `BindingId` newtypes indexing declaration tables within one
+`ParameterId`, `LocalId`, and `BindingId` newtypes indexing declaration tables within one
 compilation. Fields carry their record and range IDs; parameters carry their
 function and canonical type. `TypedExpr` stores kind, computed type, and span;
-references use parameter and field IDs, and nominal types use range IDs. AST and
-HIR functions each have one `requires` and one `ensures` expression. Parentheses
+references use parameter, local, field, and function IDs, and nominal types use
+range IDs. AST `FunctionDecl` and HIR `Function` each distinguish Ordinary and
+Verified forms in one source-ordered function table. `functions()` and `function(id)`
+now return the common HIR `Function`, with `id()`, `name()`, `as_ordinary()`, and
+`as_verified()` read-only views. This is an intentional prototype API change.
+Verified functions retain one `requires` and one `ensures` expression; ordinary
+functions carry parameter IDs, a `ValueType` return, typed lets and a typed explicit
+return. `ValueType` permits only Bool/Range, excluding IntegerLiteral. Ordinary
+parameters use `ParameterType::Value(ValueType)`; verified parameter types are
+unchanged. Locals carry their owning FunctionId and concrete type; BindingId
+continues to denote only top-level record bindings. Parentheses
 affect grouping and spans without introducing an extra HIR node.
 Construction and calls carry record/field/function/binding IDs. Names and source
 spans remain metadata for diagnostics. These IDs have no cross-compilation,
@@ -142,17 +220,17 @@ body proof, and ordered modular call-state reasoning.
 
 `hir::Program` owns the canonical tables for its compilation-local IDs. Public
 inspection is read-only: `ranges()`, `records()`, `fields()`, `functions()`,
-`parameters()`, `bindings()`, and `statements()` return immutable slices, while
+`parameters()`, `locals()`, `bindings()`, and `statements()` return immutable slices, while
 `range(id)`, `record(id)`, `field(id)`, `function(id)`, `parameter(id)`, and
-`binding(id)` provide immutable ID-based lookup. External consumers cannot mutate
-or reorder the underlying tables. Storage is crate-private so the resolver can
+`local(id)` and `binding(id)` provide immutable ID-based lookup. External consumers
+cannot mutate or reorder the underlying tables. Storage is crate-private so the resolver can
 construct HIR directly; compiler-internal transformations are responsible for
 preserving its identity and reference invariants.
 
 The CLI follows this exact path:
 
 ```text
-source → lexer → parser → AST expressions → resolver → expression type checking
+source → lexer → parser → AST expressions/functions → resolver → expression and value-flow type checking
        → typed HIR expressions → prototype verifier → diagnostics
 ```
 
@@ -162,7 +240,7 @@ shapes, and numerical counterexamples. Missing names are resolution errors;
 non-Boolean contracts and incompatible operators are type errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012 and KD-018 only for the documented subset. General type
+This implements KD-012, KD-018, and KD-019 only for the documented subset. General type
 inference, ownership/effects, MIR, VIR, and broader HIR features remain future work.
 
 ## What the proof establishes
@@ -184,7 +262,7 @@ relevant expression span. The adapter does not simplify expressions or prove
 Boolean formulas. It lowers only supported body operands to private numerical
 inputs; there is no second contract representation or broadened proof kernel.
 
-For **each function in that proof family**, including uncalled functions, the checker proves
+For **each verified function in that proof family**, including uncalled functions, the checker proves
 that for every input within the two declared ranges satisfying its precondition:
 
 1. Every body subtraction fits signed i64.
@@ -229,11 +307,12 @@ multiple fields, record invariants, SMT/VIR/MIR, or machine-code generation. In 
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, and KD-018,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, and KD-019,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
-remain design work.
+remain design work under OQ-019/OQ-020. OQ-022 records remaining ordinary-function
+and local-value questions; KED-004 does not settle them.
 
 KED-001 clarifies the nominal arithmetic boundary under KD-005; KED-003 applies
 nominal identity to expression typing. KD-018 records that direction, while
@@ -259,6 +338,12 @@ contracts, bodies, construction, and calls, including declarations after their u
 Metadata-renaming tests check that typing and verification are independent of
 display names. Expression tests cover grouping, precedence, exact operator rules,
 restricted snapshots, error phases, and the narrower verifier support boundary.
+Value-flow tests inspect immutable canonical views, one shared source-ordered
+function identity space, local IDs, forward/recursive calls, scope, exact signatures,
+call/return types, explicit-return diagnostics, literal restrictions, and mixed-kind
+rejection. Privileged metadata-renaming tests preserve function/local identity
+without exposing mutable public storage. CLI tests demonstrate ordinary-only
+acceptance with zero proof counts and explicit non-execution/non-proof wording.
 CI runs the tests in debug and optimized builds and Clippy with warnings
 treated as errors.
 

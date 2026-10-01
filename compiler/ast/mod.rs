@@ -4,7 +4,7 @@ use crate::lexer::Span;
 pub struct Program {
     pub ranges: Vec<RangeType>,
     pub records: Vec<RecordDef>,
-    pub functions: Vec<VerifiedFunction>,
+    pub functions: Vec<FunctionDecl>,
     pub statements: Vec<Statement>,
 }
 
@@ -29,6 +29,59 @@ pub struct RecordDef {
     pub field_name: String,
     pub field_type: String,
     pub span: Span,
+}
+
+/// Both function forms share source declaration order and a name namespace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FunctionDecl {
+    Ordinary(ValueFunction),
+    Verified(VerifiedFunction),
+}
+impl FunctionDecl {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Ordinary(f) => &f.name,
+            Self::Verified(f) => &f.name,
+        }
+    }
+    pub fn span(&self) -> Span {
+        match self {
+            Self::Ordinary(f) => f.span,
+            Self::Verified(f) => f.span,
+        }
+    }
+    pub fn as_verified(&self) -> Option<&VerifiedFunction> {
+        match self {
+            Self::Verified(f) => Some(f),
+            Self::Ordinary(_) => None,
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValueFunction {
+    pub name: String,
+    pub parameters: Vec<ValueParameter>,
+    pub return_type: String,
+    pub body: Vec<ValueStatement>,
+    pub span: Span,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValueParameter {
+    pub name: String,
+    pub ty: String,
+    pub span: Span,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValueStatement {
+    Let {
+        name: String,
+        initializer: Expr,
+        span: Span,
+    },
+    Return {
+        value: Expr,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,6 +115,10 @@ pub enum ExprKind {
     BoolLiteral(bool),
     IntegerLiteral(i64),
     Name(String),
+    Call {
+        callee: String,
+        arguments: Vec<Expr>,
+    },
     FieldAccess(FieldAccess),
     OldField(FieldAccess),
     Unary {

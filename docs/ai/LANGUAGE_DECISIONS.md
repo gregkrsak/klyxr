@@ -330,3 +330,29 @@ between distinct named constrained types.
 The initial executable expression subset and surface spellings remain subject to
 the explicit open questions and prototype-boundary rules. Implementing an operator
 in the prototype does not settle the complete Klyxr operator set.
+
+---
+
+## KD-019 — Explicit value returns in block-bodied functions
+
+**Status:** Accepted
+
+Klyxr uses explicit value returns in block-bodied functions.
+
+A value-returning block function declares its return type with `-> Type` and
+returns a value with:
+
+```klyxr
+return expression;
+```
+
+Klyxr does not use Rust-style implicit block-tail returns. The absence of a
+semicolon on the final expression does not cause that expression to become the
+function's return value.
+
+Local bindings use `let` and are immutable by default; future local mutation
+must be explicit. Function calls are expressions.
+
+A future explicitly marked expression-bodied function shorthand is not ruled
+out, but it would be a separate syntactic construct and would not change the
+explicit-return rule for block-bodied functions.
