@@ -281,92 +281,66 @@ fn signed_i64_limits_parse_and_arithmetic_overflow_is_rejected() {
         .replace("type Percent = range 0..100;", bounds)
         .replace("Percent", "Full");
     fails(&source, "subtraction overflow cannot be excluded");
-    let zero_amount = source
-        .replace("record Battery", "type Zero = range 0..0; record Battery")
-        .replace("amount: Full", "amount: Zero");
-    assert!(report(&zero_amount).diagnostics.is_empty());
 }
 
 #[test]
-fn rejects_nonempty_range_damage_and_empty_preconditions() {
+fn rejects_nonzero_lower_bound_range_damage() {
     fails(
         &PREFIX.replace("0..100", "10..100"),
         "field range preservation",
     );
-    let source = PREFIX
-        .replace(
-            "record Battery",
-            "type TooMuch = range 101..200; record Battery",
-        )
-        .replace("amount: Percent", "amount: TooMuch");
-    fails(&source, "precondition has no admissible inputs");
 }
 
 #[test]
 fn zero_only_amount_can_have_an_empty_body() {
     let source = PREFIX
-        .replace("record Battery", "type Zero = range 0..0; record Battery")
-        .replace("amount: Percent", "amount: Zero")
+        .replace("range 0..100", "range 0..0")
         .replace("battery.charge -= amount;", "");
     assert!(report(&source).diagnostics.is_empty());
 }
 
-/// Independent finite model checks the universal proof over many small domains.
-/// It enumerates every admissible input and every intermediate assignment,
-/// rather than reconstructing the verifier's polygon/vertex implementation.
 #[test]
-fn affine_proofs_match_exhaustive_execution_on_small_domains() {
-    let bodies: &[&[Option<i64>]] = &[
-        &[],
-        &[None],
-        &[Some(0)],
-        &[Some(1)],
-        &[Some(-1)],
-        &[None, None],
-        &[Some(1), Some(-1), None],
-        &[None, Some(1), Some(-1)],
-    ];
-    for low in -2..=2 {
-        for high in low..=2 {
-            for amount_low in -2..=2 {
-                for amount_high in amount_low..=2 {
-                    for body in bodies {
-                        let mut has_inputs = false;
-                        let mut valid = true;
-                        for initial in low..=high {
-                            for amount in amount_low..=amount_high {
-                                if amount > initial {
-                                    continue;
-                                }
-                                has_inputs = true;
-                                let mut current = initial;
-                                for operand in *body {
-                                    current -= operand.unwrap_or(amount);
-                                    valid &= current >= low && current <= high;
-                                }
-                                valid &= current == initial - amount;
-                            }
-                        }
-                        let statements: String = body
-                            .iter()
-                            .map(|operand| {
-                                format!(
-                                    "b.value -= {};",
-                                    operand.map_or("a".into(), |n| n.to_string())
-                                )
-                            })
-                            .collect();
-                        let source = format!("type State = range {low}..{high}; type Amount = range {amount_low}..{amount_high};
-                            record R {{ value: State }} verified fn f(b: &mut R, a: Amount)
-                            requires a <= b.value ensures b.value == old(b.value) - a {{ {statements} }}");
-                        assert_eq!(
-                            report(&source).diagnostics.is_empty(),
-                            has_inputs && valid,
-                            "{source}"
-                        );
-                    }
-                }
-            }
-        }
+fn subtraction_accepts_the_same_named_range_type() {
+    let result = report(PREFIX);
+    assert!(result.diagnostics.is_empty());
+    assert_eq!(result.functions_proven, 1);
+}
+
+#[test]
+fn distinct_named_ranges_are_rejected_regardless_of_numeric_bounds() {
+    for bounds in ["0..100", "0..50", "101..200"] {
+        let source = PREFIX
+            .replace(
+                "record Battery",
+                &format!("type Amount = range {bounds}; record Battery"),
+            )
+            .replace("amount: Percent", "amount: Amount");
+        let result = report(&source);
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.functions_proven, 0);
+        assert_eq!(result.calls_checked, 0);
+        let diagnostic = &result.diagnostics[0];
+        assert_eq!(
+            diagnostic.message,
+            "incompatible named range types for subtraction: `Percent` and `Amount`"
+        );
+        let text = diagnostic.render("nominal.klx", &source);
+        assert!(text.contains("state field `battery.charge` has type `Percent`"));
+        assert!(text.contains("parameter `amount` has type `Amount`"));
+        assert!(
+            text.contains("does not permit implicit arithmetic between distinct named range types")
+        );
+        assert!(text.contains("nominal.klx:"));
+    }
+}
+
+#[test]
+fn postcondition_subtraction_cannot_bypass_nominal_compatibility() {
+    for body in ["", "battery.charge -= 0;"] {
+        let source = PREFIX
+            .replace("record Battery", "type Amount = range 0..0; record Battery")
+            .replace("amount: Percent", "amount: Amount")
+            .replace("battery.charge -= amount;", body);
+        fails(&source, "incompatible named range types");
     }
 }

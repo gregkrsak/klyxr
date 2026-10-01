@@ -14,6 +14,8 @@ pub struct VerificationReport {
     pub final_values: BTreeMap<String, i64>,
 }
 
+type VerificationResult<T = ()> = Result<T, Box<Diagnostic>>;
+
 /// Convenience API for callers that only need diagnostics.
 pub fn verify(program: &Program) -> Vec<Diagnostic> {
     verify_report(program).diagnostics
@@ -27,7 +29,7 @@ pub fn verify_report(program: &Program) -> VerificationReport {
     let mut function_names = HashSet::new();
     for range in &program.ranges {
         if !type_names.insert(&range.name) {
-            report.diagnostics.push(duplicate(range.span, &range.name));
+            report.diagnostics.push(*duplicate(range.span, &range.name));
         }
         if range.min > range.max {
             report.diagnostics.push(Diagnostic::semantic(
@@ -44,20 +46,20 @@ pub fn verify_report(program: &Program) -> VerificationReport {
         if !type_names.insert(&record.name) {
             report
                 .diagnostics
-                .push(duplicate(record.span, &record.name));
+                .push(*duplicate(record.span, &record.name));
         }
         if let Err(error) = find_range(program, &record.field_type, record.span) {
-            report.diagnostics.push(error);
+            report.diagnostics.push(*error);
         }
     }
     for function in &program.functions {
         if !function_names.insert(&function.name) {
             report
                 .diagnostics
-                .push(duplicate(function.span, &function.name));
+                .push(*duplicate(function.span, &function.name));
         }
         if let Err(error) = validate_function(program, function) {
-            report.diagnostics.push(error);
+            report.diagnostics.push(*error);
         }
     }
     if !report.diagnostics.is_empty() {
@@ -68,7 +70,7 @@ pub fn verify_report(program: &Program) -> VerificationReport {
     for function in &program.functions {
         match prove_function(program, function) {
             Ok(()) => report.functions_proven += 1,
-            Err(error) => report.diagnostics.push(error),
+            Err(error) => report.diagnostics.push(*error),
         }
     }
     if !report.diagnostics.is_empty() {
@@ -92,7 +94,7 @@ pub fn verify_report(program: &Program) -> VerificationReport {
                 }),
         };
         if let Err(error) = result {
-            report.diagnostics.push(error);
+            report.diagnostics.push(*error);
             // Do not reason about later calls with stale state after a failure.
             break;
         }
@@ -100,8 +102,16 @@ pub fn verify_report(program: &Program) -> VerificationReport {
     report
 }
 
-fn duplicate(span: Span, name: &str) -> Diagnostic {
-    Diagnostic::semantic(
+fn semantic_error(
+    span: Span,
+    message: impl Into<String>,
+    detail: impl Into<String>,
+) -> Box<Diagnostic> {
+    Diagnostic::semantic(span, message, detail).into()
+}
+
+fn duplicate(span: Span, name: &str) -> Box<Diagnostic> {
+    semantic_error(
         span,
         format!("duplicate declaration `{name}`"),
         "names must be unique in this prototype scope",
@@ -112,13 +122,13 @@ fn find_range<'a>(
     program: &'a Program,
     name: &str,
     span: Span,
-) -> Result<&'a RangeType, Diagnostic> {
+) -> VerificationResult<&'a RangeType> {
     program
         .ranges
         .iter()
         .find(|range| range.name == name)
         .ok_or_else(|| {
-            Diagnostic::semantic(
+            semantic_error(
                 span,
                 format!("unknown range type `{name}`"),
                 "declare a signed i64 range type",
@@ -130,13 +140,13 @@ fn record_range<'a>(
     program: &'a Program,
     name: &str,
     span: Span,
-) -> Result<(&'a str, &'a RangeType), Diagnostic> {
+) -> VerificationResult<(&'a str, &'a RangeType)> {
     let record = program
         .records
         .iter()
         .find(|record| record.name == name)
         .ok_or_else(|| {
-            Diagnostic::semantic(
+            semantic_error(
                 span,
                 format!("unknown record type `{name}`"),
                 "declare a one-field record",
@@ -152,9 +162,9 @@ fn validate_access(
     access: &FieldAccess,
     function: &VerifiedFunction,
     field: &str,
-) -> Result<(), Diagnostic> {
+) -> VerificationResult {
     if access.binding != function.state_param || access.field != field {
-        return Err(Diagnostic::semantic(
+        return Err(semantic_error(
             access.span,
             format!(
                 "invalid field reference `{}.{}`",
@@ -169,14 +179,14 @@ fn validate_access(
     Ok(())
 }
 
-fn validate_function(program: &Program, function: &VerifiedFunction) -> Result<(), Diagnostic> {
+fn validate_function(program: &Program, function: &VerifiedFunction) -> VerificationResult {
     if function.state_param == function.amount_param {
         return Err(duplicate(function.span, &function.state_param));
     }
-    let (field, _) = record_range(program, &function.state_type, function.span)?;
-    find_range(program, &function.amount_type, function.span)?;
+    let (field, state_range) = record_range(program, &function.state_type, function.span)?;
+    let amount_range = find_range(program, &function.amount_type, function.span)?;
     if function.required_field != field {
-        return Err(Diagnostic::semantic(
+        return Err(semantic_error(
             function.requires_span,
             format!("unknown precondition field `{}`", function.required_field),
             format!("record `{}` has field `{field}`", function.state_type),
@@ -185,7 +195,7 @@ fn validate_function(program: &Program, function: &VerifiedFunction) -> Result<(
     validate_access(&function.postcondition.target, function, field)?;
     validate_access(&function.postcondition.old, function, field)?;
     if function.postcondition.amount != function.amount_param {
-        return Err(Diagnostic::semantic(
+        return Err(semantic_error(
             function.postcondition.span,
             format!(
                 "unknown postcondition parameter `{}`",
@@ -201,7 +211,7 @@ fn validate_function(program: &Program, function: &VerifiedFunction) -> Result<(
         validate_access(&statement.target, function, field)?;
         if let Operand::Parameter(name) = &statement.operand {
             if name != &function.amount_param {
-                return Err(Diagnostic::semantic(
+                return Err(semantic_error(
                     statement.span,
                     format!("unknown subtraction parameter `{name}`"),
                     format!(
@@ -211,6 +221,23 @@ fn validate_function(program: &Program, function: &VerifiedFunction) -> Result<(
                 ));
             }
         }
+    }
+    // The mandatory postcondition also subtracts amount, even for an empty or
+    // literal-only body. Reject nominal mixing before any numerical proof.
+    if state_range.name != amount_range.name {
+        return Err(semantic_error(
+            function.postcondition.span,
+            format!(
+                "incompatible named range types for subtraction: `{}` and `{}`",
+                state_range.name, amount_range.name
+            ),
+            format!(
+                "state field `{}.{field}` has type `{}`; parameter `{}` has type `{}`. \
+                 This prototype does not permit implicit arithmetic between distinct named range types; \
+                 both must use the same declared range type",
+                function.state_param, state_range.name, function.amount_param, amount_range.name
+            ),
+        ));
     }
     Ok(())
 }
@@ -240,12 +267,22 @@ fn input_vertices(state: &RangeType, amount: &RangeType) -> Vec<(i128, i128)> {
     points
 }
 
-fn prove_function(program: &Program, function: &VerifiedFunction) -> Result<(), Diagnostic> {
+fn prove_function(program: &Program, function: &VerifiedFunction) -> VerificationResult {
     let (_, state) = record_range(program, &function.state_type, function.span)?;
     let amount = find_range(program, &function.amount_type, function.span)?;
+    prove_affine_function(function, state, amount)
+}
+
+/// Private numerical kernel. Source-language nominal compatibility is checked
+/// before this is reached; unit tests can vary the numeric domains independently.
+fn prove_affine_function(
+    function: &VerifiedFunction,
+    state: &RangeType,
+    amount: &RangeType,
+) -> VerificationResult {
     let vertices = input_vertices(state, amount);
     if vertices.is_empty() {
-        return Err(Diagnostic::semantic(
+        return Err(semantic_error(
             function.requires_span,
             "precondition has no admissible inputs",
             "this prototype requires a nonempty input domain rather than reporting a vacuous proof",
@@ -305,7 +342,7 @@ fn proof_failure(
     state: i128,
     amount: i128,
     actual: i128,
-) -> Diagnostic {
+) -> Box<Diagnostic> {
     Diagnostic {
         message: message.into(), span,
         required: format!("`{}` must preserve its field range and establish its postcondition for every input satisfying requires", function.name),
@@ -316,20 +353,20 @@ fn proof_failure(
             format!("computed field value == {actual}"),
         ],
         conclusion: "admissible counterexample; this function has not been verified".into(),
-    }
+    }.into()
 }
 
 fn validate_binding(
     program: &Program,
     binding: &RecordBinding,
     bindings: &BTreeMap<String, &RecordBinding>,
-) -> Result<(), Diagnostic> {
+) -> VerificationResult {
     if bindings.contains_key(&binding.name) {
         return Err(duplicate(binding.span, &binding.name));
     }
     let (field, range) = record_range(program, &binding.record_type, binding.span)?;
     if binding.field_name != field {
-        return Err(Diagnostic::semantic(
+        return Err(semantic_error(
             binding.span,
             format!("unknown initializer field `{}`", binding.field_name),
             format!("record `{}` requires field `{field}`", binding.record_type),
@@ -345,7 +382,8 @@ fn validate_binding(
             ),
             known: vec![format!("{}.{} == {}", binding.name, field, binding.value)],
             conclusion: format!("{} is outside {}..{}", binding.value, range.min, range.max),
-        });
+        }
+        .into());
     }
     Ok(())
 }
@@ -355,27 +393,27 @@ fn check_call(
     call: &crate::ast::Call,
     bindings: &BTreeMap<String, &RecordBinding>,
     values: &mut BTreeMap<String, i64>,
-) -> Result<(), Diagnostic> {
+) -> VerificationResult {
     let function = program
         .functions
         .iter()
         .find(|function| function.name == call.function)
         .ok_or_else(|| {
-            Diagnostic::semantic(
+            semantic_error(
                 call.span,
                 format!("unknown function `{}`", call.function),
                 "declare a supported verified function",
             )
         })?;
     let binding = bindings.get(&call.binding).ok_or_else(|| {
-        Diagnostic::semantic(
+        semantic_error(
             call.span,
             format!("unknown binding `{}`", call.binding),
             "construct the record before this call",
         )
     })?;
     if binding.record_type != function.state_type {
-        return Err(Diagnostic::semantic(
+        return Err(semantic_error(
             call.span,
             "record argument type mismatch",
             format!(
@@ -385,7 +423,7 @@ fn check_call(
         ));
     }
     if !binding.mutable {
-        return Err(Diagnostic::semantic(
+        return Err(semantic_error(
             call.span,
             "cannot mutably borrow immutable binding",
             format!("declare `{}` with `let mut` or `let mutable`", binding.name),
@@ -405,7 +443,8 @@ fn check_call(
                 "{} is outside {}..{}",
                 call.amount, amount_range.min, amount_range.max
             ),
-        });
+        }
+        .into());
     }
     let initial = values[&call.binding];
     if call.amount > initial {
@@ -421,11 +460,12 @@ fn check_call(
                 format!("{}.{} == {initial}", binding.name, function.required_field),
             ],
             conclusion: format!("{} <= {initial} is false", call.amount),
-        });
+        }
+        .into());
     }
     // Modular reasoning uses the postcondition only AFTER the body proof.
     let next = initial.checked_sub(call.amount).ok_or_else(|| {
-        Diagnostic::semantic(
+        semantic_error(
             call.span,
             "subtraction overflow",
             "the checked subtraction must fit signed i64",
@@ -433,4 +473,121 @@ fn check_call(
     })?;
     values.insert(call.binding.clone(), next);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Independent finite model checks the universal proof over many small domains.
+    /// It enumerates every admissible input and every intermediate assignment,
+    /// rather than reconstructing the verifier's polygon/vertex implementation.
+    #[test]
+    fn affine_proofs_match_exhaustive_execution_on_small_domains() {
+        let prototype =
+            crate::compile_source(include_str!("../../examples/battery_ok.klx")).unwrap();
+        let template = &prototype.functions[0];
+        let mut combinations = 0;
+        let bodies: &[&[Option<i64>]] = &[
+            &[],
+            &[None],
+            &[Some(0)],
+            &[Some(1)],
+            &[Some(-1)],
+            &[None, None],
+            &[Some(1), Some(-1), None],
+            &[None, Some(1), Some(-1)],
+        ];
+        for low in -2..=2 {
+            for high in low..=2 {
+                for amount_low in -2..=2 {
+                    for amount_high in amount_low..=2 {
+                        for body in bodies {
+                            let mut has_inputs = false;
+                            let mut valid = true;
+                            for initial in low..=high {
+                                for amount in amount_low..=amount_high {
+                                    if amount > initial {
+                                        continue;
+                                    }
+                                    has_inputs = true;
+                                    let mut current = initial;
+                                    for operand in *body {
+                                        current -= operand.unwrap_or(amount);
+                                        valid &= current >= low && current <= high;
+                                    }
+                                    valid &= current == initial - amount;
+                                }
+                            }
+                            let state = RangeType {
+                                name: "State".into(),
+                                min: low,
+                                max: high,
+                                span: template.span,
+                            };
+                            let amount = RangeType {
+                                name: "Amount".into(),
+                                min: amount_low,
+                                max: amount_high,
+                                span: template.span,
+                            };
+                            let mut function = template.clone();
+                            function.body = body
+                                .iter()
+                                .map(|operand| {
+                                    let mut statement = template.body[0].clone();
+                                    statement.operand = match operand {
+                                        Some(value) => Operand::Literal(*value),
+                                        None => Operand::Parameter(function.amount_param.clone()),
+                                    };
+                                    statement
+                                })
+                                .collect();
+                            let case = format!("state={low}..{high}, amount={amount_low}..{amount_high}, body={body:?}");
+                            assert_eq!(
+                                prove_affine_function(&function, &state, &amount).is_ok(),
+                                has_inputs && valid,
+                                "{case}"
+                            );
+                            combinations += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(combinations, 1_800);
+    }
+
+    #[test]
+    fn numerical_kernel_preserves_extreme_and_empty_domain_coverage() {
+        let program = crate::compile_source(include_str!("../../examples/battery_ok.klx")).unwrap();
+        let function = &program.functions[0];
+        let full = RangeType {
+            name: "Full".into(),
+            min: i64::MIN,
+            max: i64::MAX,
+            span: function.span,
+        };
+        let zero = RangeType {
+            name: "Zero".into(),
+            min: 0,
+            max: 0,
+            span: function.span,
+        };
+        assert!(prove_affine_function(function, &full, &zero).is_ok());
+        let small = RangeType {
+            name: "Small".into(),
+            min: 0,
+            max: 100,
+            span: function.span,
+        };
+        let too_much = RangeType {
+            name: "TooMuch".into(),
+            min: 101,
+            max: 200,
+            span: function.span,
+        };
+        let error = prove_affine_function(function, &small, &too_much).unwrap_err();
+        assert_eq!(error.message, "precondition has no admissible inputs");
+    }
 }

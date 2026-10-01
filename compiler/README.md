@@ -6,7 +6,7 @@ semantic validation → integer contract proof → diagnostic path.
 
 ## Run it
 
-Install Rust through rustup. `rust-toolchain.toml` pins Rust 1.80.0 and rustfmt,
+Install Rust through rustup. `rust-toolchain.toml` pins Rust 1.80.0, rustfmt, and Clippy,
 matching the workspace's minimum supported Rust version.
 
 From the repository root:
@@ -15,6 +15,7 @@ From the repository root:
 cargo run --locked --bin klyxr -- verify examples/battery_ok.klx
 cargo run --locked --bin klyxr -- check examples/battery_ok.klx
 cargo test --locked --workspace
+cargo clippy --locked --workspace --all-targets -- -D warnings
 ```
 
 `check` and `verify` currently run the same restricted semantic and proof passes.
@@ -39,6 +40,11 @@ proof failure, `2` for command usage or file-reading errors.
 - Straight-line bodies containing zero or more `state.field -= amount;` or
   `state.field -= signed_integer_literal;` statements. Every field reference
   must resolve to the function's record parameter and its declared field.
+  The amount parameter and state field must have the **same declared named range
+  type**. Separately declared types remain distinct even when their numeric bounds
+  are identical or overlap. This restriction also applies to subtraction in the
+  mandatory postcondition, so empty and literal-only bodies cannot bypass it.
+  Integer literals retain their existing prototype treatment.
 - Record construction with a literal field value, followed by calls whose second
   argument is a literal. These top-level statements are a prototype execution
   harness, not a settled language entry-point design. Their source order matters.
@@ -74,10 +80,10 @@ integral. Arithmetic during proof uses i128 to detect i64 overflow without host
 overflow. The implementation and its mathematical argument are part of the
 prototype's trusted base; there are no independently checked proof certificates.
 
-An empty admissible domain is explicitly rejected by this prototype. It does not
+An empty admissible domain is explicitly rejected by the numerical proof kernel. It does not
 report a vacuous proof as a useful verification result. An empty body is allowed
-only if it actually establishes the postcondition (for example, an amount type
-whose only value is zero).
+only if it actually establishes the postcondition (for example, when the shared
+named range type of the state field and amount is `range 0..0`).
 
 At each call, the checker validates the record's distinct type, mutable binding,
 amount range, and precondition using the **current** field value. It updates state
@@ -105,14 +111,24 @@ or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
 remain design work.
 
+KED-001 clarifies this prototype's nominal arithmetic boundary under KD-005.
+The same-name restriction does not settle future generalized arithmetic,
+conversion, coercion, subtyping, units, or operator-overloading rules. None of
+those mechanisms is introduced here.
+
 ## Regression coverage
 
 The tests cover invalid declarations/references, unsupported syntax, postcondition
 failures, signed arithmetic limits, range preservation, independent records,
 source-order execution, sequential calls, keyword aliases, CLI output and exit
-codes. An independent exhaustive interpreter compares the affine proof results
-with every admissible integer input across 1,800 small range/body combinations.
-CI runs the tests in debug and optimized builds.
+codes, and nominal range-type compatibility. An independent exhaustive interpreter
+compares the private affine proof kernel with every admissible integer input across
+1,800 small range/body combinations, varying state and amount numeric domains
+independently. This is an internal numerical test, not source-language permission
+to mix distinct named types. Separate source-level regressions establish same-name
+acceptance and rejection of distinct names with identical, overlapping, or disjoint
+bounds. CI runs the tests in debug and optimized builds and Clippy with warnings
+treated as errors.
 
 The failing examples are intentional:
 
