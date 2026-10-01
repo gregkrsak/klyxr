@@ -2,7 +2,7 @@
 
 This Rust implementation is an executable **prototype**, not a general-purpose
 Klyxr compiler. It implements a restricted source → lexer → parser → AST →
-semantic validation → integer contract proof → diagnostic path.
+name resolution → typed HIR → integer contract proof → diagnostic path.
 
 ## Run it
 
@@ -58,6 +58,65 @@ across the input; record bindings must be constructed before their use. Duplicat
 names in a declaration namespace or the binding scope are rejected; shadowing
 is outside this prototype. Passing an immutable binding to `&mut` is an error.
 
+## Front-end architecture and API
+
+`parse_source(source)` returns a source-oriented `ast::Program`: textual names,
+spans, contracts, body statements, and ordered prototype statements. Parsing does
+not decide which declarations those names denote. The supported keyword aliases
+still normalize in the lexer.
+
+`compile_source(source)` parses and calls `resolve::resolve(&ast)`, returning a
+canonical `hir::Program` or `FrontendError` (`Lex`, `Parse`, or `Resolve` with
+source diagnostics). This changes the former prototype API, where
+`compile_source` returned AST. Compilation here establishes resolved references
+and nominal subtraction compatibility; it does not prove numerical obligations.
+
+The resolver collects the complete range/record/function declaration sets before
+lowering references. Range and record names share the existing type namespace;
+functions have their existing separate namespace. Binding lookup proceeds in
+statement order and rejects use before construction and duplicate bindings.
+No namespace, import, alias, or shadowing feature is introduced.
+
+Typed HIR has separate `RangeTypeId`, `RecordId`, `FieldId`, `FunctionId`,
+`ParameterId`, and `BindingId` newtypes indexing declaration tables within one
+compilation. Fields carry their record and range IDs; parameters carry their
+function and canonical type; contracts and body accesses carry parameter, field,
+and range IDs. Parameter subtraction operands carry parameter and range IDs.
+Construction and calls carry record/field/function/binding IDs. Names and source
+spans remain metadata for diagnostics. These IDs have no cross-compilation,
+serialization, or ABI stability guarantee.
+
+`verify::verify_report(&hir)` (and the diagnostics-only `verify`) consume canonical
+HIR produced by the resolver. Verification uses direct ID-based table access and
+tracks current state by `BindingId`; names are used only for diagnostics and the
+human-readable `final_values` report. It retains numerical initialization/argument
+checks, record-ID compatibility and the existing mutable-binding check, universal
+body proof, and ordered modular call-state reasoning.
+
+`hir::Program` owns the canonical tables for its compilation-local IDs. Public
+inspection is read-only: `ranges()`, `records()`, `fields()`, `functions()`,
+`parameters()`, `bindings()`, and `statements()` return immutable slices, while
+`range(id)`, `record(id)`, `field(id)`, `function(id)`, `parameter(id)`, and
+`binding(id)` provide immutable ID-based lookup. External consumers cannot mutate
+or reorder the underlying tables. Storage is crate-private so the resolver can
+construct HIR directly; compiler-internal transformations are responsible for
+preserving its identity and reference invariants.
+
+The CLI follows this exact path:
+
+```text
+source → lexer → parser → AST → resolver → typed HIR → verifier → diagnostics
+```
+
+Resolution errors prevent proof. All names are resolved before numerical proof
+or call-state analysis, so a program with multiple independent errors may report
+a resolution error before a proof failure. Incorrect `requires` parameter names
+now produce semantic resolution diagnostics instead of parser errors; they remain
+rejected, with the expected and supplied names and source locations preserved.
+
+This implements KD-012 only for the documented subset. General type checking,
+ownership/effects, MIR, VIR, and the broader HIR features remain future work.
+
 ## What the proof establishes
 
 For **each declared function**, including uncalled functions, the checker proves
@@ -105,14 +164,15 @@ fields, record invariants, SMT/VIR/MIR, or machine-code generation. In particula
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-013, KD-014, and KD-015,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, and KD-015,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
 remain design work.
 
 KED-001 clarifies this prototype's nominal arithmetic boundary under KD-005.
-The same-name restriction does not settle future generalized arithmetic,
+The same-declaration restriction, enforced by `RangeTypeId` equality, does not
+settle future generalized arithmetic,
 conversion, coercion, subtyping, units, or operator-overloading rules. None of
 those mechanisms is introduced here.
 
@@ -125,9 +185,12 @@ codes, and nominal range-type compatibility. An independent exhaustive interpret
 compares the private affine proof kernel with every admissible integer input across
 1,800 small range/body combinations, varying state and amount numeric domains
 independently. This is an internal numerical test, not source-language permission
-to mix distinct named types. Separate source-level regressions establish same-name
-acceptance and rejection of distinct names with identical, overlapping, or disjoint
-bounds. CI runs the tests in debug and optimized builds and Clippy with warnings
+to mix distinct named types. Separate source-level regressions establish
+same-declaration acceptance and rejection of distinct declarations with identical,
+overlapping, or disjoint bounds. Resolution tests inspect canonical IDs and types across records, parameters,
+contracts, bodies, construction, and calls, including declarations after their uses.
+A metadata-renaming test checks that verification is independent of display names.
+CI runs the tests in debug and optimized builds and Clippy with warnings
 treated as errors.
 
 The failing examples are intentional:

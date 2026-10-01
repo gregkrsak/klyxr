@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::ast::{
-    Call, FieldAccess, Operand, Postcondition, Program, RangeType, RecordBinding, RecordDef,
-    Statement, Subtract, VerifiedFunction,
+    Call, FieldAccess, Operand, Postcondition, Precondition, Program, RangeType, RecordBinding,
+    RecordDef, Statement, Subtract, VerifiedFunction,
 };
 use crate::lexer::{Span, Token, TokenKind};
 
@@ -117,24 +117,14 @@ impl Parser<'_> {
         self.expect(&TokenKind::RParen)?;
 
         let requires_span = self.expect(&TokenKind::Requires)?.span;
-        let lhs = self.expect_ident()?;
-        if lhs != amount_param {
-            return Err(self.error(format!(
-                "vertical slice expects precondition lhs `{amount_param}`, found `{lhs}`"
-            )));
-        }
-
+        let amount = self.expect_ident()?;
         self.expect(&TokenKind::LessEqual)?;
-
-        let rhs_state = self.expect_ident()?;
-        if rhs_state != state_param {
-            return Err(self.error(format!(
-                "vertical slice expects precondition state `{state_param}`, found `{rhs_state}`"
-            )));
-        }
-
-        self.expect(&TokenKind::Dot)?;
-        let required_field = self.expect_ident()?;
+        let state = self.parse_field_access()?;
+        let precondition = Precondition {
+            amount,
+            state,
+            span: requires_span,
+        };
 
         let ensures_span = self.expect(&TokenKind::Ensures)?.span;
         let target = self.parse_field_access()?;
@@ -179,8 +169,7 @@ impl Parser<'_> {
             state_type,
             amount_param,
             amount_type,
-            required_field,
-            requires_span,
+            precondition,
             postcondition,
             body,
         })
@@ -362,7 +351,7 @@ consume(&mut battery, 90);
         let program = parse(&tokens).unwrap();
 
         assert_eq!(program.ranges[0].name, "Percent");
-        assert_eq!(program.functions[0].required_field, "charge");
+        assert_eq!(program.functions[0].precondition.state.field, "charge");
         assert!(
             matches!(&program.statements[0], Statement::Binding(binding) if binding.value == 80)
         );

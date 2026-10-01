@@ -1,6 +1,7 @@
 use klyxr_compiler::{
     compile_source,
     verify::{verify_report, VerificationReport},
+    FrontendError,
 };
 
 const PREFIX: &str = "\
@@ -13,7 +14,14 @@ verified fn consume(battery: &mut Battery, amount: Percent)
 ";
 
 fn report(source: &str) -> VerificationReport {
-    verify_report(&compile_source(source).expect("fixture should parse"))
+    match compile_source(source) {
+        Ok(program) => verify_report(&program),
+        Err(FrontendError::Resolve(diagnostics)) => VerificationReport {
+            diagnostics,
+            ..VerificationReport::default()
+        },
+        Err(error) => panic!("fixture should parse: {error}"),
+    }
 }
 
 fn fails(source: &str, message: &str) {
