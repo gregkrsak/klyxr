@@ -18,6 +18,9 @@ AST
 name resolution
    │
    ▼
+expression type checking
+   │
+   ▼
 typed HIR
    │
    ├── type checking
@@ -240,12 +243,15 @@ The MVP should demonstrate the difference between memory safety and application-
 
 The first compiler slice is implemented in Rust, with its toolchain pinned to
 1.80.0. It follows source → lexer → parser → AST → explicit name resolution →
-typed HIR → specialized integer contract proof → diagnostics. The resolver and
-HIR implement KD-012's semantic boundary for this subset. Strongly typed IDs
+expression type checking → typed HIR expressions → specialized integer contract
+proof → diagnostics. The resolver, type layer, and HIR implement KD-012's semantic
+boundary and KD-018's expression direction for this subset. Strongly typed IDs
 identify range types, records, fields, functions, parameters, and top-level
 bindings within one compilation. HIR references carry canonical types and IDs;
-source names and spans remain diagnostic metadata. Nominal range compatibility
-uses range IDs, and verification performs no textual declaration lookup.
+source names and spans remain diagnostic metadata. The resolver owns declaration
+identity; `compiler/types` owns operator legality and expression types (`Bool`,
+nominal range, and internal integer literal). Nominal compatibility uses range
+IDs, and typing/verification perform no textual declaration lookup.
 `hir::Program` owns the canonical tables for those compilation-local IDs and
 exposes read-only slices and ID lookups publicly. Storage is crate-private;
 compiler-internal construction and transformations must preserve HIR identity
@@ -254,6 +260,12 @@ and reference invariants. IDs have no cross-compilation stability guarantee.
 MIR, VIR, general ownership/effect analysis, SMT integration, and code generation
 are not yet implemented. This bounded implementation does not settle broader HIR,
 module, coercion, or generalized arithmetic design.
+
+AST and HIR contracts are general expressions, and subtraction statements have
+expression operands. The verifier recognizes only the original resolved battery
+proof structure and parameter/literal body operands. Richer well-typed expressions
+are rejected at verification with their source spans, not misclassified as frontend
+errors. The affine numerical kernel is private and unchanged in proof breadth.
 
 The AST retains supported postconditions and subtraction statements; no function
 body or contract is silently skipped. Ordered construction/call statements form a
@@ -273,4 +285,4 @@ Empty admissible domains are explicitly rejected by this prototype.
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
 invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
-KD-013, KD-014, KD-015, KD-017, DP-008, DP-009, and OQ-018 through OQ-020.
+KD-013, KD-014, KD-015, KD-017, KD-018, DP-008, DP-009, and OQ-018 through OQ-021.

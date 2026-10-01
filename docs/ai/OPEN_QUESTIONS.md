@@ -91,3 +91,20 @@ Need exact rules for the state a function may change, when record invariants mus
 hold, and what `old(...)` snapshots for nested records, aliases, heap values, and
 exceptional exits. The current prototype models only one mutable field and its
 entry integer value; that scope does not settle the general rules.
+
+## OQ-021 — General constrained arithmetic expression semantics
+
+The initial expression layer supports a deliberately narrow constrained-range arithmetic model.
+
+Still open:
+
+- broader numeric base types;
+- default numeric literal typing;
+- generalized literal coercion/context rules;
+- arithmetic result typing beyond the initial range-preserving model;
+- exact runtime behavior for constrained arithmetic outside verified code;
+- interaction with checked/wrapping/result/saturating arithmetic families;
+- conversions between constrained types;
+- units/dimension-aware arithmetic.
+
+KED-003 does not settle these questions implicitly.

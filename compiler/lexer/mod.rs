@@ -22,6 +22,11 @@ pub enum TokenKind {
     Let,
     Mut,
     Old,
+    True,
+    False,
+    Not,
+    AndAnd,
+    OrOr,
     Equal,
     EqualEqual,
     LessEqual,
@@ -136,6 +141,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                     "let" => TokenKind::Let,
                     "mut" | "mutable" => TokenKind::Mut,
                     "old" => TokenKind::Old,
+                    "true" => TokenKind::True,
+                    "false" => TokenKind::False,
                     _ => TokenKind::Ident(text.to_owned()),
                 };
 
@@ -149,6 +156,24 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                     },
                 });
             }
+            b'&' if i + 1 < bytes.len() && bytes[i + 1] == b'&' => {
+                push_two(&mut tokens, TokenKind::AndAnd, line, column, i);
+                i += 2;
+                column += 2;
+            }
+            b'|' if i + 1 < bytes.len() && bytes[i + 1] == b'|' => {
+                push_two(&mut tokens, TokenKind::OrOr, line, column, i);
+                i += 2;
+                column += 2;
+            }
+            b'!' => push_one(
+                &mut tokens,
+                TokenKind::Not,
+                line,
+                column,
+                &mut i,
+                &mut column,
+            ),
             b'<' if i + 1 < bytes.len() && bytes[i + 1] == b'=' => {
                 push_two(&mut tokens, TokenKind::LessEqual, line, column, i);
                 i += 2;

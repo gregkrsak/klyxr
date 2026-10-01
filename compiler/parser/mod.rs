@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::ast::{
-    Call, FieldAccess, Operand, Postcondition, Precondition, Program, RangeType, RecordBinding,
-    RecordDef, Statement, Subtract, VerifiedFunction,
+    BinaryOp, Call, Expr, ExprKind, FieldAccess, Program, RangeType, RecordBinding, RecordDef,
+    Statement, Subtract, UnaryOp, VerifiedFunction,
 };
 use crate::lexer::{Span, Token, TokenKind};
 
@@ -116,31 +116,10 @@ impl Parser<'_> {
         let amount_type = self.expect_ident()?;
         self.expect(&TokenKind::RParen)?;
 
-        let requires_span = self.expect(&TokenKind::Requires)?.span;
-        let amount = self.expect_ident()?;
-        self.expect(&TokenKind::LessEqual)?;
-        let state = self.parse_field_access()?;
-        let precondition = Precondition {
-            amount,
-            state,
-            span: requires_span,
-        };
-
-        let ensures_span = self.expect(&TokenKind::Ensures)?.span;
-        let target = self.parse_field_access()?;
-        self.expect(&TokenKind::EqualEqual)?;
-        self.expect(&TokenKind::Old)?;
-        self.expect(&TokenKind::LParen)?;
-        let old = self.parse_field_access()?;
-        self.expect(&TokenKind::RParen)?;
-        self.expect(&TokenKind::Minus)?;
-        let amount = self.expect_ident()?;
-        let postcondition = Postcondition {
-            target,
-            old,
-            amount,
-            span: ensures_span,
-        };
+        self.expect(&TokenKind::Requires)?;
+        let requires = self.parse_expression(0)?;
+        self.expect(&TokenKind::Ensures)?;
+        let ensures = self.parse_expression(0)?;
 
         self.expect(&TokenKind::LBrace)?;
         let mut body = Vec::new();
@@ -148,11 +127,7 @@ impl Parser<'_> {
             let target = self.parse_field_access()?;
             let statement_span = target.span;
             self.expect(&TokenKind::MinusEqual)?;
-            let operand = if matches!(self.peek_kind(), TokenKind::Ident(_)) {
-                Operand::Parameter(self.expect_ident()?)
-            } else {
-                Operand::Literal(self.expect_number()?)
-            };
+            let operand = self.parse_expression(0)?;
             self.expect(&TokenKind::Semicolon)?;
             body.push(Subtract {
                 target,
@@ -169,9 +144,112 @@ impl Parser<'_> {
             state_type,
             amount_param,
             amount_type,
-            precondition,
-            postcondition,
+            requires,
+            ensures,
             body,
+        })
+    }
+
+    // Precedence climbing: only the explicitly authorized operators participate.
+    fn parse_expression(&mut self, minimum: u8) -> Result<Expr, ParseError> {
+        let mut left = self.parse_primary()?;
+        let mut comparison_seen = None;
+        while let Some((op, precedence)) = self.binary_operator() {
+            if precedence < minimum {
+                break;
+            }
+            let comparison = matches!(op, BinaryOp::LessEqual | BinaryOp::Equal);
+            if comparison && comparison_seen == Some(op) {
+                return Err(
+                    self.error("comparison operators are non-associative; use parentheses".into())
+                );
+            }
+            self.advance();
+            let right = self.parse_expression(precedence + 1)?;
+            let span = Span {
+                end: right.span.end,
+                ..left.span
+            };
+            left = Expr {
+                kind: ExprKind::Binary {
+                    op,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                span,
+            };
+            if comparison {
+                comparison_seen = Some(op);
+            }
+        }
+        Ok(left)
+    }
+    fn binary_operator(&self) -> Option<(BinaryOp, u8)> {
+        match self.peek_kind() {
+            TokenKind::OrOr => Some((BinaryOp::Or, 1)),
+            TokenKind::AndAnd => Some((BinaryOp::And, 2)),
+            TokenKind::EqualEqual => Some((BinaryOp::Equal, 3)),
+            TokenKind::LessEqual => Some((BinaryOp::LessEqual, 4)),
+            TokenKind::Minus => Some((BinaryOp::Subtract, 5)),
+            _ => None,
+        }
+    }
+    fn parse_primary(&mut self) -> Result<Expr, ParseError> {
+        let start = self.peek().span;
+        let kind = match self.peek_kind() {
+            TokenKind::True | TokenKind::False => {
+                let value = self.at(&TokenKind::True);
+                self.advance();
+                ExprKind::BoolLiteral(value)
+            }
+            TokenKind::Number(_) | TokenKind::Minus => {
+                ExprKind::IntegerLiteral(self.expect_number()?)
+            }
+            TokenKind::Not => {
+                self.advance();
+                ExprKind::Unary {
+                    op: UnaryOp::Not,
+                    operand: Box::new(self.parse_primary()?),
+                }
+            }
+            TokenKind::Ident(_) => {
+                if self.lookahead_is(1, &TokenKind::Dot) {
+                    ExprKind::FieldAccess(self.parse_field_access()?)
+                } else {
+                    ExprKind::Name(self.expect_ident()?)
+                }
+            }
+            TokenKind::Old => {
+                self.advance();
+                self.expect(&TokenKind::LParen)?;
+                let inner = self.parse_expression(0)?;
+                self.expect(&TokenKind::RParen)?;
+                let ExprKind::FieldAccess(field) = inner.kind else {
+                    return Err(ParseError {
+                        span: inner.span,
+                        message: "old(...) supports only the mutable state field in this prototype"
+                            .into(),
+                    });
+                };
+                ExprKind::OldField(field)
+            }
+            TokenKind::LParen => {
+                self.advance();
+                let mut expression = self.parse_expression(0)?;
+                let end = self.expect(&TokenKind::RParen)?.span.end;
+                expression.span = Span { end, ..start };
+                return Ok(expression);
+            }
+            other => {
+                return Err(self.error(format!("unsupported or malformed expression: {other:?}")))
+            }
+        };
+        Ok(Expr {
+            kind,
+            span: Span {
+                end: self.tokens[self.current - 1].span.end,
+                ..start
+            },
         })
     }
 
@@ -229,6 +307,10 @@ impl Parser<'_> {
         let binding = self.expect_ident()?;
         self.expect(&TokenKind::Dot)?;
         let field = self.expect_ident()?;
+        let span = Span {
+            end: self.tokens[self.current - 1].span.end,
+            ..span
+        };
         Ok(FieldAccess {
             binding,
             field,
@@ -351,12 +433,24 @@ consume(&mut battery, 90);
         let program = parse(&tokens).unwrap();
 
         assert_eq!(program.ranges[0].name, "Percent");
-        assert_eq!(program.functions[0].precondition.state.field, "charge");
+        assert!(matches!(
+            &program.functions[0].requires.kind,
+            ExprKind::Binary {
+                op: BinaryOp::LessEqual,
+                ..
+            }
+        ));
         assert!(
             matches!(&program.statements[0], Statement::Binding(binding) if binding.value == 80)
         );
         assert!(matches!(&program.statements[1], Statement::Call(call) if call.amount == 90));
-        assert_eq!(program.functions[0].postcondition.old.field, "charge");
+        assert!(matches!(
+            &program.functions[0].ensures.kind,
+            ExprKind::Binary {
+                op: BinaryOp::Equal,
+                ..
+            }
+        ));
         assert_eq!(program.functions[0].body.len(), 1);
     }
 }

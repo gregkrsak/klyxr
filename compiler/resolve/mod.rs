@@ -17,9 +17,56 @@ fn duplicate(span: Span, name: &str) -> Box<Diagnostic> {
     )
 }
 
+/// Resolved names before expression type checking. Canonical storage remains internal.
+#[derive(Debug)]
+pub struct ResolvedProgram {
+    pub(crate) declarations: hir::Program,
+    pub(crate) functions: Vec<ResolvedFunction>,
+}
+#[derive(Debug)]
+pub(crate) struct ResolvedFunction {
+    pub id: FunctionId,
+    pub name: String,
+    pub span: Span,
+    pub state_param: ParameterId,
+    pub state_type: RecordId,
+    pub amount_param: hir::RangeParameter,
+    pub requires: ResolvedExpr,
+    pub ensures: ResolvedExpr,
+    pub body: Vec<ResolvedSubtract>,
+}
+#[derive(Debug)]
+pub(crate) struct ResolvedSubtract {
+    pub target: hir::FieldAccess,
+    pub operand: ResolvedExpr,
+    pub span: Span,
+}
+#[derive(Debug)]
+pub(crate) struct ResolvedExpr {
+    pub kind: ResolvedExprKind,
+    pub span: Span,
+}
+#[derive(Debug)]
+pub(crate) enum ResolvedExprKind {
+    BoolLiteral(bool),
+    IntegerLiteral(i64),
+    Parameter(ParameterId),
+    FieldAccess(hir::FieldAccess),
+    OldField(hir::FieldAccess),
+    Unary {
+        op: ast::UnaryOp,
+        operand: Box<ResolvedExpr>,
+    },
+    Binary {
+        op: ast::BinaryOp,
+        left: Box<ResolvedExpr>,
+        right: Box<ResolvedExpr>,
+    },
+}
+
 /// Resolve complete declaration sets, then executable statements in source order.
 /// No partially resolved program is returned on failure.
-pub fn resolve(ast: &ast::Program) -> Result<hir::Program, Vec<Diagnostic>> {
+pub fn resolve(ast: &ast::Program) -> Result<ResolvedProgram, Vec<Diagnostic>> {
     let mut resolver = Resolver::default();
     let mut diagnostics = Vec::new();
     let mut types = HashSet::new();
@@ -92,9 +139,10 @@ pub fn resolve(ast: &ast::Program) -> Result<hir::Program, Vec<Diagnostic>> {
     if !diagnostics.is_empty() {
         return Err(diagnostics);
     }
+    let mut functions = Vec::new();
     for (index, function) in ast.functions.iter().enumerate() {
         match resolver.function(FunctionId(index), function) {
-            Ok(function) => resolver.program.functions.push(function),
+            Ok(function) => functions.push(function),
             Err(diagnostic) => diagnostics.push(*diagnostic),
         }
     }
@@ -107,7 +155,10 @@ pub fn resolve(ast: &ast::Program) -> Result<hir::Program, Vec<Diagnostic>> {
             Err(diagnostic) => return Err(vec![*diagnostic]),
         }
     }
-    Ok(resolver.program)
+    Ok(ResolvedProgram {
+        declarations: resolver.program,
+        functions,
+    })
 }
 
 #[derive(Default)]
@@ -186,7 +237,7 @@ impl Resolver {
         &mut self,
         id: FunctionId,
         function: &ast::VerifiedFunction,
-    ) -> ResolutionResult<hir::VerifiedFunction> {
+    ) -> ResolutionResult<ResolvedFunction> {
         if function.state_param == function.amount_param {
             return Err(duplicate(function.span, &function.state_param));
         }
@@ -209,118 +260,106 @@ impl Resolver {
             parameter: amount_id,
             ty: amount_type,
         };
-        let requires = &function.precondition;
-        if requires.amount != function.amount_param {
-            return Err(error(
-                requires.span,
-                format!(
-                    "vertical slice expects precondition lhs `{}`, found `{}`",
-                    function.amount_param, requires.amount
-                ),
-                "use the declared amount parameter",
-            ));
-        }
-        if requires.state.binding != function.state_param {
-            return Err(error(
-                requires.state.span,
-                format!(
-                    "vertical slice expects precondition state `{}`, found `{}`",
-                    function.state_param, requires.state.binding
-                ),
-                "use the declared mutable record parameter",
-            ));
-        }
-        if requires.state.field != self.program.field(field).name {
-            return Err(error(
-                requires.span,
-                format!("unknown precondition field `{}`", requires.state.field),
-                format!(
-                    "record `{}` has field `{}`",
-                    function.state_type,
-                    self.program.field(field).name
-                ),
-            ));
-        }
-        let precondition = hir::Precondition {
-            amount: amount_param,
-            state: self.access(&requires.state, function, state_param, field)?,
-            span: requires.span,
-        };
-        let post = &function.postcondition;
-        let target = self.access(&post.target, function, state_param, field)?;
-        let old = self.access(&post.old, function, state_param, field)?;
-        if post.amount != function.amount_param {
-            return Err(error(
-                post.span,
-                format!("unknown postcondition parameter `{}`", post.amount),
-                format!(
-                    "the supported amount parameter is `{}`",
-                    function.amount_param
-                ),
-            ));
-        }
-        let postcondition = hir::Postcondition {
-            target,
-            old,
-            amount: amount_param,
-            span: post.span,
-        };
+        let requires = self.expression(
+            &function.requires,
+            function,
+            state_param,
+            amount_id,
+            field,
+            false,
+        )?;
+        let ensures = self.expression(
+            &function.ensures,
+            function,
+            state_param,
+            amount_id,
+            field,
+            true,
+        )?;
         let mut body = Vec::new();
         for statement in &function.body {
-            let target = self.access(&statement.target, function, state_param, field)?;
-            let operand = match &statement.operand {
-                ast::Operand::Literal(value) => hir::Operand::Literal(*value),
-                ast::Operand::Parameter(name) => {
-                    if name != &function.amount_param {
-                        return Err(error(
-                            statement.span,
-                            format!("unknown subtraction parameter `{name}`"),
-                            format!(
-                                "use `{}` or a signed integer literal",
-                                function.amount_param
-                            ),
-                        ));
-                    }
-                    hir::Operand::Parameter(amount_param)
-                }
-            };
-            body.push(hir::Subtract {
-                target,
-                operand,
+            body.push(ResolvedSubtract {
+                target: self.access(&statement.target, function, state_param, field)?,
+                operand: self.expression(
+                    &statement.operand,
+                    function,
+                    state_param,
+                    amount_id,
+                    field,
+                    false,
+                )?,
                 span: statement.span,
             });
         }
-        // The mandatory postcondition subtracts amount even for empty/literal bodies.
-        // Nominal identity, never display-name or numeric-bound equality.
-        let state_type_id = postcondition.target.ty;
-        if state_type_id != amount_param.ty {
-            let state_range = self.program.range(state_type_id);
-            let amount_range = self.program.range(amount_param.ty);
-            return Err(error(
-                post.span,
-                format!(
-                    "incompatible named range types for subtraction: `{}` and `{}`",
-                    state_range.name, amount_range.name
-                ),
-                format!(
-                    "state field `{}.{}` has type `{}`; parameter `{}` has type `{}`. \
-                     This prototype does not permit implicit arithmetic between distinct named range types; \
-                     both must use the same declared range type",
-                    function.state_param, self.program.field(field).name, state_range.name,
-                    function.amount_param, amount_range.name
-                ),
-            ));
-        }
-        Ok(hir::VerifiedFunction {
+        Ok(ResolvedFunction {
             id,
             name: function.name.clone(),
             span: function.span,
             state_param,
             state_type,
             amount_param,
-            precondition,
-            postcondition,
+            requires,
+            ensures,
             body,
+        })
+    }
+    fn expression(
+        &self,
+        expression: &ast::Expr,
+        function: &ast::VerifiedFunction,
+        state: ParameterId,
+        amount: ParameterId,
+        field: FieldId,
+        allow_old: bool,
+    ) -> ResolutionResult<ResolvedExpr> {
+        let kind = match &expression.kind {
+            ast::ExprKind::BoolLiteral(value) => ResolvedExprKind::BoolLiteral(*value),
+            ast::ExprKind::IntegerLiteral(value) => ResolvedExprKind::IntegerLiteral(*value),
+            ast::ExprKind::Name(name) => {
+                let parameter = if name == &function.amount_param {
+                    amount
+                } else if name == &function.state_param {
+                    state
+                } else {
+                    return Err(error(
+                        expression.span,
+                        format!("unknown parameter `{name}`"),
+                        format!(
+                            "function `{}` declares parameters `{}` and `{}`",
+                            function.name, function.state_param, function.amount_param
+                        ),
+                    ));
+                };
+                ResolvedExprKind::Parameter(parameter)
+            }
+            ast::ExprKind::FieldAccess(access) => {
+                ResolvedExprKind::FieldAccess(self.access(access, function, state, field)?)
+            }
+            ast::ExprKind::OldField(access) => {
+                if !allow_old {
+                    return Err(error(
+                        expression.span,
+                        "old(...) is permitted only in ensures",
+                        "this prototype snapshots only the mutable state field at function entry",
+                    ));
+                }
+                ResolvedExprKind::OldField(self.access(access, function, state, field)?)
+            }
+            ast::ExprKind::Unary { op, operand } => ResolvedExprKind::Unary {
+                op: *op,
+                operand: Box::new(
+                    self.expression(operand, function, state, amount, field, allow_old)?,
+                ),
+            },
+            ast::ExprKind::Binary { op, left, right } => ResolvedExprKind::Binary {
+                op: *op,
+                left: Box::new(self.expression(left, function, state, amount, field, allow_old)?),
+                right: Box::new(self.expression(right, function, state, amount, field, allow_old)?),
+            },
+        };
+        Ok(ResolvedExpr {
+            kind,
+            span: expression.span,
         })
     }
     fn statement(&mut self, statement: &ast::Statement) -> ResolutionResult<hir::Statement> {

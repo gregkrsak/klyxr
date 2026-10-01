@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use crate::diagnostics::Diagnostic;
 use crate::hir::{
-    BindingId, Operand, Program, RangeType, RecordBinding, Statement, VerifiedFunction,
+    BinaryOp, BindingId, ExprKind, FieldId, Program, RangeType, RecordBinding, Statement,
+    TypedExpr, VerifiedFunction,
 };
 use crate::lexer::Span;
 
@@ -98,10 +99,107 @@ fn input_vertices(state: &RangeType, amount: &RangeType) -> Vec<(i128, i128)> {
     points
 }
 
+enum Operand {
+    Parameter,
+    Literal(i64),
+}
+struct ProofSubtract {
+    operand: Operand,
+    span: Span,
+}
+
+fn unsupported(expression: &TypedExpr, role: &str) -> Box<Diagnostic> {
+    semantic_error(
+        expression.span,
+        "well-typed expression is not yet supported by the prototype verifier",
+        format!(
+            "unsupported {role}; this verifier requires amount <= state.field, \
+             state.field == old(state.field) - amount, and body operands that are \
+             the amount parameter or an integer literal"
+        ),
+    )
+}
+fn is_amount(expression: &TypedExpr, function: &VerifiedFunction) -> bool {
+    matches!(expression.kind, ExprKind::Parameter(id) if id == function.amount_param.parameter)
+}
+fn is_state(
+    expression: &TypedExpr,
+    function: &VerifiedFunction,
+    field: FieldId,
+    old: bool,
+) -> bool {
+    let access = match (&expression.kind, old) {
+        (ExprKind::FieldAccess(access), false) | (ExprKind::OldField(access), true) => access,
+        _ => return false,
+    };
+    access.parameter == function.state_param && access.field == field
+}
+/// Recognize the original semantic proof shape; do not simplify richer expressions.
+fn proof_body(
+    program: &Program,
+    function: &VerifiedFunction,
+) -> VerificationResult<Vec<ProofSubtract>> {
+    let field = program.record(function.state_type).field;
+    let supported_requires = match &function.requires.kind {
+        ExprKind::Binary {
+            op: BinaryOp::LessEqual,
+            left,
+            right,
+        } => is_amount(left, function) && is_state(right, function, field, false),
+        _ => false,
+    };
+    if !supported_requires {
+        return Err(unsupported(&function.requires, "requires expression"));
+    }
+    let supported_ensures = match &function.ensures.kind {
+        ExprKind::Binary {
+            op: BinaryOp::Equal,
+            left,
+            right,
+        } if is_state(left, function, field, false) => match &right.kind {
+            ExprKind::Binary {
+                op: BinaryOp::Subtract,
+                left,
+                right,
+            } => is_state(left, function, field, true) && is_amount(right, function),
+            _ => false,
+        },
+        _ => false,
+    };
+    if !supported_ensures {
+        return Err(unsupported(&function.ensures, "ensures expression"));
+    }
+    let mut body = Vec::new();
+    for statement in &function.body {
+        if statement.target.parameter != function.state_param || statement.target.field != field {
+            return Err(semantic_error(
+                statement.target.span,
+                "well-typed expression is not yet supported by the prototype verifier",
+                "the subtract-assignment target must be this function's resolved mutable state field",
+            ));
+        }
+        let operand = match statement.operand.kind {
+            ExprKind::Parameter(id) if id == function.amount_param.parameter => Operand::Parameter,
+            ExprKind::IntegerLiteral(value) => Operand::Literal(value),
+            _ => {
+                return Err(unsupported(
+                    &statement.operand,
+                    "subtract-assignment operand",
+                ))
+            }
+        };
+        body.push(ProofSubtract {
+            operand,
+            span: statement.span,
+        });
+    }
+    Ok(body)
+}
 fn prove_function(program: &Program, function: &VerifiedFunction) -> VerificationResult {
-    let state = program.range(function.precondition.state.ty);
+    let body = proof_body(program, function)?;
+    let state = program.range(program.field(program.record(function.state_type).field).ty);
     let amount = program.range(function.amount_param.ty);
-    prove_affine_function(program, function, state, amount)
+    prove_affine_function(program, function, state, amount, &body)
 }
 
 /// Private numerical kernel. Source-language nominal compatibility is checked
@@ -111,20 +209,21 @@ fn prove_affine_function(
     function: &VerifiedFunction,
     state: &RangeType,
     amount: &RangeType,
+    body: &[ProofSubtract],
 ) -> VerificationResult {
     let vertices = input_vertices(state, amount);
     if vertices.is_empty() {
         return Err(semantic_error(
-            function.precondition.span,
+            function.requires.span,
             "precondition has no admissible inputs",
             "this prototype requires a nonempty input domain rather than reporting a vacuous proof",
         ));
     }
     let mut current: Vec<i128> = vertices.iter().map(|(x, _)| *x).collect();
-    for statement in &function.body {
+    for statement in body {
         for (index, &(initial, input_amount)) in vertices.iter().enumerate() {
             let operand = match &statement.operand {
-                Operand::Parameter(_) => input_amount,
+                Operand::Parameter => input_amount,
                 Operand::Literal(value) => *value as i128,
             };
             // Both operands fit i64; i128 subtraction cannot overflow.
@@ -159,7 +258,7 @@ fn prove_affine_function(
             return Err(proof_failure(
                 program,
                 function,
-                function.postcondition.span,
+                function.ensures.span,
                 "postcondition cannot be established",
                 initial,
                 input_amount,
@@ -183,7 +282,7 @@ fn proof_failure(
         message: message.into(), span,
         required: format!("`{}` must preserve its field range and establish its postcondition for every input satisfying requires", function.name),
         known: vec![
-            format!("old({}.{}) == {state}", program.parameter(function.state_param).name, program.field(function.precondition.state.field).name),
+            format!("old({}.{}) == {state}", program.parameter(function.state_param).name, program.field(program.record(function.state_type).field).name),
             format!("{} == {amount}", program.parameter(function.amount_param.parameter).name),
             format!("{amount} <= {state} is true"),
             format!("computed field value == {actual}"),
@@ -266,11 +365,11 @@ fn check_call(
             span: call.span,
             required: format!(
                 "{} <= {}.{}",
-                program
-                    .parameter(function.precondition.amount.parameter)
-                    .name,
+                program.parameter(function.amount_param.parameter).name,
                 binding.name,
-                program.field(function.precondition.state.field).name
+                program
+                    .field(program.record(function.state_type).field)
+                    .name
             ),
             known: vec![
                 format!(
@@ -281,7 +380,9 @@ fn check_call(
                 format!(
                     "{}.{} == {initial}",
                     binding.name,
-                    program.field(function.precondition.state.field).name
+                    program
+                        .field(program.record(function.state_type).field)
+                        .name
                 ),
             ],
             conclusion: format!("{} <= {initial} is false", call.amount),
@@ -345,7 +446,9 @@ mod tests {
                                 }
                             }
                             let state = RangeType {
-                                id: template.precondition.state.ty,
+                                id: prototype
+                                    .field(prototype.record(template.state_type).field)
+                                    .ty,
                                 name: "State".into(),
                                 min: low,
                                 max: high,
@@ -358,22 +461,26 @@ mod tests {
                                 max: amount_high,
                                 span: template.span,
                             };
-                            let mut function = template.clone();
-                            function.body = body
+                            let proof_body: Vec<ProofSubtract> = body
                                 .iter()
-                                .map(|operand| {
-                                    let mut statement = template.body[0].clone();
-                                    statement.operand = match operand {
+                                .map(|operand| ProofSubtract {
+                                    operand: match operand {
                                         Some(value) => Operand::Literal(*value),
-                                        None => Operand::Parameter(function.amount_param),
-                                    };
-                                    statement
+                                        None => Operand::Parameter,
+                                    },
+                                    span: template.body[0].span,
                                 })
                                 .collect();
                             let case = format!("state={low}..{high}, amount={amount_low}..{amount_high}, body={body:?}");
                             assert_eq!(
-                                prove_affine_function(&prototype, &function, &state, &amount)
-                                    .is_ok(),
+                                prove_affine_function(
+                                    &prototype,
+                                    template,
+                                    &state,
+                                    &amount,
+                                    &proof_body
+                                )
+                                .is_ok(),
                                 has_inputs && valid,
                                 "{case}"
                             );
@@ -390,6 +497,7 @@ mod tests {
     fn numerical_kernel_preserves_extreme_and_empty_domain_coverage() {
         let program = crate::compile_source(include_str!("../../examples/battery_ok.klx")).unwrap();
         let function = &program.functions[0];
+        let body = proof_body(&program, function).unwrap();
         let full = RangeType {
             id: function.amount_param.ty,
             name: "Full".into(),
@@ -404,7 +512,7 @@ mod tests {
             max: 0,
             span: function.span,
         };
-        assert!(prove_affine_function(&program, function, &full, &zero).is_ok());
+        assert!(prove_affine_function(&program, function, &full, &zero, &body).is_ok());
         let small = RangeType {
             id: function.amount_param.ty,
             name: "Small".into(),
@@ -419,7 +527,8 @@ mod tests {
             max: 200,
             span: function.span,
         };
-        let error = prove_affine_function(&program, function, &small, &too_much).unwrap_err();
+        let error =
+            prove_affine_function(&program, function, &small, &too_much, &body).unwrap_err();
         assert_eq!(error.message, "precondition has no admissible inputs");
     }
 }
