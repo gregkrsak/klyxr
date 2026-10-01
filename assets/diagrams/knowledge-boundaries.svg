@@ -11,8 +11,7 @@
   </text>
 
   <!-- Compiler -->
-  <rect x="48" y="138" width="258" height="232" rx="22" fill="#111827" stroke="#65F3FF" stroke-width="2"/>
-  <rect x="48" y="138" width="258" height="7" rx="4" fill="#65F3FF"/>
+  <rect x="48" y="138" width="258" height="232" rx="22" fill="#111827" stroke="#65F3FF" stroke-width="3"/>
   <text x="74" y="188" fill="#65F3FF" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="800">COMPILER KNOWS</text>
   <text x="74" y="232" fill="#EDF2FF" font-family="Arial, Helvetica, sans-serif" font-size="20">• ownership</text>
   <text x="74" y="272" fill="#EDF2FF" font-family="Arial, Helvetica, sans-serif" font-size="20">• valid references</text>
@@ -20,8 +19,7 @@
   <text x="74" y="350" fill="#96A3BD" font-family="Arial, Helvetica, sans-serif" font-size="17">Structural guarantees</text>
 
   <!-- Verifier -->
-  <rect x="330" y="138" width="258" height="232" rx="22" fill="#111827" stroke="#6F8CFF" stroke-width="2"/>
-  <rect x="330" y="138" width="258" height="7" rx="4" fill="#6F8CFF"/>
+  <rect x="330" y="138" width="258" height="232" rx="22" fill="#111827" stroke="#6F8CFF" stroke-width="3"/>
   <text x="356" y="188" fill="#6F8CFF" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="800">VERIFIER PROVED</text>
   <text x="356" y="232" fill="#EDF2FF" font-family="Arial, Helvetica, sans-serif" font-size="20">• contracts</text>
   <text x="356" y="272" fill="#EDF2FF" font-family="Arial, Helvetica, sans-serif" font-size="20">• invariants</text>
@@ -29,8 +27,7 @@
   <text x="356" y="350" fill="#96A3BD" font-family="Arial, Helvetica, sans-serif" font-size="17">Under stated assumptions</text>
 
   <!-- Trusted -->
-  <rect x="612" y="138" width="258" height="232" rx="22" fill="#111827" stroke="#9C77FF" stroke-width="2"/>
-  <rect x="612" y="138" width="258" height="7" rx="4" fill="#9C77FF"/>
+  <rect x="612" y="138" width="258" height="232" rx="22" fill="#111827" stroke="#9C77FF" stroke-width="3"/>
   <text x="638" y="188" fill="#B99DFF" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="800">PROGRAMMER TRUSTS</text>
   <text x="638" y="232" fill="#EDF2FF" font-family="Arial, Helvetica, sans-serif" font-size="20">• external assumptions</text>
   <text x="638" y="272" fill="#EDF2FF" font-family="Arial, Helvetica, sans-serif" font-size="20">• FFI boundaries</text>
@@ -38,8 +35,7 @@
   <text x="638" y="350" fill="#96A3BD" font-family="Arial, Helvetica, sans-serif" font-size="17">Explicit and auditable</text>
 
   <!-- Unsafe -->
-  <rect x="894" y="138" width="258" height="232" rx="22" fill="#111827" stroke="#FF6F7D" stroke-width="2"/>
-  <rect x="894" y="138" width="258" height="7" rx="4" fill="#FF6F7D"/>
+  <rect x="894" y="138" width="258" height="232" rx="22" fill="#111827" stroke="#FF6F7D" stroke-width="3"/>
   <text x="920" y="188" fill="#FF8792" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="800">UNSAFE</text>
   <text x="920" y="232" fill="#EDF2FF" font-family="Arial, Helvetica, sans-serif" font-size="20">• escape hatches</text>
   <text x="920" y="272" fill="#EDF2FF" font-family="Arial, Helvetica, sans-serif" font-size="20">• isolated regions</text>
