@@ -5,16 +5,21 @@ on:
   pull_request:
 
 jobs:
-  prototype-build:
+  compiler-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-      - name: Validate repository structure
+
+      - name: Show Rust toolchain
         run: |
-          test -f README.md
-          test -f examples/battery.klx
-          test -f examples/effects.klx
-          python scripts/verify-readme.py
+          rustc --version
+          cargo --version
+
+      - name: Check compiler workspace
+        run: cargo check --workspace --all-targets
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Validate README assets
+        run: python scripts/verify-readme.py

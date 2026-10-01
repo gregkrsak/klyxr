@@ -1,0 +1,324 @@
+use std::fmt;
+
+use crate::ast::{Call, Program, RangeType, RecordBinding, RecordDef, VerifiedFunction};
+use crate::lexer::{Span, Token, TokenKind};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseError {
+    pub message: String,
+    pub span: Span,
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} at {}:{}", self.message, self.span.line, self.span.column)
+    }
+}
+
+impl std::error::Error for ParseError {}
+
+pub fn parse(tokens: &[Token]) -> Result<Program, ParseError> {
+    Parser { tokens, current: 0 }.parse_program()
+}
+
+struct Parser<'a> {
+    tokens: &'a [Token],
+    current: usize,
+}
+
+impl Parser<'_> {
+    fn parse_program(&mut self) -> Result<Program, ParseError> {
+        let mut program = Program::default();
+
+        while !self.at(&TokenKind::Eof) {
+            if self.at(&TokenKind::Type) {
+                program.ranges.push(self.parse_range_type()?);
+            } else if self.at(&TokenKind::Record) {
+                program.records.push(self.parse_record()?);
+            } else if self.at(&TokenKind::Verified) {
+                program.functions.push(self.parse_verified_function()?);
+            } else if self.at(&TokenKind::Let) {
+                program.bindings.push(self.parse_binding()?);
+            } else if matches!(self.peek_kind(), TokenKind::Ident(_))
+                && self.lookahead_is(1, &TokenKind::LParen)
+            {
+                program.calls.push(self.parse_call()?);
+            } else {
+                return Err(self.error(format!(
+                    "unexpected top-level token {:?}",
+                    self.peek_kind()
+                )));
+            }
+        }
+
+        Ok(program)
+    }
+
+    fn parse_range_type(&mut self) -> Result<RangeType, ParseError> {
+        let span = self.expect(&TokenKind::Type)?.span;
+        let name = self.expect_ident()?;
+        self.expect(&TokenKind::Equal)?;
+        self.expect(&TokenKind::Range)?;
+        let min = self.expect_number()?;
+        self.expect(&TokenKind::DotDot)?;
+        let max = self.expect_number()?;
+        self.expect(&TokenKind::Semicolon)?;
+
+        Ok(RangeType {
+            name,
+            min,
+            max,
+            span,
+        })
+    }
+
+    fn parse_record(&mut self) -> Result<RecordDef, ParseError> {
+        let span = self.expect(&TokenKind::Record)?.span;
+        let name = self.expect_ident()?;
+        self.expect(&TokenKind::LBrace)?;
+        let field_name = self.expect_ident()?;
+        self.expect(&TokenKind::Colon)?;
+        let field_type = self.expect_ident()?;
+        self.expect(&TokenKind::RBrace)?;
+
+        Ok(RecordDef {
+            name,
+            field_name,
+            field_type,
+            span,
+        })
+    }
+
+    fn parse_verified_function(&mut self) -> Result<VerifiedFunction, ParseError> {
+        self.expect(&TokenKind::Verified)?;
+        self.expect(&TokenKind::Fn)?;
+        let name = self.expect_ident()?;
+        self.expect(&TokenKind::LParen)?;
+
+        let state_param = self.expect_ident()?;
+        self.expect(&TokenKind::Colon)?;
+        self.expect(&TokenKind::Amp)?;
+        self.expect(&TokenKind::Mut)?;
+        let state_type = self.expect_ident()?;
+        self.expect(&TokenKind::Comma)?;
+
+        let amount_param = self.expect_ident()?;
+        self.expect(&TokenKind::Colon)?;
+        let amount_type = self.expect_ident()?;
+        self.expect(&TokenKind::RParen)?;
+
+        let requires_span = self.expect(&TokenKind::Requires)?.span;
+        let lhs = self.expect_ident()?;
+        if lhs != amount_param {
+            return Err(self.error(format!(
+                "vertical slice expects precondition lhs `{amount_param}`, found `{lhs}`"
+            )));
+        }
+
+        self.expect(&TokenKind::LessEqual)?;
+
+        let rhs_state = self.expect_ident()?;
+        if rhs_state != state_param {
+            return Err(self.error(format!(
+                "vertical slice expects precondition state `{state_param}`, found `{rhs_state}`"
+            )));
+        }
+
+        self.expect(&TokenKind::Dot)?;
+        let required_field = self.expect_ident()?;
+
+        if self.at(&TokenKind::Ensures) {
+            self.advance();
+            while !self.at(&TokenKind::LBrace) && !self.at(&TokenKind::Eof) {
+                self.advance();
+            }
+        }
+
+        self.skip_balanced_block()?;
+
+        Ok(VerifiedFunction {
+            name,
+            state_param,
+            state_type,
+            amount_param,
+            amount_type,
+            required_field,
+            requires_span,
+        })
+    }
+
+    fn parse_binding(&mut self) -> Result<RecordBinding, ParseError> {
+        let span = self.expect(&TokenKind::Let)?.span;
+
+        if self.at(&TokenKind::Mut) {
+            self.advance();
+        }
+
+        let name = self.expect_ident()?;
+        self.expect(&TokenKind::Equal)?;
+        let record_type = self.expect_ident()?;
+        self.expect(&TokenKind::LBrace)?;
+        let field_name = self.expect_ident()?;
+        self.expect(&TokenKind::Colon)?;
+        let value = self.expect_number()?;
+        self.expect(&TokenKind::RBrace)?;
+        self.expect(&TokenKind::Semicolon)?;
+
+        Ok(RecordBinding {
+            name,
+            record_type,
+            field_name,
+            value,
+            span,
+        })
+    }
+
+    fn parse_call(&mut self) -> Result<Call, ParseError> {
+        let span = self.peek().span;
+        let function = self.expect_ident()?;
+
+        self.expect(&TokenKind::LParen)?;
+        self.expect(&TokenKind::Amp)?;
+        self.expect(&TokenKind::Mut)?;
+        let binding = self.expect_ident()?;
+        self.expect(&TokenKind::Comma)?;
+        let amount = self.expect_number()?;
+        self.expect(&TokenKind::RParen)?;
+        self.expect(&TokenKind::Semicolon)?;
+
+        Ok(Call {
+            function,
+            binding,
+            amount,
+            span,
+        })
+    }
+
+    fn skip_balanced_block(&mut self) -> Result<(), ParseError> {
+        self.expect(&TokenKind::LBrace)?;
+        let mut depth = 1usize;
+
+        while depth > 0 {
+            if self.at(&TokenKind::LBrace) {
+                depth += 1;
+                self.advance();
+            } else if self.at(&TokenKind::RBrace) {
+                depth -= 1;
+                self.advance();
+            } else if self.at(&TokenKind::Eof) {
+                return Err(self.error("unterminated function body".to_owned()));
+            } else {
+                self.advance();
+            }
+        }
+
+        Ok(())
+    }
+
+    fn expect_ident(&mut self) -> Result<String, ParseError> {
+        match self.peek_kind().clone() {
+            TokenKind::Ident(name) => {
+                self.advance();
+                Ok(name)
+            }
+            other => Err(self.error(format!("expected identifier, found {other:?}"))),
+        }
+    }
+
+    fn expect_number(&mut self) -> Result<i64, ParseError> {
+        match self.peek_kind().clone() {
+            TokenKind::Number(value) => {
+                self.advance();
+                Ok(value)
+            }
+            other => Err(self.error(format!("expected integer, found {other:?}"))),
+        }
+    }
+
+    fn expect(&mut self, expected: &TokenKind) -> Result<Token, ParseError> {
+        if self.at(expected) {
+            Ok(self.advance().clone())
+        } else {
+            Err(self.error(format!(
+                "expected {expected:?}, found {:?}",
+                self.peek_kind()
+            )))
+        }
+    }
+
+    fn at(&self, expected: &TokenKind) -> bool {
+        same_variant(self.peek_kind(), expected)
+    }
+
+    fn lookahead_is(&self, offset: usize, expected: &TokenKind) -> bool {
+        self.tokens
+            .get(self.current + offset)
+            .map(|token| same_variant(&token.kind, expected))
+            .unwrap_or(false)
+    }
+
+    fn peek(&self) -> &Token {
+        &self.tokens[self.current]
+    }
+
+    fn peek_kind(&self) -> &TokenKind {
+        &self.peek().kind
+    }
+
+    fn advance(&mut self) -> &Token {
+        let index = self.current;
+        if !matches!(&self.tokens[index].kind, TokenKind::Eof) {
+            self.current += 1;
+        }
+        &self.tokens[index]
+    }
+
+    fn error(&self, message: String) -> ParseError {
+        ParseError {
+            message,
+            span: self.peek().span,
+        }
+    }
+}
+
+fn same_variant(left: &TokenKind, right: &TokenKind) -> bool {
+    std::mem::discriminant(left) == std::mem::discriminant(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::lex;
+
+    const PROGRAM: &str = r#"
+type Percent = range 0..100;
+
+record Battery {
+    charge: Percent
+}
+
+verified fn consume(
+    battery: &mut Battery,
+    amount: Percent
+)
+    requires amount <= battery.charge
+    ensures battery.charge == old(battery.charge) - amount
+{
+    battery.charge -= amount;
+}
+
+let mut battery = Battery { charge: 80 };
+consume(&mut battery, 90);
+"#;
+
+    #[test]
+    fn parses_battery_vertical_slice() {
+        let tokens = lex(PROGRAM).unwrap();
+        let program = parse(&tokens).unwrap();
+
+        assert_eq!(program.ranges[0].name, "Percent");
+        assert_eq!(program.functions[0].required_field, "charge");
+        assert_eq!(program.bindings[0].value, 80);
+        assert_eq!(program.calls[0].amount, 90);
+    }
+}

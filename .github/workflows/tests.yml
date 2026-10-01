@@ -5,15 +5,15 @@ on:
   pull_request:
 
 jobs:
-  prototype-tests:
+  compiler-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-      - name: Run prototype repository tests
+
+      - name: Run compiler unit tests
+        run: cargo test --workspace
+
+      - name: Verify compact and explicit examples remain present
         run: |
-          python scripts/verify-readme.py
-          grep -q "verified fn consume" examples/battery.klx
-          grep -q "deny_effects" examples/effects.klx
+          grep -q "verified fn consume" examples/battery_fail.klx
+          grep -q "verified function consume" examples/battery_ok.klx
