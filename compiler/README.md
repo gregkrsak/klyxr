@@ -91,8 +91,16 @@ HIR produced by the resolver. Verification uses direct ID-based table access and
 tracks current state by `BindingId`; names are used only for diagnostics and the
 human-readable `final_values` report. It retains numerical initialization/argument
 checks, record-ID compatibility and the existing mutable-binding check, universal
-body proof, and ordered modular call-state reasoning. HIR tables and references
-must remain consistent if inspected or modified by library tooling.
+body proof, and ordered modular call-state reasoning.
+
+`hir::Program` owns the canonical tables for its compilation-local IDs. Public
+inspection is read-only: `ranges()`, `records()`, `fields()`, `functions()`,
+`parameters()`, `bindings()`, and `statements()` return immutable slices, while
+`range(id)`, `record(id)`, `field(id)`, `function(id)`, `parameter(id)`, and
+`binding(id)` provide immutable ID-based lookup. External consumers cannot mutate
+or reorder the underlying tables. Storage is crate-private so the resolver can
+construct HIR directly; compiler-internal transformations are responsible for
+preserving its identity and reference invariants.
 
 The CLI follows this exact path:
 

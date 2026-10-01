@@ -880,6 +880,10 @@ identify range types, records, fields, functions, parameters, and top-level
 bindings within one compilation. HIR references carry canonical types and IDs;
 source names and spans remain diagnostic metadata. Nominal range compatibility
 uses range IDs, and verification performs no textual declaration lookup.
+`hir::Program` owns the canonical tables for those compilation-local IDs and
+exposes read-only slices and ID lookups publicly. Storage is crate-private;
+compiler-internal construction and transformations must preserve HIR identity
+and reference invariants. IDs have no cross-compilation stability guarantee.
 
 MIR, VIR, general ownership/effect analysis, SMT integration, and code generation
 are not yet implemented. This bounded implementation does not settle broader HIR,

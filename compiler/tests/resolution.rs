@@ -24,9 +24,9 @@ verified function drain(battery: &mutable Other, amount: Percent)
 #[test]
 fn declarations_and_all_function_references_have_canonical_identities() {
     let program = compile_source(SOURCE).unwrap();
-    let percent = program.ranges[1].id;
-    assert_ne!(program.ranges[0].id, percent);
-    for (record, function) in program.records.iter().zip(&program.functions) {
+    let percent = program.ranges()[1].id;
+    assert_ne!(program.ranges()[0].id, percent);
+    for (record, function) in program.records().iter().zip(program.functions()) {
         let field = program.field(record.field);
         assert_eq!(field.record, record.id);
         assert_eq!(field.ty, percent);
@@ -58,14 +58,14 @@ fn declarations_and_all_function_references_have_canonical_identities() {
         // Nominal comparison requires no declaration-name lookup.
         assert_eq!(function.body[0].target.ty, operand.ty);
     }
-    assert_ne!(program.records[0].field, program.records[1].field);
+    assert_ne!(program.records()[0].field, program.records()[1].field);
     assert_ne!(
-        program.functions[0].state_param,
-        program.functions[1].state_param
+        program.functions()[0].state_param,
+        program.functions()[1].state_param
     );
     assert_ne!(
-        program.functions[0].amount_param.parameter,
-        program.functions[1].amount_param.parameter
+        program.functions()[0].amount_param.parameter,
+        program.functions()[1].amount_param.parameter
     );
 }
 
@@ -73,17 +73,17 @@ fn declarations_and_all_function_references_have_canonical_identities() {
 fn ordered_construction_and_calls_resolve_to_the_correct_entities() {
     let program = compile_source(SOURCE).unwrap();
     for index in 0..2 {
-        let binding = &program.bindings[index];
-        assert_eq!(binding.record_type, program.records[index].id);
-        assert_eq!(binding.field, program.records[index].field);
+        let binding = &program.bindings()[index];
+        assert_eq!(binding.record_type, program.records()[index].id);
+        assert_eq!(binding.field, program.records()[index].field);
         assert_eq!(
-            program.statements[index * 2],
+            program.statements()[index * 2],
             Statement::Binding(binding.id)
         );
-        let Statement::Call(call) = &program.statements[index * 2 + 1] else {
+        let Statement::Call(call) = &program.statements()[index * 2 + 1] else {
             panic!("expected call")
         };
-        assert_eq!(call.function, program.functions[index].id);
+        assert_eq!(call.function, program.functions()[index].id);
         assert_eq!(call.binding, binding.id);
     }
     let result = verify_report(&program);
@@ -97,9 +97,9 @@ fn ordered_construction_and_calls_resolve_to_the_correct_entities() {
 #[test]
 fn equal_bounds_do_not_create_equal_range_identities() {
     let program = compile_source("type First = range 0..100; type Second = range 0..100;").unwrap();
-    assert_ne!(program.ranges[0].id, program.ranges[1].id);
-    assert_eq!(program.ranges[0].min, program.ranges[1].min);
-    assert_eq!(program.ranges[0].max, program.ranges[1].max);
+    assert_ne!(program.ranges()[0].id, program.ranges()[1].id);
+    assert_eq!(program.ranges()[0].min, program.ranges()[1].min);
+    assert_eq!(program.ranges()[0].max, program.ranges()[1].max);
     let source = SOURCE.replace("amount: Percent", "amount: Unused");
     let Err(FrontendError::Resolve(errors)) = compile_source(&source) else {
         panic!("expected nominal error")
@@ -160,49 +160,45 @@ fn existing_separate_function_type_and_binding_scopes_are_preserved() {
         .replace("consume", "Percent")
         .replace("first", "Percent");
     let program = compile_source(&source).unwrap();
-    assert_eq!(program.ranges[1].name, "Percent");
-    assert_eq!(program.functions[0].name, "Percent");
-    assert_eq!(program.bindings[0].name, "Percent");
+    assert_eq!(program.ranges()[1].name, "Percent");
+    assert_eq!(program.functions()[0].name, "Percent");
+    assert_eq!(program.bindings()[0].name, "Percent");
     assert!(verify_report(&program).diagnostics.is_empty());
 }
 
 #[test]
-fn verifier_uses_identities_even_when_display_names_collide() {
-    let mut program = compile_source(SOURCE).unwrap();
-    // Metadata changes cannot change which entities the references denote.
-    for range in &mut program.ranges {
-        range.name = "display".into();
+fn public_collection_views_and_id_lookups_expose_the_same_entities() {
+    let program = compile_source(SOURCE).unwrap();
+    let ranges: &[RangeType] = program.ranges();
+    let records: &[Record] = program.records();
+    let fields: &[Field] = program.fields();
+    let functions: &[VerifiedFunction] = program.functions();
+    let parameters: &[Parameter] = program.parameters();
+    let bindings: &[RecordBinding] = program.bindings();
+    let statements: &[Statement] = program.statements();
+    assert_eq!(ranges.len(), 2);
+    assert_eq!(records.len(), 2);
+    assert_eq!(fields.len(), 2);
+    assert_eq!(functions.len(), 2);
+    assert_eq!(parameters.len(), 4);
+    assert_eq!(bindings.len(), 2);
+    assert_eq!(statements.len(), 4);
+    for range in ranges {
+        assert_eq!(program.range(range.id), range);
     }
-    for record in &mut program.records {
-        record.name = "display".into();
+    for record in records {
+        assert_eq!(program.record(record.id), record);
     }
-    for field in &mut program.fields {
-        field.name = "display".into();
+    for field in fields {
+        assert_eq!(program.field(field.id), field);
     }
-    for function in &mut program.functions {
-        function.name = "display".into();
+    for function in functions {
+        assert_eq!(program.function(function.id), function);
     }
-    for parameter in &mut program.parameters {
-        parameter.name = "display".into();
+    for parameter in parameters {
+        assert_eq!(program.parameter(parameter.id), parameter);
     }
-    program.bindings[0].name = "renamed_first".into();
-    program.bindings[1].name = "renamed_second".into();
-    let report = verify_report(&program);
-    assert!(report.diagnostics.is_empty());
-    assert_eq!(report.functions_proven, 2);
-    assert_eq!(report.calls_checked, 2);
-    assert_eq!(report.final_values["renamed_first"], 30);
-    assert_eq!(report.final_values["renamed_second"], 50);
-
-    let wrong_record = SOURCE.replace("drain(&mut second, 20)", "drain(&mut first, 20)");
-    let mut program = compile_source(&wrong_record).unwrap();
-    for record in &mut program.records {
-        record.name = "display".into();
+    for binding in bindings {
+        assert_eq!(program.binding(binding.id), binding);
     }
-    let report = verify_report(&program);
-    assert_eq!(report.calls_checked, 1);
-    assert_eq!(
-        report.diagnostics[0].message,
-        "record argument type mismatch"
-    );
 }
