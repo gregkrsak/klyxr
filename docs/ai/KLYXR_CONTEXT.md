@@ -47,6 +47,17 @@ Klyxr's core proposition is:
 
 Once they are part of the program, the compiler and verifier should be able to reason about them.
 
+## Current implementation status
+
+An executable compiler prototype, written in Rust, supports a narrow one-field
+record/signed-integer contract subset. It validates declarations and references,
+proves supported body subtraction safety, field ranges, and postconditions for all
+admissible inputs, and tracks current record state between literal-argument calls.
+Unsupported syntax is rejected, and success reports explicitly limit their scope.
+General ownership/borrowing, effects, runtime contracts, SMT integration, and
+machine-code generation remain unimplemented. Read `compiler/README.md` before
+making claims about what the current executable establishes.
+
 ## Intellectual lineage
 
 Klyxr deliberately combines lessons from **Rust** and **Ada/SPARK**, while aiming to become its own coherent language.

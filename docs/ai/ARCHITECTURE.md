@@ -235,3 +235,32 @@ A narrow first compiler should target:
 - simple integer verification.
 
 The MVP should demonstrate the difference between memory safety and application-level verified correctness before pursuing breadth.
+
+## 17. Current executable prototype
+
+The first compiler slice is implemented in Rust, with its toolchain pinned to
+1.80.0. It follows source → lexer/parser → AST → semantic validation → specialized
+integer contract proof → diagnostics. HIR, MIR, VIR, general ownership/effect
+analysis, SMT integration, and code generation are not yet implemented. This
+temporary path is a bounded prototype of the architecture, not a replacement for
+KD-012's direction.
+
+The AST retains supported postconditions and subtraction statements; no function
+body or contract is silently skipped. Ordered construction/call statements form a
+prototype harness. The checker rejects unresolved references, distinct-record
+type mismatches, invalid ranges, duplicate names, and mutable access to immutable
+bindings. It proves every declared body independently of its call sites, then uses
+the established postcondition to update caller state in source order.
+
+For the supported precondition `amount <= state.field` and postcondition
+`state.field == old(state.field) - amount`, the proof establishes signed i64
+subtraction safety, range preservation at each assignment, and the final equality
+over every admissible input. It uses affine extrema at the vertices of the
+range rectangle clipped by the precondition. This is a specialized proof with
+the implementation in its trusted base, not an SMT proof or proof certificate.
+Empty admissible domains are explicitly rejected by this prototype.
+
+The exact grammar, mathematical argument, CLI behavior, and limitations live in
+`compiler/README.md`. The broader language's representation, assurance-boundary,
+invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006,
+KD-013, KD-014, KD-015, KD-017, DP-008, DP-009, and OQ-018 through OQ-020.

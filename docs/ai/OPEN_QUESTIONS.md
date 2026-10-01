@@ -75,3 +75,19 @@ First implementation likely uses Rust. Criteria and trust story for self-hosting
 ## OQ-018 — Syntax is not frozen by repetition
 
 Many current examples are illustrative. Always distinguish accepted semantic concepts from provisional surface spelling.
+
+## OQ-019 — Mixed assurance call boundaries
+
+Need exact rules for calls among `safe`, `checked`, and `verified` code: who
+establishes preconditions, which postconditions may be assumed, when runtime
+checks are required or may be removed, and how unproved callees enter the trust
+report. KD-003, KD-006, and KD-013 settle the direction, not these details. The
+prototype's `check` and `verify` commands share a restricted proof pass; they do
+not implement different assurance levels.
+
+## OQ-020 — Mutation framing, invariant boundaries, and snapshots
+
+Need exact rules for the state a function may change, when record invariants must
+hold, and what `old(...)` snapshots for nested records, aliases, heap values, and
+exceptional exits. The current prototype models only one mutable field and its
+entry integer value; that scope does not settle the general rules.
