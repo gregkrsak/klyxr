@@ -38,25 +38,57 @@ fn declarations_and_all_function_references_have_canonical_identities() {
         assert_eq!(amount.function, function.id);
         assert_eq!(amount.ty, ParameterType::Range(percent));
         assert_eq!(function.amount_param.ty, percent);
-        assert_eq!(function.precondition.amount, function.amount_param);
-        assert_eq!(function.postcondition.amount, function.amount_param);
-        for access in [
-            &function.precondition.state,
-            &function.postcondition.target,
-            &function.postcondition.old,
-            &function.body[0].target,
+        let ExprKind::Binary {
+            left: requires_amount,
+            right: requires_state,
+            ..
+        } = &function.requires.kind
+        else {
+            panic!("expected comparison")
+        };
+        let ExprKind::Binary {
+            left: target,
+            right: subtraction,
+            ..
+        } = &function.ensures.kind
+        else {
+            panic!("expected equality")
+        };
+        let ExprKind::Binary {
+            left: old,
+            right: ensures_amount,
+            ..
+        } = &subtraction.kind
+        else {
+            panic!("expected subtraction")
+        };
+        for parameter in [
+            requires_amount.as_ref(),
+            ensures_amount.as_ref(),
+            &function.body[0].operand,
         ] {
+            assert_eq!(parameter.kind, ExprKind::Parameter(amount.id));
+            assert_eq!(parameter.ty, ExprType::Range(percent));
+        }
+        for expression in [requires_state.as_ref(), target.as_ref(), old.as_ref()] {
+            let access = match &expression.kind {
+                ExprKind::FieldAccess(access) | ExprKind::OldField(access) => access,
+                _ => panic!("expected field"),
+            };
             assert_eq!(access.parameter, state.id);
             assert_eq!(access.field, field.id);
+            assert_eq!(expression.ty, ExprType::Range(percent));
             assert_eq!(access.ty, percent);
-            assert!(access.span.end > access.span.start);
+            assert!(expression.span.end > expression.span.start);
         }
-        let Operand::Parameter(operand) = function.body[0].operand else {
-            panic!("expected resolved parameter")
-        };
-        assert_eq!(operand.parameter, amount.id);
-        // Nominal comparison requires no declaration-name lookup.
-        assert_eq!(function.body[0].target.ty, operand.ty);
+        assert_eq!(function.body[0].target.parameter, state.id);
+        assert_eq!(function.body[0].target.field, field.id);
+        assert_eq!(
+            ExprType::Range(function.body[0].target.ty),
+            function.body[0].operand.ty
+        );
+        assert_eq!(function.requires.ty, ExprType::Bool);
+        assert_eq!(function.ensures.ty, ExprType::Bool);
     }
     assert_ne!(program.records()[0].field, program.records()[1].field);
     assert_ne!(
@@ -101,11 +133,13 @@ fn equal_bounds_do_not_create_equal_range_identities() {
     assert_eq!(program.ranges()[0].min, program.ranges()[1].min);
     assert_eq!(program.ranges()[0].max, program.ranges()[1].max);
     let source = SOURCE.replace("amount: Percent", "amount: Unused");
-    let Err(FrontendError::Resolve(errors)) = compile_source(&source) else {
+    let Err(FrontendError::Type(errors)) = compile_source(&source) else {
         panic!("expected nominal error")
     };
-    assert!(errors.iter().all(|error| error.message
-        == "incompatible named range types for subtraction: `Percent` and `Unused`"));
+    assert!(errors
+        .iter()
+        .all(|error| error.message
+            == "incompatible named range types for <=: `Unused` and `Percent`"));
 }
 
 #[test]
@@ -115,16 +149,23 @@ fn parsing_preserves_unresolved_precondition_names_and_spans() {
         "requires missing <= other.charge",
     );
     let ast = parse_source(&source).unwrap();
-    let precondition = &ast.functions[0].precondition;
-    assert_eq!(precondition.amount, "missing");
-    assert_eq!(precondition.state.binding, "other");
-    assert_eq!(precondition.state.field, "charge");
-    assert!(precondition.state.span.end > precondition.state.span.start);
+    let requires = &ast.functions[0].requires;
+    let klyxr_compiler::ast::ExprKind::Binary { left, right, .. } = &requires.kind else {
+        panic!("expected comparison")
+    };
+    assert_eq!(
+        left.kind,
+        klyxr_compiler::ast::ExprKind::Name("missing".into())
+    );
+    let klyxr_compiler::ast::ExprKind::FieldAccess(access) = &right.kind else {
+        panic!("expected field")
+    };
+    assert_eq!(access.binding, "other");
+    assert_eq!(access.field, "charge");
+    assert!(access.span.end > access.span.start);
     let errors = resolve::resolve(&ast).unwrap_err();
-    assert!(errors[0]
-        .message
-        .contains("precondition lhs `amount`, found `missing`"));
-    assert_eq!(errors[0].span, precondition.span);
+    assert!(errors[0].message.contains("unknown parameter `missing`"));
+    assert_eq!(errors[0].span, left.span);
     let state_only = SOURCE.replace(
         "requires amount <= battery.charge",
         "requires amount <= other.charge",
@@ -134,7 +175,7 @@ fn parsing_preserves_unresolved_precondition_names_and_spans() {
     };
     assert!(errors[0]
         .message
-        .contains("precondition state `battery`, found `other`"));
+        .contains("invalid field reference `other.charge`"));
 }
 
 #[test]

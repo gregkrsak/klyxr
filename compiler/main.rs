@@ -57,7 +57,7 @@ fn run() -> Result<(), i32> {
             let (span, message) = match error {
                 FrontendError::Lex(error) => (error.span, error.message),
                 FrontendError::Parse(error) => (error.span, error.message),
-                FrontendError::Resolve(diagnostics) => {
+                FrontendError::Resolve(diagnostics) | FrontendError::Type(diagnostics) => {
                     for diagnostic in diagnostics {
                         eprint!("{}", diagnostic.render(&path, &source));
                     }

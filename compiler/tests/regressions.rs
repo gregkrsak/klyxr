@@ -16,10 +16,12 @@ verified fn consume(battery: &mut Battery, amount: Percent)
 fn report(source: &str) -> VerificationReport {
     match compile_source(source) {
         Ok(program) => verify_report(&program),
-        Err(FrontendError::Resolve(diagnostics)) => VerificationReport {
-            diagnostics,
-            ..VerificationReport::default()
-        },
+        Err(FrontendError::Resolve(diagnostics)) | Err(FrontendError::Type(diagnostics)) => {
+            VerificationReport {
+                diagnostics,
+                ..VerificationReport::default()
+            }
+        }
         Err(error) => panic!("fixture should parse: {error}"),
     }
 }
@@ -121,7 +123,7 @@ fn unknown_declarations_and_references_never_succeed() {
                 "requires amount <= battery.charge",
                 "requires amount <= battery.missing",
             ),
-            "unknown precondition field",
+            "invalid field reference",
         ),
         (
             PREFIX.replace("old(battery.charge)", "old(other.charge)"),
@@ -137,7 +139,7 @@ fn unknown_declarations_and_references_never_succeed() {
         ),
         (
             PREFIX.replace("- amount\n", "- missing\n"),
-            "unknown postcondition parameter",
+            "unknown parameter",
         ),
         (
             PREFIX.replace("battery.charge -= amount", "battery.missing -= amount"),
@@ -149,7 +151,7 @@ fn unknown_declarations_and_references_never_succeed() {
         ),
         (
             PREFIX.replace("battery.charge -= amount", "battery.charge -= missing"),
-            "unknown subtraction parameter",
+            "unknown parameter",
         ),
     ] {
         fails(&source, message);
@@ -265,10 +267,11 @@ fn unsupported_and_malformed_syntax_is_not_skipped() {
         ),
         format!("{PREFIX}unsafe {{}}"),
     ] {
-        assert!(
-            compile_source(&source).is_err(),
-            "silently accepted: {source}"
-        );
+        let rejected = match compile_source(&source) {
+            Err(_) => true,
+            Ok(program) => !verify_report(&program).diagnostics.is_empty(),
+        };
+        assert!(rejected, "silently accepted: {source}");
     }
     assert!(compile_source(include_str!("../../examples/effects.klx")).is_err());
 }
@@ -330,14 +333,14 @@ fn distinct_named_ranges_are_rejected_regardless_of_numeric_bounds() {
         let diagnostic = &result.diagnostics[0];
         assert_eq!(
             diagnostic.message,
-            "incompatible named range types for subtraction: `Percent` and `Amount`"
+            "incompatible named range types for <=: `Amount` and `Percent`"
         );
         let text = diagnostic.render("nominal.klx", &source);
-        assert!(text.contains("state field `battery.charge` has type `Percent`"));
-        assert!(text.contains("parameter `amount` has type `Amount`"));
-        assert!(
-            text.contains("does not permit implicit arithmetic between distinct named range types")
-        );
+        assert!(text.contains("range `Percent`"));
+        assert!(text.contains("range `Amount`"));
+        assert!(text.contains(
+            "does not permit implicit arithmetic or comparison between distinct named range types"
+        ));
         assert!(text.contains("nominal.klx:"));
     }
 }

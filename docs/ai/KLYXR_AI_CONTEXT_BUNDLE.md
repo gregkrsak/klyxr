@@ -63,11 +63,17 @@ Once they are part of the program, the compiler and verifier should be able to r
 ## Current implementation status
 
 An executable compiler prototype, written in Rust, supports a narrow one-field
-record/signed-integer contract subset. Its explicit resolver lowers source AST
-to typed HIR with canonical declaration IDs and retained diagnostic names/spans.
-The resolver validates declarations and references; verification consumes HIR
-without textual name lookup. It proves supported body subtraction safety, field ranges, and postconditions for all
-admissible inputs, and tracks current record state between literal-argument calls.
+record/signed-integer contract subset. Source contracts and subtraction operands
+use expression trees. Explicit resolution assigns canonical declaration IDs;
+expression type checking produces typed HIR with `Bool`, nominal range identities,
+and an internal integer-literal category. Public HIR inspection remains read-only,
+and names/spans remain diagnostic metadata.
+
+The frontend supports only KED-003's expression grammar. The verifier recognizes
+the original battery-contract structure by IDs and rejects richer well-typed
+expressions with a verifier-support diagnostic. Its affine proof establishes
+subtraction safety, field ranges, and postconditions for every admissible input
+of the supported structure, and tracks state between literal-argument calls.
 Unsupported syntax is rejected, and success reports explicitly limit their scope.
 General ownership/borrowing, effects, runtime contracts, SMT integration, and
 machine-code generation remain unimplemented. Read `compiler/README.md` before
@@ -626,6 +632,29 @@ Canonical wording:
 
 > **The stated properties were proven under the stated assumptions.**
 
+---
+
+## KD-018 — Typed expression semantics
+
+**Status:** Direction Accepted
+
+Klyxr expressions are resolved and type-checked before verification or backend lowering.
+
+Typed HIR records the semantic type of expressions.
+
+`Bool` is a built-in semantic expression type.
+
+Named constrained range types remain nominally distinct during expression typing;
+operators do not implicitly mix different constrained type identities merely
+because their representations or bounds are compatible.
+
+Integer literals are constants and do not themselves create implicit conversions
+between distinct named constrained types.
+
+The initial executable expression subset and surface spellings remain subject to
+the explicit open questions and prototype-boundary rules. Implementing an operator
+in the prototype does not settle the complete Klyxr operator set.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -650,6 +679,9 @@ AST
    │
    ▼
 name resolution
+   │
+   ▼
+expression type checking
    │
    ▼
 typed HIR
@@ -874,12 +906,15 @@ The MVP should demonstrate the difference between memory safety and application-
 
 The first compiler slice is implemented in Rust, with its toolchain pinned to
 1.80.0. It follows source → lexer → parser → AST → explicit name resolution →
-typed HIR → specialized integer contract proof → diagnostics. The resolver and
-HIR implement KD-012's semantic boundary for this subset. Strongly typed IDs
+expression type checking → typed HIR expressions → specialized integer contract
+proof → diagnostics. The resolver, type layer, and HIR implement KD-012's semantic
+boundary and KD-018's expression direction for this subset. Strongly typed IDs
 identify range types, records, fields, functions, parameters, and top-level
 bindings within one compilation. HIR references carry canonical types and IDs;
-source names and spans remain diagnostic metadata. Nominal range compatibility
-uses range IDs, and verification performs no textual declaration lookup.
+source names and spans remain diagnostic metadata. The resolver owns declaration
+identity; `compiler/types` owns operator legality and expression types (`Bool`,
+nominal range, and internal integer literal). Nominal compatibility uses range
+IDs, and typing/verification perform no textual declaration lookup.
 `hir::Program` owns the canonical tables for those compilation-local IDs and
 exposes read-only slices and ID lookups publicly. Storage is crate-private;
 compiler-internal construction and transformations must preserve HIR identity
@@ -888,6 +923,12 @@ and reference invariants. IDs have no cross-compilation stability guarantee.
 MIR, VIR, general ownership/effect analysis, SMT integration, and code generation
 are not yet implemented. This bounded implementation does not settle broader HIR,
 module, coercion, or generalized arithmetic design.
+
+AST and HIR contracts are general expressions, and subtraction statements have
+expression operands. The verifier recognizes only the original resolved battery
+proof structure and parameter/literal body operands. Richer well-typed expressions
+are rejected at verification with their source spans, not misclassified as frontend
+errors. The affine numerical kernel is private and unchanged in proof breadth.
 
 The AST retains supported postconditions and subtraction statements; no function
 body or contract is silently skipped. Ordered construction/call statements form a
@@ -907,7 +948,7 @@ Empty admissible domains are explicitly rejected by this prototype.
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
 invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
-KD-013, KD-014, KD-015, KD-017, DP-008, DP-009, and OQ-018 through OQ-020.
+KD-013, KD-014, KD-015, KD-017, KD-018, DP-008, DP-009, and OQ-018 through OQ-021.
 
 <!-- END ARCHITECTURE.md -->
 
@@ -1008,5 +1049,22 @@ Need exact rules for the state a function may change, when record invariants mus
 hold, and what `old(...)` snapshots for nested records, aliases, heap values, and
 exceptional exits. The current prototype models only one mutable field and its
 entry integer value; that scope does not settle the general rules.
+
+## OQ-021 — General constrained arithmetic expression semantics
+
+The initial expression layer supports a deliberately narrow constrained-range arithmetic model.
+
+Still open:
+
+- broader numeric base types;
+- default numeric literal typing;
+- generalized literal coercion/context rules;
+- arithmetic result typing beyond the initial range-preserving model;
+- exact runtime behavior for constrained arithmetic outside verified code;
+- interaction with checked/wrapping/result/saturating arithmetic families;
+- conversions between constrained types;
+- units/dimension-aware arithmetic.
+
+KED-003 does not settle these questions implicitly.
 
 <!-- END OPEN_QUESTIONS.md -->

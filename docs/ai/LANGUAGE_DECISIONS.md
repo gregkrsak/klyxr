@@ -307,3 +307,26 @@ Klyxr never equates verification with unspecified global correctness.
 Canonical wording:
 
 > **The stated properties were proven under the stated assumptions.**
+
+---
+
+## KD-018 — Typed expression semantics
+
+**Status:** Direction Accepted
+
+Klyxr expressions are resolved and type-checked before verification or backend lowering.
+
+Typed HIR records the semantic type of expressions.
+
+`Bool` is a built-in semantic expression type.
+
+Named constrained range types remain nominally distinct during expression typing;
+operators do not implicitly mix different constrained type identities merely
+because their representations or bounds are compatible.
+
+Integer literals are constants and do not themselves create implicit conversions
+between distinct named constrained types.
+
+The initial executable expression subset and surface spellings remain subject to
+the explicit open questions and prototype-boundary rules. Implementing an operator
+in the prototype does not settle the complete Klyxr operator set.

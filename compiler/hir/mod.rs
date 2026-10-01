@@ -119,28 +119,40 @@ pub struct FieldAccess {
     pub ty: RangeTypeId,
     pub span: Span,
 }
+pub use crate::ast::{BinaryOp, UnaryOp};
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExprType {
+    Bool,
+    Range(RangeTypeId),
+    IntegerLiteral,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Precondition {
-    pub amount: RangeParameter,
-    pub state: FieldAccess,
+pub struct TypedExpr {
+    pub kind: ExprKind,
+    pub ty: ExprType,
     pub span: Span,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Postcondition {
-    pub target: FieldAccess,
-    pub old: FieldAccess,
-    pub amount: RangeParameter,
-    pub span: Span,
-}
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Operand {
-    Parameter(RangeParameter),
-    Literal(i64),
+pub enum ExprKind {
+    BoolLiteral(bool),
+    IntegerLiteral(i64),
+    Parameter(ParameterId),
+    FieldAccess(FieldAccess),
+    OldField(FieldAccess),
+    Unary {
+        op: UnaryOp,
+        operand: Box<TypedExpr>,
+    },
+    Binary {
+        op: BinaryOp,
+        left: Box<TypedExpr>,
+        right: Box<TypedExpr>,
+    },
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Subtract {
     pub target: FieldAccess,
-    pub operand: Operand,
+    pub operand: TypedExpr,
     pub span: Span,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -151,8 +163,8 @@ pub struct VerifiedFunction {
     pub state_param: ParameterId,
     pub state_type: RecordId,
     pub amount_param: RangeParameter,
-    pub precondition: Precondition,
-    pub postcondition: Postcondition,
+    pub requires: TypedExpr,
+    pub ensures: TypedExpr,
     pub body: Vec<Subtract>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]

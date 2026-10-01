@@ -2,7 +2,8 @@
 
 This Rust implementation is an executable **prototype**, not a general-purpose
 Klyxr compiler. It implements a restricted source → lexer → parser → AST →
-name resolution → typed HIR → integer contract proof → diagnostic path.
+name resolution → expression type checking → typed HIR → integer contract proof
+→ diagnostic path.
 
 ## Run it
 
@@ -34,17 +35,11 @@ proof failure, `2` for command usage or file-reading errors.
 - One-field records whose field type is a declared range.
 - Verified functions with exactly one mutable record reference and one named
   range-valued amount parameter.
-- Exactly one precondition: `requires amount <= state.field`.
-- Exactly one postcondition:
-  `ensures state.field == old(state.field) - amount`.
-- Straight-line bodies containing zero or more `state.field -= amount;` or
-  `state.field -= signed_integer_literal;` statements. Every field reference
-  must resolve to the function's record parameter and its declared field.
-  The amount parameter and state field must have the **same declared named range
-  type**. Separately declared types remain distinct even when their numeric bounds
-  are identical or overlap. This restriction also applies to subtraction in the
-  mandatory postcondition, so empty and literal-only bodies cannot bypass it.
-  Integer literals retain their existing prototype treatment.
+- Exactly one `requires expression` and one `ensures expression`; both must type
+  as `Bool`. Contracts use ordinary expression trees, not bespoke operand records.
+- Straight-line bodies containing zero or more `state.field -= expression;`
+  statements. Every target resolves to the mutable record parameter's field.
+  The RHS must type as that field's nominal range or as an integer literal.
 - Record construction with a literal field value, followed by calls whose second
   argument is a literal. These top-level statements are a prototype execution
   harness, not a settled language entry-point design. Their source order matters.
@@ -58,6 +53,53 @@ across the input; record bindings must be constructed before their use. Duplicat
 names in a declaration namespace or the binding scope are rejected; shadowing
 is outside this prototype. Passing an immutable binding to `&mut` is an error.
 
+## Core expressions and types (KED-003)
+
+Primary expressions are `true`, `false`, signed i64 literals, parameters,
+`state.field`, `old(state.field)`, and parenthesized expressions. A record parameter
+by itself is not a numeric expression. `old(...)` is allowed only in `ensures`
+and only for the current mutable state field. Parentheses around that exact field
+are permitted; arbitrary snapshots, nested objects, and aliases are not.
+
+Only these operators are implemented, in order from highest to lowest precedence:
+
+| Form | Associativity |
+|---|---|
+| Primary / `old(...)` | Grouping |
+| `!` | Prefix Boolean negation |
+| `-` | Left |
+| `<=` | Non-associative |
+| `==` | Non-associative |
+| `&&` | Left |
+| `||` | Left |
+
+Unparenthesized repeated comparisons such as `a <= b <= c` and `a == b == c` are
+rejected. Different comparison levels follow the stated precedence and still
+must type-check. A minus sign on an integer literal preserves the existing signed
+literal behavior; general unary numeric negation is not implemented.
+
+Every HIR expression has an `ExprType`: `Bool`, `Range(RangeTypeId)`, or
+`IntegerLiteral`. The last is an internal constant category, not a public numeric
+base type or implicit conversion mechanism.
+
+| Operation | Permitted operands | Result |
+|---|---|---|
+| `!` | Bool | Bool |
+| `&&`, `||` | Bool, Bool | Bool |
+| `==` | Bool/Bool; same-range/same-range; range/literal either way; literal/literal | Bool |
+| `<=` | Same-range/same-range; range/literal either way; literal/literal | Bool |
+| `-` | Same-range/same-range; range/literal | The left range identity |
+| `field -= expression` | RHS is the target's range or an integer literal | Statement |
+
+Named ranges remain distinct even with identical or overlapping bounds. Operator
+compatibility uses `RangeTypeId`, never display-name equality. Only the two listed
+subtraction combinations are enabled; literal-minus-range and literal-minus-literal
+are rejected. No generalized coercion or arithmetic system is introduced.
+
+A `Range(T)` result type does **not** prove overflow safety or membership in T's
+bounds. Those remain verification obligations. A well-typed expression can still
+be outside this prototype verifier's supported subset.
+
 ## Front-end architecture and API
 
 `parse_source(source)` returns a source-oriented `ast::Program`: textual names,
@@ -65,11 +107,14 @@ spans, contracts, body statements, and ordered prototype statements. Parsing doe
 not decide which declarations those names denote. The supported keyword aliases
 still normalize in the lexer.
 
-`compile_source(source)` parses and calls `resolve::resolve(&ast)`, returning a
-canonical `hir::Program` or `FrontendError` (`Lex`, `Parse`, or `Resolve` with
-source diagnostics). This changes the former prototype API, where
-`compile_source` returned AST. Compilation here establishes resolved references
-and nominal subtraction compatibility; it does not prove numerical obligations.
+`compile_source(source)` parses, calls `resolve::resolve(&ast)`, then calls
+`types::check(resolved)`, returning canonical `hir::Program` or `FrontendError`
+(`Lex`, `Parse`, `Resolve`, or `Type`). Compilation does not prove numerical
+obligations. `resolve` now returns an opaque `ResolvedProgram`, consumed by
+`types::check`; it no longer publishes typed HIR by itself. The resolver identifies
+names and fields, while `compiler/types` owns operator legality, nominal
+compatibility, result types, Boolean contracts, and subtract-assignment typing.
+The type layer performs no textual source-name lookup.
 
 The resolver collects the complete range/record/function declaration sets before
 lowering references. Range and record names share the existing type namespace;
@@ -80,15 +125,17 @@ No namespace, import, alias, or shadowing feature is introduced.
 Typed HIR has separate `RangeTypeId`, `RecordId`, `FieldId`, `FunctionId`,
 `ParameterId`, and `BindingId` newtypes indexing declaration tables within one
 compilation. Fields carry their record and range IDs; parameters carry their
-function and canonical type; contracts and body accesses carry parameter, field,
-and range IDs. Parameter subtraction operands carry parameter and range IDs.
+function and canonical type. `TypedExpr` stores kind, computed type, and span;
+references use parameter and field IDs, and nominal types use range IDs. AST and
+HIR functions each have one `requires` and one `ensures` expression. Parentheses
+affect grouping and spans without introducing an extra HIR node.
 Construction and calls carry record/field/function/binding IDs. Names and source
 spans remain metadata for diagnostics. These IDs have no cross-compilation,
 serialization, or ABI stability guarantee.
 
 `verify::verify_report(&hir)` (and the diagnostics-only `verify`) consume canonical
-HIR produced by the resolver. Verification uses direct ID-based table access and
-tracks current state by `BindingId`; names are used only for diagnostics and the
+HIR produced by resolution and type checking. Verification uses direct ID-based
+table access and tracks current state by `BindingId`; names are used only for diagnostics and the
 human-readable `final_values` report. It retains numerical initialization/argument
 checks, record-ID compatibility and the existing mutable-binding check, universal
 body proof, and ordered modular call-state reasoning.
@@ -105,21 +152,39 @@ preserving its identity and reference invariants.
 The CLI follows this exact path:
 
 ```text
-source → lexer → parser → AST → resolver → typed HIR → verifier → diagnostics
+source → lexer → parser → AST expressions → resolver → expression type checking
+       → typed HIR expressions → prototype verifier → diagnostics
 ```
 
-Resolution errors prevent proof. All names are resolved before numerical proof
-or call-state analysis, so a program with multiple independent errors may report
-a resolution error before a proof failure. Incorrect `requires` parameter names
-now produce semantic resolution diagnostics instead of parser errors; they remain
-rejected, with the expected and supplied names and source locations preserved.
+Resolution and type errors prevent proof. Diagnostics distinguish malformed syntax,
+unknown references, incompatible expression types, unsupported well-typed proof
+shapes, and numerical counterexamples. Missing names are resolution errors;
+non-Boolean contracts and incompatible operators are type errors. Names and spans
+remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012 only for the documented subset. General type checking,
-ownership/effects, MIR, VIR, and the broader HIR features remain future work.
+This implements KD-012 and KD-018 only for the documented subset. General type
+inference, ownership/effects, MIR, VIR, and broader HIR features remain future work.
 
 ## What the proof establishes
 
-For **each declared function**, including uncalled functions, the checker proves
+The verifier recognizes the resolved structure of exactly this proof family:
+
+```klyxr
+requires amount <= state.field
+ensures state.field == old(state.field) - amount
+{ state.field -= amount; } // integer literal operands also supported
+```
+
+Parentheses that preserve this structure are accepted. Recognition uses parameter
+and field IDs, not spelling. A typed conjunction such as
+`requires (amount <= state.field) && true`, a different Boolean contract, or
+`state.field -= amount - 0;` reaches verification but receives
+`well-typed expression is not yet supported by the prototype verifier`, with the
+relevant expression span. The adapter does not simplify expressions or prove
+Boolean formulas. It lowers only supported body operands to private numerical
+inputs; there is no second contract representation or broadened proof kernel.
+
+For **each function in that proof family**, including uncalled functions, the checker proves
 that for every input within the two declared ranges satisfying its precondition:
 
 1. Every body subtraction fits signed i64.
@@ -158,19 +223,21 @@ consume(&mut battery, 50); // rejected: 50 <= 30 is false
 ## Limits and next work
 
 The prototype does not implement general ownership/borrowing, moves, lifetimes,
-effects, runtime contracts, general expressions, loops, quantifiers, multiple
-fields, record invariants, SMT/VIR/MIR, or machine-code generation. In particular,
+effects, runtime contracts, expressions beyond this subset, loops, quantifiers,
+multiple fields, record invariants, SMT/VIR/MIR, or machine-code generation. In particular,
 `examples/effects.klx` is illustrative and is rejected rather than analyzed.
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, and KD-015,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, and KD-018,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
 remain design work.
 
-KED-001 clarifies this prototype's nominal arithmetic boundary under KD-005.
+KED-001 clarifies the nominal arithmetic boundary under KD-005; KED-003 applies
+nominal identity to expression typing. KD-018 records that direction, while
+OQ-021 retains broader constrained arithmetic questions.
 The same-declaration restriction, enforced by `RangeTypeId` equality, does not
 settle future generalized arithmetic,
 conversion, coercion, subtyping, units, or operator-overloading rules. None of
@@ -189,7 +256,9 @@ to mix distinct named types. Separate source-level regressions establish
 same-declaration acceptance and rejection of distinct declarations with identical,
 overlapping, or disjoint bounds. Resolution tests inspect canonical IDs and types across records, parameters,
 contracts, bodies, construction, and calls, including declarations after their uses.
-A metadata-renaming test checks that verification is independent of display names.
+Metadata-renaming tests check that typing and verification are independent of
+display names. Expression tests cover grouping, precedence, exact operator rules,
+restricted snapshots, error phases, and the narrower verifier support boundary.
 CI runs the tests in debug and optimized builds and Clippy with warnings
 treated as errors.
 

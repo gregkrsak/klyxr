@@ -39,8 +39,8 @@ pub struct VerifiedFunction {
     pub state_type: String,
     pub amount_param: String,
     pub amount_type: String,
-    pub precondition: Precondition,
-    pub postcondition: Postcondition,
+    pub requires: Expr,
+    pub ensures: Expr,
     pub body: Vec<Subtract>,
 }
 
@@ -51,32 +51,57 @@ pub struct FieldAccess {
     pub span: Span,
 }
 
+/// Source expression tree; identifiers are deliberately unresolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Precondition {
-    pub amount: String,
-    pub state: FieldAccess,
+pub struct Expr {
+    pub kind: ExprKind,
     pub span: Span,
 }
-
-/// The currently supported postcondition: target == old(source) - amount.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Postcondition {
-    pub target: FieldAccess,
-    pub old: FieldAccess,
-    pub amount: String,
-    pub span: Span,
+pub enum ExprKind {
+    BoolLiteral(bool),
+    IntegerLiteral(i64),
+    Name(String),
+    FieldAccess(FieldAccess),
+    OldField(FieldAccess),
+    Unary {
+        op: UnaryOp,
+        operand: Box<Expr>,
+    },
+    Binary {
+        op: BinaryOp,
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Operand {
-    Parameter(String),
-    Literal(i64),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnaryOp {
+    Not,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryOp {
+    Subtract,
+    LessEqual,
+    Equal,
+    And,
+    Or,
+}
+impl BinaryOp {
+    pub fn spelling(self) -> &'static str {
+        match self {
+            Self::Subtract => "-",
+            Self::LessEqual => "<=",
+            Self::Equal => "==",
+            Self::And => "&&",
+            Self::Or => "||",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Subtract {
     pub target: FieldAccess,
-    pub operand: Operand,
+    pub operand: Expr,
     pub span: Span,
 }
 
