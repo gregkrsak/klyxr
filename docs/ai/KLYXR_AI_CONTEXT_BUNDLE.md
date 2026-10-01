@@ -60,6 +60,17 @@ Klyxr's core proposition is:
 
 Once they are part of the program, the compiler and verifier should be able to reason about them.
 
+## Current implementation status
+
+An executable compiler prototype, written in Rust, supports a narrow one-field
+record/signed-integer contract subset. It validates declarations and references,
+proves supported body subtraction safety, field ranges, and postconditions for all
+admissible inputs, and tracks current record state between literal-argument calls.
+Unsupported syntax is rejected, and success reports explicitly limit their scope.
+General ownership/borrowing, effects, runtime contracts, SMT integration, and
+machine-code generation remain unimplemented. Read `compiler/README.md` before
+making claims about what the current executable establishes.
+
 ## Intellectual lineage
 
 Klyxr deliberately combines lessons from **Rust** and **Ada/SPARK**, while aiming to become its own coherent language.
@@ -857,6 +868,35 @@ A narrow first compiler should target:
 
 The MVP should demonstrate the difference between memory safety and application-level verified correctness before pursuing breadth.
 
+## 17. Current executable prototype
+
+The first compiler slice is implemented in Rust, with its toolchain pinned to
+1.80.0. It follows source → lexer/parser → AST → semantic validation → specialized
+integer contract proof → diagnostics. HIR, MIR, VIR, general ownership/effect
+analysis, SMT integration, and code generation are not yet implemented. This
+temporary path is a bounded prototype of the architecture, not a replacement for
+KD-012's direction.
+
+The AST retains supported postconditions and subtraction statements; no function
+body or contract is silently skipped. Ordered construction/call statements form a
+prototype harness. The checker rejects unresolved references, distinct-record
+type mismatches, invalid ranges, duplicate names, and mutable access to immutable
+bindings. It proves every declared body independently of its call sites, then uses
+the established postcondition to update caller state in source order.
+
+For the supported precondition `amount <= state.field` and postcondition
+`state.field == old(state.field) - amount`, the proof establishes signed i64
+subtraction safety, range preservation at each assignment, and the final equality
+over every admissible input. It uses affine extrema at the vertices of the
+range rectangle clipped by the precondition. This is a specialized proof with
+the implementation in its trusted base, not an SMT proof or proof certificate.
+Empty admissible domains are explicitly rejected by this prototype.
+
+The exact grammar, mathematical argument, CLI behavior, and limitations live in
+`compiler/README.md`. The broader language's representation, assurance-boundary,
+invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006,
+KD-013, KD-014, KD-015, KD-017, DP-008, DP-009, and OQ-018 through OQ-020.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -940,5 +980,21 @@ First implementation likely uses Rust. Criteria and trust story for self-hosting
 ## OQ-018 — Syntax is not frozen by repetition
 
 Many current examples are illustrative. Always distinguish accepted semantic concepts from provisional surface spelling.
+
+## OQ-019 — Mixed assurance call boundaries
+
+Need exact rules for calls among `safe`, `checked`, and `verified` code: who
+establishes preconditions, which postconditions may be assumed, when runtime
+checks are required or may be removed, and how unproved callees enter the trust
+report. KD-003, KD-006, and KD-013 settle the direction, not these details. The
+prototype's `check` and `verify` commands share a restricted proof pass; they do
+not implement different assurance levels.
+
+## OQ-020 — Mutation framing, invariant boundaries, and snapshots
+
+Need exact rules for the state a function may change, when record invariants must
+hold, and what `old(...)` snapshots for nested records, aliases, heap values, and
+exceptional exits. The current prototype models only one mutable field and its
+entry integer value; that scope does not settle the general rules.
 
 <!-- END OPEN_QUESTIONS.md -->

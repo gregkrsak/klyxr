@@ -1,4 +1,10 @@
-# Apply the Klyxr vertical slice
+# Historical vertical-slice overlay instructions
+
+The original overlay has been incorporated into
+`1-initial-compiler-implementation`. Use that branch directly for current work;
+the compiler's supported scope and local checks are in `compiler/README.md`.
+The instructions below describe applying the original archive, not updating the
+current implementation.
 
 This package is an **overlay** for the current `gregkrsak/klyxr` repository.
 
@@ -18,4 +24,5 @@ git push -u origin feat/compiler-vertical-slice
 
 Then open a pull request into `prod`.
 
-The first CI run is important: it will be the first real Rust compilation of this slice.
+Current CI builds and tests the compiler. Run the documented local checks before
+pushing further changes to the development branch.

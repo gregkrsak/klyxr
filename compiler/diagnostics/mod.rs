@@ -12,6 +12,16 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
+    pub fn semantic(span: Span, message: impl Into<String>, detail: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            span,
+            required: detail.into(),
+            known: Vec::new(),
+            conclusion: "verification stopped; this program has not been established valid".into(),
+        }
+    }
+
     pub fn render(&self, path: &str, source: &str) -> String {
         let line_text = source
             .lines()
@@ -23,11 +33,7 @@ impl Diagnostic {
 
         let _ = writeln!(out, "error: {}", self.message);
         let _ = writeln!(out);
-        let _ = writeln!(
-            out,
-            "  --> {path}:{}:{}",
-            self.span.line, self.span.column
-        );
+        let _ = writeln!(out, "  --> {path}:{}:{}", self.span.line, self.span.column);
         let _ = writeln!(out);
         let _ = writeln!(
             out,
@@ -47,11 +53,13 @@ impl Diagnostic {
         let _ = writeln!(out, "required:");
         let _ = writeln!(out, "    {}", self.required);
         let _ = writeln!(out);
-        let _ = writeln!(out, "known:");
-        for fact in &self.known {
-            let _ = writeln!(out, "    {fact}");
+        if !self.known.is_empty() {
+            let _ = writeln!(out, "known:");
+            for fact in &self.known {
+                let _ = writeln!(out, "    {fact}");
+            }
+            let _ = writeln!(out);
         }
-        let _ = writeln!(out);
         let _ = writeln!(out, "{}", self.conclusion);
 
         out

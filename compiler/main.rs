@@ -1,6 +1,6 @@
 use std::{env, fs, process};
 
-use klyxr_compiler::{compile_source, verify};
+use klyxr_compiler::{compile_source, diagnostics::Diagnostic, verify, FrontendError};
 
 fn main() {
     if let Err(code) = run() {
@@ -17,6 +17,10 @@ fn run() -> Result<(), i32> {
     };
 
     if command == "--version" || command == "-V" {
+        if args.next().is_some() {
+            eprintln!("error: too many arguments");
+            return Err(2);
+        }
         println!("klyxr 0.0.1 (vertical-slice prototype)");
         return Ok(());
     }
@@ -50,23 +54,47 @@ fn run() -> Result<(), i32> {
     let program = match compile_source(&source) {
         Ok(program) => program,
         Err(error) => {
-            eprintln!("error: {error}");
+            let (span, message) = match error {
+                FrontendError::Lex(error) => (error.span, error.message),
+                FrontendError::Parse(error) => (error.span, error.message),
+            };
+            eprint!(
+                "{}",
+                Diagnostic::semantic(
+                    span,
+                    message,
+                    "use the supported grammar documented in compiler/README.md"
+                )
+                .render(&path, &source)
+            );
             return Err(1);
         }
     };
 
-    let diagnostics = verify::verify(&program);
+    let report = verify::verify_report(&program);
 
-    if diagnostics.is_empty() {
-        println!("verified: {path}");
-        println!("  ranges: {}", program.ranges.len());
-        println!("  records: {}", program.records.len());
-        println!("  verified functions: {}", program.functions.len());
-        println!("  calls checked: {}", program.calls.len());
+    if report.diagnostics.is_empty() {
+        let status = if report.functions_proven == 0 {
+            "checked declarations; no function contracts to verify"
+        } else if command == "verify" {
+            "verified supported integer contracts"
+        } else {
+            "checked supported integer contracts"
+        };
+        println!("{status}: {path}");
+        println!(
+            "  function bodies proven: {} (subtraction safety, field ranges, postconditions)",
+            report.functions_proven
+        );
+        println!(
+            "  calls checked: {} (argument ranges, mutable access, preconditions)",
+            report.calls_checked
+        );
+        println!("  scope: straight-line signed i64 prototype; general ownership, effects, and code generation are not implemented");
         return Ok(());
     }
 
-    for (index, diagnostic) in diagnostics.iter().enumerate() {
+    for (index, diagnostic) in report.diagnostics.iter().enumerate() {
         if index > 0 {
             eprintln!();
         }

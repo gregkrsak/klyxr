@@ -373,7 +373,20 @@ It is part of the language philosophy.
 > **Klyxr is an early-stage language project.**
 >
 > The compiler, verifier, syntax, semantics, and tooling are still being designed and prototyped.
-> The badges at the top of this README are **live GitHub Actions status badges** for this repository's `build`, `tests`, `verify`, and `docs` workflows. At this stage, those workflows validate the repository scaffold, canonical examples, and documentation—not a production Klyxr compiler.
+> An executable Rust-based prototype now parses and checks a narrow integer/record subset. It proves supported subtraction safety, field-range preservation, and postconditions, and checks call preconditions using state updated by earlier calls. General ownership, effects, runtime contracts, and code generation are not yet implemented.
+> The badges at the top of this README are **live GitHub Actions status badges** for this repository's `build`, `tests`, `verify`, and `docs` workflows. These workflows build the prototype, run its regression tests in debug and optimized builds, exercise successful and failing contract examples, and validate documentation assets. They do not establish production readiness.
+
+Try the current prototype from the repository root with Rust/rustup installed:
+
+```bash
+cargo run --locked --bin klyxr -- verify examples/battery_ok.klx
+cargo test --locked --workspace
+```
+
+See [the prototype scope and proof model](compiler/README.md) for supported syntax,
+exact guarantees, and intentional failure examples. The examples elsewhere in this
+README describe the broader language design; they are not all accepted by the
+current prototype.
 
 Current design areas include:
 
@@ -403,6 +416,10 @@ Current design areas include:
 │       ├── verify.yml
 │       └── docs.yml
 ├── assets/
+├── Cargo.toml
+├── Cargo.lock
+├── rust-toolchain.toml
+├── compiler/
 │   ├── diagrams/
 │   └── readme-banner.png
 ├── docs/

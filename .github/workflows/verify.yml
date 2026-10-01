@@ -11,13 +11,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Accept provable battery call
-        run: cargo run --quiet --bin klyxr -- verify examples/battery_ok.klx
+        run: cargo run --locked --quiet --bin klyxr -- verify examples/battery_ok.klx
 
       - name: Reject unprovable battery call with Klyxr diagnostic
         shell: bash
         run: |
           set +e
-          output="$(cargo run --quiet --bin klyxr -- verify examples/battery_fail.klx 2>&1)"
+          output="$(cargo run --locked --quiet --bin klyxr -- verify examples/battery_fail.klx 2>&1)"
           status=$?
           set -e
 
@@ -29,5 +29,5 @@ jobs:
           grep -Fq "battery.charge == 80" <<<"$output"
           grep -Fq "90 <= 80 is false" <<<"$output"
 
-      - name: Keep effects example visible
-        run: grep -q "heap, blocking" examples/effects.klx
+      - name: Exercise CLI proof scope and negative regressions
+        run: cargo test --locked --package klyxr-compiler --test cli

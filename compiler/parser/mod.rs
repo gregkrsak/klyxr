@@ -1,6 +1,9 @@
 use std::fmt;
 
-use crate::ast::{Call, Program, RangeType, RecordBinding, RecordDef, VerifiedFunction};
+use crate::ast::{
+    Call, FieldAccess, Operand, Postcondition, Program, RangeType, RecordBinding, RecordDef,
+    Statement, Subtract, VerifiedFunction,
+};
 use crate::lexer::{Span, Token, TokenKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,7 +14,11 @@ pub struct ParseError {
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} at {}:{}", self.message, self.span.line, self.span.column)
+        write!(
+            f,
+            "{} at {}:{}",
+            self.message, self.span.line, self.span.column
+        )
     }
 }
 
@@ -38,14 +45,16 @@ impl Parser<'_> {
             } else if self.at(&TokenKind::Verified) {
                 program.functions.push(self.parse_verified_function()?);
             } else if self.at(&TokenKind::Let) {
-                program.bindings.push(self.parse_binding()?);
+                program
+                    .statements
+                    .push(Statement::Binding(self.parse_binding()?));
             } else if matches!(self.peek_kind(), TokenKind::Ident(_))
                 && self.lookahead_is(1, &TokenKind::LParen)
             {
-                program.calls.push(self.parse_call()?);
+                program.statements.push(Statement::Call(self.parse_call()?));
             } else {
                 return Err(self.error(format!(
-                    "unexpected top-level token {:?}",
+                    "unsupported or unexpected top-level token in prototype: {:?}",
                     self.peek_kind()
                 )));
             }
@@ -90,7 +99,7 @@ impl Parser<'_> {
     }
 
     fn parse_verified_function(&mut self) -> Result<VerifiedFunction, ParseError> {
-        self.expect(&TokenKind::Verified)?;
+        let span = self.expect(&TokenKind::Verified)?.span;
         self.expect(&TokenKind::Fn)?;
         let name = self.expect_ident()?;
         self.expect(&TokenKind::LParen)?;
@@ -127,30 +136,61 @@ impl Parser<'_> {
         self.expect(&TokenKind::Dot)?;
         let required_field = self.expect_ident()?;
 
-        if self.at(&TokenKind::Ensures) {
-            self.advance();
-            while !self.at(&TokenKind::LBrace) && !self.at(&TokenKind::Eof) {
-                self.advance();
-            }
-        }
+        let ensures_span = self.expect(&TokenKind::Ensures)?.span;
+        let target = self.parse_field_access()?;
+        self.expect(&TokenKind::EqualEqual)?;
+        self.expect(&TokenKind::Old)?;
+        self.expect(&TokenKind::LParen)?;
+        let old = self.parse_field_access()?;
+        self.expect(&TokenKind::RParen)?;
+        self.expect(&TokenKind::Minus)?;
+        let amount = self.expect_ident()?;
+        let postcondition = Postcondition {
+            target,
+            old,
+            amount,
+            span: ensures_span,
+        };
 
-        self.skip_balanced_block()?;
+        self.expect(&TokenKind::LBrace)?;
+        let mut body = Vec::new();
+        while !self.at(&TokenKind::RBrace) {
+            let target = self.parse_field_access()?;
+            let statement_span = target.span;
+            self.expect(&TokenKind::MinusEqual)?;
+            let operand = if matches!(self.peek_kind(), TokenKind::Ident(_)) {
+                Operand::Parameter(self.expect_ident()?)
+            } else {
+                Operand::Literal(self.expect_number()?)
+            };
+            self.expect(&TokenKind::Semicolon)?;
+            body.push(Subtract {
+                target,
+                operand,
+                span: statement_span,
+            });
+        }
+        self.expect(&TokenKind::RBrace)?;
 
         Ok(VerifiedFunction {
             name,
+            span,
             state_param,
             state_type,
             amount_param,
             amount_type,
             required_field,
             requires_span,
+            postcondition,
+            body,
         })
     }
 
     fn parse_binding(&mut self) -> Result<RecordBinding, ParseError> {
         let span = self.expect(&TokenKind::Let)?.span;
 
-        if self.at(&TokenKind::Mut) {
+        let mutable = self.at(&TokenKind::Mut);
+        if mutable {
             self.advance();
         }
 
@@ -166,6 +206,7 @@ impl Parser<'_> {
 
         Ok(RecordBinding {
             name,
+            mutable,
             record_type,
             field_name,
             value,
@@ -194,25 +235,16 @@ impl Parser<'_> {
         })
     }
 
-    fn skip_balanced_block(&mut self) -> Result<(), ParseError> {
-        self.expect(&TokenKind::LBrace)?;
-        let mut depth = 1usize;
-
-        while depth > 0 {
-            if self.at(&TokenKind::LBrace) {
-                depth += 1;
-                self.advance();
-            } else if self.at(&TokenKind::RBrace) {
-                depth -= 1;
-                self.advance();
-            } else if self.at(&TokenKind::Eof) {
-                return Err(self.error("unterminated function body".to_owned()));
-            } else {
-                self.advance();
-            }
-        }
-
-        Ok(())
+    fn parse_field_access(&mut self) -> Result<FieldAccess, ParseError> {
+        let span = self.peek().span;
+        let binding = self.expect_ident()?;
+        self.expect(&TokenKind::Dot)?;
+        let field = self.expect_ident()?;
+        Ok(FieldAccess {
+            binding,
+            field,
+            span,
+        })
     }
 
     fn expect_ident(&mut self) -> Result<String, ParseError> {
@@ -226,10 +258,23 @@ impl Parser<'_> {
     }
 
     fn expect_number(&mut self) -> Result<i64, ParseError> {
+        let span = self.peek().span;
+        let negative = self.at(&TokenKind::Minus);
+        if negative {
+            self.advance();
+        }
         match self.peek_kind().clone() {
             TokenKind::Number(value) => {
                 self.advance();
-                Ok(value)
+                let value = if negative {
+                    -(value as i128)
+                } else {
+                    value as i128
+                };
+                i64::try_from(value).map_err(|_| ParseError {
+                    message: "integer literal is outside the prototype's signed i64 domain".into(),
+                    span,
+                })
             }
             other => Err(self.error(format!("expected integer, found {other:?}"))),
         }
@@ -240,7 +285,7 @@ impl Parser<'_> {
             Ok(self.advance().clone())
         } else {
             Err(self.error(format!(
-                "expected {expected:?}, found {:?}",
+                "unsupported or malformed prototype syntax: expected {expected:?}, found {:?}",
                 self.peek_kind()
             )))
         }
@@ -318,7 +363,11 @@ consume(&mut battery, 90);
 
         assert_eq!(program.ranges[0].name, "Percent");
         assert_eq!(program.functions[0].required_field, "charge");
-        assert_eq!(program.bindings[0].value, 80);
-        assert_eq!(program.calls[0].amount, 90);
+        assert!(
+            matches!(&program.statements[0], Statement::Binding(binding) if binding.value == 80)
+        );
+        assert!(matches!(&program.statements[1], Statement::Call(call) if call.amount == 90));
+        assert_eq!(program.functions[0].postcondition.old.field, "charge");
+        assert_eq!(program.functions[0].body.len(), 1);
     }
 }

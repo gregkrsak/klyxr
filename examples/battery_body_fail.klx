@@ -1,0 +1,14 @@
+type Percent = range 0..100;
+
+record Battery {
+    charge: Percent
+}
+
+verified fn consume(battery: &mut Battery, amount: Percent)
+    requires amount <= battery.charge
+    ensures battery.charge == old(battery.charge) - amount
+{
+    // No subtraction: this body does not establish its postcondition.
+}
+
+// An invalid verified body is rejected even without any call sites.

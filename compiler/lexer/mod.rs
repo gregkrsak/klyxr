@@ -11,7 +11,7 @@ pub struct Span {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenKind {
     Ident(String),
-    Number(i64),
+    Number(u64),
     Type,
     Range,
     Record,
@@ -23,6 +23,7 @@ pub enum TokenKind {
     Mut,
     Old,
     Equal,
+    EqualEqual,
     LessEqual,
     DotDot,
     MinusEqual,
@@ -53,7 +54,11 @@ pub struct LexError {
 
 impl fmt::Display for LexError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} at {}:{}", self.message, self.span.line, self.span.column)
+        write!(
+            f,
+            "{} at {}:{}",
+            self.message, self.span.line, self.span.column
+        )
     }
 }
 
@@ -92,7 +97,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                     column += 1;
                 }
                 let text = &source[start..i];
-                let value = text.parse::<i64>().map_err(|_| LexError {
+                let value = text.parse::<u64>().map_err(|_| LexError {
                     message: format!("integer literal is out of range: {text}"),
                     span: Span {
                         line,
@@ -114,9 +119,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
                 let start = i;
                 let start_column = column;
-                while i < bytes.len()
-                    && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_')
-                {
+                while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
                     i += 1;
                     column += 1;
                 }
@@ -158,6 +161,11 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             }
             b'-' if i + 1 < bytes.len() && bytes[i + 1] == b'=' => {
                 push_two(&mut tokens, TokenKind::MinusEqual, line, column, i);
+                i += 2;
+                column += 2;
+            }
+            b'=' if i + 1 < bytes.len() && bytes[i + 1] == b'=' => {
+                push_two(&mut tokens, TokenKind::EqualEqual, line, column, i);
                 i += 2;
                 column += 2;
             }
@@ -327,8 +335,7 @@ mod tests {
 
     #[test]
     fn lexes_range_and_precondition_operators() {
-        let tokens =
-            lex("type Percent = range 0..100; requires amount <= battery.charge").unwrap();
+        let tokens = lex("type Percent = range 0..100; requires amount <= battery.charge").unwrap();
 
         assert!(tokens.iter().any(|token| token.kind == TokenKind::DotDot));
         assert!(tokens
