@@ -26,8 +26,8 @@ pub fn verify(program: &Program) -> Vec<Diagnostic> {
 /// Input must be canonical typed HIR produced by the resolver.
 pub fn verify_report(program: &Program) -> VerificationReport {
     let mut report = VerificationReport::default();
-    // Prove every declared body, even when it has no call sites.
-    for function in &program.functions {
+    // Prove each verified body, even when uncalled. Ordinary functions are frontend-only.
+    for function in program.functions().iter().filter_map(|f| f.as_verified()) {
         match prove_function(program, function) {
             Ok(()) => report.functions_proven += 1,
             Err(error) => report.diagnostics.push(*error),
@@ -315,7 +315,13 @@ fn check_call(
     call: &crate::hir::Call,
     values: &mut BTreeMap<BindingId, i64>,
 ) -> VerificationResult {
-    let function = program.function(call.function);
+    let Some(function) = program.function(call.function).as_verified() else {
+        return Err(semantic_error(
+            call.span,
+            "top-level prototype calls require a verified function",
+            "ordinary functions are frontend-only",
+        ));
+    };
     let binding = program.binding(call.binding);
     if binding.record_type != function.state_type {
         return Err(semantic_error(
@@ -412,7 +418,7 @@ mod tests {
     fn affine_proofs_match_exhaustive_execution_on_small_domains() {
         let prototype =
             crate::compile_source(include_str!("../../examples/battery_ok.klx")).unwrap();
-        let template = &prototype.functions[0];
+        let template = prototype.functions[0].as_verified().unwrap();
         let mut combinations = 0;
         let bodies: &[&[Option<i64>]] = &[
             &[],
@@ -496,7 +502,7 @@ mod tests {
     #[test]
     fn numerical_kernel_preserves_extreme_and_empty_domain_coverage() {
         let program = crate::compile_source(include_str!("../../examples/battery_ok.klx")).unwrap();
-        let function = &program.functions[0];
+        let function = program.functions[0].as_verified().unwrap();
         let body = proof_body(&program, function).unwrap();
         let full = RangeType {
             id: function.amount_param.ty,

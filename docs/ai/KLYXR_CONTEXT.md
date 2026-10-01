@@ -49,22 +49,34 @@ Once they are part of the program, the compiler and verifier should be able to r
 
 ## Current implementation status
 
-An executable compiler prototype, written in Rust, supports a narrow one-field
-record/signed-integer contract subset. Source contracts and subtraction operands
-use expression trees. Explicit resolution assigns canonical declaration IDs;
-expression type checking produces typed HIR with `Bool`, nominal range identities,
-and an internal integer-literal category. Public HIR inspection remains read-only,
-and names/spans remain diagnostic metadata.
+An executable compiler prototype, written in Rust, supports ordinary straight-line
+value functions alongside a narrow one-field record/signed-integer contract subset.
+Explicit resolution assigns compilation-local function, parameter, local, type,
+field, and top-level binding IDs. Expression and value-flow type checking produce
+canonical typed HIR. Public HIR inspection remains read-only; names/spans are
+diagnostic metadata.
 
-The frontend supports only KED-003's expression grammar. The verifier recognizes
-the original battery-contract structure by IDs and rejects richer well-typed
-expressions with a verifier-support diagnostic. Its affine proof establishes
-subtraction safety, field ranges, and postconditions for every admissible input
-of the supported structure, and tracks state between literal-argument calls.
-Unsupported syntax is rejected, and success reports explicitly limit their scope.
-General ownership/borrowing, effects, runtime contracts, SMT integration, and
-machine-code generation remain unimplemented. Read `compiler/README.md` before
-making claims about what the current executable establishes.
+KED-004 ordinary functions declare `-> bool` or a named range return type, accept
+zero or more bool/range parameters, introduce immutable initializer-typed locals,
+and end with explicit `return expression;` (KD-019). Calls are expressions and
+may resolve forward or recursively. Ordinary and verified functions share one
+function namespace and ID table. Bare integer literals do not materialize as
+locals, arguments, or returns. Ordinary functions are parsed, resolved, and
+type-checked, but not executed or proven; a range result type does not establish
+that the produced value meets its bounds. Plain `fn` does not yet implement the
+complete future `safe` assurance model, and repeated value use does not settle
+future Copy/move semantics.
+
+The verifier continues to recognize the original battery-contract structure by
+IDs and rejects richer well-typed expressions inside that verified path with a
+verifier-support diagnostic. It ignores ordinary functions as proof targets.
+Its affine proof establishes subtraction safety, field ranges, and postconditions
+for every admissible input of the supported structure, and tracks state between
+literal-argument harness calls. Calls across function kinds are rejected; OQ-019,
+OQ-021, and OQ-022 retain the broader assurance, arithmetic, and function questions.
+General ownership/borrowing, effects, runtime contracts, MIR/VIR, SMT integration,
+and machine-code generation remain unimplemented. Read `compiler/README.md`
+before making claims about what the executable establishes.
 
 ## Intellectual lineage
 

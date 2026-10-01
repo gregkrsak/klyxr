@@ -62,22 +62,34 @@ Once they are part of the program, the compiler and verifier should be able to r
 
 ## Current implementation status
 
-An executable compiler prototype, written in Rust, supports a narrow one-field
-record/signed-integer contract subset. Source contracts and subtraction operands
-use expression trees. Explicit resolution assigns canonical declaration IDs;
-expression type checking produces typed HIR with `Bool`, nominal range identities,
-and an internal integer-literal category. Public HIR inspection remains read-only,
-and names/spans remain diagnostic metadata.
+An executable compiler prototype, written in Rust, supports ordinary straight-line
+value functions alongside a narrow one-field record/signed-integer contract subset.
+Explicit resolution assigns compilation-local function, parameter, local, type,
+field, and top-level binding IDs. Expression and value-flow type checking produce
+canonical typed HIR. Public HIR inspection remains read-only; names/spans are
+diagnostic metadata.
 
-The frontend supports only KED-003's expression grammar. The verifier recognizes
-the original battery-contract structure by IDs and rejects richer well-typed
-expressions with a verifier-support diagnostic. Its affine proof establishes
-subtraction safety, field ranges, and postconditions for every admissible input
-of the supported structure, and tracks state between literal-argument calls.
-Unsupported syntax is rejected, and success reports explicitly limit their scope.
-General ownership/borrowing, effects, runtime contracts, SMT integration, and
-machine-code generation remain unimplemented. Read `compiler/README.md` before
-making claims about what the current executable establishes.
+KED-004 ordinary functions declare `-> bool` or a named range return type, accept
+zero or more bool/range parameters, introduce immutable initializer-typed locals,
+and end with explicit `return expression;` (KD-019). Calls are expressions and
+may resolve forward or recursively. Ordinary and verified functions share one
+function namespace and ID table. Bare integer literals do not materialize as
+locals, arguments, or returns. Ordinary functions are parsed, resolved, and
+type-checked, but not executed or proven; a range result type does not establish
+that the produced value meets its bounds. Plain `fn` does not yet implement the
+complete future `safe` assurance model, and repeated value use does not settle
+future Copy/move semantics.
+
+The verifier continues to recognize the original battery-contract structure by
+IDs and rejects richer well-typed expressions inside that verified path with a
+verifier-support diagnostic. It ignores ordinary functions as proof targets.
+Its affine proof establishes subtraction safety, field ranges, and postconditions
+for every admissible input of the supported structure, and tracks state between
+literal-argument harness calls. Calls across function kinds are rejected; OQ-019,
+OQ-021, and OQ-022 retain the broader assurance, arithmetic, and function questions.
+General ownership/borrowing, effects, runtime contracts, MIR/VIR, SMT integration,
+and machine-code generation remain unimplemented. Read `compiler/README.md`
+before making claims about what the executable establishes.
 
 ## Intellectual lineage
 
@@ -655,6 +667,32 @@ The initial executable expression subset and surface spellings remain subject to
 the explicit open questions and prototype-boundary rules. Implementing an operator
 in the prototype does not settle the complete Klyxr operator set.
 
+---
+
+## KD-019 — Explicit value returns in block-bodied functions
+
+**Status:** Accepted
+
+Klyxr uses explicit value returns in block-bodied functions.
+
+A value-returning block function declares its return type with `-> Type` and
+returns a value with:
+
+```klyxr
+return expression;
+```
+
+Klyxr does not use Rust-style implicit block-tail returns. The absence of a
+semicolon on the final expression does not cause that expression to become the
+function's return value.
+
+Local bindings use `let` and are immutable by default; future local mutation
+must be explicit. Function calls are expressions.
+
+A future explicitly marked expression-bodied function shorthand is not ruled
+out, but it would be a separate syntactic construct and would not change the
+explicit-return rule for block-bodied functions.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -904,38 +942,63 @@ The MVP should demonstrate the difference between memory safety and application-
 
 ## 17. Current executable prototype
 
-The first compiler slice is implemented in Rust, with its toolchain pinned to
-1.80.0. It follows source → lexer → parser → AST → explicit name resolution →
-expression type checking → typed HIR expressions → specialized integer contract
-proof → diagnostics. The resolver, type layer, and HIR implement KD-012's semantic
-boundary and KD-018's expression direction for this subset. Strongly typed IDs
-identify range types, records, fields, functions, parameters, and top-level
-bindings within one compilation. HIR references carry canonical types and IDs;
-source names and spans remain diagnostic metadata. The resolver owns declaration
-identity; `compiler/types` owns operator legality and expression types (`Bool`,
-nominal range, and internal integer literal). Nominal compatibility uses range
-IDs, and typing/verification perform no textual declaration lookup.
-`hir::Program` owns the canonical tables for those compilation-local IDs and
-exposes read-only slices and ID lookups publicly. Storage is crate-private;
-compiler-internal construction and transformations must preserve HIR identity
-and reference invariants. IDs have no cross-compilation stability guarantee.
+The compiler prototype is implemented in Rust, pinned to 1.80.0. The executable
+pipeline is source → lexer → parser → AST → explicit name resolution → expression
+and value-flow type checking → typed HIR → specialized integer contract proof
+→ diagnostics. This implements KD-012, KD-018, and KD-019 only for the documented
+subset; the broader pipeline above remains accepted architecture/future work.
 
-MIR, VIR, general ownership/effect analysis, SMT integration, and code generation
-are not yet implemented. This bounded implementation does not settle broader HIR,
-module, coercion, or generalized arithmetic design.
+The AST preserves textual declarations, parameter types, explicit ordinary
+returns, local initializers, expression calls, contracts, and ordered prototype
+statements. `FunctionDecl` retains source order across ordinary and verified forms.
+The resolver collects all declarations/signatures before resolving bodies, owns
+name lookup and source-order local scope, and assigns strongly typed range, record,
+field, function, parameter, local, and harness-binding IDs. Locals enter scope after
+resolving their initializer; no shadowing or cross-function local scope is supported.
+Forward and recursive ordinary calls resolve without execution or termination
+analysis. Source type names resolve to canonical references; `compiler/types`
+validates declared value types, operators, initializers, calls, and returns without
+textual name lookup.
 
-AST and HIR contracts are general expressions, and subtraction statements have
+One canonical `FunctionId` table contains both ordinary value and verified mutation
+functions, in source declaration order. Both kinds share the existing function
+namespace. Ordinary signatures/materialized locals use `ValueType::Bool` or
+`ValueType::Range(RangeTypeId)`; `IntegerLiteral` remains expression-only. HIR
+local and call references carry `LocalId` and `FunctionId`, with typed arguments,
+initializers, and explicit returns. Nominal compatibility uses exact range IDs.
+Names and spans are diagnostic metadata. `hir::Program` owns compilation-local
+canonical tables, including locals, and exposes read-only slices/ID lookups.
+Storage is crate-private; internal construction/transformations must preserve
+identity and reference invariants. IDs have no cross-compilation stability.
+
+Ordinary functions have explicit value return types and exactly one final
+`return expression;`. Immutable locals propagate concrete initializer types;
+call arguments and returns require exact concrete types. Bare integer locals,
+arguments to range parameters, and returns do not gain implicit range types.
+KED-004 does not execute, prove, or dynamically enforce ordinary functions.
+`Range(T)` typing does not prove bounds or overflow safety. Plain `fn` is not a
+claim to implement the full future `safe` model; ownership/moves and Copy semantics
+are not established by this frontend. All mixed-kind calls are rejected.
+
+The verifier takes only a verified-function view from the shared HIR table;
+ordinary functions are ignored as proof targets and never counted as proven.
+Verified AST/HIR contracts remain expressions, and subtraction statements have
 expression operands. The verifier recognizes only the original resolved battery
 proof structure and parameter/literal body operands. Richer well-typed expressions
-are rejected at verification with their source spans, not misclassified as frontend
-errors. The affine numerical kernel is private and unchanged in proof breadth.
+inside verified functions receive spanned verifier-support diagnostics. The
+private affine kernel and its independent 1,800-case cross-check retain their
+existing mathematical coverage, including independently varying numeric domains.
 
-The AST retains supported postconditions and subtraction statements; no function
-body or contract is silently skipped. Ordered construction/call statements form a
-prototype harness. The checker rejects unresolved references, distinct-record
-type mismatches, invalid ranges, duplicate names, and mutable access to immutable
-bindings. It proves every declared body independently of its call sites, then uses
-the established postcondition to update caller state in source order.
+Ordered record construction/call statements remain the prototype harness. The
+checker retains distinct-record checks, range checks, and immutable-binding
+rejection. Every verified body is proven independently of its call sites; its
+postcondition then updates caller state in source order. Ordinary functions do
+not enter that state model.
+
+MIR, VIR, general ownership/effect analysis, SMT integration, runtime lowering,
+and code generation remain unimplemented. This subset does not settle broader
+HIR, modules, generalized inference/coercions, arithmetic enforcement, or mixed
+assurance semantics.
 
 For the supported precondition `amount <= state.field` and postcondition
 `state.field == old(state.field) - amount`, the proof establishes signed i64
@@ -948,7 +1011,7 @@ Empty admissible domains are explicitly rejected by this prototype.
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
 invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
-KD-013, KD-014, KD-015, KD-017, KD-018, DP-008, DP-009, and OQ-018 through OQ-021.
+KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, DP-008, DP-009, and OQ-018 through OQ-022.
 
 <!-- END ARCHITECTURE.md -->
 
@@ -1065,6 +1128,30 @@ Still open:
 - conversions between constrained types;
 - units/dimension-aware arithmetic.
 
-KED-003 does not settle these questions implicitly.
+KED-003 and KED-004 do not settle these questions implicitly.
+
+
+## OQ-022 — General function and local-value semantics
+
+KED-004 establishes only a straight-line value-function core.
+
+Still open:
+
+- whether unqualified `fn` is the final surface spelling of the base `safe` assurance level;
+- explicit `safe fn` syntax, if any;
+- unit/no-value function return semantics;
+- early returns and multiple control-flow return paths;
+- mutable locals and assignment;
+- expression-bodied function shorthand;
+- contextual integer-literal typing at bindings, arguments, and returns;
+- general record/reference parameters and returns;
+- function values, closures, and higher-order calls;
+- function overloading;
+- interaction of calls with ownership/moves/borrows;
+- runtime enforcement of constrained return values outside verified code.
+
+OQ-019 remains authoritative for mixed `safe` / `checked` / `verified` call
+boundaries. OQ-021 remains authoritative for unresolved constrained arithmetic
+and literal-conversion rules.
 
 <!-- END OPEN_QUESTIONS.md -->

@@ -1,8 +1,9 @@
 use std::fmt;
 
 use crate::ast::{
-    BinaryOp, Call, Expr, ExprKind, FieldAccess, Program, RangeType, RecordBinding, RecordDef,
-    Statement, Subtract, UnaryOp, VerifiedFunction,
+    BinaryOp, Call, Expr, ExprKind, FieldAccess, FunctionDecl, Program, RangeType, RecordBinding,
+    RecordDef, Statement, Subtract, UnaryOp, ValueFunction, ValueParameter, ValueStatement,
+    VerifiedFunction,
 };
 use crate::lexer::{Span, Token, TokenKind};
 
@@ -43,7 +44,13 @@ impl Parser<'_> {
             } else if self.at(&TokenKind::Record) {
                 program.records.push(self.parse_record()?);
             } else if self.at(&TokenKind::Verified) {
-                program.functions.push(self.parse_verified_function()?);
+                program
+                    .functions
+                    .push(FunctionDecl::Verified(self.parse_verified_function()?));
+            } else if self.at(&TokenKind::Fn) {
+                program
+                    .functions
+                    .push(FunctionDecl::Ordinary(self.parse_value_function()?));
             } else if self.at(&TokenKind::Let) {
                 program
                     .statements
@@ -150,6 +157,88 @@ impl Parser<'_> {
         })
     }
 
+    fn parse_value_type(&mut self) -> Result<String, ParseError> {
+        if self.at(&TokenKind::Bool) {
+            self.advance();
+            Ok("bool".into())
+        } else {
+            self.expect_ident()
+        }
+    }
+    fn parse_value_function(&mut self) -> Result<ValueFunction, ParseError> {
+        let start = self.expect(&TokenKind::Fn)?.span;
+        let name = self.expect_ident()?;
+        self.expect(&TokenKind::LParen)?;
+        let mut parameters = Vec::new();
+        if !self.at(&TokenKind::RParen) {
+            loop {
+                let span = self.peek().span;
+                let name = self.expect_ident()?;
+                self.expect(&TokenKind::Colon)?;
+                let ty = self.parse_value_type()?;
+                let span = Span {
+                    end: self.tokens[self.current - 1].span.end,
+                    ..span
+                };
+                parameters.push(ValueParameter { name, ty, span });
+                if !self.at(&TokenKind::Comma) {
+                    break;
+                }
+                self.advance();
+            }
+        }
+        self.expect(&TokenKind::RParen)?;
+        self.expect(&TokenKind::Arrow)?;
+        let return_type = self.parse_value_type()?;
+        self.expect(&TokenKind::LBrace)?;
+        let mut body = Vec::new();
+        while !self.at(&TokenKind::RBrace) {
+            let span = self.peek().span;
+            if self.at(&TokenKind::Let) {
+                self.advance();
+                if self.at(&TokenKind::Mut) {
+                    return Err(self.error(
+                        "ordinary function locals are immutable; local `let mut` is not supported"
+                            .into(),
+                    ));
+                }
+                let name = self.expect_ident()?;
+                self.expect(&TokenKind::Equal)?;
+                let initializer = self.parse_expression(0)?;
+                let end = self.expect(&TokenKind::Semicolon)?.span.end;
+                body.push(ValueStatement::Let {
+                    name,
+                    initializer,
+                    span: Span { end, ..span },
+                });
+            } else if self.at(&TokenKind::Return) {
+                self.advance();
+                let value = self.parse_expression(0)?;
+                if !self.at(&TokenKind::Semicolon) {
+                    return Err(self.error("value-returning Klyxr functions require `return expression;` with a semicolon".into()));
+                }
+                let end = self.advance().span.end;
+                body.push(ValueStatement::Return {
+                    value,
+                    span: Span { end, ..span },
+                });
+                if !self.at(&TokenKind::RBrace) {
+                    return Err(self.error("return must be the final statement; statements after return are not supported".into()));
+                }
+            } else {
+                return Err(self.error("value-returning Klyxr functions require `return expression;`; bare expressions and local assignment are not supported".into()));
+            }
+        }
+        let end = self.expect(&TokenKind::RBrace)?.span.end;
+        Ok(ValueFunction {
+            name,
+            parameters,
+            return_type,
+            body,
+            span: Span { end, ..start },
+        })
+    }
+
     // Precedence climbing: only the explicitly authorized operators participate.
     fn parse_expression(&mut self, minimum: u8) -> Result<Expr, ParseError> {
         let mut left = self.parse_primary()?;
@@ -216,7 +305,24 @@ impl Parser<'_> {
                 if self.lookahead_is(1, &TokenKind::Dot) {
                     ExprKind::FieldAccess(self.parse_field_access()?)
                 } else {
-                    ExprKind::Name(self.expect_ident()?)
+                    let callee = self.expect_ident()?;
+                    if self.at(&TokenKind::LParen) {
+                        self.advance();
+                        let mut arguments = Vec::new();
+                        if !self.at(&TokenKind::RParen) {
+                            loop {
+                                arguments.push(self.parse_expression(0)?);
+                                if !self.at(&TokenKind::Comma) {
+                                    break;
+                                }
+                                self.advance();
+                            }
+                        }
+                        self.expect(&TokenKind::RParen)?;
+                        ExprKind::Call { callee, arguments }
+                    } else {
+                        ExprKind::Name(callee)
+                    }
                 }
             }
             TokenKind::Old => {
@@ -434,7 +540,7 @@ consume(&mut battery, 90);
 
         assert_eq!(program.ranges[0].name, "Percent");
         assert!(matches!(
-            &program.functions[0].requires.kind,
+            &program.functions[0].as_verified().unwrap().requires.kind,
             ExprKind::Binary {
                 op: BinaryOp::LessEqual,
                 ..
@@ -445,12 +551,12 @@ consume(&mut battery, 90);
         );
         assert!(matches!(&program.statements[1], Statement::Call(call) if call.amount == 90));
         assert!(matches!(
-            &program.functions[0].ensures.kind,
+            &program.functions[0].as_verified().unwrap().ensures.kind,
             ExprKind::Binary {
                 op: BinaryOp::Equal,
                 ..
             }
         ));
-        assert_eq!(program.functions[0].body.len(), 1);
+        assert_eq!(program.functions[0].as_verified().unwrap().body.len(), 1);
     }
 }

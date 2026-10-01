@@ -80,7 +80,14 @@ fn run() -> Result<(), i32> {
     let report = verify::verify_report(&program);
 
     if report.diagnostics.is_empty() {
-        let status = if report.functions_proven == 0 {
+        let ordinary = program
+            .functions()
+            .iter()
+            .filter(|f| f.as_ordinary().is_some())
+            .count();
+        let status = if report.functions_proven == 0 && ordinary > 0 {
+            "checked ordinary value functions; no verified function contracts"
+        } else if report.functions_proven == 0 {
             "checked declarations; no function contracts to verify"
         } else if command == "verify" {
             "verified supported integer contracts"
@@ -88,6 +95,9 @@ fn run() -> Result<(), i32> {
             "checked supported integer contracts"
         };
         println!("{status}: {path}");
+        if ordinary > 0 {
+            println!("  ordinary value functions type-checked: {ordinary} (not executed or verified; constrained results are not proven)");
+        }
         println!(
             "  function bodies proven: {} (subtraction safety, field ranges, postconditions)",
             report.functions_proven

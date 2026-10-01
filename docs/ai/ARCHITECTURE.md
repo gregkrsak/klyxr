@@ -241,38 +241,63 @@ The MVP should demonstrate the difference between memory safety and application-
 
 ## 17. Current executable prototype
 
-The first compiler slice is implemented in Rust, with its toolchain pinned to
-1.80.0. It follows source → lexer → parser → AST → explicit name resolution →
-expression type checking → typed HIR expressions → specialized integer contract
-proof → diagnostics. The resolver, type layer, and HIR implement KD-012's semantic
-boundary and KD-018's expression direction for this subset. Strongly typed IDs
-identify range types, records, fields, functions, parameters, and top-level
-bindings within one compilation. HIR references carry canonical types and IDs;
-source names and spans remain diagnostic metadata. The resolver owns declaration
-identity; `compiler/types` owns operator legality and expression types (`Bool`,
-nominal range, and internal integer literal). Nominal compatibility uses range
-IDs, and typing/verification perform no textual declaration lookup.
-`hir::Program` owns the canonical tables for those compilation-local IDs and
-exposes read-only slices and ID lookups publicly. Storage is crate-private;
-compiler-internal construction and transformations must preserve HIR identity
-and reference invariants. IDs have no cross-compilation stability guarantee.
+The compiler prototype is implemented in Rust, pinned to 1.80.0. The executable
+pipeline is source → lexer → parser → AST → explicit name resolution → expression
+and value-flow type checking → typed HIR → specialized integer contract proof
+→ diagnostics. This implements KD-012, KD-018, and KD-019 only for the documented
+subset; the broader pipeline above remains accepted architecture/future work.
 
-MIR, VIR, general ownership/effect analysis, SMT integration, and code generation
-are not yet implemented. This bounded implementation does not settle broader HIR,
-module, coercion, or generalized arithmetic design.
+The AST preserves textual declarations, parameter types, explicit ordinary
+returns, local initializers, expression calls, contracts, and ordered prototype
+statements. `FunctionDecl` retains source order across ordinary and verified forms.
+The resolver collects all declarations/signatures before resolving bodies, owns
+name lookup and source-order local scope, and assigns strongly typed range, record,
+field, function, parameter, local, and harness-binding IDs. Locals enter scope after
+resolving their initializer; no shadowing or cross-function local scope is supported.
+Forward and recursive ordinary calls resolve without execution or termination
+analysis. Source type names resolve to canonical references; `compiler/types`
+validates declared value types, operators, initializers, calls, and returns without
+textual name lookup.
 
-AST and HIR contracts are general expressions, and subtraction statements have
+One canonical `FunctionId` table contains both ordinary value and verified mutation
+functions, in source declaration order. Both kinds share the existing function
+namespace. Ordinary signatures/materialized locals use `ValueType::Bool` or
+`ValueType::Range(RangeTypeId)`; `IntegerLiteral` remains expression-only. HIR
+local and call references carry `LocalId` and `FunctionId`, with typed arguments,
+initializers, and explicit returns. Nominal compatibility uses exact range IDs.
+Names and spans are diagnostic metadata. `hir::Program` owns compilation-local
+canonical tables, including locals, and exposes read-only slices/ID lookups.
+Storage is crate-private; internal construction/transformations must preserve
+identity and reference invariants. IDs have no cross-compilation stability.
+
+Ordinary functions have explicit value return types and exactly one final
+`return expression;`. Immutable locals propagate concrete initializer types;
+call arguments and returns require exact concrete types. Bare integer locals,
+arguments to range parameters, and returns do not gain implicit range types.
+KED-004 does not execute, prove, or dynamically enforce ordinary functions.
+`Range(T)` typing does not prove bounds or overflow safety. Plain `fn` is not a
+claim to implement the full future `safe` model; ownership/moves and Copy semantics
+are not established by this frontend. All mixed-kind calls are rejected.
+
+The verifier takes only a verified-function view from the shared HIR table;
+ordinary functions are ignored as proof targets and never counted as proven.
+Verified AST/HIR contracts remain expressions, and subtraction statements have
 expression operands. The verifier recognizes only the original resolved battery
 proof structure and parameter/literal body operands. Richer well-typed expressions
-are rejected at verification with their source spans, not misclassified as frontend
-errors. The affine numerical kernel is private and unchanged in proof breadth.
+inside verified functions receive spanned verifier-support diagnostics. The
+private affine kernel and its independent 1,800-case cross-check retain their
+existing mathematical coverage, including independently varying numeric domains.
 
-The AST retains supported postconditions and subtraction statements; no function
-body or contract is silently skipped. Ordered construction/call statements form a
-prototype harness. The checker rejects unresolved references, distinct-record
-type mismatches, invalid ranges, duplicate names, and mutable access to immutable
-bindings. It proves every declared body independently of its call sites, then uses
-the established postcondition to update caller state in source order.
+Ordered record construction/call statements remain the prototype harness. The
+checker retains distinct-record checks, range checks, and immutable-binding
+rejection. Every verified body is proven independently of its call sites; its
+postcondition then updates caller state in source order. Ordinary functions do
+not enter that state model.
+
+MIR, VIR, general ownership/effect analysis, SMT integration, runtime lowering,
+and code generation remain unimplemented. This subset does not settle broader
+HIR, modules, generalized inference/coercions, arithmetic enforcement, or mixed
+assurance semantics.
 
 For the supported precondition `amount <= state.field` and postcondition
 `state.field == old(state.field) - amount`, the proof establishes signed i64
@@ -285,4 +310,4 @@ Empty admissible domains are explicitly rejected by this prototype.
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
 invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
-KD-013, KD-014, KD-015, KD-017, KD-018, DP-008, DP-009, and OQ-018 through OQ-021.
+KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, DP-008, DP-009, and OQ-018 through OQ-022.
