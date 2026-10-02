@@ -133,6 +133,7 @@ pub use crate::ast::{BinaryOp, UnaryOp};
 pub enum ExprType {
     Bool,
     Range(RangeTypeId),
+    Record(RecordId),
     IntegerLiteral,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -174,12 +175,14 @@ pub struct Subtract {
 pub enum ValueType {
     Bool,
     Range(RangeTypeId),
+    Record(RecordId),
 }
 impl From<ValueType> for ExprType {
     fn from(ty: ValueType) -> Self {
         match ty {
             ValueType::Bool => Self::Bool,
             ValueType::Range(id) => Self::Range(id),
+            ValueType::Record(id) => Self::Record(id),
         }
     }
 }

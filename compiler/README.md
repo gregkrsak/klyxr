@@ -1,9 +1,9 @@
-# First Klyxr compiler vertical slice
+# Klyxr compiler prototype
 
 This Rust implementation is an executable **prototype**, not a general-purpose
 Klyxr compiler. It implements a restricted source → lexer → parser → AST →
-name resolution → expression and value-flow type checking → typed HIR → integer contract proof
-→ diagnostic path.
+name resolution → expression and value-flow type checking → typed HIR → core
+ownership checking → integer contract proof → diagnostics.
 
 ## Run it
 
@@ -23,7 +23,8 @@ cargo clippy --locked --workspace --all-targets -- -D warnings
 These commands are not implementations of the `safe` and `checked` assurance
 levels. Success reports the proof scope and counts. Declaration-only inputs
 explicitly report that there are no function contracts to verify. Ordinary-only
-inputs report their type-checked function count and explicitly state that they
+inputs report their type-checked function count and core Copy/move check result,
+and explicitly state that they
 are not executed or verified; constrained results are not proven. In mixed inputs,
 only verified mutation functions contribute to the proof counts.
 
@@ -56,7 +57,7 @@ across the input; record bindings must be constructed before their use. Duplicat
 names in a declaration namespace or the binding scope are rejected; shadowing
 is outside this prototype. Passing an immutable binding to `&mut` is an error.
 
-## Ordinary value functions (KED-004)
+## Ordinary value functions (KED-004 / KED-005)
 
 ```klyxr
 type Percent = range 0..100;
@@ -79,10 +80,11 @@ fn can_use(current: Percent, used: Percent) -> bool {
 See `examples/value_flow.klx` for these flows and a forward call.
 
 Ordinary functions accept zero or more named immutable parameters, each typed as
-built-in source `bool` (semantic `Bool`) or a declared named range. The explicit
+built-in source `bool` (semantic `Bool`), a declared named range, or an existing
+record by value. The explicit
 `-> Type` return declaration permits only those same types. `bool` is a reserved
 built-in type token, so user range/record declarations cannot redefine it. Ordinary
-record/reference interfaces, unit, generics, and inferred return types are rejected.
+reference interfaces, unit, generics, and inferred return types are rejected.
 
 The body contains immutable `let name = expression;` locals followed by exactly
 one final **`return expression;`**. Its semicolon is mandatory. Klyxr deliberately
@@ -95,8 +97,8 @@ top-level mutable record harness is unchanged.
 Parameters are visible at entry; a local enters scope after its initializer is
 resolved. Later locals and the return can reference earlier locals. Self-reference,
 use before declaration, parameter/local duplicates, shadowing, and cross-function
-scope leakage are resolution errors. Initializers propagate their concrete Bool
-or named range type. `let five = 5;` is a type error: the internal IntegerLiteral
+scope leakage are resolution errors. Initializers propagate their concrete Bool,
+named range, or record type. `let five = 5;` is a type error: the internal IntegerLiteral
 category has no settled value-materialization rule. `let result = amount - 5;`
 is valid because the existing subtraction rule computes a concrete range type.
 
@@ -104,20 +106,75 @@ Ordinary calls are expressions, including nested calls and operator operands.
 Complete signatures are collected before bodies, so forward and direct/indirect
 recursive calls resolve. No termination or recursion policy is introduced. Calls
 require exact arity and exact concrete argument types; their result has the declared
-return type. Returns likewise require exact concrete types. Distinct ranges cannot
-be passed or returned implicitly even with identical bounds. Bare integer literals
-cannot satisfy a range parameter or return type, while Bool literals already type
+return type. Returns likewise require exact concrete types. Distinct ranges or
+records cannot be passed or returned implicitly even with identical bounds or
+field definitions. Bare integer literals cannot satisfy a range parameter or return type, while Bool literals already type
 as Bool. Generalized contextual literal conversion remains open under OQ-021.
 
-Ordinary functions are **frontend semantic work only**: parsed, resolved, and
-type-checked, with no execution, code generation, range proof, or runtime checks.
-For example, `return current - used;` can type as Percent without establishing
+Ordinary functions are **frontend semantic work only**: parsed, resolved,
+type-checked, and ownership-checked, with no execution, code generation, range
+proof, or runtime checks. For example, `return current - used;` can type as Percent without establishing
 that every result meets Percent's bounds. The verifier ignores ordinary functions
 as proof targets. Plain `fn` does not yet implement the full `safe` assurance model,
-and repeated value uses imply no future Copy/move rule. Ownership remains future
-work under KD-004. Ordinary calls may target only ordinary functions; verified
+with only the core owned-value moves described below implemented under KD-004
+and KD-020. Ordinary calls may target only ordinary functions; verified
 contracts/body expressions cannot call functions, and top-level harness calls may
 target only verified functions. These rejections leave OQ-019 unresolved.
+
+## Core owned-value moves (KED-005)
+
+```klyxr
+type Percent = range 0..100;
+record Ticket { value: Percent }
+
+fn identity(ticket: Ticket) -> Ticket {
+    return ticket;
+}
+
+fn forward(ticket: Ticket) -> Ticket {
+    let next = identity(ticket);
+    return next;
+}
+```
+
+Bool and named ranges are **Copy**. Records are **Move**, even when every field
+is Copy. This fixed compiler classification introduces no Copy trait, derivation,
+clone operation, or user customization. No move silently copies or clones a record.
+
+Owned ordinary parameters begin available. A value reference to a record consumes
+its ParameterId/LocalId place through an initializer, by-value argument, or return.
+An initializer is analyzed first, then its destination local becomes a fresh owner.
+Returning a record transfers it; call results are fresh values that may be bound,
+passed onward, or returned directly. Nested calls need no artificial locals.
+Forward and recursive calls remain structurally valid; no termination is established.
+Copy parameters and locals remain reusable through all these operations.
+
+```klyxr
+fn bad(ticket: Ticket) -> Ticket {
+    let next = ticket;
+    return ticket; // error: use of moved value `ticket`
+}
+```
+
+The diagnostic points at the illegal use and gives the previous move's line/column
+and destination. The checker stops at the first ownership error, avoiding cascades.
+State is per function and keyed by typed place IDs, never names. Expression children
+are checked in source order for deterministic diagnostics; this is not a runtime
+evaluation-order specification. Unused owned parameters/locals are accepted.
+
+This is whole-record, straight-line ownership only. Ordinary records enter through
+by-value parameters or ordinary call results. Record construction, field reads,
+field mutation, destructuring, partial moves, mutable locals, references/borrowing,
+Copy customization, Clone, destruction, and runtime resource release are not added.
+In particular, ordinary record equality and arithmetic remain type errors.
+The existing verified mutable state and top-level record harness are excluded
+from this ownership state machine and retain their existing behavior.
+
+`examples/move_values.klx` demonstrates accepted Copy reuse and record transfers.
+`examples/move_fail.klx` intentionally fails ownership analysis. Passing this phase
+does not execute ordinary functions, verify their contracts/ranges, or implement
+the complete future memory-safety model. OQ-023 retains Copy customization, cloning,
+partial moves, and destruction; borrowing remains separate future work.
 
 ## Core expressions and types (KED-003)
 
@@ -145,8 +202,8 @@ rejected. Different comparison levels follow the stated precedence and still
 must type-check. A minus sign on an integer literal preserves the existing signed
 literal behavior; general unary numeric negation is not implemented.
 
-Every HIR expression has an `ExprType`: `Bool`, `Range(RangeTypeId)`, or
-`IntegerLiteral`. The last is an internal constant category, not a public numeric
+Every HIR expression has an `ExprType`: `Bool`, `Range(RangeTypeId)`,
+`Record(RecordId)`, or `IntegerLiteral`. The last is an internal constant category, not a public numeric
 base type or implicit conversion mechanism.
 
 | Operation | Permitted operands | Result |
@@ -175,15 +232,20 @@ not decide which declarations those names denote. The supported keyword aliases
 still normalize in the lexer.
 
 `compile_source(source)` parses, calls `resolve::resolve(&ast)`, then calls
-`types::check(resolved)`, returning canonical `hir::Program` or `FrontendError`
-(`Lex`, `Parse`, `Resolve`, or `Type`). Compilation does not prove numerical
+`types::check(resolved)`, then `ownership::check(&program)`, returning accepted
+canonical `hir::Program` or `FrontendError` (`Lex`, `Parse`, `Resolve`, `Type`,
+or `Ownership`). Compilation does not prove numerical
 obligations. `resolve` now returns an opaque `ResolvedProgram`, consumed by
 `types::check`; it no longer publishes typed HIR by itself. The resolver identifies
 names, fields, callees, and source-ordered local scope. It resolves type names to
 canonical type references. `compiler/types` validates concrete declared value types,
 operator legality, nominal compatibility, result types, Boolean contracts,
 subtract-assignment, initializer propagation, call arguments, and explicit returns.
-The type layer performs no textual source-name lookup.
+The type layer performs no textual source-name lookup. `types::check` remains a
+separate type-only API and may return typed HIR that fails ownership checking.
+Use `compile_source` for the complete frontend, or call `ownership::check(&program)`
+after typing. Ownership inspects that HIR without duplicating or rebuilding it;
+its classification, place states, and move sites remain private implementation data.
 
 The resolver collects the complete range/record/function declaration sets before
 lowering references. Range and record names share the existing type namespace;
@@ -196,13 +258,13 @@ Typed HIR has separate `RangeTypeId`, `RecordId`, `FieldId`, `FunctionId`,
 compilation. Fields carry their record and range IDs; parameters carry their
 function and canonical type. `TypedExpr` stores kind, computed type, and span;
 references use parameter, local, field, and function IDs, and nominal types use
-range IDs. AST `FunctionDecl` and HIR `Function` each distinguish Ordinary and
+range/record IDs. AST `FunctionDecl` and HIR `Function` each distinguish Ordinary and
 Verified forms in one source-ordered function table. `functions()` and `function(id)`
 now return the common HIR `Function`, with `id()`, `name()`, `as_ordinary()`, and
 `as_verified()` read-only views. This is an intentional prototype API change.
 Verified functions retain one `requires` and one `ensures` expression; ordinary
 functions carry parameter IDs, a `ValueType` return, typed lets and a typed explicit
-return. `ValueType` permits only Bool/Range, excluding IntegerLiteral. Ordinary
+return. `ValueType` permits Bool/Range/Record, excluding IntegerLiteral. Ordinary
 parameters use `ParameterType::Value(ValueType)`; verified parameter types are
 unchanged. Locals carry their owning FunctionId and concrete type; BindingId
 continues to denote only top-level record bindings. Parentheses
@@ -212,7 +274,8 @@ spans remain metadata for diagnostics. These IDs have no cross-compilation,
 serialization, or ABI stability guarantee.
 
 `verify::verify_report(&hir)` (and the diagnostics-only `verify`) consume canonical
-HIR produced by resolution and type checking. Verification uses direct ID-based
+HIR accepted by the frontend. Ownership is a separate prerequisite; the verifier
+does not discover moves or reinterpret ordinary functions. Verification uses direct ID-based
 table access and tracks current state by `BindingId`; names are used only for diagnostics and the
 human-readable `final_values` report. It retains numerical initialization/argument
 checks, record-ID compatibility and the existing mutable-binding check, universal
@@ -221,8 +284,8 @@ body proof, and ordered modular call-state reasoning.
 `hir::Program` owns the canonical tables for its compilation-local IDs. Public
 inspection is read-only: `ranges()`, `records()`, `fields()`, `functions()`,
 `parameters()`, `locals()`, `bindings()`, and `statements()` return immutable slices, while
-`range(id)`, `record(id)`, `field(id)`, `function(id)`, `parameter(id)`, and
-`local(id)` and `binding(id)` provide immutable ID-based lookup. External consumers
+`range(id)`, `record(id)`, `field(id)`, `function(id)`, `parameter(id)`,
+`local(id)`, and `binding(id)` provide immutable ID-based lookup. External consumers
 cannot mutate or reorder the underlying tables. Storage is crate-private so the resolver can
 construct HIR directly; compiler-internal transformations are responsible for
 preserving its identity and reference invariants.
@@ -231,17 +294,19 @@ The CLI follows this exact path:
 
 ```text
 source → lexer → parser → AST expressions/functions → resolver → expression and value-flow type checking
-       → typed HIR expressions → prototype verifier → diagnostics
+       → typed HIR expressions → core ownership checking → prototype verifier → diagnostics
 ```
 
-Resolution and type errors prevent proof. Diagnostics distinguish malformed syntax,
+Resolution, type, and ownership errors prevent proof. Diagnostics distinguish malformed syntax,
 unknown references, incompatible expression types, unsupported well-typed proof
 shapes, and numerical counterexamples. Missing names are resolution errors;
-non-Boolean contracts and incompatible operators are type errors. Names and spans
+non-Boolean contracts and incompatible operators are type errors; well-typed
+use-after-move failures are ownership errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012, KD-018, and KD-019 only for the documented subset. General type
-inference, ownership/effects, MIR, VIR, and broader HIR features remain future work.
+This implements KD-012, KD-018, KD-019, and KD-020 only for the documented subset.
+General type inference, borrowing, ownership beyond core moves, effects, MIR, VIR,
+and broader HIR features remain future work.
 
 ## What the proof establishes
 
@@ -300,19 +365,21 @@ consume(&mut battery, 50); // rejected: 50 <= 30 is false
 
 ## Limits and next work
 
-The prototype does not implement general ownership/borrowing, moves, lifetimes,
+The prototype does not implement ownership beyond core ordinary value moves,
+borrowing, lifetimes, destruction,
 effects, runtime contracts, expressions beyond this subset, loops, quantifiers,
 multiple fields, record invariants, SMT/VIR/MIR, or machine-code generation. In particular,
 `examples/effects.klx` is illustrative and is rejected rather than analyzed.
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, and KD-019,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, and KD-020,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
 remain design work under OQ-019/OQ-020. OQ-022 records remaining ordinary-function
-and local-value questions; KED-004 does not settle them.
+and local-value questions; KD-020 now settles core moves, while OQ-023 retains
+Copy customization, partial moves, cloning, and destruction.
 
 KED-001 clarifies the nominal arithmetic boundary under KD-005; KED-003 applies
 nominal identity to expression typing. KD-018 records that direction, while
@@ -344,6 +411,12 @@ call/return types, explicit-return diagnostics, literal restrictions, and mixed-
 rejection. Privileged metadata-renaming tests preserve function/local identity
 without exposing mutable public storage. CLI tests demonstrate ordinary-only
 acceptance with zero proof counts and explicit non-execution/non-proof wording.
+Ownership regressions cover record signatures/locals/results, nominal record
+mismatches, binding/call/return transfers, Copy reuse, nested and repeated consuming
+arguments, forward/recursive calls, unused owners, function isolation, first-error
+reporting, phase ordering, retained restrictions, and privileged metadata renaming.
+CLI tests distinguish successful core ownership checking from execution/proof and
+check the later-use and prior-move locations on failure.
 CI runs the tests in debug and optimized builds and Clippy with warnings
 treated as errors.
 
@@ -352,3 +425,4 @@ The failing examples are intentional:
 - `battery_fail.klx`: invalid first-call precondition.
 - `battery_sequence_fail.klx`: invalid second-call precondition after mutation.
 - `battery_body_fail.klx`: uncalled body fails its postcondition.
+- `move_fail.klx`: returning a record parameter after moving it into a local.

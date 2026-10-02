@@ -56,16 +56,25 @@ field, and top-level binding IDs. Expression and value-flow type checking produc
 canonical typed HIR. Public HIR inspection remains read-only; names/spans are
 diagnostic metadata.
 
-KED-004 ordinary functions declare `-> bool` or a named range return type, accept
-zero or more bool/range parameters, introduce immutable initializer-typed locals,
-and end with explicit `return expression;` (KD-019). Calls are expressions and
-may resolve forward or recursively. Ordinary and verified functions share one
-function namespace and ID table. Bare integer literals do not materialize as
-locals, arguments, or returns. Ordinary functions are parsed, resolved, and
-type-checked, but not executed or proven; a range result type does not establish
-that the produced value meets its bounds. Plain `fn` does not yet implement the
-complete future `safe` assurance model, and repeated value use does not settle
-future Copy/move semantics.
+KED-004 introduced ordinary Bool/range value functions, immutable locals, calls,
+and explicit `return expression;` (KD-019). KED-005 now permits existing records
+by value in ordinary signatures, call results, locals, and returns. Ordinary and
+verified functions retain one function namespace and ID table. Bare integer
+literals do not materialize as locals, arguments, or returns.
+
+The dedicated ownership phase runs after type checking. Bool and named ranges
+are `Copy`; records are non-`Copy` and move through bindings, by-value arguments,
+and returns (KD-020). ParameterId/LocalId state is per function; a moved place
+cannot be reused. The compiler does not silently clone. Record fields do not make
+records Copy. Ordinary record construction, field access, partial moves, mutable
+locals, borrowing, and destruction remain unsupported.
+
+Ordinary functions are parsed, resolved, type-checked, and ownership-checked,
+but not executed or proven. A range result type does not establish that the
+produced value meets its bounds. Plain `fn` does not yet implement the complete
+future `safe` assurance model. Forward and recursive calls remain structurally
+valid without a termination claim. Diagnostic traversal order does not settle
+runtime evaluation order.
 
 The verifier continues to recognize the original battery-contract structure by
 IDs and rejects richer well-typed expressions inside that verified path with a
@@ -73,8 +82,10 @@ verifier-support diagnostic. It ignores ordinary functions as proof targets.
 Its affine proof establishes subtraction safety, field ranges, and postconditions
 for every admissible input of the supported structure, and tracks state between
 literal-argument harness calls. Calls across function kinds are rejected; OQ-019,
-OQ-021, and OQ-022 retain the broader assurance, arithmetic, and function questions.
-General ownership/borrowing, effects, runtime contracts, MIR/VIR, SMT integration,
+OQ-021, OQ-022, and OQ-023 retain the broader assurance, arithmetic, function,
+and Copy/destruction questions.
+General ownership beyond this core move model, borrowing, effects, runtime
+contracts, MIR/VIR, SMT integration,
 and machine-code generation remain unimplemented. Read `compiler/README.md`
 before making claims about what the executable establishes.
 

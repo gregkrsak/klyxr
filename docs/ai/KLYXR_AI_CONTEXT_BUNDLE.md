@@ -69,16 +69,25 @@ field, and top-level binding IDs. Expression and value-flow type checking produc
 canonical typed HIR. Public HIR inspection remains read-only; names/spans are
 diagnostic metadata.
 
-KED-004 ordinary functions declare `-> bool` or a named range return type, accept
-zero or more bool/range parameters, introduce immutable initializer-typed locals,
-and end with explicit `return expression;` (KD-019). Calls are expressions and
-may resolve forward or recursively. Ordinary and verified functions share one
-function namespace and ID table. Bare integer literals do not materialize as
-locals, arguments, or returns. Ordinary functions are parsed, resolved, and
-type-checked, but not executed or proven; a range result type does not establish
-that the produced value meets its bounds. Plain `fn` does not yet implement the
-complete future `safe` assurance model, and repeated value use does not settle
-future Copy/move semantics.
+KED-004 introduced ordinary Bool/range value functions, immutable locals, calls,
+and explicit `return expression;` (KD-019). KED-005 now permits existing records
+by value in ordinary signatures, call results, locals, and returns. Ordinary and
+verified functions retain one function namespace and ID table. Bare integer
+literals do not materialize as locals, arguments, or returns.
+
+The dedicated ownership phase runs after type checking. Bool and named ranges
+are `Copy`; records are non-`Copy` and move through bindings, by-value arguments,
+and returns (KD-020). ParameterId/LocalId state is per function; a moved place
+cannot be reused. The compiler does not silently clone. Record fields do not make
+records Copy. Ordinary record construction, field access, partial moves, mutable
+locals, borrowing, and destruction remain unsupported.
+
+Ordinary functions are parsed, resolved, type-checked, and ownership-checked,
+but not executed or proven. A range result type does not establish that the
+produced value meets its bounds. Plain `fn` does not yet implement the complete
+future `safe` assurance model. Forward and recursive calls remain structurally
+valid without a termination claim. Diagnostic traversal order does not settle
+runtime evaluation order.
 
 The verifier continues to recognize the original battery-contract structure by
 IDs and rejects richer well-typed expressions inside that verified path with a
@@ -86,8 +95,10 @@ verifier-support diagnostic. It ignores ordinary functions as proof targets.
 Its affine proof establishes subtraction safety, field ranges, and postconditions
 for every admissible input of the supported structure, and tracks state between
 literal-argument harness calls. Calls across function kinds are rejected; OQ-019,
-OQ-021, and OQ-022 retain the broader assurance, arithmetic, and function questions.
-General ownership/borrowing, effects, runtime contracts, MIR/VIR, SMT integration,
+OQ-021, OQ-022, and OQ-023 retain the broader assurance, arithmetic, function,
+and Copy/destruction questions.
+General ownership beyond this core move model, borrowing, effects, runtime
+contracts, MIR/VIR, SMT integration,
 and machine-code generation remain unimplemented. Read `compiler/README.md`
 before making claims about what the executable establishes.
 
@@ -693,6 +704,30 @@ A future explicitly marked expression-bodied function shorthand is not ruled
 out, but it would be a separate syntactic construct and would not change the
 explicit-return rule for block-bodied functions.
 
+---
+
+## KD-020 — Core owned-value move semantics
+
+**Status:** Accepted
+
+Klyxr uses move-by-default ownership for non-`Copy` values.
+
+In the initial core ownership model:
+
+- `bool` values are `Copy`;
+- named constrained range values are `Copy`;
+- record values are non-`Copy` and move by default.
+
+A non-`Copy` owned value moves when transferred through a by-value binding,
+by-value function argument, or return. After a move, the previous owned place
+may not be used as a value. The compiler never silently clones a moved value.
+
+This initial `Copy` classification is semantic compiler behavior; KED-005 does
+not establish the eventual user-facing `Copy` trait or customization mechanism.
+A record is non-`Copy` even when all its fields are `Copy`.
+
+Borrowing is a separate language mechanism and is not introduced by KED-005.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -944,8 +979,9 @@ The MVP should demonstrate the difference between memory safety and application-
 
 The compiler prototype is implemented in Rust, pinned to 1.80.0. The executable
 pipeline is source → lexer → parser → AST → explicit name resolution → expression
-and value-flow type checking → typed HIR → specialized integer contract proof
-→ diagnostics. This implements KD-012, KD-018, and KD-019 only for the documented
+and value-flow type checking → typed HIR → core ownership checking → specialized
+integer contract proof → diagnostics. This implements KD-012, KD-018, KD-019,
+and KD-020 only for the documented
 subset; the broader pipeline above remains accepted architecture/future work.
 
 The AST preserves textual declarations, parameter types, explicit ordinary
@@ -962,10 +998,13 @@ textual name lookup.
 
 One canonical `FunctionId` table contains both ordinary value and verified mutation
 functions, in source declaration order. Both kinds share the existing function
-namespace. Ordinary signatures/materialized locals use `ValueType::Bool` or
-`ValueType::Range(RangeTypeId)`; `IntegerLiteral` remains expression-only. HIR
+namespace. Ordinary signatures/materialized locals use `ValueType::Bool`,
+`ValueType::Range(RangeTypeId)`, or `ValueType::Record(RecordId)`; `IntegerLiteral`
+remains expression-only. Expressions represent records by the same canonical
+RecordId. Record arguments and returns require exact nominal identity; existing
+operators do not accept record values. HIR
 local and call references carry `LocalId` and `FunctionId`, with typed arguments,
-initializers, and explicit returns. Nominal compatibility uses exact range IDs.
+initializers, and explicit returns. Nominal compatibility uses exact range/record IDs.
 Names and spans are diagnostic metadata. `hir::Program` owns compilation-local
 canonical tables, including locals, and exposes read-only slices/ID lookups.
 Storage is crate-private; internal construction/transformations must preserve
@@ -975,10 +1014,32 @@ Ordinary functions have explicit value return types and exactly one final
 `return expression;`. Immutable locals propagate concrete initializer types;
 call arguments and returns require exact concrete types. Bare integer locals,
 arguments to range parameters, and returns do not gain implicit range types.
-KED-004 does not execute, prove, or dynamically enforce ordinary functions.
+KED-004 and KED-005 do not execute, prove, or dynamically enforce ordinary functions.
 `Range(T)` typing does not prove bounds or overflow safety. Plain `fn` is not a
-claim to implement the full future `safe` model; ownership/moves and Copy semantics
-are not established by this frontend. All mixed-kind calls are rejected.
+claim to implement the full future `safe` model. All mixed-kind calls are rejected.
+
+`compiler/ownership` is a dedicated phase that inspects canonical typed HIR without
+rebuilding it or adding public ownership annotations. Its private classification
+is Bool/range → Copy, record → Move, regardless of field types. It tracks only
+ordinary by-value ParameterId/LocalId places, using separate strongly typed place
+variants in a per-function state table. Record parameters begin Available. Local
+initializers are analyzed before introducing a fresh local owner. Value references
+consume Move places through bindings, by-value calls, and returns; Copy places
+remain reusable. Call results are fresh values, without public temporary IDs.
+
+State is Available or Moved with the prior source span and transfer destination.
+Use-after-move produces the first precise `FrontendError::Ownership` diagnostic,
+with the later use span and prior move location. Names are diagnostic metadata;
+classification and state use canonical types and IDs. Children are traversed in
+source order for deterministic diagnostics, without settling runtime evaluation
+order. There are no branches, joins, fixed points, or inlined callee states.
+Forward/recursive calls are checked structurally, not executed or proven terminating.
+Unused owners are accepted without destruction behavior.
+
+The ownership phase excludes the verified state parameter, fields, and BindingId
+harness state. It adds no borrowing, mutable locals, ordinary field access/record
+construction, partial moves, user-defined Copy/Clone, or destructors. Source names
+and nominal type errors must be resolved before ownership checking.
 
 The verifier takes only a verified-function view from the shared HIR table;
 ordinary functions are ignored as proof targets and never counted as proven.
@@ -995,7 +1056,8 @@ rejection. Every verified body is proven independently of its call sites; its
 postcondition then updates caller state in source order. Ordinary functions do
 not enter that state model.
 
-MIR, VIR, general ownership/effect analysis, SMT integration, runtime lowering,
+MIR, VIR, ownership beyond this straight-line move subset, borrowing/effect
+analysis, destruction, SMT integration, runtime lowering,
 and code generation remain unimplemented. This subset does not settle broader
 HIR, modules, generalized inference/coercions, arithmetic enforcement, or mixed
 assurance semantics.
@@ -1011,7 +1073,7 @@ Empty admissible domains are explicitly rejected by this prototype.
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
 invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
-KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, DP-008, DP-009, and OQ-018 through OQ-022.
+KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, DP-008, DP-009, and OQ-018 through OQ-023.
 
 <!-- END ARCHITECTURE.md -->
 
@@ -1128,12 +1190,15 @@ Still open:
 - conversions between constrained types;
 - units/dimension-aware arithmetic.
 
-KED-003 and KED-004 do not settle these questions implicitly.
+KED-003, KED-004, and KED-005 do not settle these questions implicitly.
 
 
 ## OQ-022 — General function and local-value semantics
 
-KED-004 establishes only a straight-line value-function core.
+KED-004 established a straight-line value-function core with Bool/range values.
+KED-005 extends it with by-value records and the basic binding/call/return move
+rules accepted in KD-020. Those core move rules are no longer wholly unresolved;
+this does not settle the broader function/local semantics below.
 
 Still open:
 
@@ -1144,14 +1209,38 @@ Still open:
 - mutable locals and assignment;
 - expression-bodied function shorthand;
 - contextual integer-literal typing at bindings, arguments, and returns;
-- general record/reference parameters and returns;
+- broader value categories and record/reference interfaces beyond the current by-value record subset;
 - function values, closures, and higher-order calls;
 - function overloading;
-- interaction of calls with ownership/moves/borrows;
+- interaction of calls and owned places with future borrowing;
 - runtime enforcement of constrained return values outside verified code.
 
 OQ-019 remains authoritative for mixed `safe` / `checked` / `verified` call
 boundaries. OQ-021 remains authoritative for unresolved constrained arithmetic
-and literal-conversion rules.
+and literal-conversion rules. Copy customization and destruction remain under OQ-023.
+
+
+## OQ-023 — Copy customization, cloning, partial moves, and destruction
+
+KED-005 establishes only the core `Copy` / move distinction.
+
+Still open:
+
+- eventual user-facing `Copy` trait or equivalent;
+- eligibility rules for user-defined `Copy`;
+- explicit cloning/duplication APIs;
+- automatic or declared Copy behavior for records, enums, tuples, and arrays;
+- partial moves from aggregate fields;
+- ownership of destructured values;
+- destructor / `Drop` semantics;
+- destruction order;
+- scope-exit lowering;
+- interaction between destruction and panic/unwind;
+- resource-owning standard-library types;
+- ownership representation across FFI boundaries.
+
+Borrowing and lifetime rules remain separate questions under KD-004, OQ-009,
+and future directives. No runtime destruction or resource release is implemented
+by the core ownership checker.
 
 <!-- END OPEN_QUESTIONS.md -->

@@ -88,3 +88,32 @@ fn ordinary_functions_report_typing_without_execution_or_proof() {
         assert!(!text.contains("verified supported integer contracts"));
     }
 }
+
+#[test]
+fn record_moves_are_checked_without_claiming_execution_or_verification() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("move_values.klx")]);
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("ordinary value functions type-checked: 8"));
+        assert!(text.contains("core Copy/move checking passed"));
+        assert!(text.contains("borrowing and destruction are not implemented"));
+        assert!(text.contains("not executed or verified"));
+        assert!(text.contains("function bodies proven: 0"));
+    }
+}
+
+#[test]
+fn ownership_failure_exits_one_and_reports_both_move_sites() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("move_fail.klx")]);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let text = String::from_utf8(output.stderr).unwrap();
+        assert!(text.contains("use of moved value `ticket`"));
+        assert!(text.contains("move_fail.klx:7:12"));
+        assert!(text.contains("into local `next` at line 6, column 16"));
+        assert!(text.contains("ownership checking stopped"));
+    }
+}

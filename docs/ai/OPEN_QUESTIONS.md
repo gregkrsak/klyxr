@@ -107,12 +107,15 @@ Still open:
 - conversions between constrained types;
 - units/dimension-aware arithmetic.
 
-KED-003 and KED-004 do not settle these questions implicitly.
+KED-003, KED-004, and KED-005 do not settle these questions implicitly.
 
 
 ## OQ-022 — General function and local-value semantics
 
-KED-004 establishes only a straight-line value-function core.
+KED-004 established a straight-line value-function core with Bool/range values.
+KED-005 extends it with by-value records and the basic binding/call/return move
+rules accepted in KD-020. Those core move rules are no longer wholly unresolved;
+this does not settle the broader function/local semantics below.
 
 Still open:
 
@@ -123,12 +126,36 @@ Still open:
 - mutable locals and assignment;
 - expression-bodied function shorthand;
 - contextual integer-literal typing at bindings, arguments, and returns;
-- general record/reference parameters and returns;
+- broader value categories and record/reference interfaces beyond the current by-value record subset;
 - function values, closures, and higher-order calls;
 - function overloading;
-- interaction of calls with ownership/moves/borrows;
+- interaction of calls and owned places with future borrowing;
 - runtime enforcement of constrained return values outside verified code.
 
 OQ-019 remains authoritative for mixed `safe` / `checked` / `verified` call
 boundaries. OQ-021 remains authoritative for unresolved constrained arithmetic
-and literal-conversion rules.
+and literal-conversion rules. Copy customization and destruction remain under OQ-023.
+
+
+## OQ-023 — Copy customization, cloning, partial moves, and destruction
+
+KED-005 establishes only the core `Copy` / move distinction.
+
+Still open:
+
+- eventual user-facing `Copy` trait or equivalent;
+- eligibility rules for user-defined `Copy`;
+- explicit cloning/duplication APIs;
+- automatic or declared Copy behavior for records, enums, tuples, and arrays;
+- partial moves from aggregate fields;
+- ownership of destructured values;
+- destructor / `Drop` semantics;
+- destruction order;
+- scope-exit lowering;
+- interaction between destruction and panic/unwind;
+- resource-owning standard-library types;
+- ownership representation across FFI boundaries.
+
+Borrowing and lifetime rules remain separate questions under KD-004, OQ-009,
+and future directives. No runtime destruction or resource release is implemented
+by the core ownership checker.
