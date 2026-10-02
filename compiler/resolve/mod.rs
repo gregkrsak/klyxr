@@ -113,6 +113,11 @@ pub(crate) struct ResolvedExpr {
 }
 #[derive(Debug)]
 pub(crate) enum ResolvedExprKind {
+    IfValue {
+        condition: Box<ResolvedExpr>,
+        then_value: Box<ResolvedExpr>,
+        else_value: Box<ResolvedExpr>,
+    },
     BoolLiteral(bool),
     IntegerLiteral(i64),
     Parameter(ParameterId),
@@ -612,6 +617,11 @@ impl Resolver {
         allow_old: bool,
     ) -> ResolutionResult<ResolvedExpr> {
         let kind = match &expression.kind {
+            ast::ExprKind::IfValue { condition, then_value, else_value } => ResolvedExprKind::IfValue {
+                condition: Box::new(self.expression(condition, scope, allow_old)?),
+                then_value: Box::new(self.expression(then_value, scope, allow_old)?),
+                else_value: Box::new(self.expression(else_value, scope, allow_old)?),
+            },
             ast::ExprKind::BoolLiteral(v) => ResolvedExprKind::BoolLiteral(*v),
             ast::ExprKind::IntegerLiteral(v) => ResolvedExprKind::IntegerLiteral(*v),
             ast::ExprKind::Name(name) => match scope.values.get(name) {

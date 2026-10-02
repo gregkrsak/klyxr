@@ -479,3 +479,50 @@ KED-009 refines the existing ownership phase above MIR. It adds no syntax, loops
 reborrowing, reference returns, explicit lifetimes, conditional values, destruction,
 or generalized CFG lifetime inference. General MIR dataflow and loops remain
 unresolved under OQ-024/OQ-026.
+
+
+---
+
+## KD-025 — Value-producing conditional initialization
+
+**Status:** Accepted
+
+An ordinary local initializer may select an owned value with:
+
+```klyxr
+let chosen = if flag { first } else { second };
+```
+
+`let mut` / `let mutable` may use the same one-time initialization. Braces and
+`else` are mandatory. Each branch contains exactly one value expression, without
+a trailing semicolon or statements. A nested conditional may be the complete
+branch result. Statement `if` remains separate and retains optional `else` and
+lexical statement branches.
+
+The condition must be Bool. Both branches must have exactly the same permitted
+concrete owned type: Bool, a canonical named range, or a canonical record. Distinct
+nominal declarations are incompatible even with identical bounds or structure.
+There is no contextual integer-literal materialization, implicit conversion, or
+reference-valued conditional result. Copy dereference results follow existing
+rules; non-Copy move-out through references remains forbidden.
+
+Condition ownership effects occur once before independent branch snapshots. A
+Copy result preserves its source; a Move result transfers into the destination
+on that path. Every reachable leaf initializes the same source local. The
+destination becomes available after the join; source availability retains
+KD-023's all-path rule. The same source may move into the destination on both
+mutually exclusive paths, but cannot then be used again. KD-024 continuation-aware
+loan liveness and call/write holds apply without relaxation.
+
+Typed HIR retains the conditional and its exact type. The first MIR strategy
+emits explicit Branch/Goto edges, initializes the canonical destination LocalId
+on each mutually exclusive leaf, and rejoins without a value merge instruction.
+This is one-time initialization, not reassignment or SSA. No phi, block parameters,
+general temporaries, result slots, or definite-assignment solver are introduced.
+
+KED-010 permits this form only as a complete local initializer or recursively as
+a complete value branch. Returns, call arguments, unary/binary operands,
+parenthesized conditional values, dereference writes, and general expression
+positions remain unsupported. It settles no statement-containing value blocks,
+reference lifetime joins, early returns, loops, destruction, execution, or general
+MIR value-flow strategy. These boundaries remain open under OQ-022/OQ-024/OQ-026.

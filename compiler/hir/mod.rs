@@ -146,6 +146,11 @@ pub struct TypedExpr {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprKind {
+    IfValue {
+        condition: Box<TypedExpr>,
+        then_value: Box<TypedExpr>,
+        else_value: Box<TypedExpr>,
+    },
     BoolLiteral(bool),
     IntegerLiteral(i64),
     Parameter(ParameterId),

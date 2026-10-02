@@ -243,7 +243,7 @@ pipeline is source → lexer → parser → AST → explicit name resolution →
 and value-flow type checking → typed HIR → core ownership, loan, and borrowed-access checking →
 ordinary MIR CFG lowering (ordinary functions) or specialized
 integer contract proof (verified functions) → diagnostics. This implements KD-012, KD-018, KD-019,
-KD-020, KD-021, KD-022, KD-023, and KD-024 only for the documented
+KD-020, KD-021, KD-022, KD-023, KD-024, and KD-025 only for the documented
 subset; the broader pipeline above remains accepted architecture/future work.
 
 The AST preserves textual declarations, parameter types, explicit ordinary
@@ -285,7 +285,7 @@ Ordinary functions have explicit value return types and exactly one final
 `return expression;`. Immutable locals propagate concrete initializer types;
 call arguments and returns require exact concrete types. Bare integer locals,
 arguments to range parameters, and returns do not gain implicit range types.
-KED-004 through KED-009 do not execute, prove, or dynamically enforce ordinary functions.
+KED-004 through KED-010 do not execute, prove, or dynamically enforce ordinary functions.
 `Range(T)` typing does not prove bounds or overflow safety. Plain `fn` is not a
 claim to implement the full future `safe` model. All mixed-kind calls are rejected.
 
@@ -375,7 +375,7 @@ balanced through their operation and cannot escape statements or branch exits.
 
 Ownership remains above MIR in `compiler/ownership`; there is no second checker,
 MIR ownership pass, general dataflow framework, or fixed-point solver. This is
-whole-value liveness for structured acyclic statements, not arbitrary CFG borrowing
+whole-value liveness for structured acyclic statement and initializer branches, not arbitrary CFG borrowing
 or a claim of Rust borrow-checker equivalence. OQ-024/OQ-026 retain general lifetimes,
 loops, reborrowing, escaping references, and broader MIR ownership dataflow.
 
@@ -391,6 +391,33 @@ branches use a direct false edge to the join. A structural validator checks entr
 targets, reachability, acyclicity, and Bool conditions; unique IDs and single
 terminators follow from indexed storage and the block type. Every finite path ends
 in Return. MIR discovers no new source semantic errors. The CLI exercises lowering.
+
+KED-010 adds initializer-only conditional values with mandatory else and exactly
+one expression per branch. AST/resolved/typed HIR retain explicit IfValue nodes;
+resolution uses the same visible scope without introducing branch declarations.
+The destination enters scope after its whole initializer resolves. Type checking
+requires Bool conditions and exact owned Bool/range/record identity; references
+and IntegerLiteral results cannot materialize conditional destinations.
+
+The existing ownership checker shares snapshot/split/join helpers for statement
+and value conditionals. It evaluates the condition once, gives each branch its
+own future uses plus the continuation, and transfers every leaf into the same
+canonical source LocalId. Copy sources survive; moved sources become conditionally
+unavailable after the join. The destination is inserted as available only after
+the whole initializer completes. KD-024 provenance and operation holds are unchanged.
+
+MIR value lowering emits explicit Branch blocks with distinct outgoing targets.
+Every nested leaf emits an existing Let statement for the same source destination
+and Goto to a common control-flow join. Multiple mutually exclusive initializations
+are not reassignment. No hidden IfValue survives inside any MIR expression; the
+structural validator checks this. Deterministic construction and mandatory value
+branches guarantee one initialization per reachable path without a general
+definite-assignment solver. This first destination-local strategy is not a final
+general MIR solution for all future value joins (OQ-026).
+
+The executable flow is typed HIR → ownership/path-sensitive acyclic loans → MIR
+statement CFGs and destination-local value joins. MIR still has no backend or
+verification consumer. The verified battery path excludes ordinary conditionals.
 
 There are no phi nodes, block parameters/results, SSA, loops, general temporaries,
 cleanup edges, execution, or MIR backend/verifier consumers. The specialized
@@ -414,4 +441,4 @@ Empty admissible domains are explicitly rejected by this prototype.
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
 invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
-KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, DP-008, DP-009, and OQ-018 through OQ-026.
+KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, DP-008, DP-009, and OQ-018 through OQ-026.

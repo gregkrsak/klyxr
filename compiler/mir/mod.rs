@@ -99,6 +99,36 @@ impl MirFunction {
             marks[id.0] = 2;
             Ok(())
         }
+        fn contains_conditional(expression: &TypedExpr) -> bool {
+            match &expression.kind {
+                hir::ExprKind::IfValue { .. } => true,
+                hir::ExprKind::Call { arguments, .. } => arguments.iter().any(contains_conditional),
+                hir::ExprKind::Unary { operand, .. } => contains_conditional(operand),
+                hir::ExprKind::Binary { left, right, .. } => {
+                    contains_conditional(left) || contains_conditional(right)
+                }
+                _ => false,
+            }
+        }
+        for block in &self.blocks {
+            for statement in &block.statements {
+                let expression = match statement {
+                    Statement::Let { initializer, .. } => initializer,
+                    Statement::DerefAssign { value, .. } => value,
+                };
+                if contains_conditional(expression) {
+                    return Err("conditional value must lower to control flow");
+                }
+            }
+            let expression = match &block.terminator {
+                Terminator::Branch { condition, .. } => Some(condition),
+                Terminator::Return { value } => Some(value),
+                Terminator::Goto { .. } => None,
+            };
+            if expression.is_some_and(contains_conditional) {
+                return Err("conditional value must lower to control flow");
+            }
+        }
         let mut marks = vec![0; self.blocks.len()];
         visit(self, self.entry, &mut marks)?;
         if marks.contains(&0) {
@@ -173,6 +203,45 @@ impl Builder {
             terminator,
         });
     }
+    // Each value leaf initializes the canonical destination once on its path.
+    // Nested value branches share the destination's control-flow-only join.
+    fn initialize(
+        &mut self,
+        current: BasicBlockId,
+        mut statements: Vec<Statement>,
+        local: LocalId,
+        value: &TypedExpr,
+        span: Span,
+        join: BasicBlockId,
+    ) {
+        if let hir::ExprKind::IfValue {
+            condition,
+            then_value,
+            else_value,
+        } = &value.kind
+        {
+            let then_target = self.reserve();
+            let else_target = self.reserve();
+            self.finish(
+                current,
+                statements,
+                Terminator::Branch {
+                    condition: (**condition).clone(),
+                    then_target,
+                    else_target,
+                },
+            );
+            self.initialize(then_target, Vec::new(), local, then_value, span, join);
+            self.initialize(else_target, Vec::new(), local, else_value, span, join);
+        } else {
+            statements.push(Statement::Let {
+                local,
+                initializer: value.clone(),
+                span,
+            });
+            self.finish(current, statements, Terminator::Goto { target: join });
+        }
+    }
     fn body(
         &mut self,
         mut current: BasicBlockId,
@@ -185,11 +254,26 @@ impl Builder {
                     local,
                     initializer,
                     span,
-                } => statements.push(Statement::Let {
-                    local: *local,
-                    initializer: initializer.clone(),
-                    span: *span,
-                }),
+                } => {
+                    if matches!(initializer.kind, hir::ExprKind::IfValue { .. }) {
+                        let join = self.reserve();
+                        self.initialize(
+                            current,
+                            std::mem::take(&mut statements),
+                            *local,
+                            initializer,
+                            *span,
+                            join,
+                        );
+                        current = join;
+                    } else {
+                        statements.push(Statement::Let {
+                            local: *local,
+                            initializer: initializer.clone(),
+                            span: *span,
+                        });
+                    }
+                }
                 ValueStatement::DerefAssign {
                     reference,
                     value,
@@ -242,6 +326,76 @@ impl Builder {
 mod tests {
     use super::*;
     use crate::{compile_source, ownership, parse_source, resolve, types};
+    #[test]
+    fn conditional_value_identity_and_ownership_ignore_display_names() {
+        let source = "type Percent = range 0..100; record Ticket { value: Percent } fn id(a: Ticket) -> Ticket { return a; } fn f(flag: bool, a: Ticket, b: Ticket) -> Ticket { let chosen = if flag { id(a) } else { if flag { b } else { a } }; return chosen; }";
+        let mut p = compile_source(source).unwrap();
+        let original = lower(&p);
+        for range in &mut p.ranges {
+            range.name = "display".into();
+        }
+        for record in &mut p.records {
+            record.name = "display".into();
+        }
+        for field in &mut p.fields {
+            field.name = "display".into();
+        }
+        for parameter in &mut p.parameters {
+            parameter.name = "display".into();
+        }
+        for local in &mut p.locals {
+            local.name = "display".into();
+        }
+        for function in &mut p.functions {
+            if let hir::Function::Ordinary(f) = function {
+                f.name = "display".into();
+            }
+        }
+        ownership::check(&p).unwrap();
+        assert_eq!(original, lower(&p));
+        let failed = source.replace("return chosen;", "return a;");
+        let mut p =
+            types::check(resolve::resolve(&parse_source(&failed).unwrap()).unwrap()).unwrap();
+        let original = ownership::check(&p).unwrap_err();
+        for parameter in &mut p.parameters {
+            parameter.name = "display".into();
+        }
+        for local in &mut p.locals {
+            local.name = "display".into();
+        }
+        let renamed = ownership::check(&p).unwrap_err();
+        assert_eq!(original[0].span, renamed[0].span);
+        assert!(original[0].message.contains("may have been moved"));
+        assert!(renamed[0].message.contains("may have been moved"));
+    }
+    #[test]
+    fn validator_rejects_hidden_conditional_value() {
+        let p = compile_source("fn f(flag: bool) -> bool { let chosen = if flag { true } else { false }; return chosen; }").unwrap();
+        let hir::ValueStatement::Let { initializer, .. } =
+            &p.functions()[0].as_ordinary().unwrap().body[0]
+        else {
+            panic!()
+        };
+        let mut m = lower(&p);
+        let f = &mut m.functions[0];
+        let statement = f
+            .blocks
+            .iter_mut()
+            .flat_map(|b| &mut b.statements)
+            .next()
+            .unwrap();
+        let Statement::Let {
+            initializer: value, ..
+        } = statement
+        else {
+            panic!()
+        };
+        *value = initializer.clone();
+        assert_eq!(
+            f.validate(),
+            Err("conditional value must lower to control flow")
+        );
+    }
     fn program() -> hir::Program {
         compile_source("type Percent = range 0..100; record Ticket { value: Percent } fn identity(value: Percent) -> Percent { return value; } fn example(flag: bool, value: Percent) -> Percent { if flag { let observed = identity(value); if flag { let copied = observed; } } else { let observed = value; } return value; }").unwrap()
     }

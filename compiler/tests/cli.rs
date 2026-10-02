@@ -226,3 +226,21 @@ fn post_join_future_reference_reports_original_borrow_conflict() {
         assert!(text.contains("-->"));
     }
 }
+
+#[test]
+fn conditional_initializer_cli_parity() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("conditional_value.klx")]);
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("not executed or verified"));
+        assert!(text.contains("function bodies proven: 0"));
+        let output = run(&[command, &example("conditional_value_move_fail.klx")]);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let text = String::from_utf8(output.stderr).unwrap();
+        assert!(text.contains("may have been moved on a previous control-flow path"));
+        assert!(text.contains("conditional_value_move_fail.klx"));
+    }
+}

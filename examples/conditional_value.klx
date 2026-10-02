@@ -1,0 +1,19 @@
+type Percent = range 0..100;
+record Ticket { value: Percent }
+
+// Frontend and MIR only: no execution or numerical proof is claimed.
+fn choose(flag: bool, first: Ticket, second: Ticket) -> Ticket {
+    let chosen = if flag { first } else { second };
+    return chosen;
+}
+
+fn choose_copy(first_flag: bool, second_flag: bool, first: Percent, second: Percent) -> Percent {
+    let mut chosen = if first_flag {
+        if second_flag { first } else { second }
+    } else {
+        first
+    };
+    let access = &mut chosen;
+    *access = second;
+    return chosen;
+}

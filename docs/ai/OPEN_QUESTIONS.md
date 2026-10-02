@@ -125,7 +125,10 @@ still does not enable direct owned-local reassignment; that remains open.
 
 KED-008 adds ordinary statement `if` / optional `else`, with nested lexical
 branch scopes. Ordinary functions still require one final function-level return;
-early/multiple return paths and value-producing conditionals remain unresolved.
+early/multiple return paths remain unresolved. KED-010 settles owned/Copy
+conditional values only in complete local initializer position, with exact branch
+types and mandatory else (KD-025). Statement-containing value blocks and general
+conditional-expression positions remain unresolved.
 
 Still open:
 
@@ -133,7 +136,8 @@ Still open:
 - explicit `safe fn` syntax, if any;
 - unit/no-value function return semantics;
 - early returns and multiple control-flow return paths;
-- value-producing conditionals and owned branch results;
+- conditional values in returns, call arguments, and general expression positions;
+- statement-containing value blocks and broader owned branch-result semantics;
 - reassignment and broader mutable-local semantics;
 - mutable owned parameters;
 - reference returns and escaping-reference interfaces;
@@ -188,6 +192,9 @@ path-sensitive whole-value loan expiry across that current conditional subset
 (KD-024). It does not establish arbitrary CFG lifetime inference, general NLL
 completeness, or borrowing across loops. Reborrowing, reference-valued branch
 results, escaping references, and advanced lifetime relationships remain open.
+KED-010 permits only owned/Copy conditional initialization; reference-valued
+conditional results, reference lifetime joins, escaping branch references,
+reference-valued block parameters, and reborrowing remain unresolved.
 
 Still open:
 
@@ -240,12 +247,19 @@ KED-008 establishes only acyclic statement conditionals and the first ordinary M
 KED-009 improves loan precision across acyclic statement branches. Ownership
 remains in the semantic typed-HIR → MIR stage, using one existing ownership
 checker. Full MIR-based ownership dataflow and loop/fixed-point analysis remain
-unresolved, as do conditional values, phi/block parameters, early returns,
-definite initialization, and unreachable-path analysis.
+unresolved, as do general conditional expressions, phi/block parameters, early
+returns, definite initialization, and unreachable-path analysis.
+
+KED-010 settles owned/Copy value production across acyclic joins only in local
+initializer position. Its first MIR strategy initializes the existing source
+LocalId independently on every mutually exclusive leaf path. This is not the
+final general MIR solution for all future value joins; no phi/block parameters,
+SSA, general temporary values, or definite-assignment solver are introduced.
 
 Still open:
 
-- value-producing `if`, branch-result type unification, and owned results across joins;
+- general conditional expressions and branch-result type unification beyond exact types;
+- join values without a source local destination, arbitrary temporaries, and SSA;
 - block parameters / phi-like representations;
 - loops/backedges, `while` / `for`, `break` / `continue`, and fixed-point analysis;
 - early returns, multiple return paths, divergence / bottom types, and `match` lowering;
@@ -255,4 +269,4 @@ Still open:
 - destruction / cleanup edges and exceptional / unwind control flow;
 - eventual MIR expression-lowering granularity.
 
-KED-008 MIR choices do not settle or preclude these features.
+KED-008/KED-010 MIR choices do not settle or preclude these broader features.

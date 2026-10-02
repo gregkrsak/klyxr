@@ -58,7 +58,7 @@ across the input; record bindings must be constructed before their use. Duplicat
 names in a declaration namespace or the binding scope are rejected; shadowing
 is outside this prototype. Passing an immutable binding to `&mut` is an error.
 
-## Ordinary value functions (KED-004 through KED-009)
+## Ordinary value functions (KED-004 through KED-010)
 
 ```klyxr
 type Percent = range 0..100;
@@ -119,7 +119,7 @@ proof, or runtime checks. For example, `return current - used;` can type as Perc
 that every result meets Percent's bounds. The verifier ignores ordinary functions
 as proof targets. Plain `fn` does not yet implement the full `safe` assurance model,
 with only core moves and whole-value, straight-line/acyclic, non-escaping borrowing
-implemented under KD-004, KD-020, KD-021, KD-022, KD-023, and KD-024. Ordinary calls may target only ordinary functions; verified
+implemented under KD-004, KD-020, KD-021, KD-022, KD-023, KD-024, and KD-025. Ordinary calls may target only ordinary functions; verified
 contracts/body expressions cannot call functions, and top-level harness calls may
 target only verified functions. These rejections leave OQ-019 unresolved.
 
@@ -335,7 +335,7 @@ fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
 `if condition { ... }` is a statement; `else { ... }` is optional. Braces are
 required, parenthesized conditions use existing expression syntax, and nesting
 is supported. Conditions must type exactly as Bool, including ordinary calls
-returning Bool. No truthiness conversion or conditional expression is permitted.
+returning Bool. No truthiness conversion is permitted. Conditional values are initializer-only under KED-010, described below.
 Branches contain lets, existing dereference writes, and nested if statements.
 Each branch is a lexical child scope: outer bindings remain visible, locals enter
 only after their initializer, visible-name shadowing is rejected, and branch
@@ -377,8 +377,53 @@ execution, interpretation, code generation, or proof of ordinary logic. The veri
 battery path remains HIR-only and excludes ordinary conditionals. MIR has no phi,
 block parameters/results, SSA, loops, temporary flattening, cleanup, backend, or
 verification consumer. KD-023 settles this boundary; OQ-026 retains broader
-conditional values, control flow, and dataflow. See `examples/if_control_flow.klx`
+conditional expressions, control flow, and dataflow. See `examples/if_control_flow.klx`
 and intentional Ownership failure `examples/if_move_fail.klx`.
+
+## Conditional value initialization (KED-010)
+
+```klyxr
+fn choose(flag: bool, first: Percent, second: Percent) -> Percent {
+    let chosen = if flag { first } else { second };
+    return chosen;
+}
+```
+
+This is immutable one-time initialization; `let mut` / `let mutable` also works
+and retains the existing exclusive-borrow capability. `else` and braces are
+mandatory. Each branch contains one expression, without statements or a trailing
+semicolon. Nested conditionals may be complete branch results. The binding enters
+scope only after its initializer resolves, so self-reference remains forbidden.
+
+Conditions require Bool; branches require exactly the same concrete Bool, range,
+or record identity. Identical bounds or structure do not make distinct nominal
+types compatible. Integer literals gain no contextual range type. Reference-valued
+results are rejected, while Copy dereference values retain KD-022 rules.
+
+Copy sources remain available. Record sources move only on their selected path;
+a source moved on any possible path is unavailable after the join. Selecting the
+same record on both branches is valid, but later source use is not. The destination
+becomes available after every path initializes it. Conditions run before branch
+splitting for ownership analysis. KD-024 path-specific future uses, post-join loan
+requirements, and existing call/write holds remain intact.
+
+AST and typed HIR publicly add `ExprKind::IfValue`; exhaustive library matches
+must handle the new variant. `compile_source` still returns canonical HIR and
+`mir::lower` retains its signature. Typed HIR preserves typed children and canonical IDs.
+MIR lowers it to Branch/Goto blocks: each reachable leaf initializes the same
+source LocalId and reaches a common join. Nested value branches share that join.
+No conditional value remains hidden in a MIR Let initializer. This is not direct
+reassignment, SSA, a phi, a block parameter, or a general temporary/result slot.
+
+The syntax is accepted only as a complete local initializer or complete nested
+branch result. Conditional values in returns, call arguments, unary/binary operands,
+parenthesized expressions, and dereference-write RHSs remain rejected. General
+value blocks, reference joins, loops, early returns, and general definite assignment
+remain unresolved. Statement `if` retains its existing grammar and optional else.
+Ordinary functions remain non-executable and unverified; the battery proof path
+is unchanged. See `examples/conditional_value.klx` and the joined-move rejection
+`examples/conditional_value_move_fail.klx`. KD-025 settles this narrow boundary;
+OQ-022/OQ-024/OQ-026 retain broader conditional value and lifetime design.
 
 ## Path-sensitive acyclic loan liveness (KED-009)
 
@@ -430,8 +475,8 @@ These rules belong to the existing ownership checker over typed HIR, before MIR.
 `compile_source`, HIR, and MIR APIs are unchanged; newly accepted programs lower
 to the same validated acyclic CFG forms. KD-024 settles only whole-value loans
 across the current structured acyclic subset. Loops, arbitrary CFG lifetime inference,
-reborrowing, reference returns, lifetime syntax, field/partial borrowing, conditional
-values, early returns, destruction, execution, and code generation remain unsupported.
+reborrowing, reference returns, lifetime syntax, field/partial borrowing, reference-valued conditional
+results, early returns, destruction, execution, and code generation remain unsupported.
 See `examples/path_sensitive_borrowing.klx` and the intentional post-join-loan
 failure `examples/path_sensitive_borrowing_fail.klx`. OQ-024/OQ-026 retain the
 broader lifetime and control-flow questions.
@@ -578,7 +623,7 @@ replacement are ownership errors. Non-reference dereference, shared writes, and
 RHS mismatches are Type errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, and KD-024 only for the documented subset.
+This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, and KD-025 only for the documented subset.
 General type inference, advanced borrowing/ownership, effects, MIR backend/verification lowering, VIR,
 and broader HIR features remain future work.
 
@@ -649,7 +694,7 @@ multiple fields, record invariants, SMT/VIR or MIR backend/verification lowering
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, and KD-024,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, and KD-025,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset

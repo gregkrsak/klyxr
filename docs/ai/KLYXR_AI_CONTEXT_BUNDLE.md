@@ -113,9 +113,17 @@ active incoming loans merge conservatively; a conditionally moved handle cannot
 erase a loan needed on another incoming path. Loans never reactivate along the
 same path. Branch-local handles/loans do not escape. Straight-line last-use, call holds, and
 write holds remain intact. Ordinary typed HIR lowers deterministically to read-only
-MIR basic-block tables with explicit Branch/Goto/Return terminators. There is no
-conditional value, phi, block parameter, SSA, loop, early return, cleanup, or
-MIR-based ownership solver (KD-023 / OQ-026).
+MIR basic-block tables with explicit Branch/Goto/Return terminators. KED-010 adds initializer-only value conditionals (KD-025): mandatory else, one
+expression per branch, nested complete branch results, Bool conditions, and exact
+owned Bool/range/record types. Reference results and contextual integer-literal
+materialization remain forbidden. Each Move leaf transfers into the same source
+LocalId; moved sources retain KD-023 conditional unavailability. KD-024 path-specific
+loan expiry and holds apply. MIR leaves initialize the canonical destination and
+Goto a common join; no IfValue remains hidden in MIR expressions. There is no
+phi, block parameter, SSA, general temporary/result slot, definite-assignment
+solver, loop, early return, cleanup, or MIR-based ownership solver. Conditional
+values in returns/call arguments/general expression positions remain open under
+OQ-022/OQ-024/OQ-026.
 
 Ordinary functions are parsed, resolved, type-checked, and ownership-checked,
 including loan and borrowed-access legality, and lowered to ordinary MIR, but not executed or proven. A range result type does not establish that the
@@ -862,6 +870,53 @@ reborrowing, reference returns, explicit lifetimes, conditional values, destruct
 or generalized CFG lifetime inference. General MIR dataflow and loops remain
 unresolved under OQ-024/OQ-026.
 
+
+---
+
+## KD-025 — Value-producing conditional initialization
+
+**Status:** Accepted
+
+An ordinary local initializer may select an owned value with:
+
+```klyxr
+let chosen = if flag { first } else { second };
+```
+
+`let mut` / `let mutable` may use the same one-time initialization. Braces and
+`else` are mandatory. Each branch contains exactly one value expression, without
+a trailing semicolon or statements. A nested conditional may be the complete
+branch result. Statement `if` remains separate and retains optional `else` and
+lexical statement branches.
+
+The condition must be Bool. Both branches must have exactly the same permitted
+concrete owned type: Bool, a canonical named range, or a canonical record. Distinct
+nominal declarations are incompatible even with identical bounds or structure.
+There is no contextual integer-literal materialization, implicit conversion, or
+reference-valued conditional result. Copy dereference results follow existing
+rules; non-Copy move-out through references remains forbidden.
+
+Condition ownership effects occur once before independent branch snapshots. A
+Copy result preserves its source; a Move result transfers into the destination
+on that path. Every reachable leaf initializes the same source local. The
+destination becomes available after the join; source availability retains
+KD-023's all-path rule. The same source may move into the destination on both
+mutually exclusive paths, but cannot then be used again. KD-024 continuation-aware
+loan liveness and call/write holds apply without relaxation.
+
+Typed HIR retains the conditional and its exact type. The first MIR strategy
+emits explicit Branch/Goto edges, initializes the canonical destination LocalId
+on each mutually exclusive leaf, and rejoins without a value merge instruction.
+This is one-time initialization, not reassignment or SSA. No phi, block parameters,
+general temporaries, result slots, or definite-assignment solver are introduced.
+
+KED-010 permits this form only as a complete local initializer or recursively as
+a complete value branch. Returns, call arguments, unary/binary operands,
+parenthesized conditional values, dereference writes, and general expression
+positions remain unsupported. It settles no statement-containing value blocks,
+reference lifetime joins, early returns, loops, destruction, execution, or general
+MIR value-flow strategy. These boundaries remain open under OQ-022/OQ-024/OQ-026.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -1113,7 +1168,7 @@ pipeline is source → lexer → parser → AST → explicit name resolution →
 and value-flow type checking → typed HIR → core ownership, loan, and borrowed-access checking →
 ordinary MIR CFG lowering (ordinary functions) or specialized
 integer contract proof (verified functions) → diagnostics. This implements KD-012, KD-018, KD-019,
-KD-020, KD-021, KD-022, KD-023, and KD-024 only for the documented
+KD-020, KD-021, KD-022, KD-023, KD-024, and KD-025 only for the documented
 subset; the broader pipeline above remains accepted architecture/future work.
 
 The AST preserves textual declarations, parameter types, explicit ordinary
@@ -1155,7 +1210,7 @@ Ordinary functions have explicit value return types and exactly one final
 `return expression;`. Immutable locals propagate concrete initializer types;
 call arguments and returns require exact concrete types. Bare integer locals,
 arguments to range parameters, and returns do not gain implicit range types.
-KED-004 through KED-009 do not execute, prove, or dynamically enforce ordinary functions.
+KED-004 through KED-010 do not execute, prove, or dynamically enforce ordinary functions.
 `Range(T)` typing does not prove bounds or overflow safety. Plain `fn` is not a
 claim to implement the full future `safe` model. All mixed-kind calls are rejected.
 
@@ -1245,7 +1300,7 @@ balanced through their operation and cannot escape statements or branch exits.
 
 Ownership remains above MIR in `compiler/ownership`; there is no second checker,
 MIR ownership pass, general dataflow framework, or fixed-point solver. This is
-whole-value liveness for structured acyclic statements, not arbitrary CFG borrowing
+whole-value liveness for structured acyclic statement and initializer branches, not arbitrary CFG borrowing
 or a claim of Rust borrow-checker equivalence. OQ-024/OQ-026 retain general lifetimes,
 loops, reborrowing, escaping references, and broader MIR ownership dataflow.
 
@@ -1261,6 +1316,33 @@ branches use a direct false edge to the join. A structural validator checks entr
 targets, reachability, acyclicity, and Bool conditions; unique IDs and single
 terminators follow from indexed storage and the block type. Every finite path ends
 in Return. MIR discovers no new source semantic errors. The CLI exercises lowering.
+
+KED-010 adds initializer-only conditional values with mandatory else and exactly
+one expression per branch. AST/resolved/typed HIR retain explicit IfValue nodes;
+resolution uses the same visible scope without introducing branch declarations.
+The destination enters scope after its whole initializer resolves. Type checking
+requires Bool conditions and exact owned Bool/range/record identity; references
+and IntegerLiteral results cannot materialize conditional destinations.
+
+The existing ownership checker shares snapshot/split/join helpers for statement
+and value conditionals. It evaluates the condition once, gives each branch its
+own future uses plus the continuation, and transfers every leaf into the same
+canonical source LocalId. Copy sources survive; moved sources become conditionally
+unavailable after the join. The destination is inserted as available only after
+the whole initializer completes. KD-024 provenance and operation holds are unchanged.
+
+MIR value lowering emits explicit Branch blocks with distinct outgoing targets.
+Every nested leaf emits an existing Let statement for the same source destination
+and Goto to a common control-flow join. Multiple mutually exclusive initializations
+are not reassignment. No hidden IfValue survives inside any MIR expression; the
+structural validator checks this. Deterministic construction and mandatory value
+branches guarantee one initialization per reachable path without a general
+definite-assignment solver. This first destination-local strategy is not a final
+general MIR solution for all future value joins (OQ-026).
+
+The executable flow is typed HIR → ownership/path-sensitive acyclic loans → MIR
+statement CFGs and destination-local value joins. MIR still has no backend or
+verification consumer. The verified battery path excludes ordinary conditionals.
 
 There are no phi nodes, block parameters/results, SSA, loops, general temporaries,
 cleanup edges, execution, or MIR backend/verifier consumers. The specialized
@@ -1284,7 +1366,7 @@ Empty admissible domains are explicitly rejected by this prototype.
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
 invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
-KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, DP-008, DP-009, and OQ-018 through OQ-026.
+KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, DP-008, DP-009, and OQ-018 through OQ-026.
 
 <!-- END ARCHITECTURE.md -->
 
@@ -1419,7 +1501,10 @@ still does not enable direct owned-local reassignment; that remains open.
 
 KED-008 adds ordinary statement `if` / optional `else`, with nested lexical
 branch scopes. Ordinary functions still require one final function-level return;
-early/multiple return paths and value-producing conditionals remain unresolved.
+early/multiple return paths remain unresolved. KED-010 settles owned/Copy
+conditional values only in complete local initializer position, with exact branch
+types and mandatory else (KD-025). Statement-containing value blocks and general
+conditional-expression positions remain unresolved.
 
 Still open:
 
@@ -1427,7 +1512,8 @@ Still open:
 - explicit `safe fn` syntax, if any;
 - unit/no-value function return semantics;
 - early returns and multiple control-flow return paths;
-- value-producing conditionals and owned branch results;
+- conditional values in returns, call arguments, and general expression positions;
+- statement-containing value blocks and broader owned branch-result semantics;
 - reassignment and broader mutable-local semantics;
 - mutable owned parameters;
 - reference returns and escaping-reference interfaces;
@@ -1482,6 +1568,9 @@ path-sensitive whole-value loan expiry across that current conditional subset
 (KD-024). It does not establish arbitrary CFG lifetime inference, general NLL
 completeness, or borrowing across loops. Reborrowing, reference-valued branch
 results, escaping references, and advanced lifetime relationships remain open.
+KED-010 permits only owned/Copy conditional initialization; reference-valued
+conditional results, reference lifetime joins, escaping branch references,
+reference-valued block parameters, and reborrowing remain unresolved.
 
 Still open:
 
@@ -1534,12 +1623,19 @@ KED-008 establishes only acyclic statement conditionals and the first ordinary M
 KED-009 improves loan precision across acyclic statement branches. Ownership
 remains in the semantic typed-HIR → MIR stage, using one existing ownership
 checker. Full MIR-based ownership dataflow and loop/fixed-point analysis remain
-unresolved, as do conditional values, phi/block parameters, early returns,
-definite initialization, and unreachable-path analysis.
+unresolved, as do general conditional expressions, phi/block parameters, early
+returns, definite initialization, and unreachable-path analysis.
+
+KED-010 settles owned/Copy value production across acyclic joins only in local
+initializer position. Its first MIR strategy initializes the existing source
+LocalId independently on every mutually exclusive leaf path. This is not the
+final general MIR solution for all future value joins; no phi/block parameters,
+SSA, general temporary values, or definite-assignment solver are introduced.
 
 Still open:
 
-- value-producing `if`, branch-result type unification, and owned results across joins;
+- general conditional expressions and branch-result type unification beyond exact types;
+- join values without a source local destination, arbitrary temporaries, and SSA;
 - block parameters / phi-like representations;
 - loops/backedges, `while` / `for`, `break` / `continue`, and fixed-point analysis;
 - early returns, multiple return paths, divergence / bottom types, and `match` lowering;
@@ -1549,6 +1645,6 @@ Still open:
 - destruction / cleanup edges and exceptional / unwind control flow;
 - eventual MIR expression-lowering granularity.
 
-KED-008 MIR choices do not settle or preclude these features.
+KED-008/KED-010 MIR choices do not settle or preclude these broader features.
 
 <!-- END OPEN_QUESTIONS.md -->
