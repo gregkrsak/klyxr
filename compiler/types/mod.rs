@@ -422,6 +422,65 @@ fn expression(
 ) -> TypeResult<TypedExpr> {
     let span = input.span;
     let (kind, ty) = match &input.kind {
+        ResolvedExprKind::IfValue {
+            condition,
+            then_value,
+            else_value,
+        } => {
+            let condition = expression(program, functions, condition)?;
+            if condition.ty != ExprType::Bool {
+                return Err(Diagnostic::semantic(
+                    condition.span,
+                    "if condition must have type Bool",
+                    format!("found {}", display_type(program, condition.ty)),
+                )
+                .into());
+            }
+            let then_value = expression(program, functions, then_value)?;
+            let else_value = expression(program, functions, else_value)?;
+            for value in [&then_value, &else_value] {
+                match value.ty {
+                    ExprType::SharedRef(_) | ExprType::MutableRef(_) => {
+                        return Err(Diagnostic::semantic(
+                            value.span,
+                            "conditional initializer cannot produce a reference value",
+                            "reference-valued conditional results remain unsupported",
+                        )
+                        .into())
+                    }
+                    ExprType::IntegerLiteral => {
+                        return Err(Diagnostic::semantic(
+                            value.span,
+                            "conditional branch must have a concrete owned type",
+                            "integer literals do not materialize a range type implicitly",
+                        )
+                        .into())
+                    }
+                    ExprType::Bool | ExprType::Range(_) | ExprType::Record(_) => {}
+                }
+            }
+            if then_value.ty != else_value.ty {
+                return Err(Diagnostic::semantic(
+                    span,
+                    "conditional branches must have the same type",
+                    format!(
+                        "found {} and {}; nominal identities must match exactly",
+                        display_type(program, then_value.ty),
+                        display_type(program, else_value.ty)
+                    ),
+                )
+                .into());
+            }
+            let ty = then_value.ty;
+            (
+                ExprKind::IfValue {
+                    condition: Box::new(condition),
+                    then_value: Box::new(then_value),
+                    else_value: Box::new(else_value),
+                },
+                ty,
+            )
+        }
         ResolvedExprKind::BoolLiteral(value) => (ExprKind::BoolLiteral(*value), ExprType::Bool),
         ResolvedExprKind::IntegerLiteral(value) => {
             (ExprKind::IntegerLiteral(*value), ExprType::IntegerLiteral)
@@ -582,6 +641,23 @@ fn expression(
 mod tests {
     use super::*;
     use crate::{parse_source, resolve, verify::verify_report};
+
+    #[test]
+    fn conditional_nominal_types_remain_distinct_when_display_names_collide() {
+        for declarations in [
+            "type First = range 0..100; type Second = range 0..100;",
+            "type Percent = range 0..100; record First { value: Percent } record Second { value: Percent }",
+        ] {
+            let source = format!("{declarations} fn f(flag: bool, a: First, b: Second) -> First {{ let chosen = if flag {{ a }} else {{ b }}; return chosen; }}");
+            let ast = crate::parse_source(&source).unwrap();
+            let mut resolved = crate::resolve::resolve(&ast).unwrap();
+            for range in &mut resolved.declarations.ranges { range.name = "display".into(); }
+            for record in &mut resolved.declarations.records { record.name = "display".into(); }
+            let errors = check(resolved).unwrap_err();
+            assert_eq!(errors[0].message, "conditional branches must have the same type");
+            assert!(errors[0].required.contains("nominal identities must match exactly"));
+        }
+    }
 
     #[test]
     fn expression_typing_uses_ids_when_diagnostic_names_change() {

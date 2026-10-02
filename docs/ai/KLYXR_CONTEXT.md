@@ -100,9 +100,17 @@ active incoming loans merge conservatively; a conditionally moved handle cannot
 erase a loan needed on another incoming path. Loans never reactivate along the
 same path. Branch-local handles/loans do not escape. Straight-line last-use, call holds, and
 write holds remain intact. Ordinary typed HIR lowers deterministically to read-only
-MIR basic-block tables with explicit Branch/Goto/Return terminators. There is no
-conditional value, phi, block parameter, SSA, loop, early return, cleanup, or
-MIR-based ownership solver (KD-023 / OQ-026).
+MIR basic-block tables with explicit Branch/Goto/Return terminators. KED-010 adds initializer-only value conditionals (KD-025): mandatory else, one
+expression per branch, nested complete branch results, Bool conditions, and exact
+owned Bool/range/record types. Reference results and contextual integer-literal
+materialization remain forbidden. Each Move leaf transfers into the same source
+LocalId; moved sources retain KD-023 conditional unavailability. KD-024 path-specific
+loan expiry and holds apply. MIR leaves initialize the canonical destination and
+Goto a common join; no IfValue remains hidden in MIR expressions. There is no
+phi, block parameter, SSA, general temporary/result slot, definite-assignment
+solver, loop, early return, cleanup, or MIR-based ownership solver. Conditional
+values in returns/call arguments/general expression positions remain open under
+OQ-022/OQ-024/OQ-026.
 
 Ordinary functions are parsed, resolved, type-checked, and ownership-checked,
 including loan and borrowed-access legality, and lowered to ordinary MIR, but not executed or proven. A range result type does not establish that the

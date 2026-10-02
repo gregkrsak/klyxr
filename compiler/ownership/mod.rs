@@ -47,6 +47,15 @@ fn count_statements(statements: &[ValueStatement], uses: &mut FutureUses) {
 }
 fn count_expression(expression: &TypedExpr, uses: &mut FutureUses) {
     match &expression.kind {
+        ExprKind::IfValue {
+            condition,
+            then_value,
+            else_value,
+        } => {
+            count_expression(condition, uses);
+            count_expression(then_value, uses);
+            count_expression(else_value, uses);
+        }
         ExprKind::Deref { reference } => *uses.entry(*reference).or_default() += 1,
         ExprKind::Parameter(id) => *uses.entry(Place::Parameter(*id)).or_default() += 1,
         ExprKind::Local(id) => *uses.entry(Place::Local(*id)).or_default() += 1,
@@ -233,18 +242,26 @@ impl<'a> Checker<'a> {
         // edge only its own branch uses plus the continuation after the join.
         let then_uses = future_uses(then_body);
         let else_uses = future_uses(else_body);
+        let (mut then_state, mut else_state, continuation) = self.split(&then_uses, &else_uses);
+        then_state.statements(then_body, function)?;
+        else_state.statements(else_body, function)?;
+        self.join(then_state, else_state, continuation);
+        Ok(())
+    }
+    fn split(&self, then_uses: &FutureUses, else_uses: &FutureUses) -> (Self, Self, FutureUses) {
         let mut continuation = self.remaining.clone();
-        subtract_uses(&mut continuation, &then_uses);
-        subtract_uses(&mut continuation, &else_uses);
+        subtract_uses(&mut continuation, then_uses);
+        subtract_uses(&mut continuation, else_uses);
         self.assert_no_holds();
         let mut then_state = self.clone();
         let mut else_state = self.clone();
-        then_state.remaining = with_branch_uses(&continuation, &then_uses);
-        else_state.remaining = with_branch_uses(&continuation, &else_uses);
+        then_state.remaining = with_branch_uses(&continuation, then_uses);
+        else_state.remaining = with_branch_uses(&continuation, else_uses);
         then_state.expire();
         else_state.expire();
-        then_state.statements(then_body, function)?;
-        else_state.statements(else_body, function)?;
+        (then_state, else_state, continuation)
+    }
+    fn join(&mut self, then_state: Self, else_state: Self, continuation: FutureUses) {
         then_state.assert_no_holds();
         else_state.assert_no_holds();
         for (place, state) in &mut self.states {
@@ -271,7 +288,6 @@ impl<'a> Checker<'a> {
         self.next_loan = then_state.next_loan.max(else_state.next_loan);
         self.assert_no_holds();
         self.expire();
-        Ok(())
     }
     fn assert_no_holds(&self) {
         assert!(
@@ -285,6 +301,28 @@ impl<'a> Checker<'a> {
         transfer: Transfer,
     ) -> OwnershipResult<Option<LoanId>> {
         match &expression.kind {
+            ExprKind::IfValue {
+                condition,
+                then_value,
+                else_value,
+            } => {
+                self.expression(condition, transfer)?;
+                self.expire();
+                let mut then_uses = FutureUses::new();
+                let mut else_uses = FutureUses::new();
+                count_expression(then_value, &mut then_uses);
+                count_expression(else_value, &mut else_uses);
+                let (mut then_state, mut else_state, continuation) =
+                    self.split(&then_uses, &else_uses);
+                // Every leaf transfers into the same source local. Reference
+                // results have already been rejected by typing.
+                assert!(then_state.expression(then_value, transfer)?.is_none());
+                then_state.expire();
+                assert!(else_state.expression(else_value, transfer)?.is_none());
+                else_state.expire();
+                self.join(then_state, else_state, continuation);
+                Ok(None)
+            }
             ExprKind::Parameter(id) => {
                 self.consume(Place::Parameter(*id), expression.span, transfer)
             }

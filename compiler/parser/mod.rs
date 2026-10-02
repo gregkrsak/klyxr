@@ -251,7 +251,7 @@ impl Parser<'_> {
                 }
                 let name = self.expect_ident()?;
                 self.expect(&TokenKind::Equal)?;
-                let initializer = self.parse_expression(0)?;
+                let initializer = self.parse_initializer()?;
                 let end = self.expect(&TokenKind::Semicolon)?.span.end;
                 body.push(ValueStatement::Let {
                     name,
@@ -295,6 +295,34 @@ impl Parser<'_> {
         }
         let end = self.expect(&TokenKind::RBrace)?.span.end;
         Ok((body, end))
+    }
+
+    // Conditional values are initializer-only, recursively at whole branch results.
+    // They deliberately do not participate in the general expression grammar.
+    fn parse_initializer(&mut self) -> Result<Expr, ParseError> {
+        if !self.at(&TokenKind::If) {
+            return self.parse_expression(0);
+        }
+        let span = self.advance().span;
+        let condition = self.parse_expression(0)?;
+        self.expect(&TokenKind::LBrace)?;
+        let then_value = self.parse_initializer()?;
+        self.expect(&TokenKind::RBrace)?;
+        if !self.at(&TokenKind::Else) {
+            return Err(self.error("conditional initializer requires an else branch".into()));
+        }
+        self.advance();
+        self.expect(&TokenKind::LBrace)?;
+        let else_value = self.parse_initializer()?;
+        let end = self.expect(&TokenKind::RBrace)?.span.end;
+        Ok(Expr {
+            kind: ExprKind::IfValue {
+                condition: Box::new(condition),
+                then_value: Box::new(then_value),
+                else_value: Box::new(else_value),
+            },
+            span: Span { end, ..span },
+        })
     }
 
     // Precedence climbing: only the explicitly authorized operators participate.
