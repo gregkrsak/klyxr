@@ -107,7 +107,7 @@ Still open:
 - conversions between constrained types;
 - units/dimension-aware arithmetic.
 
-KED-003 through KED-007 do not settle these questions implicitly.
+KED-003 through KED-008 do not settle these questions implicitly.
 
 
 ## OQ-022 — General function and local-value semantics
@@ -123,12 +123,17 @@ reference semantics remain under OQ-024. KED-007 adds explicit dereference and
 Copy-safe write-through as a distinct accepted operation (KD-022). `let mut`
 still does not enable direct owned-local reassignment; that remains open.
 
+KED-008 adds ordinary statement `if` / optional `else`, with nested lexical
+branch scopes. Ordinary functions still require one final function-level return;
+early/multiple return paths and value-producing conditionals remain unresolved.
+
 Still open:
 
 - whether unqualified `fn` is the final surface spelling of the base `safe` assurance level;
 - explicit `safe fn` syntax, if any;
 - unit/no-value function return semantics;
 - early returns and multiple control-flow return paths;
+- value-producing conditionals and owned branch results;
 - reassignment and broader mutable-local semantics;
 - mutable owned parameters;
 - reference returns and escaping-reference interfaces;
@@ -178,6 +183,12 @@ KED-007 settles basic explicit named dereference and Copy-safe whole-value
 write-through under KD-022. Advanced borrowing and dereference coercions remain
 open; general mutation/replacement is tracked separately under OQ-025.
 
+KED-008 extends sound loan handling across acyclic statement branches only.
+Incoming live loans are conservatively retained through a conditional; this is
+not a general borrow checker over arbitrary CFGs. General path-sensitive loan
+precision, loops, reborrowing across control flow, reference-valued branch results,
+escaping references, and advanced lifetime relationships remain under OQ-024/OQ-026.
+
 Still open:
 
 - reference returns and escaping-reference semantics;
@@ -190,7 +201,7 @@ Still open:
 - reference mutation beyond Copy-safe whole-value write-through;
 - two-phase borrows;
 - temporary lifetime extension and borrowing arbitrary temporary expressions;
-- borrowing across control-flow joins and loops;
+- general path-sensitive borrowing across complex joins and loops;
 - borrowing interaction with closures and destructors;
 - interior mutability and smart-pointer borrowing;
 - FFI reference/lifetime boundaries.
@@ -200,6 +211,8 @@ OQ-009 remains authoritative for the broader explicit lifetime syntax question.
 ## OQ-025 — General mutation, place expressions, and replacement semantics
 
 KED-007 settles only explicit dereference and Copy-safe whole-value write-through.
+KED-008 permits those operations inside `if` branches. It does not settle general
+mutation across loops or complex control flow, or non-Copy replacement/destruction.
 
 Still open:
 
@@ -218,3 +231,21 @@ Still open:
 OQ-023 remains authoritative for Copy customization and destruction. OQ-024
 remains authoritative for advanced borrowing, reborrowing, dereference coercions,
 escaping references, and field/partial borrowing.
+
+## OQ-026 — General control flow, conditional values, and MIR dataflow
+
+KED-008 establishes only acyclic statement conditionals and the first ordinary MIR CFG.
+
+Still open:
+
+- value-producing `if`, branch-result type unification, and owned results across joins;
+- block parameters / phi-like representations;
+- loops/backedges, `while` / `for`, `break` / `continue`, and fixed-point analysis;
+- early returns, multiple return paths, divergence / bottom types, and `match` lowering;
+- definite initialization and uninitialized locals;
+- full MIR-based ownership dataflow and maximally precise path-sensitive loan analysis;
+- short-circuit Boolean lowering / evaluation guarantees and unreachable-code policy;
+- destruction / cleanup edges and exceptional / unwind control flow;
+- eventual MIR expression-lowering granularity.
+
+KED-008 MIR choices do not settle or preclude these features.

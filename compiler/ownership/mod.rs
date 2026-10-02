@@ -1,4 +1,4 @@
-//! Straight-line owned moves, whole-value loans, and Copy-safe borrowed access in ordinary HIR.
+//! Acyclic owned moves, whole-value loans, and Copy-safe borrowed access in ordinary HIR.
 //! Availability and active loans are orthogonal private state; no runtime behavior.
 use std::collections::BTreeMap;
 
@@ -35,9 +35,11 @@ enum Transfer {
 enum State {
     Available,
     Moved { span: Span, transfer: Transfer },
+    ConditionalMove { span: Span },
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct LoanId(usize);
+#[derive(Clone)]
 struct Loan {
     // External reference parameters have no owner identity in this function.
     owner: Option<Place>,
@@ -56,6 +58,7 @@ pub fn check(program: &Program) -> Result<(), Vec<Diagnostic>> {
     }
     Ok(())
 }
+#[derive(Clone)]
 struct Checker<'a> {
     program: &'a Program,
     states: BTreeMap<Place, State>,
@@ -74,20 +77,7 @@ impl<'a> Checker<'a> {
             remaining: BTreeMap::new(),
             next_loan: 0,
         };
-        // The source subset is straight-line. Count syntactic handle uses once;
-        // aliases inherit provenance during traversal, not through source names.
-        for statement in &function.body {
-            match statement {
-                ValueStatement::Let { initializer, .. } => checker.count_uses(initializer),
-                ValueStatement::Return { value, .. } => checker.count_uses(value),
-                ValueStatement::DerefAssign {
-                    reference, value, ..
-                } => {
-                    *checker.remaining.entry(*reference).or_default() += 1;
-                    checker.count_uses(value);
-                }
-            }
-        }
+        checker.count_statements(&function.body);
         for id in &function.parameters {
             if let ParameterType::Value(ty) = program.parameter(*id).ty {
                 let place = Place::Parameter(*id);
@@ -106,6 +96,30 @@ impl<'a> Checker<'a> {
             }
         }
         checker
+    }
+    fn count_statements(&mut self, statements: &[ValueStatement]) {
+        for statement in statements {
+            match statement {
+                ValueStatement::If {
+                    condition,
+                    then_body,
+                    else_body,
+                    ..
+                } => {
+                    self.count_uses(condition);
+                    self.count_statements(then_body);
+                    self.count_statements(else_body);
+                }
+                ValueStatement::Let { initializer, .. } => self.count_uses(initializer),
+                ValueStatement::Return { value, .. } => self.count_uses(value),
+                ValueStatement::DerefAssign {
+                    reference, value, ..
+                } => {
+                    *self.remaining.entry(*reference).or_default() += 1;
+                    self.count_uses(value);
+                }
+            }
+        }
     }
     fn count_uses(&mut self, expression: &TypedExpr) {
         match &expression.kind {
@@ -132,8 +146,23 @@ impl<'a> Checker<'a> {
         }
     }
     fn body(&mut self, function: &ValueFunction) -> OwnershipResult {
-        for statement in &function.body {
+        self.statements(&function.body, function.id)
+    }
+    fn statements(
+        &mut self,
+        statements: &[ValueStatement],
+        function: FunctionId,
+    ) -> OwnershipResult {
+        for statement in statements {
             match statement {
+                ValueStatement::If {
+                    condition,
+                    then_body,
+                    else_body,
+                    ..
+                } => {
+                    self.conditional(condition, then_body, else_body, function)?;
+                }
                 ValueStatement::Let {
                     local, initializer, ..
                 } => {
@@ -165,11 +194,59 @@ impl<'a> Checker<'a> {
                     self.loans.get_mut(&loan).expect("write-held loan").held -= 1;
                 }
                 ValueStatement::Return { value, .. } => {
-                    self.expression(value, Transfer::Return(function.id))?;
+                    self.expression(value, Transfer::Return(function))?;
                 }
             }
             self.expire();
         }
+        Ok(())
+    }
+    fn conditional(
+        &mut self,
+        condition: &TypedExpr,
+        then_body: &[ValueStatement],
+        else_body: &[ValueStatement],
+        function: FunctionId,
+    ) -> OwnershipResult {
+        // Condition effects occur once, before either branch starts.
+        self.expression(condition, Transfer::Return(function))?;
+        self.expire();
+        // Pin incoming live loans through both branches. This is deliberately
+        // conservative: no path-sensitive early expiry of pre-existing loans.
+        for loan in self.loans.values_mut() {
+            loan.held += 1;
+        }
+        let mut then_state = self.clone();
+        let mut else_state = self.clone();
+        then_state.statements(then_body, function)?;
+        else_state.statements(else_body, function)?;
+        for (place, state) in &mut self.states {
+            if *state == State::Available {
+                let moved = [then_state.states.get(place), else_state.states.get(place)]
+                    .into_iter()
+                    .flatten()
+                    .find_map(|state| match state {
+                        State::Moved { span, .. } | State::ConditionalMove { span } => Some(*span),
+                        State::Available => None,
+                    });
+                if let Some(span) = moved {
+                    *state = State::ConditionalMove { span };
+                }
+            }
+        }
+        // Discard branch-local owners, handles and loans: none can escape through
+        // this statement-only construct. Account for both syntactic branches so
+        // straight-line last-use expiry resumes after the join.
+        for (place, remaining) in &mut self.remaining {
+            let then_used = *remaining - then_state.remaining.get(place).copied().unwrap_or(0);
+            let else_used = *remaining - else_state.remaining.get(place).copied().unwrap_or(0);
+            *remaining -= then_used + else_used;
+        }
+        self.next_loan = then_state.next_loan.max(else_state.next_loan);
+        for loan in self.loans.values_mut() {
+            loan.held -= 1;
+        }
+        self.expire();
         Ok(())
     }
     fn expression(
@@ -305,7 +382,10 @@ impl<'a> Checker<'a> {
                 || handles.iter().any(|(place, handle)| {
                     handle == id
                         && remaining.get(place).copied().unwrap_or(0) > 0
-                        && !matches!(states.get(place), Some(State::Moved { .. }))
+                        && !matches!(
+                            states.get(place),
+                            Some(State::Moved { .. } | State::ConditionalMove { .. })
+                        )
                 })
         });
     }
@@ -401,6 +481,26 @@ impl<'a> Checker<'a> {
     }
     fn available(&self, place: Place, span: Span) -> OwnershipResult {
         let name = self.metadata(place).0;
+        if let Some(State::ConditionalMove { span: earlier }) = self.states.get(&place) {
+            return Err(
+                Diagnostic {
+                    message: format!(
+                        "value `{name}` may have been moved on a previous control-flow path"
+                    ),
+                    span,
+                    required: "a non-Copy place must remain available on every incoming branch"
+                        .into(),
+                    known: vec![format!(
+                        "a move occurred at line {}, column {}",
+                        earlier.line, earlier.column
+                    )],
+                    conclusion:
+                        "ownership checking stopped; this program has not been established valid"
+                            .into(),
+                }
+                .into(),
+            );
+        }
         if let Some(State::Moved {
             span: earlier,
             transfer: previous,

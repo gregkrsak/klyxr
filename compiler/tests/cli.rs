@@ -175,3 +175,28 @@ fn non_copy_mutation_failure_explains_the_replacement_boundary() {
         assert!(text.contains("ownership checking stopped"));
     }
 }
+
+#[test]
+fn conditional_success_reports_mir_without_execution_or_ordinary_proof() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("if_control_flow.klx")]);
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("ordinary MIR control-flow lowering passed: 1 functions"));
+        assert!(text.contains("not executed or verified"));
+        assert!(text.contains("function bodies proven: 0"));
+    }
+}
+#[test]
+fn conditional_move_failure_reports_prior_path_and_move_location() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("if_move_fail.klx")]);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let text = String::from_utf8(output.stderr).unwrap();
+        assert!(text.contains("`ticket` may have been moved on a previous control-flow path"));
+        assert!(text.contains("a move occurred at line 6"));
+        assert!(text.contains("-->"));
+    }
+}
