@@ -373,7 +373,7 @@ It is part of the language philosophy.
 > **Klyxr is an early-stage language project.**
 >
 > The compiler, verifier, syntax, semantics, and tooling are still being designed and prototyped.
-> An executable Rust-based prototype now resolves and type-checks ordinary value functions, checks core moves and whole-value straight-line loans, and supports a narrow verified integer/record subset. It proves supported subtraction safety, field-range preservation, and postconditions, and checks call preconditions using state updated by earlier calls. General ownership, effects, runtime contracts, and code generation are not yet implemented.
+> An executable Rust-based prototype now resolves and type-checks ordinary value functions, checks core moves, whole-value straight-line loans, and explicit Copy-safe borrowed access/mutation, and supports a narrow verified integer/record subset. It proves supported subtraction safety, field-range preservation, and postconditions, and checks call preconditions using state updated by earlier calls. General ownership, effects, runtime contracts, and code generation are not yet implemented.
 > The badges at the top of this README are **live GitHub Actions status badges** for this repository's `build`, `tests`, `verify`, and `docs` workflows. These workflows build the prototype, run its regression tests in debug and optimized builds, exercise successful and failing contract examples, and validate documentation assets. They do not establish production readiness.
 
 Try the current prototype from the repository root with Rust/rustup installed:

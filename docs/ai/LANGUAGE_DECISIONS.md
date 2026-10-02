@@ -403,3 +403,23 @@ KED-006 implements only whole-value, straight-line, non-escaping borrowing.
 `let mut` marks an owned local as exclusively borrowable; it enables no reassignment.
 KED-006 does not establish explicit lifetime syntax, reference returns, dereference
 semantics, partial borrowing, or mutation through references.
+
+---
+
+## KD-022 — Core dereference and Copy-safe mutation
+
+**Status:** Accepted
+
+Klyxr uses explicit `*reference` dereference syntax. Dereferencing accesses the
+referent but does not itself transfer or consume the reference handle.
+Borrowed Copy values may be read through either `&T` or `&mut T`; the read copies
+the referent. Borrowed non-Copy values may not be moved out through dereference.
+
+Whole-value write-through is permitted through `&mut T` only when T is Copy.
+Write-through through `&T` is forbidden. Non-Copy replacement remains forbidden
+until ownership and destruction semantics for displaced values are defined.
+
+KED-007 implements directly named ordinary reference access and dedicated
+`*reference = expression;` statements only. It does not establish owned-local
+reassignment, non-Copy replacement, destructors/Drop, field access or mutation,
+auto-deref, reborrowing, compound assignment, assignment expressions, or control flow.

@@ -150,6 +150,9 @@ pub enum ExprKind {
     IntegerLiteral(i64),
     Parameter(ParameterId),
     Local(LocalId),
+    Deref {
+        reference: Place,
+    },
     Borrow {
         kind: BorrowKind,
         place: Place,
@@ -191,6 +194,15 @@ pub enum ReferentType {
     Bool,
     Range(RangeTypeId),
     Record(RecordId),
+}
+impl ReferentType {
+    pub(crate) fn value_type(self) -> ValueType {
+        match self {
+            Self::Bool => ValueType::Bool,
+            Self::Range(id) => ValueType::Range(id),
+            Self::Record(id) => ValueType::Record(id),
+        }
+    }
 }
 /// Canonical ordinary whole-value place; never a field or temporary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -261,6 +273,11 @@ pub struct ValueFunction {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueStatement {
+    DerefAssign {
+        reference: Place,
+        value: TypedExpr,
+        span: Span,
+    },
     Let {
         local: LocalId,
         initializer: TypedExpr,

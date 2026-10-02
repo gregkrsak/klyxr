@@ -1,0 +1,26 @@
+// Copy-safe reference access is checked, not executed or contract-proven.
+type Percent = range 0..100;
+
+fn shared_read(value: &Percent) -> Percent {
+    return *value;
+}
+
+fn update(value: &mut Percent, replacement: Percent) -> Percent {
+    let before = *value;
+    *value = replacement;
+    let after = *value; // Read/write access does not move the reference handle.
+    *value = *value;
+    return after;
+}
+
+fn recover(value: Percent, replacement: Percent) -> Percent {
+    let mut owned = value;
+    let view = &owned;
+    let alias = view;
+    let before = *view;
+    let copied = *alias; // Last shared use permits a new exclusive loan.
+    let access = &mut owned;
+    *access = replacement;
+    let observed = *access; // Last exclusive use permits direct owner access.
+    return owned;
+}

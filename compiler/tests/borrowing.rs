@@ -350,13 +350,17 @@ fn borrow_targets_resolve_in_source_order_without_shadowing() {
 }
 #[test]
 fn unsupported_borrow_targets_and_mutation_syntax_remain_rejected() {
+    assert!(
+        type_error("fn bad(ticket: Ticket) -> bool { let view = *ticket; return true; }")
+            .message
+            .contains("dereference requires a reference")
+    );
     for expression in [
         "&(ticket)",
         "&consume(ticket)",
         "&ticket.value",
         "&true",
         "&5",
-        "*ticket",
     ] {
         assert!(
             parse_source(&source(&format!(
