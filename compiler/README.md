@@ -58,7 +58,7 @@ across the input; record bindings must be constructed before their use. Duplicat
 names in a declaration namespace or the binding scope are rejected; shadowing
 is outside this prototype. Passing an immutable binding to `&mut` is an error.
 
-## Ordinary value functions (KED-004 through KED-008)
+## Ordinary value functions (KED-004 through KED-009)
 
 ```klyxr
 type Percent = range 0..100;
@@ -119,7 +119,7 @@ proof, or runtime checks. For example, `return current - used;` can type as Perc
 that every result meets Percent's bounds. The verifier ignores ordinary functions
 as proof targets. Plain `fn` does not yet implement the full `safe` assurance model,
 with only core moves and whole-value, straight-line/acyclic, non-escaping borrowing
-implemented under KD-004, KD-020, KD-021, KD-022, and KD-023. Ordinary calls may target only ordinary functions; verified
+implemented under KD-004, KD-020, KD-021, KD-022, KD-023, and KD-024. Ordinary calls may target only ordinary functions; verified
 contracts/body expressions cannot call functions, and top-level harness calls may
 target only verified functions. These rejections leave OQ-019 unresolved.
 
@@ -224,8 +224,8 @@ shared loans, but not under an exclusive loan. Borrowing a moved owner is reject
 
 Stored references carry private loan provenance. Shared copies carry the same
 loan; mutable transfers move their handle while retaining that loan. The checker
-counts future straight-line place uses by ID, and keeps a loan while any available
-derived handle has a future use. A local with no future use does not keep its loan
+counts continuation-aware future place uses by ID, and keeps a loan while any
+derived handle may remain available and future-used on that path. A local with no future use does not keep its loan
 alive past the binding statement. Moved reference handles remain moved even after
 their underlying loan ends. No lexical-block lifetime or runtime destruction is
 implied by loan expiry.
@@ -354,13 +354,10 @@ remain Copy. Both branches may separately consume the same incoming owner if
 there is no subsequent joined use.
 
 Branch-local reference handles/loans cannot escape and end no later than branch
-exit. Incoming live loans are conservatively held through the entire conditional,
-even if a particular mutually exclusive path might permit earlier expiry. This
-can reject path-sensitive borrowing patterns; it never relaxes existing loan
-conflicts. Syntactic uses on both branches are accounted for at the join and
-straight-line last-use expiry resumes. Call-held references and write-held loans
-retain their existing protection inside branches. No generalized CFG borrow
-solver, reference-valued branch result, destruction, or new borrowing rule is implied.
+exit. KED-009 refines borrowing with path-sensitive liveness, described below.
+Call-held references and write-held loans retain their existing protection inside
+branches. No generalized CFG borrow solver, reference-valued branch result, or
+destruction is implied.
 
 `mir::lower(&program)` lowers accepted ordinary HIR to `MirProgram`/`MirFunction`.
 Canonical FunctionId, ParameterId, LocalId, and nominal type identities survive;
@@ -382,6 +379,62 @@ block parameters/results, SSA, loops, temporary flattening, cleanup, backend, or
 verification consumer. KD-023 settles this boundary; OQ-026 retains broader
 conditional values, control flow, and dataflow. See `examples/if_control_flow.klx`
 and intentional Ownership failure `examples/if_move_fail.klx`.
+
+## Path-sensitive acyclic loan liveness (KED-009)
+
+```klyxr
+fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
+    let mut owned = value;
+    let view = &owned;
+    if flag {
+        let observed = *view;
+    } else {
+        let access = &mut owned;
+        *access = replacement;
+    }
+    return owned;
+}
+```
+
+This was rejected by KED-008's whole-conditional loan hold and is now accepted.
+**Lexical coexistence of reference bindings does not imply overlapping loans;
+only control-flow paths with future uses keep a loan active.** The then path
+needs the shared loan through `*view`. On the else edge, no use of `view` remains,
+so that loan expires before the exclusive borrow. Last use within a branch can
+likewise permit a later conflicting borrow on that same path.
+
+The ownership checker decomposes the remaining statement suffix into condition,
+then, else, and post-join future uses. A loan required on either successor remains
+active through condition evaluation. Each outgoing path then receives its own
+uses plus the common continuation, excluding sibling-only uses. No constant
+condition is pruned: both edges are considered possible. Nested conditionals use
+the same finite recursive analysis, without a generalized dataflow/fixed-point engine.
+
+If the example instead ends with `return *view;`, the shared loan remains needed
+on both incoming paths, and the exclusive borrow in else is an Ownership error.
+Loans never expire and then reactivate along one path. Shared aliases extend
+original provenance through their own last possible uses; mutable transfers
+remain moves, including transfers to branch-local handles. Call arguments remain
+held throughout their receiving call, and writes hold the exclusive loan through
+the entire RHS.
+
+Move joins are unchanged: availability requires every incoming path. At a join,
+pre-existing loans active on any incoming path remain potentially active; loans
+dead on all paths disappear. A conditionally moved handle remains unusable, but
+its loan may still block owner access if a future handle use needs that loan on
+a path where the handle was not moved. With no future reference use and loans
+ended on every path, owner recovery is allowed. Branch-local handles/loans cannot
+escape, and unrelated sibling-created provenance is never merged.
+
+These rules belong to the existing ownership checker over typed HIR, before MIR.
+`compile_source`, HIR, and MIR APIs are unchanged; newly accepted programs lower
+to the same validated acyclic CFG forms. KD-024 settles only whole-value loans
+across the current structured acyclic subset. Loops, arbitrary CFG lifetime inference,
+reborrowing, reference returns, lifetime syntax, field/partial borrowing, conditional
+values, early returns, destruction, execution, and code generation remain unsupported.
+See `examples/path_sensitive_borrowing.klx` and the intentional post-join-loan
+failure `examples/path_sensitive_borrowing_fail.klx`. OQ-024/OQ-026 retain the
+broader lifetime and control-flow questions.
 
 ## Core expressions and types (KED-003)
 
@@ -525,7 +578,7 @@ replacement are ownership errors. Non-reference dereference, shared writes, and
 RHS mismatches are Type errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, and KD-023 only for the documented subset.
+This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, and KD-024 only for the documented subset.
 General type inference, advanced borrowing/ownership, effects, MIR backend/verification lowering, VIR,
 and broader HIR features remain future work.
 
@@ -596,7 +649,7 @@ multiple fields, record invariants, SMT/VIR or MIR backend/verification lowering
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, and KD-023,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, and KD-024,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset

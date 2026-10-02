@@ -13,6 +13,72 @@ use crate::{
 
 type OwnershipResult<T = ()> = Result<T, Box<Diagnostic>>;
 
+// A count is consumed only by analysis of its own path. At a conditional the
+// suffix is shared, but sibling-only counts are removed before edge expiry.
+type FutureUses = BTreeMap<Place, usize>;
+fn future_uses(statements: &[ValueStatement]) -> FutureUses {
+    let mut uses = FutureUses::new();
+    count_statements(statements, &mut uses);
+    uses
+}
+fn count_statements(statements: &[ValueStatement], uses: &mut FutureUses) {
+    for statement in statements {
+        match statement {
+            ValueStatement::If {
+                condition,
+                then_body,
+                else_body,
+                ..
+            } => {
+                count_expression(condition, uses);
+                count_statements(then_body, uses);
+                count_statements(else_body, uses);
+            }
+            ValueStatement::Let { initializer, .. } => count_expression(initializer, uses),
+            ValueStatement::Return { value, .. } => count_expression(value, uses),
+            ValueStatement::DerefAssign {
+                reference, value, ..
+            } => {
+                *uses.entry(*reference).or_default() += 1;
+                count_expression(value, uses);
+            }
+        }
+    }
+}
+fn count_expression(expression: &TypedExpr, uses: &mut FutureUses) {
+    match &expression.kind {
+        ExprKind::Deref { reference } => *uses.entry(*reference).or_default() += 1,
+        ExprKind::Parameter(id) => *uses.entry(Place::Parameter(*id)).or_default() += 1,
+        ExprKind::Local(id) => *uses.entry(Place::Local(*id)).or_default() += 1,
+        ExprKind::Call { arguments, .. } => {
+            for argument in arguments {
+                count_expression(argument, uses);
+            }
+        }
+        ExprKind::Unary { operand, .. } => count_expression(operand, uses),
+        ExprKind::Binary { left, right, .. } => {
+            count_expression(left, uses);
+            count_expression(right, uses);
+        }
+        _ => {}
+    }
+}
+fn subtract_uses(future: &mut FutureUses, uses: &FutureUses) {
+    for (place, count) in uses {
+        let remaining = future.get_mut(place).expect("counted branch use");
+        *remaining = remaining
+            .checked_sub(*count)
+            .expect("branch uses belong to suffix");
+    }
+}
+fn with_branch_uses(continuation: &FutureUses, branch: &FutureUses) -> FutureUses {
+    let mut future = continuation.clone();
+    for (place, count) in branch {
+        *future.entry(*place).or_default() += count;
+    }
+    future
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OwnershipKind {
     Copy,
@@ -64,7 +130,7 @@ struct Checker<'a> {
     states: BTreeMap<Place, State>,
     loans: BTreeMap<LoanId, Loan>,
     handles: BTreeMap<Place, LoanId>,
-    remaining: BTreeMap<Place, usize>,
+    remaining: FutureUses,
     next_loan: usize,
 }
 impl<'a> Checker<'a> {
@@ -74,10 +140,9 @@ impl<'a> Checker<'a> {
             states: BTreeMap::new(),
             loans: BTreeMap::new(),
             handles: BTreeMap::new(),
-            remaining: BTreeMap::new(),
+            remaining: future_uses(&function.body),
             next_loan: 0,
         };
-        checker.count_statements(&function.body);
         for id in &function.parameters {
             if let ParameterType::Value(ty) = program.parameter(*id).ty {
                 let place = Place::Parameter(*id);
@@ -96,54 +161,6 @@ impl<'a> Checker<'a> {
             }
         }
         checker
-    }
-    fn count_statements(&mut self, statements: &[ValueStatement]) {
-        for statement in statements {
-            match statement {
-                ValueStatement::If {
-                    condition,
-                    then_body,
-                    else_body,
-                    ..
-                } => {
-                    self.count_uses(condition);
-                    self.count_statements(then_body);
-                    self.count_statements(else_body);
-                }
-                ValueStatement::Let { initializer, .. } => self.count_uses(initializer),
-                ValueStatement::Return { value, .. } => self.count_uses(value),
-                ValueStatement::DerefAssign {
-                    reference, value, ..
-                } => {
-                    *self.remaining.entry(*reference).or_default() += 1;
-                    self.count_uses(value);
-                }
-            }
-        }
-    }
-    fn count_uses(&mut self, expression: &TypedExpr) {
-        match &expression.kind {
-            ExprKind::Deref { reference } => {
-                *self.remaining.entry(*reference).or_default() += 1;
-            }
-            ExprKind::Parameter(id) => {
-                *self.remaining.entry(Place::Parameter(*id)).or_default() += 1;
-            }
-            ExprKind::Local(id) => {
-                *self.remaining.entry(Place::Local(*id)).or_default() += 1;
-            }
-            ExprKind::Call { arguments, .. } => {
-                for argument in arguments {
-                    self.count_uses(argument);
-                }
-            }
-            ExprKind::Unary { operand, .. } => self.count_uses(operand),
-            ExprKind::Binary { left, right, .. } => {
-                self.count_uses(left);
-                self.count_uses(right);
-            }
-            _ => {}
-        }
     }
     fn body(&mut self, function: &ValueFunction) -> OwnershipResult {
         self.statements(&function.body, function.id)
@@ -211,15 +228,25 @@ impl<'a> Checker<'a> {
         // Condition effects occur once, before either branch starts.
         self.expression(condition, Transfer::Return(function))?;
         self.expire();
-        // Pin incoming live loans through both branches. This is deliberately
-        // conservative: no path-sensitive early expiry of pre-existing loans.
-        for loan in self.loans.values_mut() {
-            loan.held += 1;
-        }
+        // The current suffix contains both possible branches and their common
+        // continuation. Keep their union through the condition, then give each
+        // edge only its own branch uses plus the continuation after the join.
+        let then_uses = future_uses(then_body);
+        let else_uses = future_uses(else_body);
+        let mut continuation = self.remaining.clone();
+        subtract_uses(&mut continuation, &then_uses);
+        subtract_uses(&mut continuation, &else_uses);
+        self.assert_no_holds();
         let mut then_state = self.clone();
         let mut else_state = self.clone();
+        then_state.remaining = with_branch_uses(&continuation, &then_uses);
+        else_state.remaining = with_branch_uses(&continuation, &else_uses);
+        then_state.expire();
+        else_state.expire();
         then_state.statements(then_body, function)?;
         else_state.statements(else_body, function)?;
+        then_state.assert_no_holds();
+        else_state.assert_no_holds();
         for (place, state) in &mut self.states {
             if *state == State::Available {
                 let moved = [then_state.states.get(place), else_state.states.get(place)]
@@ -234,20 +261,23 @@ impl<'a> Checker<'a> {
                 }
             }
         }
-        // Discard branch-local owners, handles and loans: none can escape through
-        // this statement-only construct. Account for both syntactic branches so
-        // straight-line last-use expiry resumes after the join.
-        for (place, remaining) in &mut self.remaining {
-            let then_used = *remaining - then_state.remaining.get(place).copied().unwrap_or(0);
-            let else_used = *remaining - else_state.remaining.get(place).copied().unwrap_or(0);
-            *remaining -= then_used + else_used;
-        }
+        // Only provenance present before the split may survive. Sibling-created
+        // loan IDs can overlap privately, but are never merged or allowed to
+        // escape through branch-local handles. Activity is a union, not an
+        // intersection: a loan required on any incoming path protects the join.
+        self.loans
+            .retain(|id, _| then_state.loans.contains_key(id) || else_state.loans.contains_key(id));
+        self.remaining = continuation;
         self.next_loan = then_state.next_loan.max(else_state.next_loan);
-        for loan in self.loans.values_mut() {
-            loan.held -= 1;
-        }
+        self.assert_no_holds();
         self.expire();
         Ok(())
+    }
+    fn assert_no_holds(&self) {
+        assert!(
+            self.loans.values().all(|loan| loan.held == 0),
+            "operation holds cannot escape a statement or branch"
+        );
     }
     fn expression(
         &mut self,
@@ -382,9 +412,11 @@ impl<'a> Checker<'a> {
                 || handles.iter().any(|(place, handle)| {
                     handle == id
                         && remaining.get(place).copied().unwrap_or(0) > 0
+                        // ConditionalMove is unusable, but can carry an active
+                        // loan on a path where the handle was not transferred.
                         && !matches!(
                             states.get(place),
-                            Some(State::Moved { .. } | State::ConditionalMove { .. })
+                            Some(State::Moved { .. })
                         )
                 })
         });
@@ -816,5 +848,122 @@ mod tests {
         assert_eq!(checker.states[&reference], State::Available);
         assert_eq!(checker.next_loan, 1);
         assert!(checker.loans.is_empty());
+    }
+    #[test]
+    fn possible_joined_loan_survives_conditional_handle_unavailability() {
+        let p = typed("fn sink(access: &mut Percent) -> bool { return true; } fn bad(flag: bool, value: Percent) -> Percent { let mut owned = value; let access = &mut owned; if flag { let done = sink(access); } let observed = owned; return *access; }");
+        let f = p.functions()[1].as_ordinary().unwrap();
+        let mut checker = Checker::new(&p, f);
+        checker.statements(&f.body[..3], f.id).unwrap();
+        let access = Place::Local(p.locals()[1].id);
+        assert!(matches!(
+            checker.states[&access],
+            State::ConditionalMove { .. }
+        ));
+        let loan = checker.handles[&access];
+        assert!(checker.loans.contains_key(&loan));
+        checker.expire();
+        assert!(checker.loans.contains_key(&loan));
+        assert!(checker.loans.values().all(|loan| loan.held == 0));
+        let error = checker.statements(&f.body[3..], f.id).unwrap_err();
+        assert!(error.message.contains("exclusively borrowed"));
+    }
+    #[test]
+    fn all_path_expiry_does_not_restore_the_moved_handle_or_export_branch_loans() {
+        let p = typed("fn sink(access: &mut Percent) -> bool { return true; } fn example(flag: bool, value: Percent) -> Percent { let mut owned = value; let access = &mut owned; if flag { let next = access; let done = sink(next); } else { let other = &mut owned; *other = value; } return owned; }");
+        let f = p.functions()[1].as_ordinary().unwrap();
+        let mut checker = Checker::new(&p, f);
+        checker.statements(&f.body[..3], f.id).unwrap();
+        assert!(matches!(
+            checker.states[&Place::Local(p.locals()[1].id)],
+            State::ConditionalMove { .. }
+        ));
+        assert!(checker.loans.is_empty());
+        assert_eq!(checker.handles.len(), 1);
+        assert!(!checker
+            .handles
+            .contains_key(&Place::Local(p.locals()[2].id)));
+        assert!(!checker
+            .handles
+            .contains_key(&Place::Local(p.locals()[4].id)));
+        checker.statements(&f.body[3..], f.id).unwrap();
+    }
+    #[test]
+    fn future_use_decomposition_preserves_suffix_and_excludes_sibling_counts() {
+        let p = typed("fn example(flag: bool, view: &Percent, access: &mut Percent) -> Percent { if flag { let observed = *view; } else { let observed = *access; } return *view; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let ValueStatement::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } = &f.body[0]
+        else {
+            panic!()
+        };
+        let mut all = future_uses(&f.body);
+        let mut condition_uses = FutureUses::new();
+        count_expression(condition, &mut condition_uses);
+        subtract_uses(&mut all, &condition_uses);
+        let then_uses = future_uses(then_body);
+        let else_uses = future_uses(else_body);
+        subtract_uses(&mut all, &then_uses);
+        subtract_uses(&mut all, &else_uses);
+        let view = Place::Parameter(f.parameters[1]);
+        let access = Place::Parameter(f.parameters[2]);
+        let then_future = with_branch_uses(&all, &then_uses);
+        let else_future = with_branch_uses(&all, &else_uses);
+        assert_eq!(then_future[&view], 2);
+        assert_eq!(then_future[&access], 0);
+        assert_eq!(else_future[&view], 1);
+        assert_eq!(else_future[&access], 1);
+    }
+    #[test]
+    fn path_liveness_outcomes_ignore_all_display_names() {
+        fn rename(p: &mut Program) {
+            for r in &mut p.ranges {
+                r.name = "display".into();
+            }
+            for r in &mut p.records {
+                r.name = "display".into();
+            }
+            for field in &mut p.fields {
+                field.name = "display".into();
+            }
+            for parameter in &mut p.parameters {
+                parameter.name = "display".into();
+            }
+            for local in &mut p.locals {
+                local.name = "display".into();
+            }
+            for f in &mut p.functions {
+                if let crate::hir::Function::Ordinary(f) = f {
+                    f.name = "display".into();
+                }
+            }
+        }
+        for body in [
+            "fn example(flag: bool, value: Percent) -> Percent { let mut owned = value; let view = &owned; if flag { let alias = view; let observed = *alias; } else { let access = &mut owned; *access = value; } return owned; }",
+            "fn example(flag: bool, value: Percent) -> Percent { let mut owned = value; let first = &mut owned; if flag { let second = first; *second = value; } else { let observed = owned; } return owned; }",
+        ] {
+            let mut p = typed(body);
+            check(&p).unwrap();
+            let before = crate::mir::lower(&p);
+            rename(&mut p);
+            check(&p).unwrap();
+            assert_eq!(before, crate::mir::lower(&p));
+        }
+        for body in [
+            "fn bad(flag: bool, value: Percent) -> Percent { let mut owned = value; let view = &owned; if flag { let observed = *view; } else { let access = &mut owned; } return *view; }",
+            "fn sink(access: &mut Percent) -> bool { return true; } fn bad(flag: bool, value: Percent) -> Percent { let mut owned = value; let access = &mut owned; if flag { let done = sink(access); } let observed = owned; return *access; }",
+        ] {
+            let mut p = typed(body);
+            let before = check(&p).unwrap_err();
+            rename(&mut p);
+            let after = check(&p).unwrap_err();
+            assert_eq!(before[0].span, after[0].span);
+            assert_eq!(before[0].known, after[0].known);
+            assert!(after[0].message.contains("display"));
+        }
     }
 }

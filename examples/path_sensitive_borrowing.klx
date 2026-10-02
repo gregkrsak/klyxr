@@ -1,0 +1,15 @@
+type Percent = range 0..100;
+
+// Accepted frontend/MIR example; no execution or numerical proof is claimed.
+// Sibling-only reference uses do not keep a loan active on the opposite path.
+fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
+    let mut owned = value;
+    let view = &owned;
+    if flag {
+        let observed = *view;
+    } else {
+        let access = &mut owned;
+        *access = replacement;
+    }
+    return owned;
+}

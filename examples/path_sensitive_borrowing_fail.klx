@@ -1,0 +1,14 @@
+type Percent = range 0..100;
+
+fn bad(flag: bool, value: Percent, replacement: Percent) -> Percent {
+    let mut owned = value;
+    let view = &owned;
+    if flag {
+        let observed = *view;
+    } else {
+        // Intentional Ownership error: the later joined use needs this loan.
+        let access = &mut owned;
+        *access = replacement;
+    }
+    return *view;
+}

@@ -107,7 +107,7 @@ Still open:
 - conversions between constrained types;
 - units/dimension-aware arithmetic.
 
-KED-003 through KED-008 do not settle these questions implicitly.
+KED-003 through KED-009 do not settle these questions implicitly.
 
 
 ## OQ-022 — General function and local-value semantics
@@ -183,11 +183,11 @@ KED-007 settles basic explicit named dereference and Copy-safe whole-value
 write-through under KD-022. Advanced borrowing and dereference coercions remain
 open; general mutation/replacement is tracked separately under OQ-025.
 
-KED-008 extends sound loan handling across acyclic statement branches only.
-Incoming live loans are conservatively retained through a conditional; this is
-not a general borrow checker over arbitrary CFGs. General path-sensitive loan
-precision, loops, reborrowing across control flow, reference-valued branch results,
-escaping references, and advanced lifetime relationships remain under OQ-024/OQ-026.
+KED-008 introduced acyclic statement branches. KED-009 settles continuation-aware,
+path-sensitive whole-value loan expiry across that current conditional subset
+(KD-024). It does not establish arbitrary CFG lifetime inference, general NLL
+completeness, or borrowing across loops. Reborrowing, reference-valued branch
+results, escaping references, and advanced lifetime relationships remain open.
 
 Still open:
 
@@ -201,7 +201,8 @@ Still open:
 - reference mutation beyond Copy-safe whole-value write-through;
 - two-phase borrows;
 - temporary lifetime extension and borrowing arbitrary temporary expressions;
-- general path-sensitive borrowing across complex joins and loops;
+- loops/backedges and general CFG lifetime inference;
+- reference-valued branch results;
 - borrowing interaction with closures and destructors;
 - interior mutability and smart-pointer borrowing;
 - FFI reference/lifetime boundaries.
@@ -235,6 +236,12 @@ escaping references, and field/partial borrowing.
 ## OQ-026 — General control flow, conditional values, and MIR dataflow
 
 KED-008 establishes only acyclic statement conditionals and the first ordinary MIR CFG.
+
+KED-009 improves loan precision across acyclic statement branches. Ownership
+remains in the semantic typed-HIR → MIR stage, using one existing ownership
+checker. Full MIR-based ownership dataflow and loop/fixed-point analysis remain
+unresolved, as do conditional values, phi/block parameters, early returns,
+definite initialization, and unreachable-path analysis.
 
 Still open:
 

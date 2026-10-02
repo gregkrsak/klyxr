@@ -70,7 +70,8 @@ records Copy. KED-006 adds explicit shared (`&T`) and exclusive (`&mut T`)
 whole-value borrowing. Shared references are Copy; mutable references move.
 `let mut` / `let mutable` marks an owned local as exclusively borrowable, without
 reassignment. Immutable reference locals carry private loan provenance. Loans
-end after the last future use of all derived available handles; call arguments
+end after the last possible use of derived handles on each path; potentially
+available handles at a join can retain a possibly active loan. Call arguments
 remain held until the receiving call completes, including nested arguments.
 Availability and loans are separate ID-based state within the same ownership phase.
 Borrowing/cloning/reborrowing/coercion are never implicit. Ordinary owned parameters
@@ -92,8 +93,12 @@ KED-008 adds statement-only `if` / optional `else` with Bool conditions, nesting
 lexical child scopes, no visible-name shadowing, and distinct sibling LocalIds.
 The condition's ownership effects occur once before independent branch snapshots.
 An outer Move place remains available at the join only if every incoming path
-retains it. Incoming live loans are conservatively held through the conditional;
-branch-local handles/loans do not escape. Straight-line last-use, call holds, and
+retains it. KED-009 replaces whole-conditional loan holds with continuation-aware,
+path-sensitive last-use analysis (KD-024): each branch inherits its own uses plus
+the shared suffix, with edge-specific expiry after condition evaluation. Possible
+active incoming loans merge conservatively; a conditionally moved handle cannot
+erase a loan needed on another incoming path. Loans never reactivate along the
+same path. Branch-local handles/loans do not escape. Straight-line last-use, call holds, and
 write holds remain intact. Ordinary typed HIR lowers deterministically to read-only
 MIR basic-block tables with explicit Branch/Goto/Return terminators. There is no
 conditional value, phi, block parameter, SSA, loop, early return, cleanup, or
