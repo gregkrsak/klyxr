@@ -284,7 +284,7 @@ impl Resolver {
         Err(error(
             span,
             format!("unknown value type `{name}`"),
-            "use built-in bool or a declared named range type",
+            "use built-in bool, a declared named range, or an existing record type",
         ))
     }
     fn parameter(
@@ -369,7 +369,7 @@ impl Resolver {
             return Err(error(
                 access.span,
                 "field access is not supported in ordinary value functions",
-                "ordinary function values are bool or named ranges",
+                "ordinary record values are indivisible owned values; field reads are not supported",
             ));
         };
         let declaration = self.program.field(*field);

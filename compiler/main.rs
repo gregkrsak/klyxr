@@ -57,7 +57,9 @@ fn run() -> Result<(), i32> {
             let (span, message) = match error {
                 FrontendError::Lex(error) => (error.span, error.message),
                 FrontendError::Parse(error) => (error.span, error.message),
-                FrontendError::Resolve(diagnostics) | FrontendError::Type(diagnostics) => {
+                FrontendError::Resolve(diagnostics)
+                | FrontendError::Type(diagnostics)
+                | FrontendError::Ownership(diagnostics) => {
                     for diagnostic in diagnostics {
                         eprint!("{}", diagnostic.render(&path, &source));
                     }
@@ -97,6 +99,7 @@ fn run() -> Result<(), i32> {
         println!("{status}: {path}");
         if ordinary > 0 {
             println!("  ordinary value functions type-checked: {ordinary} (not executed or verified; constrained results are not proven)");
+            println!("  ordinary ownership: core Copy/move checking passed; borrowing and destruction are not implemented");
         }
         println!(
             "  function bodies proven: {} (subtraction safety, field ranges, postconditions)",

@@ -120,15 +120,13 @@ fn builtin_bool_zero_parameters_and_multiple_parameters_are_typed() {
 }
 
 #[test]
-fn ordinary_interfaces_reject_records_references_and_missing_return_types() {
-    for text in [
-        "record R { value: Percent } fn bad(value: R) -> bool { return true; }",
-        "record R { value: Percent } fn bad() -> R { return true; }",
-    ] {
-        assert!(type_error(text)
+fn ordinary_interfaces_accept_records_but_reject_references_and_missing_return_types() {
+    compile("record R { value: Percent } fn ignore(value: R) -> bool { return true; } fn identity(value: R) -> R { return value; }");
+    assert!(
+        type_error("record R { value: Percent } fn bad() -> R { return true; }")
             .message
-            .contains("ordinary value signature"));
-    }
+            .contains("return type mismatch")
+    );
     assert!(
         resolve_error("fn bad(value: Missing) -> bool { return true; }")
             .message

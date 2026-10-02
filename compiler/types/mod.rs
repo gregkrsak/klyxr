@@ -5,7 +5,6 @@ use crate::{
         self, BinaryOp, ExprKind, ExprType, ParameterType, Program, Subtract, TypedExpr, ValueType,
         VerifiedFunction,
     },
-    lexer::Span,
     resolve::{
         ResolvedExpr, ResolvedExprKind, ResolvedFunction, ResolvedParameterType, ResolvedProgram,
         ResolvedValueStatement, ResolvedValueType,
@@ -20,9 +19,7 @@ pub fn check(resolved: ResolvedProgram) -> Result<Program, Vec<Diagnostic>> {
         let ty = match parameter.ty {
             ResolvedParameterType::MutableRecord(id) => ParameterType::MutableRecord(id),
             ResolvedParameterType::Range(id) => ParameterType::Range(id),
-            ResolvedParameterType::Value(ty) => ParameterType::Value(
-                value_type(&program, ty, parameter.span).map_err(|e| vec![*e])?,
-            ),
+            ResolvedParameterType::Value(ty) => ParameterType::Value(value_type(ty)),
         };
         program.parameters.push(hir::Parameter {
             id: parameter.id,
@@ -31,12 +28,6 @@ pub fn check(resolved: ResolvedProgram) -> Result<Program, Vec<Diagnostic>> {
             ty,
             span: parameter.span,
         });
-    }
-    // Validate all return declarations before bodies, including forward/recursive callees.
-    for function in &resolved.functions {
-        if let ResolvedFunction::Ordinary(f) = function {
-            value_type(&program, f.return_type, f.span).map_err(|e| vec![*e])?;
-        }
     }
     let mut diagnostics = Vec::new();
     for function in &resolved.functions {
@@ -110,7 +101,7 @@ fn value_function(
     functions: &[ResolvedFunction],
     f: &crate::resolve::ResolvedValueFunction,
 ) -> TypeResult<hir::ValueFunction> {
-    let return_type = value_type(program, f.return_type, f.span)?;
+    let return_type = value_type(f.return_type);
     if !matches!(f.body.last(), Some(ResolvedValueStatement::Return { .. })) {
         return Err(Diagnostic::semantic(
             f.span,
@@ -121,36 +112,55 @@ fn value_function(
     }
     let mut body = Vec::new();
     for (index, statement) in f.body.iter().enumerate() {
-        body.push(match statement {
-                        ResolvedValueStatement::Let { id, function, name, initializer, span } => {
-                            let initializer = expression(program, functions, initializer)?;
-                            let ty = match initializer.ty {
-                                ExprType::Bool => ValueType::Bool,
-                                ExprType::Range(id) => ValueType::Range(id),
-                                ExprType::IntegerLiteral => {
-                            return Err(Diagnostic::semantic(
-                                initializer.span,
-                                "integer literal cannot materialize as a local value",
-                                "general integer/literal materialization is unresolved; use a concrete bool or named range expression",
-                            ).into());
-                        }
-                            };
-                            program.locals.push(hir::Local { id: *id, function: *function, name: name.clone(), ty, span: *span });
-                            hir::ValueStatement::Let { local: *id, initializer, span: *span }
-                        }
-                        ResolvedValueStatement::Return { value, span } => {
-                            if index + 1 != f.body.len() {
-                                return Err(Diagnostic::semantic(
-                            *span,
-                            "return must be the final statement",
-                            "early or multiple returns are not supported",
+        let statement = match statement {
+            ResolvedValueStatement::Let {
+                id,
+                function,
+                name,
+                initializer,
+                span,
+            } => {
+                let initializer = expression(program, functions, initializer)?;
+                let ty = match initializer.ty {
+                    ExprType::Bool => ValueType::Bool,
+                    ExprType::Range(id) => ValueType::Range(id),
+                    ExprType::Record(id) => ValueType::Record(id),
+                    ExprType::IntegerLiteral => {
+                        return Err(Diagnostic::semantic(
+                            initializer.span,
+                            "integer literal cannot materialize as a local value",
+                            "general integer/literal materialization is unresolved; use a concrete bool, named range, or record expression",
                         ).into());
-                            }
-                            let value = expression(program, functions, value)?;
-                            exact_value(program, &value, return_type, "return")?;
-                            hir::ValueStatement::Return { value, span: *span }
-                        }
-                    });
+                    }
+                };
+                program.locals.push(hir::Local {
+                    id: *id,
+                    function: *function,
+                    name: name.clone(),
+                    ty,
+                    span: *span,
+                });
+                hir::ValueStatement::Let {
+                    local: *id,
+                    initializer,
+                    span: *span,
+                }
+            }
+            ResolvedValueStatement::Return { value, span } => {
+                if index + 1 != f.body.len() {
+                    return Err(Diagnostic::semantic(
+                        *span,
+                        "return must be the final statement",
+                        "early or multiple returns are not supported",
+                    )
+                    .into());
+                }
+                let value = expression(program, functions, value)?;
+                exact_value(program, &value, return_type, "return")?;
+                hir::ValueStatement::Return { value, span: *span }
+            }
+        };
+        body.push(statement);
     }
     Ok(hir::ValueFunction {
         id: f.id,
@@ -161,19 +171,11 @@ fn value_function(
         span: f.span,
     })
 }
-fn value_type(program: &Program, ty: ResolvedValueType, span: Span) -> TypeResult<ValueType> {
+fn value_type(ty: ResolvedValueType) -> ValueType {
     match ty {
-        ResolvedValueType::Bool => Ok(ValueType::Bool),
-        ResolvedValueType::Range(id) => Ok(ValueType::Range(id)),
-        ResolvedValueType::Record(id) => Err(Diagnostic::semantic(
-            span,
-            format!(
-                "record type `{}` is not permitted in an ordinary value signature",
-                program.record(id).name
-            ),
-            "ordinary parameters and returns support only bool and named ranges",
-        )
-        .into()),
+        ResolvedValueType::Bool => ValueType::Bool,
+        ResolvedValueType::Range(id) => ValueType::Range(id),
+        ResolvedValueType::Record(id) => ValueType::Record(id),
     }
 }
 fn exact_value(
@@ -190,6 +192,9 @@ fn exact_value(
         matches!((expected, expression.ty), (ExprType::Range(a), ExprType::Range(b)) if a != b);
     let message = if nominal {
         format!("{boundary} type mismatch between distinct named ranges")
+    } else if matches!((expected, expression.ty), (ExprType::Record(a), ExprType::Record(b)) if a != b)
+    {
+        format!("{boundary} type mismatch between distinct named records")
     } else {
         format!("{boundary} type mismatch")
     };
@@ -221,6 +226,7 @@ fn display_type(program: &Program, ty: ExprType) -> String {
         ExprType::Bool => "Bool".into(),
         ExprType::IntegerLiteral => "IntegerLiteral".into(),
         ExprType::Range(id) => format!("range `{}`", program.range(id).name),
+        ExprType::Record(id) => format!("record `{}`", program.record(id).name),
     }
 }
 fn incompatible(
@@ -354,14 +360,14 @@ fn expression(
                     return Err(Diagnostic::semantic(
                         span,
                         "invalid ordinary parameter type",
-                        "ordinary signatures require bool or named ranges",
+                        "ordinary signatures require bool, named ranges, or records",
                     )
                     .into());
                 };
                 exact_value(program, &argument, expected, "call argument")?;
                 typed.push(argument);
             }
-            let ty = value_type(program, callee.return_type, callee.span)?.into();
+            let ty = value_type(callee.return_type).into();
             (
                 ExprKind::Call {
                     function: *function,

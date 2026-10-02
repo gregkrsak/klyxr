@@ -356,3 +356,27 @@ must be explicit. Function calls are expressions.
 A future explicitly marked expression-bodied function shorthand is not ruled
 out, but it would be a separate syntactic construct and would not change the
 explicit-return rule for block-bodied functions.
+
+---
+
+## KD-020 — Core owned-value move semantics
+
+**Status:** Accepted
+
+Klyxr uses move-by-default ownership for non-`Copy` values.
+
+In the initial core ownership model:
+
+- `bool` values are `Copy`;
+- named constrained range values are `Copy`;
+- record values are non-`Copy` and move by default.
+
+A non-`Copy` owned value moves when transferred through a by-value binding,
+by-value function argument, or return. After a move, the previous owned place
+may not be used as a value. The compiler never silently clones a moved value.
+
+This initial `Copy` classification is semantic compiler behavior; KED-005 does
+not establish the eventual user-facing `Copy` trait or customization mechanism.
+A record is non-`Copy` even when all its fields are `Copy`.
+
+Borrowing is a separate language mechanism and is not introduced by KED-005.

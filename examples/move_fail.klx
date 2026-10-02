@@ -1,0 +1,8 @@
+// Intentional failure: ticket was moved into next before the return.
+type Percent = range 0..100;
+record Ticket { value: Percent }
+
+fn bad(ticket: Ticket) -> Ticket {
+    let next = ticket;
+    return ticket;
+}
