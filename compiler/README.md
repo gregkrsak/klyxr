@@ -3,7 +3,8 @@
 This Rust implementation is an executable **prototype**, not a general-purpose
 Klyxr compiler. It implements a restricted source → lexer → parser → AST →
 name resolution → expression and value-flow type checking → typed HIR → core
-ownership, loan, and borrowed-access checking → integer contract proof → diagnostics.
+ownership, loan, and borrowed-access checking → ordinary MIR CFG lowering or
+specialized verified integer contract proof → diagnostics.
 
 ## Run it
 
@@ -57,7 +58,7 @@ across the input; record bindings must be constructed before their use. Duplicat
 names in a declaration namespace or the binding scope are rejected; shadowing
 is outside this prototype. Passing an immutable binding to `&mut` is an error.
 
-## Ordinary value functions (KED-004 through KED-007)
+## Ordinary value functions (KED-004 through KED-008)
 
 ```klyxr
 type Percent = range 0..100;
@@ -113,12 +114,12 @@ field definitions. Bare integer literals cannot satisfy a range parameter or ret
 as Bool. Generalized contextual literal conversion remains open under OQ-021.
 
 Ordinary functions are **frontend semantic work only**: parsed, resolved,
-type-checked, and ownership/loan-checked, with no execution, code generation, range
+type-checked, ownership/loan-checked, and lowered to ordinary MIR, with no execution, code generation, range
 proof, or runtime checks. For example, `return current - used;` can type as Percent without establishing
 that every result meets Percent's bounds. The verifier ignores ordinary functions
 as proof targets. Plain `fn` does not yet implement the full `safe` assurance model,
-with only core moves and whole-value, straight-line, non-escaping borrowing
-implemented under KD-004, KD-020, KD-021, and KD-022. Ordinary calls may target only ordinary functions; verified
+with only core moves and whole-value, straight-line/acyclic, non-escaping borrowing
+implemented under KD-004, KD-020, KD-021, KD-022, and KD-023. Ordinary calls may target only ordinary functions; verified
 contracts/body expressions cannot call functions, and top-level harness calls may
 target only verified functions. These rejections leave OQ-019 unresolved.
 
@@ -163,7 +164,7 @@ State is per function and keyed by typed place IDs, never names. Expression chil
 are checked in source order for deterministic diagnostics; this is not a runtime
 evaluation-order specification. Unused owned parameters/locals are accepted.
 
-This is whole-record, straight-line ownership only. Ordinary records enter through
+This is whole-record ownership with straight-line and acyclic branch joins only. Ordinary records enter through
 by-value parameters or ordinary call results. Record construction, field reads,
 field mutation, destructuring, partial moves, Copy customization, Clone, destruction,
 and runtime resource release remain unsupported. KED-006 adds mutable owned locals
@@ -249,7 +250,7 @@ Ordinary borrowing does not execute or prove functions. The verified battery's
 existing special state-reference semantics and harness remain unchanged and are
 excluded from ordinary loan analysis. KD-021 settles this core; OQ-024 retains
 reference returns, lifetimes, reborrowing, auto-dereference, fields, partial borrowing,
-advanced reference mutation, temporaries, control flow, and advanced borrowing.
+advanced reference mutation, temporaries, general control flow, and advanced borrowing.
 KED-007 adds only the explicit Copy-safe access described below.
 
 ## Explicit dereference and Copy-safe mutation (KED-007)
@@ -312,9 +313,75 @@ See `examples/deref_mutation.klx` and intentional failure
 not executed, interpreted, code-generated, contract-proven, or range-enforced at
 runtime. The verified battery state/field `-=` machinery is unchanged and separate.
 No direct local/reference-binding reassignment, assignment expressions, compound
-assignment, field mutation, auto-deref, reborrowing, destruction, or control flow
-is introduced. KD-022 settles this narrow core; OQ-025 retains general mutation
+assignment, field mutation, auto-deref, reborrowing, or destruction
+is introduced by KED-007. KED-008 allows these existing Copy-safe writes inside branches. KD-022 settles this narrow core; OQ-025 retains general mutation
 and replacement, OQ-023 destruction, and OQ-024 advanced reference behavior.
+
+## Statement conditionals and ordinary MIR (KED-008)
+
+```klyxr
+fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
+    let mut owned = value;
+    if flag {
+        let access = &mut owned;
+        *access = replacement;
+    } else {
+        let observed = owned;
+    }
+    return owned;
+}
+```
+
+`if condition { ... }` is a statement; `else { ... }` is optional. Braces are
+required, parenthesized conditions use existing expression syntax, and nesting
+is supported. Conditions must type exactly as Bool, including ordinary calls
+returning Bool. No truthiness conversion or conditional expression is permitted.
+Branches contain lets, existing dereference writes, and nested if statements.
+Each branch is a lexical child scope: outer bindings remain visible, locals enter
+only after their initializer, visible-name shadowing is rejected, and branch
+locals cannot escape or cross into siblings. Siblings may reuse a spelling with
+distinct canonical LocalIds. One explicit final function-level return remains
+required. Branch-local returns and `else if` shorthand are rejected, as are loops,
+match, break/continue, expression statements, and direct local reassignment.
+
+Ownership evaluates the condition once before splitting state. Both branches
+start independently from that post-condition state. A non-Copy place visible at
+the join is available only if every incoming branch retains it, including the
+empty false path when else is absent. Otherwise later use or borrowing reports
+that the value may have moved on a previous control-flow path and identifies a
+move location. Mutable-reference handles follow this Move rule; shared handles
+remain Copy. Both branches may separately consume the same incoming owner if
+there is no subsequent joined use.
+
+Branch-local reference handles/loans cannot escape and end no later than branch
+exit. Incoming live loans are conservatively held through the entire conditional,
+even if a particular mutually exclusive path might permit earlier expiry. This
+can reject path-sensitive borrowing patterns; it never relaxes existing loan
+conflicts. Syntactic uses on both branches are accounted for at the join and
+straight-line last-use expiry resumes. Call-held references and write-held loans
+retain their existing protection inside branches. No generalized CFG borrow
+solver, reference-valued branch result, destruction, or new borrowing rule is implied.
+
+`mir::lower(&program)` lowers accepted ordinary HIR to `MirProgram`/`MirFunction`.
+Canonical FunctionId, ParameterId, LocalId, and nominal type identities survive;
+names remain metadata. Public function/block inspection is read-only, with
+compilation-local BasicBlockIds. Blocks contain Let/DerefAssign statements using
+existing typed expression trees, and exactly one Branch/Goto/Return terminator.
+Simple if has an explicit false edge to the join; if/else joins both outgoing
+paths; nesting recursively builds real CFG edges. Empty else is normalized to
+the false join edge. Every fallthrough is explicit, and the final source return
+is a terminator. Allocation order is deterministic, without making block numbering
+source semantics. `MirFunction::validate()` checks targets, entry, reachability,
+acyclicity, and Bool conditions. Indexed tables give unique IDs; the block type
+requires one terminator. A finite acyclic graph has only Return leaves.
+
+The CLI exercises MIR lowering before success. There is no MIR source-error phase,
+execution, interpretation, code generation, or proof of ordinary logic. The verified
+battery path remains HIR-only and excludes ordinary conditionals. MIR has no phi,
+block parameters/results, SSA, loops, temporary flattening, cleanup, backend, or
+verification consumer. KD-023 settles this boundary; OQ-026 retains broader
+conditional values, control flow, and dataflow. See `examples/if_control_flow.klx`
+and intentional Ownership failure `examples/if_move_fail.klx`.
 
 ## Core expressions and types (KED-003)
 
@@ -444,7 +511,9 @@ The CLI follows this exact path:
 
 ```text
 source → lexer → parser → AST expressions/functions → resolver → expression and value-flow type checking
-       → typed HIR expressions → core ownership, loan, and borrowed-access checking → prototype verifier → diagnostics
+       → typed HIR → core ownership, loan, and borrowed-access checking
+       ├─ ordinary functions → MIR CFG lowering → diagnostics
+       └─ verified functions → specialized prototype verifier → diagnostics
 ```
 
 Resolution, type, and ownership errors prevent proof. Diagnostics distinguish malformed syntax,
@@ -456,8 +525,8 @@ replacement are ownership errors. Non-reference dereference, shared writes, and
 RHS mismatches are Type errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012, KD-018, KD-019, KD-020, KD-021, and KD-022 only for the documented subset.
-General type inference, advanced borrowing/ownership, effects, MIR, VIR,
+This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, and KD-023 only for the documented subset.
+General type inference, advanced borrowing/ownership, effects, MIR backend/verification lowering, VIR,
 and broader HIR features remain future work.
 
 ## What the proof establishes
@@ -518,16 +587,16 @@ consume(&mut battery, 50); // rejected: 50 <= 30 is false
 ## Limits and next work
 
 The prototype does not implement ownership beyond core ordinary moves and
-whole-value straight-line loans, reference returns, explicit lifetimes, reborrowing,
+whole-value acyclic loans, reference returns, explicit lifetimes, reborrowing,
 auto-dereference, non-Copy replacement, field/reference mutation beyond Copy-safe
 whole-value writes, partial borrowing, reassignment, destruction,
 effects, runtime contracts, expressions beyond this subset, loops, quantifiers,
-multiple fields, record invariants, SMT/VIR/MIR, or machine-code generation. In particular,
+multiple fields, record invariants, SMT/VIR or MIR backend/verification lowering, or machine-code generation. In particular,
 `examples/effects.klx` is illustrative and is rejected rather than analyzed.
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, and KD-022,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, and KD-023,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset

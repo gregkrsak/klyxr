@@ -64,6 +64,12 @@ pub(crate) struct ResolvedValueFunction {
 }
 #[derive(Debug)]
 pub(crate) enum ResolvedValueStatement {
+    If {
+        condition: ResolvedExpr,
+        then_body: Vec<ResolvedValueStatement>,
+        else_body: Vec<ResolvedValueStatement>,
+        span: Span,
+    },
     DerefAssign {
         reference: hir::Place,
         value: ResolvedExpr,
@@ -151,7 +157,7 @@ enum Reference {
     Parameter(ParameterId),
     Local(LocalId),
 }
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Scope {
     values: HashMap<String, Reference>,
     state: Option<(String, ParameterId, FieldId)>,
@@ -428,6 +434,76 @@ impl Resolver {
             span: access.span,
         })
     }
+    fn value_statements(
+        &mut self,
+        function: FunctionId,
+        statements: &[ast::ValueStatement],
+        scope: &mut Scope,
+    ) -> ResolutionResult<Vec<ResolvedValueStatement>> {
+        let mut body = Vec::new();
+        for statement in statements {
+            body.push(match statement {
+                ast::ValueStatement::If {
+                    condition,
+                    then_body,
+                    else_body,
+                    span,
+                } => {
+                    let condition = self.expression(condition, scope, false)?;
+                    let then_body =
+                        self.value_statements(function, then_body, &mut scope.clone())?;
+                    let else_body = self.value_statements(
+                        function,
+                        else_body.as_deref().unwrap_or(&[]),
+                        &mut scope.clone(),
+                    )?;
+                    ResolvedValueStatement::If {
+                        condition,
+                        then_body,
+                        else_body,
+                        span: *span,
+                    }
+                }
+                ast::ValueStatement::Let {
+                    name,
+                    mutable,
+                    initializer,
+                    span,
+                } => {
+                    if scope.values.contains_key(name) {
+                        return Err(duplicate(*span, name));
+                    }
+                    // Resolve first, then introduce the local: no self-reference.
+                    let initializer = self.expression(initializer, scope, false)?;
+                    let local = LocalId(self.local_count);
+                    self.local_count += 1;
+                    scope.values.insert(name.clone(), Reference::Local(local));
+                    ResolvedValueStatement::Let {
+                        id: local,
+                        function,
+                        name: name.clone(),
+                        mutable: *mutable,
+                        initializer,
+                        span: *span,
+                    }
+                }
+                ast::ValueStatement::DerefAssign {
+                    reference,
+                    value,
+                    span,
+                } => ResolvedValueStatement::DerefAssign {
+                    reference: self.reference_place(reference, scope, *span)?,
+                    value: self.expression(value, scope, false)?,
+                    span: *span,
+                },
+                ast::ValueStatement::Return { value, span } => ResolvedValueStatement::Return {
+                    value: self.expression(value, scope, false)?,
+                    span: *span,
+                },
+            });
+        }
+        Ok(body)
+    }
     fn function(
         &mut self,
         id: FunctionId,
@@ -493,49 +569,7 @@ impl Resolver {
                         .values
                         .insert(p.name.clone(), Reference::Parameter(*id));
                 }
-                let mut body = Vec::new();
-                for statement in &f.body {
-                    body.push(match statement {
-                        ast::ValueStatement::Let {
-                            name,
-                            mutable,
-                            initializer,
-                            span,
-                        } => {
-                            if scope.values.contains_key(name) {
-                                return Err(duplicate(*span, name));
-                            }
-                            // Resolve first, then introduce the local: no self-reference.
-                            let initializer = self.expression(initializer, &scope, false)?;
-                            let local = LocalId(self.local_count);
-                            self.local_count += 1;
-                            scope.values.insert(name.clone(), Reference::Local(local));
-                            ResolvedValueStatement::Let {
-                                id: local,
-                                function: id,
-                                name: name.clone(),
-                                mutable: *mutable,
-                                initializer,
-                                span: *span,
-                            }
-                        }
-                        ast::ValueStatement::DerefAssign {
-                            reference,
-                            value,
-                            span,
-                        } => ResolvedValueStatement::DerefAssign {
-                            reference: self.reference_place(reference, &scope, *span)?,
-                            value: self.expression(value, &scope, false)?,
-                            span: *span,
-                        },
-                        ast::ValueStatement::Return { value, span } => {
-                            ResolvedValueStatement::Return {
-                                value: self.expression(value, &scope, false)?,
-                                span: *span,
-                            }
-                        }
-                    });
-                }
+                let body = self.value_statements(id, &f.body, &mut scope)?;
                 Ok(ResolvedFunction::Ordinary(ResolvedValueFunction {
                     id,
                     name: f.name.clone(),

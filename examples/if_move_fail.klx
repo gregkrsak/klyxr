@@ -1,0 +1,10 @@
+type Percent = range 0..100;
+record Ticket { value: Percent }
+
+fn bad(flag: bool, ticket: Ticket) -> Ticket {
+    if flag {
+        let moved = ticket;
+    }
+    // Intentional Ownership error: one incoming path moved ticket.
+    return ticket;
+}

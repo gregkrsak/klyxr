@@ -423,3 +423,26 @@ KED-007 implements directly named ordinary reference access and dedicated
 `*reference = expression;` statements only. It does not establish owned-local
 reassignment, non-Copy replacement, destructors/Drop, field access or mutation,
 auto-deref, reborrowing, compound assignment, assignment expressions, or control flow.
+
+---
+
+## KD-023 — Statement conditionals and MIR control-flow foundation
+
+**Status:** Accepted
+
+Klyxr initially introduces `if` / optional `else` as control-flow statements.
+An `if` requires a Bool condition, creates lexical child scopes for its branches,
+and rejoins after the selected branch completes. Nested statements are allowed;
+conditionals do not produce values. Visible names cannot be shadowed; sibling
+branches may reuse a spelling with distinct canonical local identities.
+
+A non-Copy place visible after a join is available only if it remains available
+on every reachable incoming branch. A move on any such branch prevents later
+use or borrowing of that place. Mutable reference handles follow the Move rule;
+shared reference handles remain Copy.
+
+KED-008 establishes acyclic ordinary MIR basic blocks and explicit Branch, Goto,
+and Return terminators. Ordinary functions still require one final function-level
+return. It establishes no loops, early/multiple returns, SSA, phi nodes, block
+parameters, or generalized control-flow dataflow. Value-producing conditionals
+remain unresolved, and the MIR architecture leaves their future extension open.

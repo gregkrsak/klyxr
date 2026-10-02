@@ -49,7 +49,7 @@ Once they are part of the program, the compiler and verifier should be able to r
 
 ## Current implementation status
 
-An executable compiler prototype, written in Rust, supports ordinary straight-line
+An executable compiler prototype, written in Rust, supports ordinary acyclic
 value functions alongside a narrow one-field record/signed-integer contract subset.
 Explicit resolution assigns compilation-local function, parameter, local, type,
 field, and top-level binding IDs. Expression and value-flow type checking produce
@@ -88,8 +88,19 @@ RHS. Copied dereference arguments do not call-hold a reference, while reference
 arguments retain KED-006 holds. Direct owner reassignment, field mutation, auto-deref,
 reborrowing, and general mutation remain unsupported (KD-022 / OQ-025).
 
+KED-008 adds statement-only `if` / optional `else` with Bool conditions, nesting,
+lexical child scopes, no visible-name shadowing, and distinct sibling LocalIds.
+The condition's ownership effects occur once before independent branch snapshots.
+An outer Move place remains available at the join only if every incoming path
+retains it. Incoming live loans are conservatively held through the conditional;
+branch-local handles/loans do not escape. Straight-line last-use, call holds, and
+write holds remain intact. Ordinary typed HIR lowers deterministically to read-only
+MIR basic-block tables with explicit Branch/Goto/Return terminators. There is no
+conditional value, phi, block parameter, SSA, loop, early return, cleanup, or
+MIR-based ownership solver (KD-023 / OQ-026).
+
 Ordinary functions are parsed, resolved, type-checked, and ownership-checked,
-including loan and borrowed-access legality, but not executed or proven. A range result type does not establish that the
+including loan and borrowed-access legality, and lowered to ordinary MIR, but not executed or proven. A range result type does not establish that the
 produced value meets its bounds. Plain `fn` does not yet implement the complete
 future `safe` assurance model. Forward and recursive calls remain structurally
 valid without a termination claim. Diagnostic traversal order does not settle
@@ -101,10 +112,10 @@ verifier-support diagnostic. It ignores ordinary functions as proof targets.
 Its affine proof establishes subtraction safety, field ranges, and postconditions
 for every admissible input of the supported structure, and tracks state between
 literal-argument harness calls. Calls across function kinds are rejected; OQ-019,
-OQ-021 through OQ-025 retain the broader assurance, arithmetic, function,
+OQ-021 through OQ-026 retain the broader assurance, arithmetic, function,
 Copy/destruction, advanced borrowing, and general mutation questions.
-General ownership beyond core moves and straight-line whole-value loans, effects, runtime
-contracts, MIR/VIR, SMT integration,
+General ownership beyond core moves and acyclic whole-value loans, effects, runtime
+contracts, VIR, MIR backend/verification lowering, SMT integration,
 and machine-code generation remain unimplemented. Read `compiler/README.md`
 before making claims about what the executable establishes.
 

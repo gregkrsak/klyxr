@@ -280,7 +280,7 @@ fn assignment_expressions_compound_assignment_and_owner_reassignment_stay_absent
         "(*value).field = true; return true;",
         "value.field = true; return true;",
         "*value; return true;",
-        "if true { *value = false; } return true;",
+        "if true { return false; } return true;",
     ] {
         assert!(
             compile_source(&source(&format!(

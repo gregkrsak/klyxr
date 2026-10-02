@@ -70,7 +70,7 @@ Original spelling remains available for source-aware tooling.
 ## 4. Ownership and regions
 
 Availability (Available/Moved) and active shared/exclusive loans are orthogonal.
-The current straight-line prototype checks these together in `compiler/ownership`.
+The current straight-line and acyclic-branch prototype checks these together in `compiler/ownership`.
 Stored loans follow derived reference handles through last use; direct reference
 arguments remain call-held through the receiving call. Broader regions/lifetimes
 are future architecture; explicit syntax remains open under OQ-009/OQ-024.
@@ -89,7 +89,7 @@ A caller denying `heap` must not reach allocation through a hidden call chain.
 
 ## 6. MIR
 
-MIR is control-flow oriented and suitable for:
+The accepted long-term MIR direction is control-flow oriented and suitable for:
 
 - ownership analysis;
 - drop elaboration;
@@ -241,19 +241,23 @@ The MVP should demonstrate the difference between memory safety and application-
 The compiler prototype is implemented in Rust, pinned to 1.80.0. The executable
 pipeline is source → lexer → parser → AST → explicit name resolution → expression
 and value-flow type checking → typed HIR → core ownership, loan, and borrowed-access checking → specialized
-integer contract proof → diagnostics. This implements KD-012, KD-018, KD-019,
-KD-020, KD-021, and KD-022 only for the documented
+ordinary MIR CFG lowering (ordinary functions) or specialized
+integer contract proof (verified functions) → diagnostics. This implements KD-012, KD-018, KD-019,
+KD-020, KD-021, KD-022, and KD-023 only for the documented
 subset; the broader pipeline above remains accepted architecture/future work.
 
 The AST preserves textual declarations, parameter types, explicit ordinary
-returns, local initializers/mutability, flat source reference types, direct named
+returns, statement conditionals with optional else/nested lexical branches,
+local initializers/mutability, flat source reference types, direct named
 borrow/dereference targets, dedicated ordinary dereference writes, expression calls,
 contracts, and ordered prototype
 statements. `FunctionDecl` retains source order across ordinary and verified forms.
 The resolver collects all declarations/signatures before resolving bodies, owns
 name lookup and source-order local scope, and assigns strongly typed range, record,
 field, function, parameter, local, and harness-binding IDs. Locals enter scope after
-resolving their initializer; no shadowing or cross-function local scope is supported.
+resolving their initializer; visible-name shadowing and cross-function local scope are rejected.
+Each branch clones the visible resolver scope; siblings may reuse a spelling,
+but every declaration receives a fresh LocalId from the compilation-wide allocator.
 Forward and recursive ordinary calls resolve without execution or termination
 analysis. Source type names resolve to canonical references; `compiler/types`
 validates declared value types, operators, initializers, calls, and returns without
@@ -281,7 +285,7 @@ Ordinary functions have explicit value return types and exactly one final
 `return expression;`. Immutable locals propagate concrete initializer types;
 call arguments and returns require exact concrete types. Bare integer locals,
 arguments to range parameters, and returns do not gain implicit range types.
-KED-004 through KED-007 do not execute, prove, or dynamically enforce ordinary functions.
+KED-004 through KED-008 do not execute, prove, or dynamically enforce ordinary functions.
 `Range(T)` typing does not prove bounds or overflow safety. Plain `fn` is not a
 claim to implement the full future `safe` model. All mixed-kind calls are rejected.
 
@@ -295,18 +299,21 @@ initializers are analyzed before introducing a fresh local owner. Value referenc
 consume Move places through bindings, by-value calls, and returns; Copy places
 remain reusable. Call results are fresh values, without public temporary IDs.
 
-State is Available or Moved with the prior source span and transfer destination.
+State is Available, Moved with the prior source span/transfer destination, or
+conditionally unavailable after a branch join with a contributing move span.
 Use-after-move produces the first precise `FrontendError::Ownership` diagnostic,
 with the later use span and prior move location. Names are diagnostic metadata;
 classification and state use canonical types and IDs. Children are traversed in
 source order for deterministic diagnostics, without settling runtime evaluation
-order. There are no branches, joins, fixed points, or inlined callee states.
+order. KED-008 adds independent post-condition branch snapshots and acyclic joins.
+An outer Move place moved on either path becomes conditionally unavailable, with
+a prior move span for diagnostics. There are no fixed points or inlined callee states.
 Forward/recursive calls are checked structurally, not executed or proven terminating.
 Unused owners are accepted without destruction behavior.
 
 The ownership phase excludes the verified state parameter, fields, and BindingId
 harness state. KED-006 adds private loan identity/provenance alongside availability,
-with future-use counts for straight-line places and operation-hold counts for nested
+with syntactic future-use counts for straight-line and branch-scoped places and operation-hold counts for nested
 calls and (under KED-007) whole write statements.
 Shared copies and mutable moves retain loan identity across LocalIds. Loans expire
 when no available derived handle has future uses and no call/write holds the loan. Local
@@ -346,7 +353,32 @@ rejection. Every verified body is proven independently of its call sites; its
 postcondition then updates caller state in source order. Ordinary functions do
 not enter that state model.
 
-MIR, VIR, ownership beyond core moves and straight-line whole-value loans, advanced
+KED-008 conservatively pins incoming live loans through each whole conditional,
+including nested branches. Branches analyze independently from the same state;
+branch-local handles and loans are discarded at exit. At the join, syntactic use
+counts from both branches are consumed and normal straight-line expiry resumes.
+No branch result or escaping handle exists. Existing call/write operation holds
+remain active; general path-sensitive loan precision remains open.
+
+`compiler/mir` lowers only ordinary typed HIR after frontend ownership checks.
+`mir::lower(&program)` leaves `compile_source`'s canonical HIR result unchanged.
+MIR preserves FunctionId/ParameterId/LocalId and exact expression types. Public
+inspection is read-only; BasicBlockId and canonical block storage are compilation-local.
+Each block owns Let/DerefAssign statements and exactly one Goto, typed Bool Branch,
+or value Return terminator. Expressions retain their typed HIR trees. Structured
+recursive lowering allocates blocks deterministically, gives every fallthrough
+an explicit Goto, and emits the final source return as a terminator. Empty else
+branches use a direct false edge to the join. A structural validator checks entry,
+targets, reachability, acyclicity, and Bool conditions; unique IDs and single
+terminators follow from indexed storage and the block type. Every finite path ends
+in Return. MIR discovers no new source semantic errors. The CLI exercises lowering.
+
+There are no phi nodes, block parameters/results, SSA, loops, general temporaries,
+cleanup edges, execution, or MIR backend/verifier consumers. The specialized
+verified path stays on HIR and retains its proof counts and numerical kernel.
+OQ-026 records future control-flow/value-flow/MIR dataflow design.
+
+VIR, ownership beyond core moves and acyclic whole-value loans, advanced
 borrowing, effect analysis, destruction, SMT integration, runtime lowering,
 and code generation remain unimplemented. This subset does not settle broader
 HIR, modules, generalized inference/coercions, arithmetic enforcement, or mixed
@@ -363,4 +395,4 @@ Empty admissible domains are explicitly rejected by this prototype.
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
 invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
-KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, DP-008, DP-009, and OQ-018 through OQ-025.
+KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, DP-008, DP-009, and OQ-018 through OQ-026.

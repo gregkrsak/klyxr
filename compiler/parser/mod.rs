@@ -206,10 +206,44 @@ impl Parser<'_> {
         self.expect(&TokenKind::Arrow)?;
         let return_type = self.parse_value_type()?;
         self.expect(&TokenKind::LBrace)?;
+        let (body, end) = self.parse_value_block(true)?;
+        Ok(ValueFunction {
+            name,
+            parameters,
+            return_type,
+            body,
+            span: Span { end, ..start },
+        })
+    }
+
+    fn parse_value_block(
+        &mut self,
+        allow_return: bool,
+    ) -> Result<(Vec<ValueStatement>, usize), ParseError> {
         let mut body = Vec::new();
         while !self.at(&TokenKind::RBrace) {
             let span = self.peek().span;
-            if self.at(&TokenKind::Let) {
+            if self.at(&TokenKind::If) {
+                self.advance();
+                let condition = self.parse_expression(0)?;
+                self.expect(&TokenKind::LBrace)?;
+                let (then_body, mut end) = self.parse_value_block(false)?;
+                let else_body = if self.at(&TokenKind::Else) {
+                    self.advance();
+                    self.expect(&TokenKind::LBrace)?;
+                    let (body, branch_end) = self.parse_value_block(false)?;
+                    end = branch_end;
+                    Some(body)
+                } else {
+                    None
+                };
+                body.push(ValueStatement::If {
+                    condition,
+                    then_body,
+                    else_body,
+                    span: Span { end, ..span },
+                });
+            } else if self.at(&TokenKind::Let) {
                 self.advance();
                 let mutable = self.at(&TokenKind::Mut);
                 if mutable {
@@ -236,6 +270,12 @@ impl Parser<'_> {
                     span: Span { end, ..span },
                 });
             } else if self.at(&TokenKind::Return) {
+                if !allow_return {
+                    return Err(self.error(
+                        "branch-local returns are unsupported; use one final function-level return"
+                            .into(),
+                    ));
+                }
                 self.advance();
                 let value = self.parse_expression(0)?;
                 if !self.at(&TokenKind::Semicolon) {
@@ -254,13 +294,7 @@ impl Parser<'_> {
             }
         }
         let end = self.expect(&TokenKind::RBrace)?.span.end;
-        Ok(ValueFunction {
-            name,
-            parameters,
-            return_type,
-            body,
-            span: Span { end, ..start },
-        })
+        Ok((body, end))
     }
 
     // Precedence climbing: only the explicitly authorized operators participate.

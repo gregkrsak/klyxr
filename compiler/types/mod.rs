@@ -12,7 +12,7 @@ use crate::{
 };
 type TypeResult<T> = Result<T, Box<Diagnostic>>;
 
-/// Type-check declarations, expressions and straight-line value flow; publish canonical HIR.
+/// Type-check declarations, expressions and structured acyclic value flow; publish canonical HIR.
 pub fn check(resolved: ResolvedProgram) -> Result<Program, Vec<Diagnostic>> {
     let mut program = resolved.declarations;
     for parameter in resolved.parameters {
@@ -126,9 +126,55 @@ fn value_function(
         )
         .into());
     }
+    let body = value_statements(program, functions, &f.body, return_type, true)?;
+    Ok(hir::ValueFunction {
+        id: f.id,
+        name: f.name.clone(),
+        parameters: f.parameters.clone(),
+        return_type,
+        body,
+        span: f.span,
+    })
+}
+fn value_statements(
+    program: &mut Program,
+    functions: &[ResolvedFunction],
+    statements: &[ResolvedValueStatement],
+    return_type: ValueType,
+    allow_return: bool,
+) -> TypeResult<Vec<hir::ValueStatement>> {
     let mut body = Vec::new();
-    for (index, statement) in f.body.iter().enumerate() {
+    for (index, statement) in statements.iter().enumerate() {
         let statement = match statement {
+            ResolvedValueStatement::If {
+                condition,
+                then_body,
+                else_body,
+                span,
+            } => {
+                let condition = expression(program, functions, condition)?;
+                if condition.ty != ExprType::Bool {
+                    return Err(Diagnostic::semantic(
+                        condition.span,
+                        "if condition must have type Bool",
+                        format!(
+                            "found {}; there is no truthiness conversion",
+                            display_type(program, condition.ty)
+                        ),
+                    )
+                    .into());
+                }
+                let then_body =
+                    value_statements(program, functions, then_body, return_type, false)?;
+                let else_body =
+                    value_statements(program, functions, else_body, return_type, false)?;
+                hir::ValueStatement::If {
+                    condition,
+                    then_body,
+                    else_body,
+                    span: *span,
+                }
+            }
             ResolvedValueStatement::Let {
                 id,
                 function,
@@ -187,7 +233,7 @@ fn value_function(
                 }
             }
             ResolvedValueStatement::Return { value, span } => {
-                if index + 1 != f.body.len() {
+                if !allow_return || index + 1 != statements.len() {
                     return Err(Diagnostic::semantic(
                         *span,
                         "return must be the final statement",
@@ -202,14 +248,7 @@ fn value_function(
         };
         body.push(statement);
     }
-    Ok(hir::ValueFunction {
-        id: f.id,
-        name: f.name.clone(),
-        parameters: f.parameters.clone(),
-        return_type,
-        body,
-        span: f.span,
-    })
+    Ok(body)
 }
 fn value_type(ty: ResolvedValueType, span: crate::lexer::Span) -> TypeResult<ValueType> {
     Ok(match ty {

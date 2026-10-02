@@ -79,6 +79,7 @@ fn run() -> Result<(), i32> {
         }
     };
 
+    let mir = klyxr_compiler::mir::lower(&program);
     let report = verify::verify_report(&program);
 
     if report.diagnostics.is_empty() {
@@ -98,6 +99,7 @@ fn run() -> Result<(), i32> {
         };
         println!("{status}: {path}");
         if ordinary > 0 {
+            println!("  ordinary MIR control-flow lowering passed: {} functions (not executed or verified)", mir.functions().len());
             println!("  ordinary value functions type-checked: {ordinary} (not executed or verified; constrained results are not proven)");
             println!("  ordinary ownership: core Copy/move checking passed; whole-value loans checked; Copy-safe borrowed access checked; destruction is not implemented");
         }
@@ -109,7 +111,7 @@ fn run() -> Result<(), i32> {
             "  calls checked: {} (argument ranges, mutable access, preconditions)",
             report.calls_checked
         );
-        println!("  scope: straight-line signed i64 prototype; general ownership, effects, and code generation are not implemented");
+        println!("  scope: acyclic ordinary control flow and specialized signed i64 contract prototype; general ownership, effects, and code generation are not implemented");
         return Ok(());
     }
 
