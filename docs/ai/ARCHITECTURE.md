@@ -69,14 +69,11 @@ Original spelling remains available for source-aware tooling.
 
 ## 4. Ownership and regions
 
-Relevant values/bindings conceptually transition among:
-
-- Owned
-- Borrowed immutable
-- Borrowed mutable
-- Moved
-
-Regions/lifetimes should primarily be inferred.
+Availability (Available/Moved) and active shared/exclusive loans are orthogonal.
+The current straight-line prototype checks these together in `compiler/ownership`.
+Stored loans follow derived reference handles through last use; direct reference
+arguments remain call-held through the receiving call. Broader regions/lifetimes
+are future architecture; explicit syntax remains open under OQ-009/OQ-024.
 
 ## 5. Effect analysis
 
@@ -243,13 +240,14 @@ The MVP should demonstrate the difference between memory safety and application-
 
 The compiler prototype is implemented in Rust, pinned to 1.80.0. The executable
 pipeline is source → lexer → parser → AST → explicit name resolution → expression
-and value-flow type checking → typed HIR → core ownership checking → specialized
+and value-flow type checking → typed HIR → core ownership and loan checking → specialized
 integer contract proof → diagnostics. This implements KD-012, KD-018, KD-019,
-and KD-020 only for the documented
+KD-020, and KD-021 only for the documented
 subset; the broader pipeline above remains accepted architecture/future work.
 
 The AST preserves textual declarations, parameter types, explicit ordinary
-returns, local initializers, expression calls, contracts, and ordered prototype
+returns, local initializers/mutability, flat source reference types, direct named
+borrow targets, expression calls, contracts, and ordered prototype
 statements. `FunctionDecl` retains source order across ordinary and verified forms.
 The resolver collects all declarations/signatures before resolving bodies, owns
 name lookup and source-order local scope, and assigns strongly typed range, record,
@@ -263,10 +261,14 @@ textual name lookup.
 One canonical `FunctionId` table contains both ordinary value and verified mutation
 functions, in source declaration order. Both kinds share the existing function
 namespace. Ordinary signatures/materialized locals use `ValueType::Bool`,
-`ValueType::Range(RangeTypeId)`, or `ValueType::Record(RecordId)`; `IntegerLiteral`
+`ValueType::Range(RangeTypeId)`, `ValueType::Record(RecordId)`,
+`SharedRef(ReferentType)`, or `MutableRef(ReferentType)`; `IntegerLiteral`
 remains expression-only. Expressions represent records by the same canonical
 RecordId. Record arguments and returns require exact nominal identity; existing
-operators do not accept record values. HIR
+operators do not accept record or reference values. Reference referents are
+nonrecursive Bool/range/record identities. Borrow expressions carry canonical
+ParameterId/LocalId targets and Shared/Mutable capability; locals carry owned
+mutability. Nested reference signatures and reference returns are rejected before ownership. HIR
 local and call references carry `LocalId` and `FunctionId`, with typed arguments,
 initializers, and explicit returns. Nominal compatibility uses exact range/record IDs.
 Names and spans are diagnostic metadata. `hir::Program` owns compilation-local
@@ -278,14 +280,15 @@ Ordinary functions have explicit value return types and exactly one final
 `return expression;`. Immutable locals propagate concrete initializer types;
 call arguments and returns require exact concrete types. Bare integer locals,
 arguments to range parameters, and returns do not gain implicit range types.
-KED-004 and KED-005 do not execute, prove, or dynamically enforce ordinary functions.
+KED-004 through KED-006 do not execute, prove, or dynamically enforce ordinary functions.
 `Range(T)` typing does not prove bounds or overflow safety. Plain `fn` is not a
 claim to implement the full future `safe` model. All mixed-kind calls are rejected.
 
 `compiler/ownership` is a dedicated phase that inspects canonical typed HIR without
 rebuilding it or adding public ownership annotations. Its private classification
-is Bool/range → Copy, record → Move, regardless of field types. It tracks only
-ordinary by-value ParameterId/LocalId places, using separate strongly typed place
+is Bool/range/shared reference → Copy, record/mutable reference → Move,
+regardless of record field types. It tracks only
+ordinary ParameterId/LocalId places, using separate strongly typed place
 variants in a per-function state table. Record parameters begin Available. Local
 initializers are analyzed before introducing a fresh local owner. Value references
 consume Move places through bindings, by-value calls, and returns; Copy places
@@ -301,8 +304,16 @@ Forward/recursive calls are checked structurally, not executed or proven termina
 Unused owners are accepted without destruction behavior.
 
 The ownership phase excludes the verified state parameter, fields, and BindingId
-harness state. It adds no borrowing, mutable locals, ordinary field access/record
-construction, partial moves, user-defined Copy/Clone, or destructors. Source names
+harness state. KED-006 adds private loan identity/provenance alongside availability,
+with future-use counts for straight-line places and call-hold counts for nested calls.
+Shared copies and mutable moves retain loan identity across LocalIds. Loans expire
+when no available derived handle has future uses and no call holds the loan. Local
+transfers attach destination provenance before expiry; final-use arguments attach
+call holds before expiry. Reference parameters have external provenance without
+interprocedural owner reconstruction. Loan state is not published in HIR.
+Exclusive borrowing requires a mutable owned local; `let mut` enables no assignment.
+There is no ordinary field access/record construction, reborrowing, reference return,
+implicit reference coercion, partial move/borrow, user-defined Copy/Clone, or destructor. Source names
 and nominal type errors must be resolved before ownership checking.
 
 The verifier takes only a verified-function view from the shared HIR table;
@@ -320,8 +331,8 @@ rejection. Every verified body is proven independently of its call sites; its
 postcondition then updates caller state in source order. Ordinary functions do
 not enter that state model.
 
-MIR, VIR, ownership beyond this straight-line move subset, borrowing/effect
-analysis, destruction, SMT integration, runtime lowering,
+MIR, VIR, ownership beyond core moves and straight-line whole-value loans, advanced
+borrowing, effect analysis, destruction, SMT integration, runtime lowering,
 and code generation remain unimplemented. This subset does not settle broader
 HIR, modules, generalized inference/coercions, arithmetic enforcement, or mixed
 assurance semantics.
@@ -337,4 +348,4 @@ Empty admissible domains are explicitly rejected by this prototype.
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
 invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
-KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, DP-008, DP-009, and OQ-018 through OQ-023.
+KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, DP-008, DP-009, and OQ-018 through OQ-024.

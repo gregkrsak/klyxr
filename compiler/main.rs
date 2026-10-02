@@ -99,7 +99,7 @@ fn run() -> Result<(), i32> {
         println!("{status}: {path}");
         if ordinary > 0 {
             println!("  ordinary value functions type-checked: {ordinary} (not executed or verified; constrained results are not proven)");
-            println!("  ordinary ownership: core Copy/move checking passed; borrowing and destruction are not implemented");
+            println!("  ordinary ownership: core Copy/move checking passed; whole-value loans checked; destruction is not implemented");
         }
         println!(
             "  function bodies proven: {} (subtraction safety, field ranges, postconditions)",

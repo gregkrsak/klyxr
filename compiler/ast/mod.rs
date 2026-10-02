@@ -61,20 +61,32 @@ impl FunctionDecl {
 pub struct ValueFunction {
     pub name: String,
     pub parameters: Vec<ValueParameter>,
-    pub return_type: String,
+    pub return_type: ValueType,
     pub body: Vec<ValueStatement>,
     pub span: Span,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValueParameter {
     pub name: String,
-    pub ty: String,
+    pub ty: ValueType,
     pub span: Span,
+}
+/// Flat source reference prefixes preserve even unsupported nested signatures.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValueType {
+    pub name: String,
+    pub references: Vec<BorrowKind>,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BorrowKind {
+    Shared,
+    Mutable,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueStatement {
     Let {
         name: String,
+        mutable: bool,
         initializer: Expr,
         span: Span,
     },
@@ -115,6 +127,10 @@ pub enum ExprKind {
     BoolLiteral(bool),
     IntegerLiteral(i64),
     Name(String),
+    Borrow {
+        kind: BorrowKind,
+        target: String,
+    },
     Call {
         callee: String,
         arguments: Vec<Expr>,

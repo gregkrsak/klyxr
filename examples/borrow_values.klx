@@ -1,0 +1,25 @@
+// Ordinary borrowing is checked, not executed or contract-proven.
+type Percent = range 0..100;
+record Ticket { value: Percent }
+
+fn inspect(ticket: &Ticket) -> bool {
+    return true;
+}
+
+fn exclusive(ticket: &mut Ticket) -> bool {
+    return true;
+}
+
+fn borrow_values(ticket: Ticket) -> Ticket {
+    let view = &ticket;
+    let copy = view;
+    let first = inspect(view);
+    let second = inspect(copy); // Last shared use: ticket can now move.
+
+    let mut owned = ticket;
+    let direct = exclusive(&mut owned); // Loan ends with this call.
+    let access = &mut owned;
+    let next = access; // Mutable reference moves; its loan follows next.
+    let stored = exclusive(next); // Moves next; loan ends with this call.
+    return owned;
+}

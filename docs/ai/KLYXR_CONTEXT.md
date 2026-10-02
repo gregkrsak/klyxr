@@ -66,11 +66,20 @@ The dedicated ownership phase runs after type checking. Bool and named ranges
 are `Copy`; records are non-`Copy` and move through bindings, by-value arguments,
 and returns (KD-020). ParameterId/LocalId state is per function; a moved place
 cannot be reused. The compiler does not silently clone. Record fields do not make
-records Copy. Ordinary record construction, field access, partial moves, mutable
-locals, borrowing, and destruction remain unsupported.
+records Copy. KED-006 adds explicit shared (`&T`) and exclusive (`&mut T`)
+whole-value borrowing. Shared references are Copy; mutable references move.
+`let mut` / `let mutable` marks an owned local as exclusively borrowable, without
+reassignment. Immutable reference locals carry private loan provenance. Loans
+end after the last future use of all derived available handles; call arguments
+remain held until the receiving call completes, including nested arguments.
+Availability and loans are separate ID-based state within the same ownership phase.
+Borrowing/cloning/reborrowing/coercion are never implicit. Ordinary owned parameters
+remain immutable. Reference returns, nested references, explicit lifetimes,
+dereference, reference mutation, ordinary record construction/field access,
+partial borrowing/moves, and destruction remain unsupported (KD-021 / OQ-024).
 
 Ordinary functions are parsed, resolved, type-checked, and ownership-checked,
-but not executed or proven. A range result type does not establish that the
+including loan legality, but not executed or proven. A range result type does not establish that the
 produced value meets its bounds. Plain `fn` does not yet implement the complete
 future `safe` assurance model. Forward and recursive calls remain structurally
 valid without a termination claim. Diagnostic traversal order does not settle
@@ -82,9 +91,9 @@ verifier-support diagnostic. It ignores ordinary functions as proof targets.
 Its affine proof establishes subtraction safety, field ranges, and postconditions
 for every admissible input of the supported structure, and tracks state between
 literal-argument harness calls. Calls across function kinds are rejected; OQ-019,
-OQ-021, OQ-022, and OQ-023 retain the broader assurance, arithmetic, function,
-and Copy/destruction questions.
-General ownership beyond this core move model, borrowing, effects, runtime
+OQ-021 through OQ-024 retain the broader assurance, arithmetic, function,
+Copy/destruction, and advanced borrowing questions.
+General ownership beyond core moves and straight-line whole-value loans, effects, runtime
 contracts, MIR/VIR, SMT integration,
 and machine-code generation remain unimplemented. Read `compiler/README.md`
 before making claims about what the executable establishes.

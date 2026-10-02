@@ -3,7 +3,7 @@
 This Rust implementation is an executable **prototype**, not a general-purpose
 Klyxr compiler. It implements a restricted source → lexer → parser → AST →
 name resolution → expression and value-flow type checking → typed HIR → core
-ownership checking → integer contract proof → diagnostics.
+ownership and loan checking → integer contract proof → diagnostics.
 
 ## Run it
 
@@ -23,7 +23,7 @@ cargo clippy --locked --workspace --all-targets -- -D warnings
 These commands are not implementations of the `safe` and `checked` assurance
 levels. Success reports the proof scope and counts. Declaration-only inputs
 explicitly report that there are no function contracts to verify. Ordinary-only
-inputs report their type-checked function count and core Copy/move check result,
+inputs report their type-checked function count and core Copy/move and whole-value loan check results,
 and explicitly state that they
 are not executed or verified; constrained results are not proven. In mixed inputs,
 only verified mutation functions contribute to the proof counts.
@@ -57,7 +57,7 @@ across the input; record bindings must be constructed before their use. Duplicat
 names in a declaration namespace or the binding scope are rejected; shadowing
 is outside this prototype. Passing an immutable binding to `&mut` is an error.
 
-## Ordinary value functions (KED-004 / KED-005)
+## Ordinary value functions (KED-004 / KED-005 / KED-006)
 
 ```klyxr
 type Percent = range 0..100;
@@ -81,24 +81,25 @@ See `examples/value_flow.klx` for these flows and a forward call.
 
 Ordinary functions accept zero or more named immutable parameters, each typed as
 built-in source `bool` (semantic `Bool`), a declared named range, or an existing
-record by value. The explicit
-`-> Type` return declaration permits only those same types. `bool` is a reserved
+record by value, or an exact shared/exclusive reference to one of those types. The explicit
+`-> Type` return declaration permits only owned Bool/range/record types; reference returns are rejected. `bool` is a reserved
 built-in type token, so user range/record declarations cannot redefine it. Ordinary
-reference interfaces, unit, generics, and inferred return types are rejected.
+unit, generics, and inferred return types are rejected.
 
-The body contains immutable `let name = expression;` locals followed by exactly
+The body contains `let name = expression;` locals, immutable by default, followed by exactly
 one final **`return expression;`**. Its semicolon is mandatory. Klyxr deliberately
 rejects implicit block tails, with or without a semicolon (KD-019). Missing returns
 are type errors; bare tails and statements after return receive explicit parser
 diagnostics. No general expression statements, early/multiple returns, local
-annotations, `let mut`/`let mutable`, or reassignment are implemented. The existing
+annotations or reassignment are implemented. KED-006 adds `let mut`/`let mutable`
+only for owned locals eligible for exclusive borrowing, as described below. The existing
 top-level mutable record harness is unchanged.
 
 Parameters are visible at entry; a local enters scope after its initializer is
 resolved. Later locals and the return can reference earlier locals. Self-reference,
 use before declaration, parameter/local duplicates, shadowing, and cross-function
 scope leakage are resolution errors. Initializers propagate their concrete Bool,
-named range, or record type. `let five = 5;` is a type error: the internal IntegerLiteral
+named range, record, or reference type. `let five = 5;` is a type error: the internal IntegerLiteral
 category has no settled value-materialization rule. `let result = amount - 5;`
 is valid because the existing subtraction rule computes a concrete range type.
 
@@ -112,12 +113,12 @@ field definitions. Bare integer literals cannot satisfy a range parameter or ret
 as Bool. Generalized contextual literal conversion remains open under OQ-021.
 
 Ordinary functions are **frontend semantic work only**: parsed, resolved,
-type-checked, and ownership-checked, with no execution, code generation, range
+type-checked, and ownership/loan-checked, with no execution, code generation, range
 proof, or runtime checks. For example, `return current - used;` can type as Percent without establishing
 that every result meets Percent's bounds. The verifier ignores ordinary functions
 as proof targets. Plain `fn` does not yet implement the full `safe` assurance model,
-with only the core owned-value moves described below implemented under KD-004
-and KD-020. Ordinary calls may target only ordinary functions; verified
+with only core moves and whole-value, straight-line, non-escaping borrowing
+implemented under KD-004, KD-020, and KD-021. Ordinary calls may target only ordinary functions; verified
 contracts/body expressions cannot call functions, and top-level harness calls may
 target only verified functions. These rejections leave OQ-019 unresolved.
 
@@ -164,8 +165,9 @@ evaluation-order specification. Unused owned parameters/locals are accepted.
 
 This is whole-record, straight-line ownership only. Ordinary records enter through
 by-value parameters or ordinary call results. Record construction, field reads,
-field mutation, destructuring, partial moves, mutable locals, references/borrowing,
-Copy customization, Clone, destruction, and runtime resource release are not added.
+field mutation, destructuring, partial moves, Copy customization, Clone, destruction,
+and runtime resource release remain unsupported. KED-006 adds mutable owned locals
+and references within the restricted borrowing model below.
 In particular, ordinary record equality and arithmetic remain type errors.
 The existing verified mutable state and top-level record harness are excluded
 from this ownership state machine and retain their existing behavior.
@@ -174,13 +176,86 @@ from this ownership state machine and retain their existing behavior.
 `examples/move_fail.klx` intentionally fails ownership analysis. Passing this phase
 does not execute ordinary functions, verify their contracts/ranges, or implement
 the complete future memory-safety model. OQ-023 retains Copy customization, cloning,
-partial moves, and destruction; borrowing remains separate future work.
+partial moves, and destruction. Advanced borrowing remains open under OQ-024.
+
+## Core borrowing and reference semantics (KED-006)
+
+```klyxr
+fn inspect(ticket: &Ticket) -> bool { return true; }
+fn exclusive(ticket: &mut Ticket) -> bool { return true; }
+
+fn example(ticket: Ticket) -> Ticket {
+    let view = &ticket;
+    let copy = view; // Shared reference values are Copy.
+    let first = inspect(view);
+    let second = inspect(copy); // Last use of all derived shared handles.
+    let mut owned = ticket; // Explicit owner transition; exclusive borrowing eligible.
+    let direct = exclusive(&mut owned); // Call-held loan ends with this call.
+    let access = &mut owned;
+    let next = access; // Mutable reference value moves; access cannot be reused.
+    let result = exclusive(next); // Loan ends after the receiving call.
+    return owned;
+}
+```
+
+`&T` is a shared, non-owning, Copy reference value. `&mut T` is an exclusive,
+non-owning, Move reference value. Referents are only Bool, a canonical named range,
+or a canonical record; the HIR `ReferentType` is nonrecursive. Exact capability and
+nominal referent identities are required at calls: no implicit owned/reference
+conversion, dereference, reborrowing, or `&mut T` → `&T` coercion occurs.
+Reference return declarations and nested reference types fail before ownership.
+No call result can therefore carry an escaping reference.
+
+Borrow expressions are exactly `&name`, `&mut name`, or `&mutable name`, where
+name resolves to an existing owned ordinary ParameterId or LocalId. Calls,
+parenthesized targets, literals, fields, and existing reference values cannot be
+borrowed. `let mut name = expression;` and `let mutable name = expression;` mark
+an owned local as eligible for exclusive borrowing. They enable no reassignment.
+Reference-valued locals remain immutable bindings even for `&mut T`; marking
+such a binding `let mut` is a type error. Ordinary owned parameters remain
+immutable places; mutable owned parameter syntax is not implemented.
+
+Availability and active loans are separate private state in `compiler/ownership`.
+A borrow never consumes or clones its owner. Shared loans may overlap; exclusive
+loans conflict with every active loan and with direct owner access. Non-Copy owners
+cannot move while any loan remains active. Copy owners may still be read under
+shared loans, but not under an exclusive loan. Borrowing a moved owner is rejected.
+
+Stored references carry private loan provenance. Shared copies carry the same
+loan; mutable transfers move their handle while retaining that loan. The checker
+counts future straight-line place uses by ID, and keeps a loan while any available
+derived handle has a future use. A local with no future use does not keep its loan
+alive past the binding statement. Moved reference handles remain moved even after
+their underlying loan ends. No lexical-block lifetime or runtime destruction is
+implied by loan expiry.
+
+Reference arguments, including stored handles at their final use, are held through
+the complete receiving call. Later arguments cannot move or exclusively borrow
+an owner already call-held. Nested calls release only their own holds; an outer
+call's earlier reference arguments remain held. A completed inner call can release
+its loan before the next outer argument. Sequential direct `&mut` calls are valid;
+reusing a stored mutable reference after passing it by value is use-after-move.
+Reference parameters have external provenance; the callee checks their Copy/Move
+behavior without reconstructing caller owners or executing/inlining callees.
+
+Loan legality failures use `FrontendError::Ownership`, with a useful conflict
+span and earlier borrow/move location. Type incompatibilities remain Type errors.
+The first substantive ownership error stops analysis. Loan IDs/state remain private
+and are not attached to public HIR or printed in diagnostics.
+
+`examples/borrow_values.klx` demonstrates valid borrowing and owner recovery;
+`examples/borrow_fail.klx` intentionally moves an owner before a later shared use.
+Ordinary borrowing does not execute or prove functions. The verified battery's
+existing special state-reference semantics and harness remain unchanged and are
+excluded from ordinary loan analysis. KD-021 settles this core; OQ-024 retains
+reference returns, lifetimes, reborrowing, dereference, fields, partial borrowing,
+reference mutation, temporaries, control flow, and advanced borrowing.
 
 ## Core expressions and types (KED-003)
 
 Primary expressions are `true`, `false`, signed i64 literals, parameters,
 `state.field`, `old(state.field)`, and parenthesized expressions. Ordinary functions additionally support locals and
-ordinary calls. A record parameter
+ordinary calls and direct whole-place borrow expressions. A record parameter
 by itself is not a numeric expression. `old(...)` is allowed only in `ensures`
 and only for the current mutable state field. Parentheses around that exact field
 are permitted; arbitrary snapshots, nested objects, and aliases are not.
@@ -203,7 +278,7 @@ must type-check. A minus sign on an integer literal preserves the existing signe
 literal behavior; general unary numeric negation is not implemented.
 
 Every HIR expression has an `ExprType`: `Bool`, `Range(RangeTypeId)`,
-`Record(RecordId)`, or `IntegerLiteral`. The last is an internal constant category, not a public numeric
+`Record(RecordId)`, `SharedRef(ReferentType)`, `MutableRef(ReferentType)`, or `IntegerLiteral`. The last is an internal constant category, not a public numeric
 base type or implicit conversion mechanism.
 
 | Operation | Permitted operands | Result |
@@ -237,7 +312,7 @@ canonical `hir::Program` or `FrontendError` (`Lex`, `Parse`, `Resolve`, `Type`,
 or `Ownership`). Compilation does not prove numerical
 obligations. `resolve` now returns an opaque `ResolvedProgram`, consumed by
 `types::check`; it no longer publishes typed HIR by itself. The resolver identifies
-names, fields, callees, and source-ordered local scope. It resolves type names to
+names, fields, callees, borrow targets, and source-ordered local scope/mutability. It resolves type names to
 canonical type references. `compiler/types` validates concrete declared value types,
 operator legality, nominal compatibility, result types, Boolean contracts,
 subtract-assignment, initializer propagation, call arguments, and explicit returns.
@@ -245,7 +320,8 @@ The type layer performs no textual source-name lookup. `types::check` remains a
 separate type-only API and may return typed HIR that fails ownership checking.
 Use `compile_source` for the complete frontend, or call `ownership::check(&program)`
 after typing. Ownership inspects that HIR without duplicating or rebuilding it;
-its classification, place states, and move sites remain private implementation data.
+its classification, availability, provenance, future-use counts, call holds, and
+loan/move sites remain private implementation data. No separate borrowing pass is introduced.
 
 The resolver collects the complete range/record/function declaration sets before
 lowering references. Range and record names share the existing type namespace;
@@ -264,9 +340,14 @@ now return the common HIR `Function`, with `id()`, `name()`, `as_ordinary()`, an
 `as_verified()` read-only views. This is an intentional prototype API change.
 Verified functions retain one `requires` and one `ensures` expression; ordinary
 functions carry parameter IDs, a `ValueType` return, typed lets and a typed explicit
-return. `ValueType` permits Bool/Range/Record, excluding IntegerLiteral. Ordinary
+return. `ValueType` permits Bool/Range/Record and SharedRef/MutableRef, excluding IntegerLiteral.
+Borrow HIR carries BorrowKind and a canonical `Place::Parameter` or `Place::Local`;
+reference types retain their canonical non-reference referent IDs. Ordinary AST
+signature types now use `ast::ValueType` with a textual name and flat reference
+prefixes, rather than a single String. Illegal nested source prefixes can therefore
+receive a Type-phase diagnostic without introducing recursive semantic reference types. Ordinary
 parameters use `ParameterType::Value(ValueType)`; verified parameter types are
-unchanged. Locals carry their owning FunctionId and concrete type; BindingId
+unchanged. Locals carry their owning FunctionId, concrete type, and owned mutability marker; BindingId
 continues to denote only top-level record bindings. Parentheses
 affect grouping and spans without introducing an extra HIR node.
 Construction and calls carry record/field/function/binding IDs. Names and source
@@ -294,18 +375,18 @@ The CLI follows this exact path:
 
 ```text
 source → lexer → parser → AST expressions/functions → resolver → expression and value-flow type checking
-       → typed HIR expressions → core ownership checking → prototype verifier → diagnostics
+       → typed HIR expressions → core ownership and loan checking → prototype verifier → diagnostics
 ```
 
 Resolution, type, and ownership errors prevent proof. Diagnostics distinguish malformed syntax,
 unknown references, incompatible expression types, unsupported well-typed proof
 shapes, and numerical counterexamples. Missing names are resolution errors;
 non-Boolean contracts and incompatible operators are type errors; well-typed
-use-after-move failures are ownership errors. Names and spans
+use-after-move and loan-legality failures are ownership errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012, KD-018, KD-019, and KD-020 only for the documented subset.
-General type inference, borrowing, ownership beyond core moves, effects, MIR, VIR,
+This implements KD-012, KD-018, KD-019, KD-020, and KD-021 only for the documented subset.
+General type inference, advanced borrowing/ownership, effects, MIR, VIR,
 and broader HIR features remain future work.
 
 ## What the proof establishes
@@ -365,21 +446,23 @@ consume(&mut battery, 50); // rejected: 50 <= 30 is false
 
 ## Limits and next work
 
-The prototype does not implement ownership beyond core ordinary value moves,
-borrowing, lifetimes, destruction,
+The prototype does not implement ownership beyond core ordinary moves and
+whole-value straight-line loans, reference returns, explicit lifetimes, reborrowing,
+dereference, reference mutation, partial borrowing, reassignment, destruction,
 effects, runtime contracts, expressions beyond this subset, loops, quantifiers,
 multiple fields, record invariants, SMT/VIR/MIR, or machine-code generation. In particular,
 `examples/effects.klx` is illustrative and is rejected rather than analyzed.
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, and KD-020,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, and KD-021,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
 remain design work under OQ-019/OQ-020. OQ-022 records remaining ordinary-function
 and local-value questions; KD-020 now settles core moves, while OQ-023 retains
-Copy customization, partial moves, cloning, and destruction.
+Copy customization, partial moves, cloning, and destruction. KD-021 settles only
+core borrowing; OQ-024 retains advanced reference and lifetime questions.
 
 KED-001 clarifies the nominal arithmetic boundary under KD-005; KED-003 applies
 nominal identity to expression typing. KD-018 records that direction, while
@@ -417,6 +500,14 @@ arguments, forward/recursive calls, unused owners, function isolation, first-err
 reporting, phase ordering, retained restrictions, and privileged metadata renaming.
 CLI tests distinguish successful core ownership checking from execution/proof and
 check the later-use and prior-move locations on failure.
+Borrowing regressions cover exact reference capability/referent typing, direct
+owned-place resolution, reference Copy/Move, immutable/exclusive eligibility,
+shared/exclusive conflicts, Copy owner reads, unused handles, last use of shared
+aliases and mutable transfers, final-use call holds, nested-call release boundaries,
+external reference parameters, aliases, phase ordering, and retained non-goals.
+Privileged tests rename all diagnostic metadata while preserving borrow targets,
+nominal referents, provenance, conflicts, and last-use behavior. CLI tests cover
+accepted borrowing with zero proof counts and spanned intentional borrow conflicts.
 CI runs the tests in debug and optimized builds and Clippy with warnings
 treated as errors.
 
@@ -426,3 +517,4 @@ The failing examples are intentional:
 - `battery_sequence_fail.klx`: invalid second-call precondition after mutation.
 - `battery_body_fail.klx`: uncalled body fails its postcondition.
 - `move_fail.klx`: returning a record parameter after moving it into a local.
+- `borrow_fail.klx`: moving an owner while a later reference use keeps its shared loan live.

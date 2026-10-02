@@ -157,13 +157,28 @@ impl Parser<'_> {
         })
     }
 
-    fn parse_value_type(&mut self) -> Result<String, ParseError> {
-        if self.at(&TokenKind::Bool) {
+    fn parse_value_type(&mut self) -> Result<crate::ast::ValueType, ParseError> {
+        let mut references = Vec::new();
+        while self.at(&TokenKind::Amp) || self.at(&TokenKind::AndAnd) {
+            if self.at(&TokenKind::AndAnd) {
+                references.push(crate::ast::BorrowKind::Shared);
+            }
             self.advance();
-            Ok("bool".into())
-        } else {
-            self.expect_ident()
+            let kind = if self.at(&TokenKind::Mut) {
+                self.advance();
+                crate::ast::BorrowKind::Mutable
+            } else {
+                crate::ast::BorrowKind::Shared
+            };
+            references.push(kind);
         }
+        let name = if self.at(&TokenKind::Bool) {
+            self.advance();
+            "bool".into()
+        } else {
+            self.expect_ident()?
+        };
+        Ok(crate::ast::ValueType { name, references })
     }
     fn parse_value_function(&mut self) -> Result<ValueFunction, ParseError> {
         let start = self.expect(&TokenKind::Fn)?.span;
@@ -196,11 +211,9 @@ impl Parser<'_> {
             let span = self.peek().span;
             if self.at(&TokenKind::Let) {
                 self.advance();
-                if self.at(&TokenKind::Mut) {
-                    return Err(self.error(
-                        "ordinary function locals are immutable; local `let mut` is not supported"
-                            .into(),
-                    ));
+                let mutable = self.at(&TokenKind::Mut);
+                if mutable {
+                    self.advance();
                 }
                 let name = self.expect_ident()?;
                 self.expect(&TokenKind::Equal)?;
@@ -208,6 +221,7 @@ impl Parser<'_> {
                 let end = self.expect(&TokenKind::Semicolon)?.span.end;
                 body.push(ValueStatement::Let {
                     name,
+                    mutable,
                     initializer,
                     span: Span { end, ..span },
                 });
@@ -293,6 +307,20 @@ impl Parser<'_> {
             }
             TokenKind::Number(_) | TokenKind::Minus => {
                 ExprKind::IntegerLiteral(self.expect_number()?)
+            }
+            TokenKind::Amp => {
+                self.advance();
+                let kind = if self.at(&TokenKind::Mut) {
+                    self.advance();
+                    crate::ast::BorrowKind::Mutable
+                } else {
+                    crate::ast::BorrowKind::Shared
+                };
+                let target = self.expect_ident()?;
+                if self.at(&TokenKind::LParen) || self.at(&TokenKind::Dot) {
+                    return Err(self.error("borrowing supports only a direct owned parameter or local name; not calls, fields, or temporaries".into()));
+                }
+                ExprKind::Borrow { kind, target }
             }
             TokenKind::Not => {
                 self.advance();

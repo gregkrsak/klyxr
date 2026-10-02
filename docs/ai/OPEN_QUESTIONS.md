@@ -107,7 +107,7 @@ Still open:
 - conversions between constrained types;
 - units/dimension-aware arithmetic.
 
-KED-003, KED-004, and KED-005 do not settle these questions implicitly.
+KED-003 through KED-006 do not settle these questions implicitly.
 
 
 ## OQ-022 — General function and local-value semantics
@@ -116,6 +116,10 @@ KED-004 established a straight-line value-function core with Bool/range values.
 KED-005 extends it with by-value records and the basic binding/call/return move
 rules accepted in KD-020. Those core move rules are no longer wholly unresolved;
 this does not settle the broader function/local semantics below.
+KED-006 adds references and `let mut` / `let mutable` for owned locals, authorizing
+exclusive borrowing only. It introduces no assignment or mutable owned parameters.
+The core straight-line, non-escaping loan rules now fall under KD-021; advanced
+reference semantics remain under OQ-024.
 
 Still open:
 
@@ -123,13 +127,15 @@ Still open:
 - explicit `safe fn` syntax, if any;
 - unit/no-value function return semantics;
 - early returns and multiple control-flow return paths;
-- mutable locals and assignment;
+- reassignment and broader mutable-local semantics;
+- mutable owned parameters;
+- reference returns and escaping-reference interfaces;
 - expression-bodied function shorthand;
 - contextual integer-literal typing at bindings, arguments, and returns;
-- broader value categories and record/reference interfaces beyond the current by-value record subset;
+- broader value categories and record/reference interfaces beyond core owned records and non-escaping references;
 - function values, closures, and higher-order calls;
 - function overloading;
-- interaction of calls and owned places with future borrowing;
+- interaction of calls and owned places with advanced borrowing and control flow;
 - runtime enforcement of constrained return values outside verified code.
 
 OQ-019 remains authoritative for mixed `safe` / `checked` / `verified` call
@@ -139,7 +145,9 @@ and literal-conversion rules. Copy customization and destruction remain under OQ
 
 ## OQ-023 — Copy customization, cloning, partial moves, and destruction
 
-KED-005 establishes only the core `Copy` / move distinction.
+KED-005 establishes the core owned `Copy` / move distinction. KED-006 classifies
+shared references as Copy and mutable references as Move; neither directive
+settles user customization.
 
 Still open:
 
@@ -156,6 +164,29 @@ Still open:
 - resource-owning standard-library types;
 - ownership representation across FFI boundaries.
 
-Borrowing and lifetime rules remain separate questions under KD-004, OQ-009,
-and future directives. No runtime destruction or resource release is implemented
+Core borrowing is accepted in KD-021. Advanced borrowing and lifetime rules
+remain separate questions under KD-004, OQ-009, and OQ-024. No runtime destruction or resource release is implemented
 by the core ownership checker.
+
+## OQ-024 — Advanced borrowing, reborrowing, dereference, and escaping references
+
+KED-006 settles only whole-value, straight-line, non-escaping core borrowing.
+
+Still open:
+
+- reference returns and escaping-reference semantics;
+- explicit lifetime syntax, parameterization, and elision;
+- reborrowing syntax and semantics;
+- whether and when `&mut T` may coerce to `&T`;
+- dereference syntax and coercions;
+- field access through references;
+- field/partial borrowing and disjoint field loans;
+- mutation through mutable references;
+- two-phase borrows;
+- temporary lifetime extension and borrowing arbitrary temporary expressions;
+- borrowing across control-flow joins and loops;
+- borrowing interaction with closures and destructors;
+- interior mutability and smart-pointer borrowing;
+- FFI reference/lifetime boundaries.
+
+OQ-009 remains authoritative for the broader explicit lifetime syntax question.

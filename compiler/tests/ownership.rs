@@ -249,8 +249,8 @@ fn unsupported_record_features_and_existing_restrictions_are_not_broadened() {
     for body in [
         "return ticket.value;",
         "return Ticket { value: 1 };",
-        "let mut next = ticket; return next;",
-        "let mutable next = ticket; return next;",
+        "let mut next = ticket; next = ticket; return next;",
+        "let mutable next = ticket; next = ticket; return next;",
         "let next = ticket; next = ticket; return next;",
         "return &ticket;",
         "return &mut ticket;",

@@ -30,6 +30,9 @@ pub(crate) enum ResolvedValueType {
     Bool,
     Range(RangeTypeId),
     Record(RecordId),
+    SharedRef(hir::ReferentType),
+    MutableRef(hir::ReferentType),
+    NestedReference,
 }
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ResolvedParameterType {
@@ -65,6 +68,7 @@ pub(crate) enum ResolvedValueStatement {
         id: LocalId,
         function: FunctionId,
         name: String,
+        mutable: bool,
         initializer: ResolvedExpr,
         span: Span,
     },
@@ -102,6 +106,10 @@ pub(crate) enum ResolvedExprKind {
     IntegerLiteral(i64),
     Parameter(ParameterId),
     Local(LocalId),
+    Borrow {
+        kind: ast::BorrowKind,
+        place: hir::Place,
+    },
     Call {
         function: FunctionId,
         arguments: Vec<ResolvedExpr>,
@@ -271,7 +279,26 @@ impl Resolver {
             )
         })
     }
-    fn value_type(&self, name: &str, span: Span) -> ResolutionResult<ResolvedValueType> {
+    fn value_type(&self, ty: &ast::ValueType, span: Span) -> ResolutionResult<ResolvedValueType> {
+        let owned = self.owned_type(&ty.name, span)?;
+        if ty.references.len() > 1 {
+            return Ok(ResolvedValueType::NestedReference);
+        }
+        let Some(kind) = ty.references.first() else {
+            return Ok(owned);
+        };
+        let referent = match owned {
+            ResolvedValueType::Bool => hir::ReferentType::Bool,
+            ResolvedValueType::Range(id) => hir::ReferentType::Range(id),
+            ResolvedValueType::Record(id) => hir::ReferentType::Record(id),
+            _ => unreachable!("owned name resolution produces a non-reference type"),
+        };
+        Ok(match kind {
+            ast::BorrowKind::Shared => ResolvedValueType::SharedRef(referent),
+            ast::BorrowKind::Mutable => ResolvedValueType::MutableRef(referent),
+        })
+    }
+    fn owned_type(&self, name: &str, span: Span) -> ResolutionResult<ResolvedValueType> {
         if name == "bool" {
             return Ok(ResolvedValueType::Bool);
         }
@@ -463,6 +490,7 @@ impl Resolver {
                     body.push(match statement {
                         ast::ValueStatement::Let {
                             name,
+                            mutable,
                             initializer,
                             span,
                         } => {
@@ -478,6 +506,7 @@ impl Resolver {
                                 id: local,
                                 function: id,
                                 name: name.clone(),
+                                mutable: *mutable,
                                 initializer,
                                 span: *span,
                             }
@@ -516,6 +545,17 @@ impl Resolver {
                 Some(Reference::Local(id)) => ResolvedExprKind::Local(*id),
                 None => return Err(error(expression.span, format!("unknown {} `{name}`", if scope.state.is_some() { "parameter" } else { "value" }), "parameters are visible at entry; locals must be declared before use in this function")),
             },
+            ast::ExprKind::Borrow { kind, target } => {
+                if scope.state.is_some() {
+                    return Err(error(expression.span, "borrow expressions are supported only in ordinary functions", "the verified state-reference prototype remains separate"));
+                }
+                let place = match scope.values.get(target) {
+                    Some(Reference::Parameter(id)) => hir::Place::Parameter(*id),
+                    Some(Reference::Local(id)) => hir::Place::Local(*id),
+                    None => return Err(error(expression.span, format!("unknown value `{target}`"), "borrow an existing parameter or previously declared local")),
+                };
+                ResolvedExprKind::Borrow { kind: *kind, place }
+            }
             ast::ExprKind::FieldAccess(a) => ResolvedExprKind::FieldAccess(self.access(a, scope)?),
             ast::ExprKind::OldField(a) => {
                 if !allow_old { return Err(error(expression.span, "old(...) is permitted only in ensures", "this prototype snapshots only the mutable state field at function entry")); }
