@@ -128,13 +128,15 @@ pub struct FieldAccess {
     pub ty: RangeTypeId,
     pub span: Span,
 }
-pub use crate::ast::{BinaryOp, UnaryOp};
+pub use crate::ast::{BinaryOp, BorrowKind, UnaryOp};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExprType {
     Bool,
     Range(RangeTypeId),
     Record(RecordId),
     IntegerLiteral,
+    SharedRef(ReferentType),
+    MutableRef(ReferentType),
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypedExpr {
@@ -148,6 +150,10 @@ pub enum ExprKind {
     IntegerLiteral(i64),
     Parameter(ParameterId),
     Local(LocalId),
+    Borrow {
+        kind: BorrowKind,
+        place: Place,
+    },
     Call {
         function: FunctionId,
         arguments: Vec<TypedExpr>,
@@ -176,6 +182,21 @@ pub enum ValueType {
     Bool,
     Range(RangeTypeId),
     Record(RecordId),
+    SharedRef(ReferentType),
+    MutableRef(ReferentType),
+}
+/// References have only non-reference referents in this milestone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReferentType {
+    Bool,
+    Range(RangeTypeId),
+    Record(RecordId),
+}
+/// Canonical ordinary whole-value place; never a field or temporary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Place {
+    Parameter(ParameterId),
+    Local(LocalId),
 }
 impl From<ValueType> for ExprType {
     fn from(ty: ValueType) -> Self {
@@ -183,11 +204,14 @@ impl From<ValueType> for ExprType {
             ValueType::Bool => Self::Bool,
             ValueType::Range(id) => Self::Range(id),
             ValueType::Record(id) => Self::Record(id),
+            ValueType::SharedRef(ty) => Self::SharedRef(ty),
+            ValueType::MutableRef(ty) => Self::MutableRef(ty),
         }
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Local {
+    pub mutable: bool,
     pub id: LocalId,
     pub function: FunctionId,
     pub name: String,

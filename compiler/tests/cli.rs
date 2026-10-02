@@ -98,7 +98,7 @@ fn record_moves_are_checked_without_claiming_execution_or_verification() {
         let text = String::from_utf8(output.stdout).unwrap();
         assert!(text.contains("ordinary value functions type-checked: 8"));
         assert!(text.contains("core Copy/move checking passed"));
-        assert!(text.contains("borrowing and destruction are not implemented"));
+        assert!(text.contains("whole-value loans checked; destruction is not implemented"));
         assert!(text.contains("not executed or verified"));
         assert!(text.contains("function bodies proven: 0"));
     }
@@ -115,5 +115,35 @@ fn ownership_failure_exits_one_and_reports_both_move_sites() {
         assert!(text.contains("move_fail.klx:7:12"));
         assert!(text.contains("into local `next` at line 6, column 16"));
         assert!(text.contains("ownership checking stopped"));
+    }
+}
+
+#[test]
+fn borrowing_success_reports_loans_without_execution_or_proof() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("borrow_values.klx")]);
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("whole-value loans checked"));
+        assert!(text.contains("not executed or verified"));
+        assert!(text.contains("function bodies proven: 0"));
+        assert!(text.contains("calls checked: 0"));
+        assert!(text.contains("destruction is not implemented"));
+    }
+}
+
+#[test]
+fn borrowing_failure_reports_the_conflict_and_earlier_loan_location() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("borrow_fail.klx")]);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let text = String::from_utf8(output.stderr).unwrap();
+        assert!(text.contains("cannot move `ticket` while it is shared-borrowed"));
+        assert!(text.contains("borrow_fail.klx:11:17"));
+        assert!(text.contains("borrow began at line 10, column 16"));
+        assert!(text.contains("ownership checking stopped"));
+        assert!(!text.contains("LoanId"));
     }
 }

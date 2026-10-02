@@ -19,7 +19,9 @@ pub fn check(resolved: ResolvedProgram) -> Result<Program, Vec<Diagnostic>> {
         let ty = match parameter.ty {
             ResolvedParameterType::MutableRecord(id) => ParameterType::MutableRecord(id),
             ResolvedParameterType::Range(id) => ParameterType::Range(id),
-            ResolvedParameterType::Value(ty) => ParameterType::Value(value_type(ty)),
+            ResolvedParameterType::Value(ty) => {
+                ParameterType::Value(value_type(ty, parameter.span).map_err(|e| vec![*e])?)
+            }
         };
         program.parameters.push(hir::Parameter {
             id: parameter.id,
@@ -28,6 +30,20 @@ pub fn check(resolved: ResolvedProgram) -> Result<Program, Vec<Diagnostic>> {
             ty,
             span: parameter.span,
         });
+    }
+    // Signature legality is checked before any body or ownership analysis, including
+    // forward calls. No ordinary call can produce an escaping reference result.
+    for function in &resolved.functions {
+        if let ResolvedFunction::Ordinary(f) = function {
+            let ty = value_type(f.return_type, f.span).map_err(|e| vec![*e])?;
+            if matches!(ty, ValueType::SharedRef(_) | ValueType::MutableRef(_)) {
+                return Err(vec![Diagnostic::semantic(
+                    f.span,
+                    "reference return types are not supported",
+                    "escaping references and lifetime relationships remain unresolved",
+                )]);
+            }
+        }
     }
     let mut diagnostics = Vec::new();
     for function in &resolved.functions {
@@ -101,7 +117,7 @@ fn value_function(
     functions: &[ResolvedFunction],
     f: &crate::resolve::ResolvedValueFunction,
 ) -> TypeResult<hir::ValueFunction> {
-    let return_type = value_type(f.return_type);
+    let return_type = value_type(f.return_type, f.span)?;
     if !matches!(f.body.last(), Some(ResolvedValueStatement::Return { .. })) {
         return Err(Diagnostic::semantic(
             f.span,
@@ -117,6 +133,7 @@ fn value_function(
                 id,
                 function,
                 name,
+                mutable,
                 initializer,
                 span,
             } => {
@@ -125,6 +142,8 @@ fn value_function(
                     ExprType::Bool => ValueType::Bool,
                     ExprType::Range(id) => ValueType::Range(id),
                     ExprType::Record(id) => ValueType::Record(id),
+                    ExprType::SharedRef(ty) => ValueType::SharedRef(ty),
+                    ExprType::MutableRef(ty) => ValueType::MutableRef(ty),
                     ExprType::IntegerLiteral => {
                         return Err(Diagnostic::semantic(
                             initializer.span,
@@ -133,7 +152,11 @@ fn value_function(
                         ).into());
                     }
                 };
+                if *mutable && matches!(ty, ValueType::SharedRef(_) | ValueType::MutableRef(_)) {
+                    return Err(Diagnostic::semantic(*span, "mutable local bindings require an owned non-reference value", "let mut marks owned locals as eligible for exclusive borrowing; reference bindings remain immutable").into());
+                }
                 program.locals.push(hir::Local {
+                    mutable: *mutable,
                     id: *id,
                     function: *function,
                     name: name.clone(),
@@ -171,12 +194,15 @@ fn value_function(
         span: f.span,
     })
 }
-fn value_type(ty: ResolvedValueType) -> ValueType {
-    match ty {
+fn value_type(ty: ResolvedValueType, span: crate::lexer::Span) -> TypeResult<ValueType> {
+    Ok(match ty {
         ResolvedValueType::Bool => ValueType::Bool,
         ResolvedValueType::Range(id) => ValueType::Range(id),
         ResolvedValueType::Record(id) => ValueType::Record(id),
-    }
+        ResolvedValueType::SharedRef(ty) => ValueType::SharedRef(ty),
+        ResolvedValueType::MutableRef(ty) => ValueType::MutableRef(ty),
+        ResolvedValueType::NestedReference => return Err(Diagnostic::semantic(span, "nested reference types are not supported", "reference referents must be bool, a named range, or a record; reborrowing remains unsupported").into()),
+    })
 }
 fn exact_value(
     program: &Program,
@@ -227,6 +253,15 @@ fn display_type(program: &Program, ty: ExprType) -> String {
         ExprType::IntegerLiteral => "IntegerLiteral".into(),
         ExprType::Range(id) => format!("range `{}`", program.range(id).name),
         ExprType::Record(id) => format!("record `{}`", program.record(id).name),
+        ExprType::SharedRef(ty) => format!("&{}", display_referent(program, ty)),
+        ExprType::MutableRef(ty) => format!("&mut {}", display_referent(program, ty)),
+    }
+}
+fn display_referent(program: &Program, ty: hir::ReferentType) -> String {
+    match ty {
+        hir::ReferentType::Bool => "bool".into(),
+        hir::ReferentType::Range(id) => program.range(id).name.clone(),
+        hir::ReferentType::Record(id) => program.record(id).name.clone(),
     }
 }
 fn incompatible(
@@ -329,6 +364,39 @@ fn expression(
             (ExprKind::Parameter(*id), ty)
         }
         ResolvedExprKind::Local(id) => (ExprKind::Local(*id), program.local(*id).ty.into()),
+        ResolvedExprKind::Borrow { kind, place } => {
+            let ty = match place {
+                hir::Place::Parameter(id) => match program.parameter(*id).ty {
+                    ParameterType::Value(ty) => ty,
+                    _ => {
+                        return Err(Diagnostic::semantic(
+                            span,
+                            "ordinary borrowing requires an ordinary owned place",
+                            "verified state references use the existing restricted prototype",
+                        )
+                        .into())
+                    }
+                },
+                hir::Place::Local(id) => program.local(*id).ty,
+            };
+            let referent = match ty {
+                ValueType::Bool => hir::ReferentType::Bool,
+                ValueType::Range(id) => hir::ReferentType::Range(id),
+                ValueType::Record(id) => hir::ReferentType::Record(id),
+                ValueType::SharedRef(_) | ValueType::MutableRef(_) => return Err(Diagnostic::semantic(span, "cannot borrow an existing reference value", "nested references and reborrowing are not supported; borrow an owned non-reference parameter or local").into()),
+            };
+            let ty = match kind {
+                hir::BorrowKind::Shared => ExprType::SharedRef(referent),
+                hir::BorrowKind::Mutable => ExprType::MutableRef(referent),
+            };
+            (
+                ExprKind::Borrow {
+                    kind: *kind,
+                    place: *place,
+                },
+                ty,
+            )
+        }
         ResolvedExprKind::Call {
             function,
             arguments,
@@ -367,7 +435,7 @@ fn expression(
                 exact_value(program, &argument, expected, "call argument")?;
                 typed.push(argument);
             }
-            let ty = value_type(callee.return_type).into();
+            let ty = value_type(callee.return_type, callee.span)?.into();
             (
                 ExprKind::Call {
                     function: *function,
@@ -528,5 +596,24 @@ mod tests {
         let errors = check(resolved).unwrap_err();
         assert!(errors[0].message.contains("distinct named ranges"));
         assert!(errors[0].required.contains("display"));
+    }
+    #[test]
+    fn reference_referent_identity_survives_colliding_diagnostic_names() {
+        for (first, second, declarations) in [
+            ("First", "Second", "type First = range 0..100; type Second = range 0..100;"),
+            ("First", "Second", "type Percent = range 0..100; record First { value: Percent } record Second { value: Percent }"),
+        ] {
+            for prefix in ["&", "&mut "] {
+                let source = format!("{declarations} fn sink(value: {prefix}{first}) -> bool {{ return true; }} fn bad(value: {prefix}{second}) -> bool {{ return sink(value); }}");
+                let mut resolved = resolve::resolve(&parse_source(&source).unwrap()).unwrap();
+                for range in &mut resolved.declarations.ranges { range.name = "display".into(); }
+                for record in &mut resolved.declarations.records { record.name = "display".into(); }
+                for parameter in &mut resolved.parameters { parameter.name = "display".into(); }
+                let errors = check(resolved).unwrap_err();
+                assert_eq!(errors.len(), 1);
+                assert!(errors[0].message.contains("call argument type mismatch"));
+                assert!(errors[0].required.contains("display"));
+            }
+        }
     }
 }

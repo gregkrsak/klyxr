@@ -380,3 +380,26 @@ not establish the eventual user-facing `Copy` trait or customization mechanism.
 A record is non-`Copy` even when all its fields are `Copy`.
 
 Borrowing is a separate language mechanism and is not introduced by KED-005.
+
+---
+
+## KD-021 — Core borrowing semantics
+
+**Status:** Accepted
+
+Klyxr uses explicit shared (`&T`) and exclusive (`&mut T`) borrowing.
+A shared loan permits multiple overlapping shared loans but conflicts with an
+exclusive loan. An exclusive loan conflicts with all other active loans and with
+direct access to the borrowed owner. Moves of a non-`Copy` owner are forbidden
+while any loan of that owner remains active.
+
+Stored loans remain active through the last possible use of the reference values
+derived from them, rather than mechanically through the enclosing lexical block.
+Shared reference values are `Copy`; mutable reference values are non-`Copy` and
+move by value. Borrowing, cloning, mutable reborrowing, and reference coercions
+are never inserted implicitly.
+
+KED-006 implements only whole-value, straight-line, non-escaping borrowing.
+`let mut` marks an owned local as exclusively borrowable; it enables no reassignment.
+KED-006 does not establish explicit lifetime syntax, reference returns, dereference
+semantics, partial borrowing, or mutation through references.

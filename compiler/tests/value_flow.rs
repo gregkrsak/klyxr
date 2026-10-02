@@ -41,13 +41,14 @@ fn parser_preserves_ordinary_signatures_lets_returns_calls_and_spans() {
     };
     assert_eq!(f.name, "wrapped");
     assert_eq!(f.parameters.len(), 3);
-    assert_eq!(f.parameters[0].ty, "Percent");
-    assert_eq!(f.parameters[2].ty, "bool");
-    assert_eq!(f.return_type, "bool");
+    assert_eq!(f.parameters[0].ty.name, "Percent");
+    assert_eq!(f.parameters[2].ty.name, "bool");
+    assert_eq!(f.return_type.name, "bool");
     let ast::ValueStatement::Let {
         name,
         initializer,
         span,
+        ..
     } = &f.body[0]
     else {
         panic!("local expected")
@@ -120,7 +121,7 @@ fn builtin_bool_zero_parameters_and_multiple_parameters_are_typed() {
 }
 
 #[test]
-fn ordinary_interfaces_accept_records_but_reject_references_and_missing_return_types() {
+fn ordinary_interfaces_accept_records_and_references_but_require_return_types() {
     compile("record R { value: Percent } fn ignore(value: R) -> bool { return true; } fn identity(value: R) -> R { return value; }");
     assert!(
         type_error("record R { value: Percent } fn bad() -> R { return true; }")
@@ -132,9 +133,8 @@ fn ordinary_interfaces_accept_records_but_reject_references_and_missing_return_t
             .message
             .contains("unknown value type")
     );
+    compile("fn inspect(value: &Percent) -> bool { return true; } fn exclusive(value: &mut Percent) -> bool { return true; }");
     for text in [
-        "fn bad(value: &Percent) -> bool { return true; }",
-        "fn bad(value: &mut Percent) -> bool { return true; }",
         "fn bad(value: Percent) { return value; }",
         "fn bad() -> () { return true; }",
     ] {
@@ -170,10 +170,15 @@ fn explicit_returns_are_required_and_cannot_be_implicit_tails() {
 }
 
 #[test]
-fn local_mutation_annotations_and_expression_statements_remain_unsupported() {
+fn owned_mutable_locals_do_not_enable_assignment_annotations_or_expression_statements() {
+    for spelling in ["mut", "mutable"] {
+        compile(&format!(
+            "fn ok(value: Percent) -> Percent {{ let {spelling} x = value; return x; }}"
+        ));
+    }
     for body in [
-        "let mut x = value; return x;",
-        "let mutable x = value; return x;",
+        "let mut x = value; x = value; return x;",
+        "let mutable x = value; x = value; return x;",
         "let x: Percent = value; return x;",
         "let x = value; x = value; return x;",
         "identity(value); return value;",
