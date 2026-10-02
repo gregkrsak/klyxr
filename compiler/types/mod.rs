@@ -169,6 +169,23 @@ fn value_function(
                     span: *span,
                 }
             }
+            ResolvedValueStatement::DerefAssign {
+                reference,
+                value,
+                span,
+            } => {
+                let (kind, referent) = reference_type(program, *reference, *span)?;
+                if kind != hir::BorrowKind::Mutable {
+                    return Err(Diagnostic::semantic(*span, "write-through requires an exclusive mutable reference", "shared references cannot write; no implicit capability conversion is supported").into());
+                }
+                let value = expression(program, functions, value)?;
+                exact_value(program, &value, referent.value_type(), "write-through RHS")?;
+                hir::ValueStatement::DerefAssign {
+                    reference: *reference,
+                    value,
+                    span: *span,
+                }
+            }
             ResolvedValueStatement::Return { value, span } => {
                 if index + 1 != f.body.len() {
                     return Err(Diagnostic::semantic(
@@ -333,6 +350,32 @@ fn binary_type(
         )),
     }
 }
+fn reference_type(
+    program: &Program,
+    reference: hir::Place,
+    span: crate::lexer::Span,
+) -> TypeResult<(hir::BorrowKind, hir::ReferentType)> {
+    let ty = match reference {
+        hir::Place::Parameter(id) => match program.parameter(id).ty {
+            ParameterType::Value(ty) => ty,
+            _ => unreachable!("resolver excludes verified dereference"),
+        },
+        hir::Place::Local(id) => program.local(id).ty,
+    };
+    match ty {
+        ValueType::SharedRef(ty) => Ok((hir::BorrowKind::Shared, ty)),
+        ValueType::MutableRef(ty) => Ok((hir::BorrowKind::Mutable, ty)),
+        _ => Err(Diagnostic::semantic(
+            span,
+            "dereference requires a reference value",
+            format!(
+                "found {}; explicit dereference requires &T or &mut T",
+                display_type(program, ty.into())
+            ),
+        )
+        .into()),
+    }
+}
 fn expression(
     program: &Program,
     functions: &[ResolvedFunction],
@@ -364,6 +407,15 @@ fn expression(
             (ExprKind::Parameter(*id), ty)
         }
         ResolvedExprKind::Local(id) => (ExprKind::Local(*id), program.local(*id).ty.into()),
+        ResolvedExprKind::Deref { reference } => {
+            let (_, referent) = reference_type(program, *reference, span)?;
+            (
+                ExprKind::Deref {
+                    reference: *reference,
+                },
+                referent.value_type().into(),
+            )
+        }
         ResolvedExprKind::Borrow { kind, place } => {
             let ty = match place {
                 hir::Place::Parameter(id) => match program.parameter(*id).ty {
@@ -615,5 +667,49 @@ mod tests {
                 assert!(errors[0].required.contains("display"));
             }
         }
+    }
+    #[test]
+    fn dereference_and_write_typing_use_canonical_referents_after_renaming() {
+        fn rename(resolved: &mut ResolvedProgram) {
+            for range in &mut resolved.declarations.ranges {
+                range.name = "display".into();
+            }
+            for record in &mut resolved.declarations.records {
+                record.name = "display".into();
+            }
+            for parameter in &mut resolved.parameters {
+                parameter.name = "display".into();
+            }
+        }
+        let prefix = "type First = range 0..100; type Second = range 0..100;";
+        let source = format!("{prefix} fn set(value: &mut First, replacement: First) -> First {{ *value = replacement; return *value; }}");
+        let mut resolved = resolve::resolve(&parse_source(&source).unwrap()).unwrap();
+        rename(&mut resolved);
+        let program = check(resolved).unwrap();
+        let f = program.functions()[0].as_ordinary().unwrap();
+        let hir::ValueStatement::DerefAssign {
+            reference, value, ..
+        } = &f.body[0]
+        else {
+            panic!("write")
+        };
+        assert_eq!(*reference, hir::Place::Parameter(f.parameters[0]));
+        assert_eq!(value.ty, ExprType::Range(program.ranges()[0].id));
+        let hir::ValueStatement::Return { value, .. } = &f.body[1] else {
+            panic!("return")
+        };
+        assert_eq!(
+            value.kind,
+            ExprKind::Deref {
+                reference: *reference
+            }
+        );
+        assert_eq!(value.ty, ExprType::Range(program.ranges()[0].id));
+        let source = source.replace("replacement: First", "replacement: Second");
+        let mut resolved = resolve::resolve(&parse_source(&source).unwrap()).unwrap();
+        rename(&mut resolved);
+        let errors = check(resolved).unwrap_err();
+        assert!(errors[0].message.contains("distinct named ranges"));
+        assert!(errors[0].required.contains("display"));
     }
 }

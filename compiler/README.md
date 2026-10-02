@@ -3,7 +3,7 @@
 This Rust implementation is an executable **prototype**, not a general-purpose
 Klyxr compiler. It implements a restricted source → lexer → parser → AST →
 name resolution → expression and value-flow type checking → typed HIR → core
-ownership and loan checking → integer contract proof → diagnostics.
+ownership, loan, and borrowed-access checking → integer contract proof → diagnostics.
 
 ## Run it
 
@@ -23,7 +23,7 @@ cargo clippy --locked --workspace --all-targets -- -D warnings
 These commands are not implementations of the `safe` and `checked` assurance
 levels. Success reports the proof scope and counts. Declaration-only inputs
 explicitly report that there are no function contracts to verify. Ordinary-only
-inputs report their type-checked function count and core Copy/move and whole-value loan check results,
+inputs report their type-checked function count and core Copy/move, whole-value loan, and Copy-safe borrowed-access check results,
 and explicitly state that they
 are not executed or verified; constrained results are not proven. In mixed inputs,
 only verified mutation functions contribute to the proof counts.
@@ -57,7 +57,7 @@ across the input; record bindings must be constructed before their use. Duplicat
 names in a declaration namespace or the binding scope are rejected; shadowing
 is outside this prototype. Passing an immutable binding to `&mut` is an error.
 
-## Ordinary value functions (KED-004 / KED-005 / KED-006)
+## Ordinary value functions (KED-004 through KED-007)
 
 ```klyxr
 type Percent = range 0..100;
@@ -118,7 +118,7 @@ proof, or runtime checks. For example, `return current - used;` can type as Perc
 that every result meets Percent's bounds. The verifier ignores ordinary functions
 as proof targets. Plain `fn` does not yet implement the full `safe` assurance model,
 with only core moves and whole-value, straight-line, non-escaping borrowing
-implemented under KD-004, KD-020, and KD-021. Ordinary calls may target only ordinary functions; verified
+implemented under KD-004, KD-020, KD-021, and KD-022. Ordinary calls may target only ordinary functions; verified
 contracts/body expressions cannot call functions, and top-level harness calls may
 target only verified functions. These rejections leave OQ-019 unresolved.
 
@@ -248,14 +248,79 @@ and are not attached to public HIR or printed in diagnostics.
 Ordinary borrowing does not execute or prove functions. The verified battery's
 existing special state-reference semantics and harness remain unchanged and are
 excluded from ordinary loan analysis. KD-021 settles this core; OQ-024 retains
-reference returns, lifetimes, reborrowing, dereference, fields, partial borrowing,
-reference mutation, temporaries, control flow, and advanced borrowing.
+reference returns, lifetimes, reborrowing, auto-dereference, fields, partial borrowing,
+advanced reference mutation, temporaries, control flow, and advanced borrowing.
+KED-007 adds only the explicit Copy-safe access described below.
+
+## Explicit dereference and Copy-safe mutation (KED-007)
+
+```klyxr
+fn read(value: &Percent) -> Percent {
+    return *value;
+}
+
+fn update(value: &mut Percent, replacement: Percent) -> Percent {
+    let before = *value;
+    *value = replacement;
+    *value = *value;
+    return *value;
+}
+```
+
+`*reference` is explicit dereference of a directly named ordinary reference
+parameter or local. The referent type preserves the exact canonical Bool, range,
+or record identity. Arbitrary-expression operands (`*(reference)`, `*(&value)`,
+`*make(...)`), nested dereference, multiplication, and field projection remain
+unsupported. Parentheses may group a completed dereference expression, as with
+other existing expressions; they do not generalize its operand.
+
+A Copy referent (Bool or named range) can be read through either shared or mutable
+references. The referent is copied; the handle is used, not moved, and no loan or
+reborrow is created. Repeated mutable-reference reads are therefore valid.
+Transferring that handle through a binding or call still moves it under KED-006;
+subsequent reads/writes report the existing use-after-move diagnostic.
+A record dereference types as that record, but ownership rejects every by-value
+materialization: local initialization, argument, or return. No implicit clone or
+move out of borrowed non-Copy storage occurs.
+
+`*reference = expression;` is a dedicated ordinary statement with no value.
+Typing requires an exclusive mutable reference and an exactly matching RHS
+referent type. Shared writes, nominal mismatches, owned/reference mismatches,
+and bare integer-literal writes to ranges are Type errors. Bool literals already
+materialize as Bool. Ownership rejects non-Copy replacement even with the correct
+reference capability and RHS type, because displacement/destruction semantics
+are unresolved. No old value is implicitly dropped, leaked, or relocated.
+
+Reads and writes count as non-consuming handle uses in existing last-use analysis.
+Copied shared handles and moved mutable handles retain their original provenance.
+A final read permits loan expiry immediately after that access. A write keeps its
+exclusive loan held throughout the RHS, including nested dereferences and calls,
+and releases that hold only after the statement. Thus `*access = owned;` cannot
+bypass exclusive-owner conflicts, even when the write is the final handle use.
+The target handle must remain available throughout the statement; moving it in
+an RHS call cannot leave a valid subsequent write. Repeated writes and
+`*access = *access;` use one continuous loan without consuming the handle.
+Normal last-use expiry then permits direct owner recovery.
+
+Passing `*access` to a Copy parameter passes a copied referent, so it does not
+call-hold the reference loan. Passing `access` to a reference parameter retains
+KED-006 transfer and complete-call hold behavior. Deterministic analysis does not
+settle the full future runtime assignment evaluation-order specification.
+
+See `examples/deref_mutation.klx` and intentional failure
+`examples/deref_mutation_fail.klx`. Ordinary access/mutation remains frontend-only:
+not executed, interpreted, code-generated, contract-proven, or range-enforced at
+runtime. The verified battery state/field `-=` machinery is unchanged and separate.
+No direct local/reference-binding reassignment, assignment expressions, compound
+assignment, field mutation, auto-deref, reborrowing, destruction, or control flow
+is introduced. KD-022 settles this narrow core; OQ-025 retains general mutation
+and replacement, OQ-023 destruction, and OQ-024 advanced reference behavior.
 
 ## Core expressions and types (KED-003)
 
 Primary expressions are `true`, `false`, signed i64 literals, parameters,
 `state.field`, `old(state.field)`, and parenthesized expressions. Ordinary functions additionally support locals and
-ordinary calls and direct whole-place borrow expressions. A record parameter
+ordinary calls, direct whole-place borrow expressions, and named dereference. A record parameter
 by itself is not a numeric expression. `old(...)` is allowed only in `ensures`
 and only for the current mutable state field. Parentheses around that exact field
 are permitted; arbitrary snapshots, nested objects, and aliases are not.
@@ -264,7 +329,7 @@ Only these operators are implemented, in order from highest to lowest precedence
 
 | Form | Associativity |
 |---|---|
-| Primary / calls / `old(...)` | Grouping |
+| Primary / calls / `old(...)` / named `*reference` | Grouping |
 | `!` | Prefix Boolean negation |
 | `-` | Left |
 | `<=` | Non-associative |
@@ -314,14 +379,15 @@ obligations. `resolve` now returns an opaque `ResolvedProgram`, consumed by
 `types::check`; it no longer publishes typed HIR by itself. The resolver identifies
 names, fields, callees, borrow targets, and source-ordered local scope/mutability. It resolves type names to
 canonical type references. `compiler/types` validates concrete declared value types,
-operator legality, nominal compatibility, result types, Boolean contracts,
+operator legality, nominal compatibility, dereference referent types, mutable write
+capability and exact RHS types, result types, Boolean contracts,
 subtract-assignment, initializer propagation, call arguments, and explicit returns.
 The type layer performs no textual source-name lookup. `types::check` remains a
 separate type-only API and may return typed HIR that fails ownership checking.
 Use `compile_source` for the complete frontend, or call `ownership::check(&program)`
 after typing. Ownership inspects that HIR without duplicating or rebuilding it;
 its classification, availability, provenance, future-use counts, call holds, and
-loan/move sites remain private implementation data. No separate borrowing pass is introduced.
+loan/move sites and borrowed-access legality remain private implementation data. No separate borrowing pass is introduced.
 
 The resolver collects the complete range/record/function declaration sets before
 lowering references. Range and record names share the existing type namespace;
@@ -342,7 +408,10 @@ Verified functions retain one `requires` and one `ensures` expression; ordinary
 functions carry parameter IDs, a `ValueType` return, typed lets and a typed explicit
 return. `ValueType` permits Bool/Range/Record and SharedRef/MutableRef, excluding IntegerLiteral.
 Borrow HIR carries BorrowKind and a canonical `Place::Parameter` or `Place::Local`;
-reference types retain their canonical non-reference referent IDs. Ordinary AST
+reference types retain their canonical non-reference referent IDs.
+`ExprKind::Deref { reference: Place }` identifies the handle and carries the
+referent ExprType. `ValueStatement::DerefAssign { reference, value, span }`
+is a dedicated typed write statement, not a generalized assignment/place system. Ordinary AST
 signature types now use `ast::ValueType` with a textual name and flat reference
 prefixes, rather than a single String. Illegal nested source prefixes can therefore
 receive a Type-phase diagnostic without introducing recursive semantic reference types. Ordinary
@@ -375,17 +444,19 @@ The CLI follows this exact path:
 
 ```text
 source → lexer → parser → AST expressions/functions → resolver → expression and value-flow type checking
-       → typed HIR expressions → core ownership and loan checking → prototype verifier → diagnostics
+       → typed HIR expressions → core ownership, loan, and borrowed-access checking → prototype verifier → diagnostics
 ```
 
 Resolution, type, and ownership errors prevent proof. Diagnostics distinguish malformed syntax,
 unknown references, incompatible expression types, unsupported well-typed proof
 shapes, and numerical counterexamples. Missing names are resolution errors;
 non-Boolean contracts and incompatible operators are type errors; well-typed
-use-after-move and loan-legality failures are ownership errors. Names and spans
+use-after-move, loan conflicts, non-Copy borrowed materialization, and non-Copy
+replacement are ownership errors. Non-reference dereference, shared writes, and
+RHS mismatches are Type errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012, KD-018, KD-019, KD-020, and KD-021 only for the documented subset.
+This implements KD-012, KD-018, KD-019, KD-020, KD-021, and KD-022 only for the documented subset.
 General type inference, advanced borrowing/ownership, effects, MIR, VIR,
 and broader HIR features remain future work.
 
@@ -448,21 +519,23 @@ consume(&mut battery, 50); // rejected: 50 <= 30 is false
 
 The prototype does not implement ownership beyond core ordinary moves and
 whole-value straight-line loans, reference returns, explicit lifetimes, reborrowing,
-dereference, reference mutation, partial borrowing, reassignment, destruction,
+auto-dereference, non-Copy replacement, field/reference mutation beyond Copy-safe
+whole-value writes, partial borrowing, reassignment, destruction,
 effects, runtime contracts, expressions beyond this subset, loops, quantifiers,
 multiple fields, record invariants, SMT/VIR/MIR, or machine-code generation. In particular,
 `examples/effects.klx` is illustrative and is rejected rather than analyzed.
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, and KD-021,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, and KD-022,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
 remain design work under OQ-019/OQ-020. OQ-022 records remaining ordinary-function
 and local-value questions; KD-020 now settles core moves, while OQ-023 retains
 Copy customization, partial moves, cloning, and destruction. KD-021 settles only
-core borrowing; OQ-024 retains advanced reference and lifetime questions.
+core borrowing, and KD-022 explicit Copy-safe access; OQ-024/OQ-025 retain advanced
+reference/lifetime and general mutation/replacement questions.
 
 KED-001 clarifies the nominal arithmetic boundary under KD-005; KED-003 applies
 nominal identity to expression typing. KD-018 records that direction, while
@@ -508,6 +581,13 @@ external reference parameters, aliases, phase ordering, and retained non-goals.
 Privileged tests rename all diagnostic metadata while preserving borrow targets,
 nominal referents, provenance, conflicts, and last-use behavior. CLI tests cover
 accepted borrowing with zero proof counts and spanned intentional borrow conflicts.
+Dereference/mutation tests cover exact canonical target/referent types, named
+operand restrictions, repeated non-consuming reads/writes, record move-out and
+replacement rejection, phase boundaries, alias/transfer provenance, future
+read/write liveness, final-use recovery, whole-write RHS holds, nested calls,
+Copy-argument versus reference-argument holds, moved RHS target handles, and
+metadata-independent typing/ownership. CLI tests distinguish frontend acceptance
+from execution/proof and explain the intentional non-Copy replacement boundary.
 CI runs the tests in debug and optimized builds and Clippy with warnings
 treated as errors.
 
@@ -518,3 +598,4 @@ The failing examples are intentional:
 - `battery_body_fail.klx`: uncalled body fails its postcondition.
 - `move_fail.klx`: returning a record parameter after moving it into a local.
 - `borrow_fail.klx`: moving an owner while a later reference use keeps its shared loan live.
+- `deref_mutation_fail.klx`: replacing a non-Copy record before displacement/destruction semantics exist.

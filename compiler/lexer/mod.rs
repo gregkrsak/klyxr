@@ -44,6 +44,7 @@ pub enum TokenKind {
     Comma,
     Semicolon,
     Amp,
+    Star,
     Dot,
     Eof,
 }
@@ -271,6 +272,14 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             b';' => push_one(
                 &mut tokens,
                 TokenKind::Semicolon,
+                line,
+                column,
+                &mut i,
+                &mut column,
+            ),
+            b'*' => push_one(
+                &mut tokens,
+                TokenKind::Star,
                 line,
                 column,
                 &mut i,

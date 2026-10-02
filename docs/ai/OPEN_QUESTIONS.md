@@ -107,7 +107,7 @@ Still open:
 - conversions between constrained types;
 - units/dimension-aware arithmetic.
 
-KED-003 through KED-006 do not settle these questions implicitly.
+KED-003 through KED-007 do not settle these questions implicitly.
 
 
 ## OQ-022 — General function and local-value semantics
@@ -119,7 +119,9 @@ this does not settle the broader function/local semantics below.
 KED-006 adds references and `let mut` / `let mutable` for owned locals, authorizing
 exclusive borrowing only. It introduces no assignment or mutable owned parameters.
 The core straight-line, non-escaping loan rules now fall under KD-021; advanced
-reference semantics remain under OQ-024.
+reference semantics remain under OQ-024. KED-007 adds explicit dereference and
+Copy-safe write-through as a distinct accepted operation (KD-022). `let mut`
+still does not enable direct owned-local reassignment; that remains open.
 
 Still open:
 
@@ -147,7 +149,8 @@ and literal-conversion rules. Copy customization and destruction remain under OQ
 
 KED-005 establishes the core owned `Copy` / move distinction. KED-006 classifies
 shared references as Copy and mutable references as Move; neither directive
-settles user customization.
+settles user customization. KED-007 blocks non-Copy write replacement specifically
+because displacement/destruction semantics remain unresolved; it adds no Drop.
 
 Still open:
 
@@ -171,6 +174,9 @@ by the core ownership checker.
 ## OQ-024 — Advanced borrowing, reborrowing, dereference, and escaping references
 
 KED-006 settles only whole-value, straight-line, non-escaping core borrowing.
+KED-007 settles basic explicit named dereference and Copy-safe whole-value
+write-through under KD-022. Advanced borrowing and dereference coercions remain
+open; general mutation/replacement is tracked separately under OQ-025.
 
 Still open:
 
@@ -178,10 +184,10 @@ Still open:
 - explicit lifetime syntax, parameterization, and elision;
 - reborrowing syntax and semantics;
 - whether and when `&mut T` may coerce to `&T`;
-- dereference syntax and coercions;
+- auto-deref and dereference coercions;
 - field access through references;
 - field/partial borrowing and disjoint field loans;
-- mutation through mutable references;
+- reference mutation beyond Copy-safe whole-value write-through;
 - two-phase borrows;
 - temporary lifetime extension and borrowing arbitrary temporary expressions;
 - borrowing across control-flow joins and loops;
@@ -190,3 +196,25 @@ Still open:
 - FFI reference/lifetime boundaries.
 
 OQ-009 remains authoritative for the broader explicit lifetime syntax question.
+
+## OQ-025 — General mutation, place expressions, and replacement semantics
+
+KED-007 settles only explicit dereference and Copy-safe whole-value write-through.
+
+Still open:
+
+- non-Copy replacement and the fate/destruction of displaced values;
+- direct local reassignment;
+- general place-expression architecture;
+- field/projected assignment, partial mutation, and aggregate mutation;
+- compound assignment;
+- swap/take/replace primitives;
+- assignment-expression semantics, if any;
+- richer assignment evaluation-order guarantees;
+- mutation through future reborrows;
+- mutation across control flow;
+- interaction with destructors and unwind.
+
+OQ-023 remains authoritative for Copy customization and destruction. OQ-024
+remains authoritative for advanced borrowing, reborrowing, dereference coercions,
+escaping references, and field/partial borrowing.

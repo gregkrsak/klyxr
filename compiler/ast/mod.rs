@@ -84,6 +84,11 @@ pub enum BorrowKind {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueStatement {
+    DerefAssign {
+        reference: String,
+        value: Expr,
+        span: Span,
+    },
     Let {
         name: String,
         mutable: bool,
@@ -127,6 +132,9 @@ pub enum ExprKind {
     BoolLiteral(bool),
     IntegerLiteral(i64),
     Name(String),
+    Deref {
+        reference: String,
+    },
     Borrow {
         kind: BorrowKind,
         target: String,

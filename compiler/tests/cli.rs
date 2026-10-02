@@ -98,7 +98,7 @@ fn record_moves_are_checked_without_claiming_execution_or_verification() {
         let text = String::from_utf8(output.stdout).unwrap();
         assert!(text.contains("ordinary value functions type-checked: 8"));
         assert!(text.contains("core Copy/move checking passed"));
-        assert!(text.contains("whole-value loans checked; destruction is not implemented"));
+        assert!(text.contains("whole-value loans checked; Copy-safe borrowed access checked; destruction is not implemented"));
         assert!(text.contains("not executed or verified"));
         assert!(text.contains("function bodies proven: 0"));
     }
@@ -145,5 +145,33 @@ fn borrowing_failure_reports_the_conflict_and_earlier_loan_location() {
         assert!(text.contains("borrow began at line 10, column 16"));
         assert!(text.contains("ownership checking stopped"));
         assert!(!text.contains("LoanId"));
+    }
+}
+
+#[test]
+fn copy_safe_mutation_reports_frontend_acceptance_without_runtime_claims() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("deref_mutation.klx")]);
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("Copy-safe borrowed access checked"));
+        assert!(text.contains("not executed or verified"));
+        assert!(text.contains("function bodies proven: 0"));
+        assert!(text.contains("calls checked: 0"));
+        assert!(text.contains("destruction is not implemented"));
+    }
+}
+#[test]
+fn non_copy_mutation_failure_explains_the_replacement_boundary() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("deref_mutation_fail.klx")]);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let text = String::from_utf8(output.stderr).unwrap();
+        assert!(text.contains("cannot replace non-Copy value `Ticket`"));
+        assert!(text.contains("before destruction semantics are defined"));
+        assert!(text.contains("deref_mutation_fail.klx:6:5"));
+        assert!(text.contains("ownership checking stopped"));
     }
 }

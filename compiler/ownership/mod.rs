@@ -1,4 +1,4 @@
-//! Straight-line owned moves and whole-value, non-escaping loans in ordinary HIR.
+//! Straight-line owned moves, whole-value loans, and Copy-safe borrowed access in ordinary HIR.
 //! Availability and active loans are orthogonal private state; no runtime behavior.
 use std::collections::BTreeMap;
 
@@ -29,6 +29,7 @@ enum Transfer {
     Local(LocalId),
     Argument(ParameterId),
     Return(FunctionId),
+    WriteThrough(Place),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum State {
@@ -79,6 +80,12 @@ impl<'a> Checker<'a> {
             match statement {
                 ValueStatement::Let { initializer, .. } => checker.count_uses(initializer),
                 ValueStatement::Return { value, .. } => checker.count_uses(value),
+                ValueStatement::DerefAssign {
+                    reference, value, ..
+                } => {
+                    *checker.remaining.entry(*reference).or_default() += 1;
+                    checker.count_uses(value);
+                }
             }
         }
         for id in &function.parameters {
@@ -102,6 +109,9 @@ impl<'a> Checker<'a> {
     }
     fn count_uses(&mut self, expression: &TypedExpr) {
         match &expression.kind {
+            ExprKind::Deref { reference } => {
+                *self.remaining.entry(*reference).or_default() += 1;
+            }
             ExprKind::Parameter(id) => {
                 *self.remaining.entry(Place::Parameter(*id)).or_default() += 1;
             }
@@ -136,6 +146,24 @@ impl<'a> Checker<'a> {
                         self.handles.insert(place, loan);
                     }
                 }
+                ValueStatement::DerefAssign {
+                    reference,
+                    value,
+                    span,
+                } => {
+                    let loan = self.borrowed_access(*reference, *span, true)?;
+                    // A final target use must still protect the whole write statement,
+                    // including RHS dereferences and nested calls that trigger expiry.
+                    self.loans
+                        .get_mut(&loan)
+                        .expect("live write provenance")
+                        .held += 1;
+                    self.expression(value, Transfer::WriteThrough(*reference))?;
+                    // RHS calls may transfer this move-only handle. That must not
+                    // leave an apparently valid write through a now-moved handle.
+                    self.available(*reference, *span)?;
+                    self.loans.get_mut(&loan).expect("write-held loan").held -= 1;
+                }
                 ValueStatement::Return { value, .. } => {
                     self.expression(value, Transfer::Return(function.id))?;
                 }
@@ -154,6 +182,12 @@ impl<'a> Checker<'a> {
                 self.consume(Place::Parameter(*id), expression.span, transfer)
             }
             ExprKind::Local(id) => self.consume(Place::Local(*id), expression.span, transfer),
+            ExprKind::Deref { reference } => {
+                self.borrowed_access(*reference, expression.span, false)?;
+                self.expire();
+                // The result is a Copy referent, not a reference argument/handle.
+                Ok(None)
+            }
             ExprKind::Borrow { kind, place } => {
                 self.borrow(*place, *kind, expression.span).map(Some)
             }
@@ -201,6 +235,37 @@ impl<'a> Checker<'a> {
             | ExprKind::FieldAccess(_)
             | ExprKind::OldField(_) => Ok(None),
         }
+    }
+    fn borrowed_access(
+        &mut self,
+        reference: Place,
+        span: Span,
+        write: bool,
+    ) -> OwnershipResult<LoanId> {
+        self.available(reference, span)?;
+        let referent = match self.metadata(reference).1 {
+            ValueType::SharedRef(ty) | ValueType::MutableRef(ty) => ty.value_type(),
+            _ => unreachable!("typed borrowed access uses reference values"),
+        };
+        if ownership_kind(referent) == OwnershipKind::Move {
+            let ValueType::Record(id) = referent else {
+                unreachable!("non-Copy referents are records")
+            };
+            let name = &self.program.record(id).name;
+            let message = if write {
+                format!("cannot replace non-Copy value `{name}` through mutable reference before destruction semantics are defined")
+            } else {
+                format!("cannot move non-Copy value `{name}` out through borrowed reference")
+            };
+            return Err(self.diagnostic(span, message, "only Copy referents may be materialized or replaced through references; no cloning, displacement, or destruction is implicit", None));
+        }
+        if let Some(remaining) = self.remaining.get_mut(&reference) {
+            *remaining -= 1;
+        }
+        Ok(*self
+            .handles
+            .get(&reference)
+            .expect("typed reference handle has provenance"))
     }
     fn metadata(&self, place: Place) -> (&str, ValueType) {
         match place {
@@ -342,6 +407,9 @@ impl<'a> Checker<'a> {
         }) = self.states.get(&place)
         {
             let destination = match previous {
+                Transfer::WriteThrough(reference) => {
+                    format!("through reference `{}`", self.metadata(*reference).0)
+                }
                 Transfer::Local(id) => format!("into local `{}`", self.program.local(*id).name),
                 Transfer::Argument(id) => format!(
                     "into by-value parameter `{}`",
@@ -564,6 +632,89 @@ mod tests {
         assert!(checker.states.is_empty());
         checker.body(f).unwrap();
         assert!(checker.states.is_empty());
+        assert!(checker.loans.is_empty());
+    }
+    #[test]
+    fn dereference_and_write_identity_remain_independent_of_diagnostic_names() {
+        fn rename(program: &mut Program) {
+            for range in &mut program.ranges {
+                range.name = "display".into();
+            }
+            for record in &mut program.records {
+                record.name = "display".into();
+            }
+            for field in &mut program.fields {
+                field.name = "display".into();
+            }
+            for parameter in &mut program.parameters {
+                parameter.name = "display".into();
+            }
+            for local in &mut program.locals {
+                local.name = "display".into();
+            }
+            for f in &mut program.functions {
+                if let crate::hir::Function::Ordinary(f) = f {
+                    f.name = "display".into();
+                }
+            }
+        }
+        for body in [
+            "fn good(value: Percent, replacement: Percent) -> Percent { let mut owned = value; let view = &owned; let alias = view; let before = *view; let after = *alias; let access = &mut owned; *access = replacement; *access = *access; return owned; }",
+            "fn good(value: &mut Percent) -> Percent { let first = value; let observed = *first; return *first; }",
+        ] {
+            let mut program = typed(body);
+            let original = program.functions()[0].as_ordinary().unwrap().body.clone();
+            check(&program).unwrap();
+            rename(&mut program);
+            assert_eq!(original, program.functions()[0].as_ordinary().unwrap().body);
+            check(&program).unwrap();
+        }
+        for body in [
+            "fn bad(value: &Ticket) -> Ticket { return *value; }",
+            "fn bad(value: &mut Ticket, replacement: Ticket) -> bool { *value = replacement; return true; }",
+            "fn bad(value: Percent) -> Percent { let mut owned = value; let access = &mut owned; let next = access; return *access; }",
+            "fn bad(value: Percent) -> Percent { let mut owned = value; let access = &mut owned; *access = owned; return owned; }",
+            "fn bad(value: Percent) -> Percent { let mut owned = value; let view = &owned; let access = &mut owned; return *view; }",
+        ] {
+            let mut program = typed(body);
+            let original = check(&program).unwrap_err();
+            rename(&mut program);
+            let renamed = check(&program).unwrap_err();
+            assert_eq!(original[0].span, renamed[0].span);
+            assert!(renamed[0].message.contains("`display`"));
+            assert_eq!(original[0].known.len(), renamed[0].known.len());
+            assert!(!renamed[0].message.contains("LoanId"));
+        }
+    }
+    #[test]
+    fn borrowed_copy_access_preserves_handle_availability_and_loan_identity() {
+        let program = typed("fn update(value: &mut Percent, replacement: Percent) -> Percent { let before = *value; *value = replacement; return *value; }");
+        let f = program.functions()[0].as_ordinary().unwrap();
+        let reference = Place::Parameter(f.parameters[0]);
+        let mut checker = Checker::new(&program, f);
+        let original_loan = checker.handles[&reference];
+        let ValueStatement::Let {
+            local, initializer, ..
+        } = &f.body[0]
+        else {
+            panic!("let")
+        };
+        assert_eq!(
+            checker
+                .expression(initializer, Transfer::Local(*local))
+                .unwrap(),
+            None
+        );
+        assert_eq!(checker.states[&reference], State::Available);
+        assert_eq!(checker.handles[&reference], original_loan);
+        assert_eq!(checker.loans.len(), 1);
+        assert_eq!(checker.next_loan, 1);
+        // Full read/write/read leaves the handle available and releases the original
+        // external loan after last use; no replacement/destruction state is added.
+        let mut checker = Checker::new(&program, f);
+        checker.body(f).unwrap();
+        assert_eq!(checker.states[&reference], State::Available);
+        assert_eq!(checker.next_loan, 1);
         assert!(checker.loans.is_empty());
     }
 }

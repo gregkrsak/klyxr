@@ -225,6 +225,16 @@ impl Parser<'_> {
                     initializer,
                     span: Span { end, ..span },
                 });
+            } else if self.at(&TokenKind::Star) {
+                let reference = self.parse_deref_target()?;
+                self.expect(&TokenKind::Equal)?;
+                let value = self.parse_expression(0)?;
+                let end = self.expect(&TokenKind::Semicolon)?.span.end;
+                body.push(ValueStatement::DerefAssign {
+                    reference,
+                    value,
+                    span: Span { end, ..span },
+                });
             } else if self.at(&TokenKind::Return) {
                 self.advance();
                 let value = self.parse_expression(0)?;
@@ -297,6 +307,17 @@ impl Parser<'_> {
             _ => None,
         }
     }
+    fn parse_deref_target(&mut self) -> Result<String, ParseError> {
+        self.expect(&TokenKind::Star)?;
+        if !matches!(self.peek_kind(), TokenKind::Ident(_)) {
+            return Err(self.error("dereference requires a directly named ordinary reference parameter or local; arbitrary expressions and nested dereference are unsupported".into()));
+        }
+        let reference = self.expect_ident()?;
+        if self.at(&TokenKind::LParen) || self.at(&TokenKind::Dot) {
+            return Err(self.error("dereference requires a directly named reference; calls and field projection are unsupported".into()));
+        }
+        Ok(reference)
+    }
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
         let start = self.peek().span;
         let kind = match self.peek_kind() {
@@ -308,6 +329,9 @@ impl Parser<'_> {
             TokenKind::Number(_) | TokenKind::Minus => {
                 ExprKind::IntegerLiteral(self.expect_number()?)
             }
+            TokenKind::Star => ExprKind::Deref {
+                reference: self.parse_deref_target()?,
+            },
             TokenKind::Amp => {
                 self.advance();
                 let kind = if self.at(&TokenKind::Mut) {

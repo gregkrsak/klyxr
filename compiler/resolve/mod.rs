@@ -64,6 +64,11 @@ pub(crate) struct ResolvedValueFunction {
 }
 #[derive(Debug)]
 pub(crate) enum ResolvedValueStatement {
+    DerefAssign {
+        reference: hir::Place,
+        value: ResolvedExpr,
+        span: Span,
+    },
     Let {
         id: LocalId,
         function: FunctionId,
@@ -106,6 +111,9 @@ pub(crate) enum ResolvedExprKind {
     IntegerLiteral(i64),
     Parameter(ParameterId),
     Local(LocalId),
+    Deref {
+        reference: hir::Place,
+    },
     Borrow {
         kind: ast::BorrowKind,
         place: hir::Place,
@@ -511,6 +519,15 @@ impl Resolver {
                                 span: *span,
                             }
                         }
+                        ast::ValueStatement::DerefAssign {
+                            reference,
+                            value,
+                            span,
+                        } => ResolvedValueStatement::DerefAssign {
+                            reference: self.reference_place(reference, &scope, *span)?,
+                            value: self.expression(value, &scope, false)?,
+                            span: *span,
+                        },
                         ast::ValueStatement::Return { value, span } => {
                             ResolvedValueStatement::Return {
                                 value: self.expression(value, &scope, false)?,
@@ -531,6 +548,29 @@ impl Resolver {
             _ => unreachable!("resolver signature and AST declaration kinds agree"),
         }
     }
+    fn reference_place(
+        &self,
+        name: &str,
+        scope: &Scope,
+        span: Span,
+    ) -> ResolutionResult<hir::Place> {
+        if scope.state.is_some() {
+            return Err(error(
+                span,
+                "dereference is supported only in ordinary functions",
+                "verified state mutation retains its restricted prototype semantics",
+            ));
+        }
+        match scope.values.get(name) {
+            Some(Reference::Parameter(id)) => Ok(hir::Place::Parameter(*id)),
+            Some(Reference::Local(id)) => Ok(hir::Place::Local(*id)),
+            None => Err(error(
+                span,
+                format!("unknown value `{name}`"),
+                "dereference an existing parameter or previously declared local in this function",
+            )),
+        }
+    }
     fn expression(
         &self,
         expression: &ast::Expr,
@@ -544,6 +584,9 @@ impl Resolver {
                 Some(Reference::Parameter(id)) => ResolvedExprKind::Parameter(*id),
                 Some(Reference::Local(id)) => ResolvedExprKind::Local(*id),
                 None => return Err(error(expression.span, format!("unknown {} `{name}`", if scope.state.is_some() { "parameter" } else { "value" }), "parameters are visible at entry; locals must be declared before use in this function")),
+            },
+            ast::ExprKind::Deref { reference } => ResolvedExprKind::Deref {
+                reference: self.reference_place(reference, scope, expression.span)?,
             },
             ast::ExprKind::Borrow { kind, target } => {
                 if scope.state.is_some() {

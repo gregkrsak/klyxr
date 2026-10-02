@@ -240,14 +240,15 @@ The MVP should demonstrate the difference between memory safety and application-
 
 The compiler prototype is implemented in Rust, pinned to 1.80.0. The executable
 pipeline is source → lexer → parser → AST → explicit name resolution → expression
-and value-flow type checking → typed HIR → core ownership and loan checking → specialized
+and value-flow type checking → typed HIR → core ownership, loan, and borrowed-access checking → specialized
 integer contract proof → diagnostics. This implements KD-012, KD-018, KD-019,
-KD-020, and KD-021 only for the documented
+KD-020, KD-021, and KD-022 only for the documented
 subset; the broader pipeline above remains accepted architecture/future work.
 
 The AST preserves textual declarations, parameter types, explicit ordinary
 returns, local initializers/mutability, flat source reference types, direct named
-borrow targets, expression calls, contracts, and ordered prototype
+borrow/dereference targets, dedicated ordinary dereference writes, expression calls,
+contracts, and ordered prototype
 statements. `FunctionDecl` retains source order across ordinary and verified forms.
 The resolver collects all declarations/signatures before resolving bodies, owns
 name lookup and source-order local scope, and assigns strongly typed range, record,
@@ -280,7 +281,7 @@ Ordinary functions have explicit value return types and exactly one final
 `return expression;`. Immutable locals propagate concrete initializer types;
 call arguments and returns require exact concrete types. Bare integer locals,
 arguments to range parameters, and returns do not gain implicit range types.
-KED-004 through KED-006 do not execute, prove, or dynamically enforce ordinary functions.
+KED-004 through KED-007 do not execute, prove, or dynamically enforce ordinary functions.
 `Range(T)` typing does not prove bounds or overflow safety. Plain `fn` is not a
 claim to implement the full future `safe` model. All mixed-kind calls are rejected.
 
@@ -305,9 +306,10 @@ Unused owners are accepted without destruction behavior.
 
 The ownership phase excludes the verified state parameter, fields, and BindingId
 harness state. KED-006 adds private loan identity/provenance alongside availability,
-with future-use counts for straight-line places and call-hold counts for nested calls.
+with future-use counts for straight-line places and operation-hold counts for nested
+calls and (under KED-007) whole write statements.
 Shared copies and mutable moves retain loan identity across LocalIds. Loans expire
-when no available derived handle has future uses and no call holds the loan. Local
+when no available derived handle has future uses and no call/write holds the loan. Local
 transfers attach destination provenance before expiry; final-use arguments attach
 call holds before expiry. Reference parameters have external provenance without
 interprocedural owner reconstruction. Loan state is not published in HIR.
@@ -315,6 +317,19 @@ Exclusive borrowing requires a mutable owned local; `let mut` enables no assignm
 There is no ordinary field access/record construction, reborrowing, reference return,
 implicit reference coercion, partial move/borrow, user-defined Copy/Clone, or destructor. Source names
 and nominal type errors must be resolved before ownership checking.
+
+KED-007 represents `Deref { reference: Place }` with the exact canonical referent
+ExprType and a dedicated `DerefAssign { reference, value, span }` statement. The
+resolver identifies existing ordinary parameter/local targets; typing requires
+reference operands, exclusive write capability, and exact RHS compatibility.
+Ownership rejects borrowed non-Copy value materialization and non-Copy replacement.
+No generalized projection/place architecture or additional frontend pass is added.
+Read/write access checks handle availability without transferring it or creating
+loans. Both count for last use. Copy reads can expire the original loan immediately
+after access, and their result does not call-hold a reference. Write statements hold
+the original loan through RHS traversal, then expire normally after completion;
+RHS calls cannot invalidate the target handle and leave an accepted write.
+No destruction, field mutation, auto-deref, or direct reassignment is implemented.
 
 The verifier takes only a verified-function view from the shared HIR table;
 ordinary functions are ignored as proof targets and never counted as proven.
@@ -348,4 +363,4 @@ Empty admissible domains are explicitly rejected by this prototype.
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
 invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
-KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, DP-008, DP-009, and OQ-018 through OQ-024.
+KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, DP-008, DP-009, and OQ-018 through OQ-025.

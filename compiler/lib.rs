@@ -51,7 +51,7 @@ pub fn parse_source(source: &str) -> Result<Program, FrontendError> {
     parser::parse(&tokens).map_err(FrontendError::Parse)
 }
 
-/// Parse, resolve, type-check, and ownership/loan-check the supported subset to canonical HIR.
+/// Parse, resolve, type-check, and ownership/loan/borrowed-access-check the supported subset to canonical HIR.
 /// Numerical proof and ordered call-state checking are separate verifier work.
 pub fn compile_source(source: &str) -> Result<hir::Program, FrontendError> {
     let ast = parse_source(source)?;

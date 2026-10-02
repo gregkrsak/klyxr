@@ -75,11 +75,21 @@ remain held until the receiving call completes, including nested arguments.
 Availability and loans are separate ID-based state within the same ownership phase.
 Borrowing/cloning/reborrowing/coercion are never implicit. Ordinary owned parameters
 remain immutable. Reference returns, nested references, explicit lifetimes,
-dereference, reference mutation, ordinary record construction/field access,
-partial borrowing/moves, and destruction remain unsupported (KD-021 / OQ-024).
+auto-dereference, ordinary record construction/field access, partial borrowing/moves,
+and destruction remain unsupported (KD-021 / OQ-024).
+
+KED-007 adds explicit `*reference` for directly named ordinary reference parameters
+and locals. Copy referents (Bool/ranges) may be read through shared or mutable
+references without consuming the handle. `*reference = expression;` requires an
+exclusive mutable reference and an exact Copy referent/RHS type. Non-Copy move-out
+and replacement are Ownership errors; no destruction or displaced-value semantics
+are implied. Reads/writes count for last use; writes hold the loan throughout the
+RHS. Copied dereference arguments do not call-hold a reference, while reference
+arguments retain KED-006 holds. Direct owner reassignment, field mutation, auto-deref,
+reborrowing, and general mutation remain unsupported (KD-022 / OQ-025).
 
 Ordinary functions are parsed, resolved, type-checked, and ownership-checked,
-including loan legality, but not executed or proven. A range result type does not establish that the
+including loan and borrowed-access legality, but not executed or proven. A range result type does not establish that the
 produced value meets its bounds. Plain `fn` does not yet implement the complete
 future `safe` assurance model. Forward and recursive calls remain structurally
 valid without a termination claim. Diagnostic traversal order does not settle
@@ -91,8 +101,8 @@ verifier-support diagnostic. It ignores ordinary functions as proof targets.
 Its affine proof establishes subtraction safety, field ranges, and postconditions
 for every admissible input of the supported structure, and tracks state between
 literal-argument harness calls. Calls across function kinds are rejected; OQ-019,
-OQ-021 through OQ-024 retain the broader assurance, arithmetic, function,
-Copy/destruction, and advanced borrowing questions.
+OQ-021 through OQ-025 retain the broader assurance, arithmetic, function,
+Copy/destruction, advanced borrowing, and general mutation questions.
 General ownership beyond core moves and straight-line whole-value loans, effects, runtime
 contracts, MIR/VIR, SMT integration,
 and machine-code generation remain unimplemented. Read `compiler/README.md`
