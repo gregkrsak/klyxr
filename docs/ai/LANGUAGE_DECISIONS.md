@@ -446,3 +446,36 @@ and Return terminators. Ordinary functions still require one final function-leve
 return. It establishes no loops, early/multiple returns, SSA, phi nodes, block
 parameters, or generalized control-flow dataflow. Value-producing conditionals
 remain unresolved, and the MIR architecture leaves their future extension open.
+
+---
+
+## KD-024 — Path-sensitive acyclic loan liveness
+
+**Status:** Accepted
+
+For the current acyclic statement conditional subset, whole-value loan liveness
+is control-flow-path-sensitive. A loan remains active on a path while an available
+reference handle carrying its provenance may still be used on that path, or an
+explicit operation hold requires it. Lexical coexistence of reference bindings
+does not imply overlapping loans. Sibling-only uses do not keep a loan active
+on the opposite branch.
+
+A loan needed by any possible successor stays active through condition evaluation
+and dispatch. After the split it may expire independently on an edge with no
+possible future use of a surviving handle. Post-join future uses propagate into
+every incoming path where that handle may remain available. Loans cannot expire
+and later reactivate along the same path; both branch edges remain possible,
+including constant Boolean conditions.
+
+At joins, Move availability retains KD-023's all-path rule. Potentially active
+incoming loans merge conservatively: an operation must be safe on every incoming
+path. Conditional unavailability of a handle does not itself erase a loan still
+needed on a path where the handle was not moved. Loans inactive on all incoming
+paths are dead after the join. Shared copies retain provenance; mutable transfers
+remain moves. Call/write holds remain authoritative and branch-local handles
+and loans do not escape.
+
+KED-009 refines the existing ownership phase above MIR. It adds no syntax, loops,
+reborrowing, reference returns, explicit lifetimes, conditional values, destruction,
+or generalized CFG lifetime inference. General MIR dataflow and loops remain
+unresolved under OQ-024/OQ-026.

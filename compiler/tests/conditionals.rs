@@ -240,9 +240,9 @@ fn incoming_loan_protects_owner_move_before_post_join_use() {
     error("fn sink(view: &Ticket) -> bool { return true; } fn bad(flag: bool, ticket: Ticket) -> bool { let view = &ticket; if flag { let moved = ticket; } return sink(view); }", "Ownership", "shared-borrowed");
 }
 #[test]
-fn cross_branch_possible_use_keeps_incoming_loan_active_conservatively() {
-    error("fn bad(flag: bool, value: Percent) -> Percent { let mut owned = value; let access = &mut owned; if flag { let observed = *access; } else { let observed = owned; } return owned; }", "Ownership", "exclusively borrowed");
-    error("fn bad(flag: bool, value: Percent) -> Percent { let mut owned = value; let view = &owned; if flag { let observed = *view; let access = &mut owned; } return owned; }", "Ownership", "shared borrow is active");
+fn branch_only_reference_uses_no_longer_hold_sibling_or_later_operations() {
+    good("fn example(flag: bool, value: Percent) -> Percent { let mut owned = value; let access = &mut owned; if flag { let observed = *access; } else { let observed = owned; } return owned; }");
+    good("fn example(flag: bool, value: Percent) -> Percent { let mut owned = value; let view = &owned; if flag { let observed = *view; let access = &mut owned; } return owned; }");
 }
 #[test]
 fn last_use_resumes_after_join_and_straight_line_behavior_remains() {
@@ -257,7 +257,7 @@ fn branch_call_and_write_holds_remain_active() {
 }
 #[test]
 fn nested_loan_holds_and_branch_local_cleanup_are_sound() {
-    error("fn bad(flag: bool, value: Percent) -> Percent { let mut owned = value; let view = &owned; if flag { if flag { let observed = *view; } let access = &mut owned; } return owned; }", "Ownership", "shared borrow is active");
+    good("fn example(flag: bool, value: Percent) -> Percent { let mut owned = value; let view = &owned; if flag { if flag { let observed = *view; } let access = &mut owned; } return owned; }");
     good("fn example(flag: bool, value: Percent) -> Percent { let mut owned = value; if flag { let access = &mut owned; if flag { *access = value; } } return owned; }");
 }
 #[test]

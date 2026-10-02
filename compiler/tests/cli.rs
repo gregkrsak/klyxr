@@ -200,3 +200,29 @@ fn conditional_move_failure_reports_prior_path_and_move_location() {
         assert!(text.contains("-->"));
     }
 }
+
+#[test]
+fn path_sensitive_borrowing_reports_acceptance_and_valid_mir_without_runtime_claims() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("path_sensitive_borrowing.klx")]);
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("ordinary MIR control-flow lowering passed: 1 functions"));
+        assert!(text.contains("not executed or verified"));
+        assert!(text.contains("function bodies proven: 0"));
+    }
+}
+#[test]
+fn post_join_future_reference_reports_original_borrow_conflict() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("path_sensitive_borrowing_fail.klx")]);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let text = String::from_utf8(output.stderr).unwrap();
+        assert!(text
+            .contains("cannot create exclusive borrow of `owned` while shared borrow is active"));
+        assert!(text.contains("the conflicting borrow began at line 5"));
+        assert!(text.contains("-->"));
+    }
+}

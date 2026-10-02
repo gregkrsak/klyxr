@@ -240,10 +240,10 @@ The MVP should demonstrate the difference between memory safety and application-
 
 The compiler prototype is implemented in Rust, pinned to 1.80.0. The executable
 pipeline is source → lexer → parser → AST → explicit name resolution → expression
-and value-flow type checking → typed HIR → core ownership, loan, and borrowed-access checking → specialized
+and value-flow type checking → typed HIR → core ownership, loan, and borrowed-access checking →
 ordinary MIR CFG lowering (ordinary functions) or specialized
 integer contract proof (verified functions) → diagnostics. This implements KD-012, KD-018, KD-019,
-KD-020, KD-021, KD-022, and KD-023 only for the documented
+KD-020, KD-021, KD-022, KD-023, and KD-024 only for the documented
 subset; the broader pipeline above remains accepted architecture/future work.
 
 The AST preserves textual declarations, parameter types, explicit ordinary
@@ -285,7 +285,7 @@ Ordinary functions have explicit value return types and exactly one final
 `return expression;`. Immutable locals propagate concrete initializer types;
 call arguments and returns require exact concrete types. Bare integer locals,
 arguments to range parameters, and returns do not gain implicit range types.
-KED-004 through KED-008 do not execute, prove, or dynamically enforce ordinary functions.
+KED-004 through KED-009 do not execute, prove, or dynamically enforce ordinary functions.
 `Range(T)` typing does not prove bounds or overflow safety. Plain `fn` is not a
 claim to implement the full future `safe` model. All mixed-kind calls are rejected.
 
@@ -313,10 +313,12 @@ Unused owners are accepted without destruction behavior.
 
 The ownership phase excludes the verified state parameter, fields, and BindingId
 harness state. KED-006 adds private loan identity/provenance alongside availability,
-with syntactic future-use counts for straight-line and branch-scoped places and operation-hold counts for nested
+with continuation-aware path-specific future-use counts (KED-009) and operation-hold counts for nested
 calls and (under KED-007) whole write statements.
 Shared copies and mutable moves retain loan identity across LocalIds. Loans expire
-when no available derived handle has future uses and no call/write holds the loan. Local
+when no potentially available derived handle has future uses on the current path
+and no call/write holds the loan. ConditionalMove blocks handle use but does not
+by itself eliminate a loan active on another incoming path. Local
 transfers attach destination provenance before expiry; final-use arguments attach
 call holds before expiry. Reference parameters have external provenance without
 interprocedural owner reconstruction. Loan state is not published in HIR.
@@ -353,12 +355,29 @@ rejection. Every verified body is proven independently of its call sites; its
 postcondition then updates caller state in source order. Ordinary functions do
 not enter that state model.
 
-KED-008 conservatively pins incoming live loans through each whole conditional,
-including nested branches. Branches analyze independently from the same state;
-branch-local handles and loans are discarded at exit. At the join, syntactic use
-counts from both branches are consumed and normal straight-line expiry resumes.
-No branch result or escaping handle exists. Existing call/write operation holds
-remain active; general path-sensitive loan precision remains open.
+KED-009 removes KED-008's whole-conditional loan pin. Future-use accounting is
+private and independent of availability, keyed by canonical ParameterId/LocalId
+places. After analyzing a condition once, the remaining suffix is decomposed
+into then uses, else uses, and a common continuation. Each branch starts from
+the same post-condition ownership snapshot, with only its own uses plus that
+continuation. Its edge expires loans with no future surviving handle uses.
+Nested statement-list analysis composes this decomposition recursively, and
+operation-level last-use expiry remains unchanged. No constant-path pruning occurs.
+
+At joins, outer Move availability retains KD-023's all-path rule. Only loan
+provenance that existed before the split may survive; activity is the union of
+incoming states. Dead-on-all-path loans are removed. ConditionalMove can retain
+possibly active provenance while rejecting any handle use. Branch-local handles
+and loans are discarded; sibling-created private LoanIds are never conflated.
+Future uses after the join keep needed loans continuously active along each
+relevant incoming path: no loan resurrection occurs. Call/write holds remain
+balanced through their operation and cannot escape statements or branch exits.
+
+Ownership remains above MIR in `compiler/ownership`; there is no second checker,
+MIR ownership pass, general dataflow framework, or fixed-point solver. This is
+whole-value liveness for structured acyclic statements, not arbitrary CFG borrowing
+or a claim of Rust borrow-checker equivalence. OQ-024/OQ-026 retain general lifetimes,
+loops, reborrowing, escaping references, and broader MIR ownership dataflow.
 
 `compiler/mir` lowers only ordinary typed HIR after frontend ownership checks.
 `mir::lower(&program)` leaves `compile_source`'s canonical HIR result unchanged.
@@ -395,4 +414,4 @@ Empty admissible domains are explicitly rejected by this prototype.
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
 invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
-KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, DP-008, DP-009, and OQ-018 through OQ-026.
+KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, DP-008, DP-009, and OQ-018 through OQ-026.
