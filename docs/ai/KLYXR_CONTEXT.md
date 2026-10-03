@@ -68,8 +68,8 @@ and returns (KD-020). ParameterId/LocalId state is per function; a moved place
 cannot be reused. The compiler does not silently clone. Record fields do not make
 records Copy. KED-006 adds explicit shared (`&T`) and exclusive (`&mut T`)
 whole-value borrowing. Shared references are Copy; mutable references move.
-`let mut` / `let mutable` marks an owned local as exclusively borrowable, without
-reassignment. Immutable reference locals carry private loan provenance. Loans
+KED-006 introduced `let mut` / `let mutable` for exclusive borrowing without
+reassignment; KD-026 later adds narrow Copy-safe local reassignment. Immutable reference locals carry private loan provenance. Loans
 end after the last possible use of derived handles on each path; potentially
 available handles at a join can retain a possibly active loan. Call arguments
 remain held until the receiving call completes, including nested arguments.
@@ -86,8 +86,8 @@ exclusive mutable reference and an exact Copy referent/RHS type. Non-Copy move-o
 and replacement are Ownership errors; no destruction or displaced-value semantics
 are implied. Reads/writes count for last use; writes hold the loan throughout the
 RHS. Copied dereference arguments do not call-hold a reference, while reference
-arguments retain KED-006 holds. Direct owner reassignment, field mutation, auto-deref,
-reborrowing, and general mutation remain unsupported (KD-022 / OQ-025).
+arguments retain KED-006 holds. General owner replacement, field mutation, auto-deref,
+reborrowing, and broader mutation remain unsupported (KD-022 / OQ-025).
 
 KED-008 adds statement-only `if` / optional `else` with Bool conditions, nesting,
 lexical child scopes, no visible-name shadowing, and distinct sibling LocalIds.
@@ -111,6 +111,18 @@ phi, block parameter, SSA, general temporary/result slot, definite-assignment
 solver, loop, early return, cleanup, or MIR-based ownership solver. Conditional
 values in returns/call arguments/general expression positions remain open under
 OQ-022/OQ-024/OQ-026.
+
+KED-011 adds direct `local = expression;` statements for mutable owned Copy Bool
+and named-range locals (KD-026). Parameters, immutable locals, and reference locals
+are Type errors; exact-typed non-Copy record replacement is an Ownership error.
+RHS typing is exact and nominal without literal materialization. The RHS evaluates
+before mutation, completes operation holds and last-use expiry, then the write
+checks that no shared/exclusive loan of the target remains active. Self/repeated
+assignment is valid; KD-024 sibling-path and post-join liveness remain unchanged.
+AST/HIR/MIR distinguish Assign from Let and DerefAssign, preserving the existing
+LocalId. MIR remains acyclic. Assignment expressions, compound/chained/projected
+assignment, conditional-value RHSs, reference replacement, non-Copy displacement,
+loops, destruction, and general dataflow remain unsupported.
 
 Ordinary functions are parsed, resolved, type-checked, and ownership-checked,
 including loan and borrowed-access legality, and lowered to ordinary MIR, but not executed or proven. A range result type does not establish that the

@@ -81,8 +81,8 @@ and returns (KD-020). ParameterId/LocalId state is per function; a moved place
 cannot be reused. The compiler does not silently clone. Record fields do not make
 records Copy. KED-006 adds explicit shared (`&T`) and exclusive (`&mut T`)
 whole-value borrowing. Shared references are Copy; mutable references move.
-`let mut` / `let mutable` marks an owned local as exclusively borrowable, without
-reassignment. Immutable reference locals carry private loan provenance. Loans
+KED-006 introduced `let mut` / `let mutable` for exclusive borrowing without
+reassignment; KD-026 later adds narrow Copy-safe local reassignment. Immutable reference locals carry private loan provenance. Loans
 end after the last possible use of derived handles on each path; potentially
 available handles at a join can retain a possibly active loan. Call arguments
 remain held until the receiving call completes, including nested arguments.
@@ -99,8 +99,8 @@ exclusive mutable reference and an exact Copy referent/RHS type. Non-Copy move-o
 and replacement are Ownership errors; no destruction or displaced-value semantics
 are implied. Reads/writes count for last use; writes hold the loan throughout the
 RHS. Copied dereference arguments do not call-hold a reference, while reference
-arguments retain KED-006 holds. Direct owner reassignment, field mutation, auto-deref,
-reborrowing, and general mutation remain unsupported (KD-022 / OQ-025).
+arguments retain KED-006 holds. General owner replacement, field mutation, auto-deref,
+reborrowing, and broader mutation remain unsupported (KD-022 / OQ-025).
 
 KED-008 adds statement-only `if` / optional `else` with Bool conditions, nesting,
 lexical child scopes, no visible-name shadowing, and distinct sibling LocalIds.
@@ -124,6 +124,18 @@ phi, block parameter, SSA, general temporary/result slot, definite-assignment
 solver, loop, early return, cleanup, or MIR-based ownership solver. Conditional
 values in returns/call arguments/general expression positions remain open under
 OQ-022/OQ-024/OQ-026.
+
+KED-011 adds direct `local = expression;` statements for mutable owned Copy Bool
+and named-range locals (KD-026). Parameters, immutable locals, and reference locals
+are Type errors; exact-typed non-Copy record replacement is an Ownership error.
+RHS typing is exact and nominal without literal materialization. The RHS evaluates
+before mutation, completes operation holds and last-use expiry, then the write
+checks that no shared/exclusive loan of the target remains active. Self/repeated
+assignment is valid; KD-024 sibling-path and post-join liveness remain unchanged.
+AST/HIR/MIR distinguish Assign from Let and DerefAssign, preserving the existing
+LocalId. MIR remains acyclic. Assignment expressions, compound/chained/projected
+assignment, conditional-value RHSs, reference replacement, non-Copy displacement,
+loops, destruction, and general dataflow remain unsupported.
 
 Ordinary functions are parsed, resolved, type-checked, and ownership-checked,
 including loan and borrowed-access legality, and lowered to ordinary MIR, but not executed or proven. A range result type does not establish that the
@@ -790,7 +802,8 @@ move by value. Borrowing, cloning, mutable reborrowing, and reference coercions
 are never inserted implicitly.
 
 KED-006 implements only whole-value, straight-line, non-escaping borrowing.
-`let mut` marks an owned local as exclusively borrowable; it enables no reassignment.
+`let mut` marked an owned local as exclusively borrowable; KED-006 itself added
+no reassignment. KD-026 later permits narrow Copy-safe direct local reassignment.
 KED-006 does not establish explicit lifetime syntax, reference returns, dereference
 semantics, partial borrowing, or mutation through references.
 
@@ -813,6 +826,7 @@ KED-007 implements directly named ordinary reference access and dedicated
 `*reference = expression;` statements only. It does not establish owned-local
 reassignment, non-Copy replacement, destructors/Drop, field access or mutation,
 auto-deref, reborrowing, compound assignment, assignment expressions, or control flow.
+KD-026 later establishes a separate narrow Copy-safe owned-local reassignment form.
 
 ---
 
@@ -916,6 +930,60 @@ parenthesized conditional values, dereference writes, and general expression
 positions remain unsupported. It settles no statement-containing value blocks,
 reference lifetime joins, early returns, loops, destruction, execution, or general
 MIR value-flow strategy. These boundaries remain open under OQ-022/OQ-024/OQ-026.
+
+
+---
+
+## KD-026 — Copy-safe direct local reassignment
+
+**Status:** Accepted
+
+An ordinary local declared with `let mut` / `let mutable` may be directly
+reassigned when it holds an owned non-reference Copy value. Initially the
+permitted target types are Bool and named constrained ranges:
+
+```klyxr
+let mut current = start;
+current = next(current);
+```
+
+The target is one directly named, in-scope mutable local. Parameters and immutable
+locals are not assignable. The RHS must have the exact same concrete type,
+including nominal range identity. There is no contextual integer-literal
+materialization, conversion, structural matching, or implicit clone.
+
+Assignment is a statement with a required semicolon and produces no value.
+It remains distinct from Let initialization and explicit DerefAssign write-through.
+Chained/compound assignment, projected/field/index targets, assignment expressions,
+and conditional values on an assignment RHS remain unsupported.
+
+For this directly named form, RHS evaluation occurs before mutation. Existing
+RHS ownership effects and call holds complete, last-use loans may expire, and
+then the write requires exclusive mutation access: any active shared or exclusive
+loan of the target conflicts. This allows Copy self-assignment and final reference
+reads/calls on the RHS before the write when no future handle use keeps the loan
+active. KD-024 continuation-aware path-sensitive expiry remains authoritative in
+branches; a post-join reference use protects the owner on every relevant path.
+Assignment creates no loan or new local identity, moves nothing out of the target,
+and leaves the Copy owner available. This rule does not settle evaluation order
+for future generalized place assignments.
+
+Reference-local reassignment is rejected during typing because provenance/lifetime
+replacement remains unresolved. Mutable record locals remain non-Copy: exact-typed
+replacement is rejected during ownership checking before consuming either owner,
+until displacement/destruction semantics are defined. No destruction, leak, clone,
+swap, take, or replace behavior is implied.
+
+AST, resolved statements, typed HIR, and MIR use a dedicated Assign node. HIR/MIR
+retain the canonical destination LocalId, typed RHS, and statement span. Straight-line
+lowering adds no blocks; branch lowering uses the current branch block. MIR remains
+deterministic and acyclic with explicit Branch/Goto/Return terminators. KED-010
+conditional initialization still emits mutually exclusive Let statements, not Assign.
+
+KED-011 adds no loops/backedges, fixed-point analysis, general ownership dataflow,
+SSA, phi, block parameters, general temporaries/result slots, definite assignment,
+non-Copy replacement, reference replacement, execution, or verification expansion.
+OQ-022/OQ-024/OQ-025/OQ-026 retain broader mutation and control-flow design.
 
 <!-- END LANGUAGE_DECISIONS.md -->
 
@@ -1168,7 +1236,7 @@ pipeline is source → lexer → parser → AST → explicit name resolution →
 and value-flow type checking → typed HIR → core ownership, loan, and borrowed-access checking →
 ordinary MIR CFG lowering (ordinary functions) or specialized
 integer contract proof (verified functions) → diagnostics. This implements KD-012, KD-018, KD-019,
-KD-020, KD-021, KD-022, KD-023, KD-024, and KD-025 only for the documented
+KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, and KD-026 only for the documented
 subset; the broader pipeline above remains accepted architecture/future work.
 
 The AST preserves textual declarations, parameter types, explicit ordinary
@@ -1210,7 +1278,7 @@ Ordinary functions have explicit value return types and exactly one final
 `return expression;`. Immutable locals propagate concrete initializer types;
 call arguments and returns require exact concrete types. Bare integer locals,
 arguments to range parameters, and returns do not gain implicit range types.
-KED-004 through KED-010 do not execute, prove, or dynamically enforce ordinary functions.
+KED-004 through KED-011 do not execute, prove, or dynamically enforce ordinary functions.
 `Range(T)` typing does not prove bounds or overflow safety. Plain `fn` is not a
 claim to implement the full future `safe` model. All mixed-kind calls are rejected.
 
@@ -1247,7 +1315,7 @@ by itself eliminate a loan active on another incoming path. Local
 transfers attach destination provenance before expiry; final-use arguments attach
 call holds before expiry. Reference parameters have external provenance without
 interprocedural owner reconstruction. Loan state is not published in HIR.
-Exclusive borrowing requires a mutable owned local; `let mut` enables no assignment.
+Exclusive borrowing requires a mutable owned local; `let mut` introduced exclusive borrowing under KED-006; KD-026 now adds Copy-safe local assignment.
 There is no ordinary field access/record construction, reborrowing, reference return,
 implicit reference coercion, partial move/borrow, user-defined Copy/Clone, or destructor. Source names
 and nominal type errors must be resolved before ownership checking.
@@ -1263,7 +1331,7 @@ loans. Both count for last use. Copy reads can expire the original loan immediat
 after access, and their result does not call-hold a reference. Write statements hold
 the original loan through RHS traversal, then expire normally after completion;
 RHS calls cannot invalidate the target handle and leave an accepted write.
-No destruction, field mutation, auto-deref, or direct reassignment is implemented.
+No destruction, field mutation, or auto-deref is implemented. KD-026 adds separate Copy-safe local assignment.
 
 The verifier takes only a verified-function view from the shared HIR table;
 ordinary functions are ignored as proof targets and never counted as proven.
@@ -1308,7 +1376,7 @@ loops, reborrowing, escaping references, and broader MIR ownership dataflow.
 `mir::lower(&program)` leaves `compile_source`'s canonical HIR result unchanged.
 MIR preserves FunctionId/ParameterId/LocalId and exact expression types. Public
 inspection is read-only; BasicBlockId and canonical block storage are compilation-local.
-Each block owns Let/DerefAssign statements and exactly one Goto, typed Bool Branch,
+Each block owns Let/Assign/DerefAssign statements and exactly one Goto, typed Bool Branch,
 or value Return terminator. Expressions retain their typed HIR trees. Structured
 recursive lowering allocates blocks deterministically, gives every fallthrough
 an explicit Goto, and emits the final source return as a terminator. Empty else
@@ -1344,6 +1412,33 @@ The executable flow is typed HIR → ownership/path-sensitive acyclic loans → 
 statement CFGs and destination-local value joins. MIR still has no backend or
 verification consumer. The verified battery path excludes ordinary conditionals.
 
+KED-011 extends ordinary statements with Assign. The AST preserves the direct target
+spelling, RHS, and complete span. Resolution binds the target to a canonical Place;
+typing rejects parameters, references, and immutable locals, requires exact RHS
+identity, and publishes only a LocalId target. It creates no declaration or new ID.
+Exact-typed non-Copy record replacement reaches the ownership rejection boundary.
+
+For mutable Bool/range targets, the existing ownership checker analyzes the RHS
+under current state, completes call holds and last-use expiry, then checks the
+write against every active shared/exclusive loan of that owner. This RHS-first,
+write-second rule allows final RHS reference uses to end before mutation. KD-024
+branch-specific future counts include RHS uses and the continuation; loan merging,
+Move/ConditionalMove availability, call holds, and write-through holds are unchanged.
+Non-Copy replacement fails before either owner is consumed or displaced.
+
+MIR Assign retains the source LocalId, typed RHS, and span; it is distinct from
+Let initialization and DerefAssign. Straight-line lowering adds no blocks; branch
+assignments stay in the current block. Expression validation also inspects Assign
+RHSs for hidden IfValue nodes. MIR's cycle rejection is unchanged. There is no
+second ownership engine, general place model, reference provenance replacement,
+destruction, loop/backedge, or fixed-point infrastructure.
+
+The implemented ordinary path now includes initialization, conditional initialization,
+Copy-safe mutable-local reassignment, and explicit dereference write-through →
+ownership/path-sensitive acyclic loans → acyclic MIR Let/Assign/DerefAssign statements
+with explicit Branch/Goto/Return terminators. Ordinary code remains non-executable
+and unverified, and the specialized battery path remains unchanged.
+
 There are no phi nodes, block parameters/results, SSA, loops, general temporaries,
 cleanup edges, execution, or MIR backend/verifier consumers. The specialized
 verified path stays on HIR and retains its proof counts and numerical kernel.
@@ -1366,7 +1461,7 @@ Empty admissible domains are explicitly rejected by this prototype.
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
 invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
-KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, DP-008, DP-009, and OQ-018 through OQ-026.
+KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, DP-008, DP-009, and OQ-018 through OQ-026.
 
 <!-- END ARCHITECTURE.md -->
 
@@ -1497,7 +1592,8 @@ exclusive borrowing only. It introduces no assignment or mutable owned parameter
 The core straight-line, non-escaping loan rules now fall under KD-021; advanced
 reference semantics remain under OQ-024. KED-007 adds explicit dereference and
 Copy-safe write-through as a distinct accepted operation (KD-022). `let mut`
-still does not enable direct owned-local reassignment; that remains open.
+did not enable direct owned-local reassignment under KED-007. KED-011 now settles
+only direct reassignment of mutable Bool/named-range Copy locals (KD-026).
 
 KED-008 adds ordinary statement `if` / optional `else`, with nested lexical
 branch scopes. Ordinary functions still require one final function-level return;
@@ -1514,7 +1610,8 @@ Still open:
 - early returns and multiple control-flow return paths;
 - conditional values in returns, call arguments, and general expression positions;
 - statement-containing value blocks and broader owned branch-result semantics;
-- reassignment and broader mutable-local semantics;
+- non-Copy replacement, reference-local reassignment, and broader mutable-local semantics;
+- compound assignment, projected places, and conditional values on assignment RHSs;
 - mutable owned parameters;
 - reference returns and escaping-reference interfaces;
 - expression-bodied function shorthand;
@@ -1597,11 +1694,14 @@ OQ-009 remains authoritative for the broader explicit lifetime syntax question.
 KED-007 settles only explicit dereference and Copy-safe whole-value write-through.
 KED-008 permits those operations inside `if` branches. It does not settle general
 mutation across loops or complex control flow, or non-Copy replacement/destruction.
+KED-011 settles only direct mutable Bool/named-range local Copy reassignment
+(KD-026), with exact typing, RHS-first/write-second ordering, and active-loan checks.
+It introduces no generalized place evaluation-order rule.
 
 Still open:
 
 - non-Copy replacement and the fate/destruction of displaced values;
-- direct local reassignment;
+- reference-local reassignment and provenance/lifetime replacement;
 - general place-expression architecture;
 - field/projected assignment, partial mutation, and aggregate mutation;
 - compound assignment;
@@ -1645,6 +1745,10 @@ Still open:
 - destruction / cleanup edges and exceptional / unwind control flow;
 - eventual MIR expression-lowering granularity.
 
-KED-008/KED-010 MIR choices do not settle or preclude these broader features.
+KED-011 adds a distinct acyclic MIR Assign statement for already initialized Copy
+locals. This prepares ordinary loop-carried Copy state for a separately authorized
+future directive; it adds no loops, backedges, fixed points, SSA, or definite assignment.
+
+KED-008/KED-010/KED-011 MIR choices do not settle or preclude these broader features.
 
 <!-- END OPEN_QUESTIONS.md -->

@@ -215,6 +215,40 @@ fn value_statements(
                     span: *span,
                 }
             }
+            ResolvedValueStatement::Assign {
+                target,
+                value,
+                span,
+            } => {
+                let local = match target {
+                    hir::Place::Local(local) => *local,
+                    hir::Place::Parameter(parameter) => {
+                        return Err(Diagnostic::semantic(*span, format!("cannot assign parameter `{}`", program.parameter(*parameter).name), "direct reassignment requires an ordinary local; mutable owned parameters are unsupported").into());
+                    }
+                };
+                let target = program.local(local);
+                if matches!(
+                    target.ty,
+                    ValueType::SharedRef(_) | ValueType::MutableRef(_)
+                ) {
+                    return Err(Diagnostic::semantic(*span, format!("cannot reassign reference local `{}`", target.name), "reference provenance replacement is unresolved; direct reassignment requires a mutable owned Copy local").into());
+                }
+                if !target.mutable {
+                    return Err(Diagnostic::semantic(
+                        *span,
+                        format!("cannot assign immutable local `{}`", target.name),
+                        "direct reassignment requires a let mut / let mutable local",
+                    )
+                    .into());
+                }
+                let value = expression(program, functions, value)?;
+                exact_value(program, &value, target.ty, "assignment RHS")?;
+                hir::ValueStatement::Assign {
+                    local,
+                    value,
+                    span: *span,
+                }
+            }
             ResolvedValueStatement::DerefAssign {
                 reference,
                 value,

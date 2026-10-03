@@ -243,7 +243,7 @@ pipeline is source → lexer → parser → AST → explicit name resolution →
 and value-flow type checking → typed HIR → core ownership, loan, and borrowed-access checking →
 ordinary MIR CFG lowering (ordinary functions) or specialized
 integer contract proof (verified functions) → diagnostics. This implements KD-012, KD-018, KD-019,
-KD-020, KD-021, KD-022, KD-023, KD-024, and KD-025 only for the documented
+KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, and KD-026 only for the documented
 subset; the broader pipeline above remains accepted architecture/future work.
 
 The AST preserves textual declarations, parameter types, explicit ordinary
@@ -285,7 +285,7 @@ Ordinary functions have explicit value return types and exactly one final
 `return expression;`. Immutable locals propagate concrete initializer types;
 call arguments and returns require exact concrete types. Bare integer locals,
 arguments to range parameters, and returns do not gain implicit range types.
-KED-004 through KED-010 do not execute, prove, or dynamically enforce ordinary functions.
+KED-004 through KED-011 do not execute, prove, or dynamically enforce ordinary functions.
 `Range(T)` typing does not prove bounds or overflow safety. Plain `fn` is not a
 claim to implement the full future `safe` model. All mixed-kind calls are rejected.
 
@@ -322,7 +322,7 @@ by itself eliminate a loan active on another incoming path. Local
 transfers attach destination provenance before expiry; final-use arguments attach
 call holds before expiry. Reference parameters have external provenance without
 interprocedural owner reconstruction. Loan state is not published in HIR.
-Exclusive borrowing requires a mutable owned local; `let mut` enables no assignment.
+Exclusive borrowing requires a mutable owned local; `let mut` introduced exclusive borrowing under KED-006; KD-026 now adds Copy-safe local assignment.
 There is no ordinary field access/record construction, reborrowing, reference return,
 implicit reference coercion, partial move/borrow, user-defined Copy/Clone, or destructor. Source names
 and nominal type errors must be resolved before ownership checking.
@@ -338,7 +338,7 @@ loans. Both count for last use. Copy reads can expire the original loan immediat
 after access, and their result does not call-hold a reference. Write statements hold
 the original loan through RHS traversal, then expire normally after completion;
 RHS calls cannot invalidate the target handle and leave an accepted write.
-No destruction, field mutation, auto-deref, or direct reassignment is implemented.
+No destruction, field mutation, or auto-deref is implemented. KD-026 adds separate Copy-safe local assignment.
 
 The verifier takes only a verified-function view from the shared HIR table;
 ordinary functions are ignored as proof targets and never counted as proven.
@@ -383,7 +383,7 @@ loops, reborrowing, escaping references, and broader MIR ownership dataflow.
 `mir::lower(&program)` leaves `compile_source`'s canonical HIR result unchanged.
 MIR preserves FunctionId/ParameterId/LocalId and exact expression types. Public
 inspection is read-only; BasicBlockId and canonical block storage are compilation-local.
-Each block owns Let/DerefAssign statements and exactly one Goto, typed Bool Branch,
+Each block owns Let/Assign/DerefAssign statements and exactly one Goto, typed Bool Branch,
 or value Return terminator. Expressions retain their typed HIR trees. Structured
 recursive lowering allocates blocks deterministically, gives every fallthrough
 an explicit Goto, and emits the final source return as a terminator. Empty else
@@ -419,6 +419,33 @@ The executable flow is typed HIR → ownership/path-sensitive acyclic loans → 
 statement CFGs and destination-local value joins. MIR still has no backend or
 verification consumer. The verified battery path excludes ordinary conditionals.
 
+KED-011 extends ordinary statements with Assign. The AST preserves the direct target
+spelling, RHS, and complete span. Resolution binds the target to a canonical Place;
+typing rejects parameters, references, and immutable locals, requires exact RHS
+identity, and publishes only a LocalId target. It creates no declaration or new ID.
+Exact-typed non-Copy record replacement reaches the ownership rejection boundary.
+
+For mutable Bool/range targets, the existing ownership checker analyzes the RHS
+under current state, completes call holds and last-use expiry, then checks the
+write against every active shared/exclusive loan of that owner. This RHS-first,
+write-second rule allows final RHS reference uses to end before mutation. KD-024
+branch-specific future counts include RHS uses and the continuation; loan merging,
+Move/ConditionalMove availability, call holds, and write-through holds are unchanged.
+Non-Copy replacement fails before either owner is consumed or displaced.
+
+MIR Assign retains the source LocalId, typed RHS, and span; it is distinct from
+Let initialization and DerefAssign. Straight-line lowering adds no blocks; branch
+assignments stay in the current block. Expression validation also inspects Assign
+RHSs for hidden IfValue nodes. MIR's cycle rejection is unchanged. There is no
+second ownership engine, general place model, reference provenance replacement,
+destruction, loop/backedge, or fixed-point infrastructure.
+
+The implemented ordinary path now includes initialization, conditional initialization,
+Copy-safe mutable-local reassignment, and explicit dereference write-through →
+ownership/path-sensitive acyclic loans → acyclic MIR Let/Assign/DerefAssign statements
+with explicit Branch/Goto/Return terminators. Ordinary code remains non-executable
+and unverified, and the specialized battery path remains unchanged.
+
 There are no phi nodes, block parameters/results, SSA, loops, general temporaries,
 cleanup edges, execution, or MIR backend/verifier consumers. The specialized
 verified path stays on HIR and retains its proof counts and numerical kernel.
@@ -441,4 +468,4 @@ Empty admissible domains are explicitly rejected by this prototype.
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
 invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
-KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, DP-008, DP-009, and OQ-018 through OQ-026.
+KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, DP-008, DP-009, and OQ-018 through OQ-026.

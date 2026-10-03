@@ -58,7 +58,7 @@ across the input; record bindings must be constructed before their use. Duplicat
 names in a declaration namespace or the binding scope are rejected; shadowing
 is outside this prototype. Passing an immutable binding to `&mut` is an error.
 
-## Ordinary value functions (KED-004 through KED-010)
+## Ordinary value functions (KED-004 through KED-011)
 
 ```klyxr
 type Percent = range 0..100;
@@ -92,8 +92,9 @@ one final **`return expression;`**. Its semicolon is mandatory. Klyxr deliberate
 rejects implicit block tails, with or without a semicolon (KD-019). Missing returns
 are type errors; bare tails and statements after return receive explicit parser
 diagnostics. No general expression statements, early/multiple returns, local
-annotations or reassignment are implemented. KED-006 adds `let mut`/`let mutable`
-only for owned locals eligible for exclusive borrowing, as described below. The existing
+annotations are implemented. KED-006 introduced `let mut`/`let mutable` for owned
+locals eligible for exclusive borrowing; KED-011 adds Copy-safe direct local
+reassignment, as described below. The existing
 top-level mutable record harness is unchanged.
 
 Parameters are visible at entry; a local enters scope after its initializer is
@@ -119,7 +120,7 @@ proof, or runtime checks. For example, `return current - used;` can type as Perc
 that every result meets Percent's bounds. The verifier ignores ordinary functions
 as proof targets. Plain `fn` does not yet implement the full `safe` assurance model,
 with only core moves and whole-value, straight-line/acyclic, non-escaping borrowing
-implemented under KD-004, KD-020, KD-021, KD-022, KD-023, KD-024, and KD-025. Ordinary calls may target only ordinary functions; verified
+implemented under KD-004, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, and KD-026. Ordinary calls may target only ordinary functions; verified
 contracts/body expressions cannot call functions, and top-level harness calls may
 target only verified functions. These rejections leave OQ-019 unresolved.
 
@@ -211,7 +212,8 @@ Borrow expressions are exactly `&name`, `&mut name`, or `&mutable name`, where
 name resolves to an existing owned ordinary ParameterId or LocalId. Calls,
 parenthesized targets, literals, fields, and existing reference values cannot be
 borrowed. `let mut name = expression;` and `let mutable name = expression;` mark
-an owned local as eligible for exclusive borrowing. They enable no reassignment.
+an owned local as eligible for exclusive borrowing. KED-006 itself introduced no
+reassignment; KED-011 now permits the narrow Copy-safe form described below.
 Reference-valued locals remain immutable bindings even for `&mut T`; marking
 such a binding `let mut` is a type error. Ordinary owned parameters remain
 immutable places; mutable owned parameter syntax is not implemented.
@@ -342,7 +344,8 @@ only after their initializer, visible-name shadowing is rejected, and branch
 locals cannot escape or cross into siblings. Siblings may reuse a spelling with
 distinct canonical LocalIds. One explicit final function-level return remains
 required. Branch-local returns and `else if` shorthand are rejected, as are loops,
-match, break/continue, expression statements, and direct local reassignment.
+match, break/continue, and expression statements. Copy-safe local reassignment
+is permitted under KED-011.
 
 Ownership evaluates the condition once before splitting state. Both branches
 start independently from that post-condition state. A non-Copy place visible at
@@ -379,6 +382,60 @@ block parameters/results, SSA, loops, temporary flattening, cleanup, backend, or
 verification consumer. KD-023 settles this boundary; OQ-026 retains broader
 conditional expressions, control flow, and dataflow. See `examples/if_control_flow.klx`
 and intentional Ownership failure `examples/if_move_fail.klx`.
+
+## Copy-safe direct local reassignment (KED-011)
+
+```klyxr
+fn next(value: Percent) -> Percent { return value; }
+fn update(start: Percent) -> Percent {
+    let mut current = start;
+    current = next(current);
+    return current;
+}
+```
+
+`let mut` / `let mutable` owned Bool and named-range locals may be reassigned with
+`local = expression;`, including inside existing statement branches. The target
+must be a previously declared in-scope mutable local; it retains the same canonical
+LocalId. Parameters and immutable locals are Type errors. The RHS requires exact
+concrete nominal identity; equal range bounds do not permit assignment between
+distinct declarations. Integer literals gain no contextual range type.
+
+The RHS evaluates first against the old value. Complete RHS calls retain their
+reference holds, then existing last-use expiry runs before the write. The actual
+write conflicts with any still-active shared or exclusive loan of the target.
+For example, `current = *view;` may be accepted when that Copy dereference is the
+handle's final possible use, while a later `*view` keeps the loan active and blocks
+the write. Sibling-only uses do not pin a loan on the opposite assignment edge;
+post-join uses propagate back into each relevant branch. Direct assignment creates
+no loan, consumes nothing out of the Copy target, and leaves it available for
+self-assignment, repeated writes, borrowing, and returning.
+
+Reference-local reassignment is a Type error; provenance replacement remains
+unresolved. Exact-typed record replacement is an Ownership error before consuming
+either owner, because displacement/destruction semantics remain undefined. KED-011
+adds no drop, clone, leak, swap, take, or replace semantics.
+
+Assignment remains statement-only and directly named. No assignment expressions,
+chained/compound forms, parameters, projected/field/index targets, auto-deref,
+reference replacement, or non-Copy replacement are added. Its RHS uses the existing
+ordinary expression grammar, so `current = if ...` remains rejected. KED-010
+conditional initialization is separate: a mutable Copy destination may subsequently
+be assigned, but its mutually exclusive MIR Let leaves remain initialization.
+Existing explicit `*reference = expression;` retains KED-007 write holds and rules.
+
+AST/HIR `ValueStatement` and MIR `Statement` publicly add `Assign`; exhaustive
+library matches must handle the new variant. HIR/MIR retain a canonical LocalId,
+typed RHS, and complete statement span. MIR emits a distinct Assign in the current
+block, adds no blocks for straight-line writes, and remains deterministic/acyclic.
+Validation rejects hidden IfValue nodes in assignment RHSs. `compile_source` and
+`mir::lower` signatures remain unchanged. No generalized place/dataflow model,
+loops/backedges, SSA, phi/block parameters, result slots, definite assignment,
+execution, or ordinary verification is introduced.
+
+See `examples/local_reassignment.klx` and the intentional future-use loan conflict
+`examples/local_reassignment_borrow_fail.klx`. KD-026 settles this boundary;
+OQ-022/OQ-024/OQ-025/OQ-026 retain broader mutation and control-flow design.
 
 ## Conditional value initialization (KED-010)
 
@@ -623,7 +680,7 @@ replacement are ownership errors. Non-reference dereference, shared writes, and
 RHS mismatches are Type errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, and KD-025 only for the documented subset.
+This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, and KD-026 only for the documented subset.
 General type inference, advanced borrowing/ownership, effects, MIR backend/verification lowering, VIR,
 and broader HIR features remain future work.
 
@@ -687,14 +744,14 @@ consume(&mut battery, 50); // rejected: 50 <= 30 is false
 The prototype does not implement ownership beyond core ordinary moves and
 whole-value acyclic loans, reference returns, explicit lifetimes, reborrowing,
 auto-dereference, non-Copy replacement, field/reference mutation beyond Copy-safe
-whole-value writes, partial borrowing, reassignment, destruction,
+whole-value writes, partial borrowing, general replacement, destruction,
 effects, runtime contracts, expressions beyond this subset, loops, quantifiers,
 multiple fields, record invariants, SMT/VIR or MIR backend/verification lowering, or machine-code generation. In particular,
 `examples/effects.klx` is illustrative and is rejected rather than analyzed.
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, and KD-025,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, and KD-026,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset

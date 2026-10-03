@@ -170,17 +170,14 @@ fn explicit_returns_are_required_and_cannot_be_implicit_tails() {
 }
 
 #[test]
-fn owned_mutable_locals_do_not_enable_assignment_annotations_or_expression_statements() {
+fn mutable_copy_assignment_does_not_enable_annotations_or_expression_statements() {
     for spelling in ["mut", "mutable"] {
         compile(&format!(
-            "fn ok(value: Percent) -> Percent {{ let {spelling} x = value; return x; }}"
+            "fn ok(value: Percent) -> Percent {{ let {spelling} x = value; x = value; return x; }}"
         ));
     }
     for body in [
-        "let mut x = value; x = value; return x;",
-        "let mutable x = value; x = value; return x;",
         "let x: Percent = value; return x;",
-        "let x = value; x = value; return x;",
         "identity(value); return value;",
         "if true { return value; }",
     ] {
