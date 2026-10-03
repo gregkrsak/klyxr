@@ -120,7 +120,7 @@ proof, or runtime checks. For example, `return current - used;` can type as Perc
 that every result meets Percent's bounds. The verifier ignores ordinary functions
 as proof targets. Plain `fn` does not yet implement the full `safe` assurance model,
 with only core moves and whole-value, straight-line/acyclic, non-escaping borrowing
-implemented under KD-004, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, and KD-027. Ordinary calls may target only ordinary functions; verified
+implemented under KD-004, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, and KD-028. Ordinary calls may target only ordinary functions; verified
 contracts/body expressions cannot call functions, and top-level harness calls may
 target only verified functions. These rejections leave OQ-019 unresolved.
 
@@ -681,7 +681,7 @@ replacement are ownership errors. Non-reference dereference, shared writes, and
 RHS mismatches are Type errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, and KD-027 only for the documented subset.
+This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, and KD-028 only for the documented subset.
 General type inference, advanced borrowing/ownership, effects, MIR backend/verification lowering, VIR,
 and broader HIR features remain future work.
 
@@ -752,7 +752,7 @@ multiple fields, record invariants, SMT/VIR or MIR backend/verification lowering
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, and KD-027,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, and KD-028,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
@@ -848,14 +848,15 @@ visible-name shadowing, and static canonical LocalIds. Body locals cannot escape
 The one final function-level return remains required. While expressions, loop-local
 returns, break/continue/for/unconditional loop and labels remain unsupported.
 
-Only owned Copy Bool/named-range activity is allowed in conditions and bodies:
+KED-012 initially allowed only owned Copy Bool/named-range activity in conditions and bodies:
 Copy calls/reads/locals, direct mutable-local reassignment, and KED-010 Copy
 conditional initialization. All reference activity (including shared Copy handles,
 borrow creation, arguments, aliases, dereference and write-through) and non-Copy
-record activity (including fresh call results) is rejected by ownership with an
+record activity (including fresh call results) was rejected by ownership with an
 explanation that cyclic ownership/lifetime analysis is future work. Existing
-Type restrictions can reject malformed operations earlier. Constant false does
-not bypass these checks.
+Type restrictions can reject malformed operations earlier. KED-013 permits
+iteration-local Move activity in bodies as described below; conditions and
+reference restrictions remain unchanged. Constant false does not bypass checks.
 
 The HIR ownership checker analyzes one permitted iteration and requires equal
 outer Move availability, handle provenance, active loans and loan allocation state
@@ -881,3 +882,52 @@ verified loops/invariants/variants, and termination checking remain unresolved
 under OQ-024/OQ-026. The battery verifier and 1,800-case affine cross-check are
 unchanged. See `examples/while_copy.klx`, `examples/while_nested.klx`, and intentional
 failures `examples/while_reference_fail.klx` / `examples/while_move_fail.klx`.
+
+
+## Iteration-local Move ownership (KED-013)
+
+A fresh non-Copy call result may now be bound and transferred inside one while
+iteration using existing Move rules:
+
+```klyxr
+while running {
+    let first = make_ticket();
+    let second = identity(first);
+    let done = consume(second);
+    running = false;
+}
+```
+
+Calls remain expressions, so Copy results use existing let/assignment statements;
+no general expression-statement syntax is added. The example helpers have ordinary
+owned signatures. Because ordinary record construction is still absent, the full
+frontend fixture `examples/while_iteration_move.klx` uses a recursive record-returning
+factory. This demonstrates typing/ownership/MIR structure, not executable value
+creation or termination.
+
+Every loop records the canonical Move places present at its own header. Transfers
+of those pre-existing owners reject before changing state and explain that they
+require future generalized cyclic ownership analysis. Fresh body-local owners are
+outside that set; their Available/Moved/ConditionalMove states evolve normally.
+Use-after-move and all-path branch availability still apply. Existing owned
+conditional initialization may select iteration-local records. Unused local owners
+retain existing scope-exit behavior; lexical state removal implies no runtime Drop.
+
+Nested loops establish independent boundaries: a record made in an outer iteration
+before an inner loop cannot move within the inner loop, but may remain untouched
+there and be consumed afterward in the outer iteration. Body-local state is removed
+before comparing header/backedge state. Static LocalIds remain unchanged across
+iterations; names/spans are diagnostic metadata. Outside ownership and loans stay
+protected, and no reference activity or non-Copy replacement is allowed in loops.
+Conditions retain KED-012's Copy-only restriction, including nested call arguments.
+
+AST/parser/resolver/type/HIR/MIR representations and public APIs are unchanged.
+Ownership remains the existing HIR-stage, one-iteration stability check without
+fixed points, general loop-carried Move joins or MIR ownership. MIR uses unchanged
+Let/call trees and Branch/Goto backedges, with no new temporaries or terminators.
+No execution, verification, destruction or termination claim is made.
+
+See `examples/while_iteration_move.klx` and intentional failures
+`examples/while_carried_move_fail.klx` / `examples/while_nested_carried_move_fail.klx`.
+KD-028 settles this refinement; OQ-022/OQ-023/OQ-024/OQ-025/OQ-026 retain broader
+control flow, destruction/replacement, and cyclic ownership/lifetime questions.

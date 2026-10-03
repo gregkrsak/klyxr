@@ -284,7 +284,7 @@ fn while_cli_reports_frontend_only_and_cyclic_ownership_boundaries() {
             ),
             (
                 "while_move_fail.klx",
-                "non-Copy ownership activity is unsupported in while loops",
+                "cannot move pre-existing non-Copy value",
             ),
         ] {
             let output = run(&[command, &example(file)]);
@@ -292,7 +292,36 @@ fn while_cli_reports_frontend_only_and_cyclic_ownership_boundaries() {
             assert!(output.stdout.is_empty());
             let text = String::from_utf8(output.stderr).unwrap();
             assert!(text.contains(message));
-            assert!(text.contains("future cyclic"));
+            assert!(text.contains("future cyclic") || text.contains("future generalized cyclic"));
+            assert!(text.contains("ownership checking stopped"));
+        }
+    }
+}
+
+#[test]
+fn iteration_local_move_cli_parity_and_nested_boundary_diagnostics() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("while_iteration_move.klx")]);
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("ordinary MIR control-flow lowering passed: 3 functions"));
+        assert!(text.contains("not executed or verified"));
+        assert!(text.contains("function bodies proven: 0"));
+        assert!(text.contains("iteration-local Move"));
+        for (file, owner) in [
+            ("while_carried_move_fail.klx", "ticket"),
+            ("while_nested_carried_move_fail.klx", "outer"),
+        ] {
+            let output = run(&[command, &example(file)]);
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            let text = String::from_utf8(output.stderr).unwrap();
+            assert!(text.contains(&format!(
+                "cannot move pre-existing non-Copy value `{owner}` in while loop"
+            )));
+            assert!(text.contains("future generalized cyclic ownership analysis"));
+            assert!(text.contains("-->"));
             assert!(text.contains("ownership checking stopped"));
         }
     }

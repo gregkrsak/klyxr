@@ -605,9 +605,11 @@ owners and references may persist unchanged. Outside live loans still constrain
 owner access and assignment; a dead pre-loop loan is not resurrected.
 
 All reference activity in the condition/body (creation, handle use/transfer,
-arguments, dereference and write-through) and all non-Copy activity (including
+arguments, dereference and write-through) and, under KED-012, all non-Copy activity (including
 fresh record call results and nested consumption) are rejected pending cyclic
-ownership/lifetime analysis. A reference being Copy does not bypass this boundary.
+ownership/lifetime analysis. KD-028 later permits iteration-local Move activity
+in the body while preserving the condition and reference boundaries. A reference
+being Copy does not bypass this boundary.
 Finite future-use counts remain outside-continuation bookkeeping, not cyclic NLL.
 Ownership remains above MIR with one permitted-iteration stability check and no
 fixed-point solver or second checker.
@@ -623,3 +625,46 @@ phi/SSA/block parameters, generalized temporaries, destruction, reference return
 reborrowing, execution, code generation, verified loops, invariants/variants, or
 termination checking is introduced. OQ-024/OQ-026 retain cyclic lifetime/ownership
 and broader control-flow questions.
+
+
+---
+
+## KD-028 — Iteration-Local Move Ownership
+
+**Status:** Accepted
+
+Non-Copy ownership activity may occur inside an ordinary while body when it
+originates and stays entirely within the current iteration and leaves all
+pre-existing ownership state unchanged at the backedge. Fresh non-Copy call
+results may be bound, moved through iteration-local bindings and by-value calls,
+or consumed by calls returning Copy values. Existing KD-020 move rules and
+KD-023 acyclic branch joins apply normally, including use-after-move rejection.
+Existing conditional initialization may select iteration-local owned values.
+
+A body-local declaration has one static canonical LocalId and represents fresh
+initialization on each dynamic iteration. Its tracked availability is scoped
+away before the KD-027 header/backedge semantic comparison. This compile-time
+scope cleanup introduces no runtime destruction, Drop, cleanup or resource-release
+semantics. Unused owned locals retain the existing prototype scope-exit behavior.
+
+Parameters and locals present at entry to the current loop are pre-existing state.
+They cannot move through bindings, calls, or nested branches inside that loop.
+Each nested loop establishes its own boundary: an outer iteration's local is
+pre-existing relative to an inner loop and cannot be consumed there. It may remain
+untouched by the inner loop and be consumed later in its containing iteration.
+Untouched outside owners and live outside loans retain their existing protection.
+
+The condition remains limited to KD-027 ownership-stable Copy activity. Reference
+creation, use/alias/transfer/call arguments, dereference and write-through remain
+forbidden in conditions and bodies. Non-Copy replacement remains forbidden even
+for iteration-local owners. Exact nominal typing, source ordering, no shadowing,
+non-escaping scopes and conservative constant-condition edges are unchanged.
+
+KED-013 refines the single typed-HIR ownership checker with per-loop header place
+identity, analyzes one permitted iteration, scopes away iteration-local state,
+and requires semantic equality of remaining header/backedge state. No fixed-point
+solver, general loop-carried Move joins, second checker, MIR ownership annotations,
+SSA/phi/block parameters, syntax, conversions, execution, or termination proof is
+introduced. MIR retains KD-027's existing lowering and cyclic validation.
+OQ-022/OQ-023/OQ-025/OQ-026 retain broader ownership/control-flow questions;
+iteration-local borrowing and cyclic lifetimes remain open under OQ-024.

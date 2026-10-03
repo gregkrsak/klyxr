@@ -1,0 +1,20 @@
+// Frontend/MIR example, not executed or verified. The recursive factory is
+// a typing fixture; ordinary record construction and termination proof are absent.
+type Percent = range 0..100;
+record Ticket { value: Percent }
+fn make_ticket() -> Ticket { return make_ticket(); }
+fn consume(ticket: Ticket) -> bool { return true; }
+fn run(flag: bool) -> bool {
+    let mut running = flag;
+    while running {
+        let first = make_ticket();
+        let second = first;
+        while running {
+            let inner = make_ticket();
+            let inner_done = consume(inner);
+            running = false;
+        }
+        let done = consume(second);
+    }
+    return running;
+}

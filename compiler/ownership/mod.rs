@@ -1,6 +1,6 @@
-//! Owned moves, acyclic whole-value loans, and loop-stable Copy state in ordinary HIR.
+//! Owned moves, acyclic whole-value loans, and iteration-local loop ownership in ordinary HIR.
 //! Availability and active loans are orthogonal private state; no runtime behavior.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     diagnostics::Diagnostic,
@@ -143,6 +143,13 @@ pub fn check(program: &Program) -> Result<(), Vec<Diagnostic>> {
     }
     Ok(())
 }
+// Each nested loop owns a distinct header boundary. Branch snapshots inherit it;
+// locals introduced in an outer iteration are pre-existing at an inner header.
+#[derive(Clone)]
+struct LoopScope {
+    header_places: BTreeSet<Place>,
+    condition: bool,
+}
 #[derive(Clone)]
 struct Checker<'a> {
     program: &'a Program,
@@ -151,7 +158,7 @@ struct Checker<'a> {
     handles: BTreeMap<Place, LoanId>,
     remaining: FutureUses,
     next_loan: usize,
-    loop_depth: usize,
+    loop_scope: Option<LoopScope>,
 }
 impl<'a> Checker<'a> {
     fn new(program: &'a Program, function: &ValueFunction) -> Self {
@@ -162,7 +169,7 @@ impl<'a> Checker<'a> {
             handles: BTreeMap::new(),
             remaining: future_uses(&function.body),
             next_loan: 0,
-            loop_depth: 0,
+            loop_scope: None,
         };
         for id in &function.parameters {
             if let ParameterType::Value(ty) = program.parameter(*id).ty {
@@ -222,9 +229,6 @@ impl<'a> Checker<'a> {
                 }
                 ValueStatement::Assign { local, value, span } => {
                     let place = Place::Local(*local);
-                    if self.loop_depth > 0 {
-                        self.loop_type(self.program.local(*local).ty.into(), *span)?;
-                    }
                     if ownership_kind(self.program.local(*local).ty) != OwnershipKind::Copy {
                         return Err(self.diagnostic(*span, format!("cannot replace non-Copy owned local `{}`", self.metadata(place).0), "replacement would displace an owned value; displacement/destruction semantics are not yet defined; KED-011 permits only Copy-safe direct local reassignment", None));
                     }
@@ -244,7 +248,7 @@ impl<'a> Checker<'a> {
                     value,
                     span,
                 } => {
-                    if self.loop_depth > 0 {
+                    if self.loop_scope.is_some() {
                         return Err(self.loop_reference_error(*span));
                     }
                     let loan = self.borrowed_access(*reference, *span, true)?;
@@ -269,13 +273,13 @@ impl<'a> Checker<'a> {
         Ok(())
     }
     fn loop_reference_error(&self, span: Span) -> Box<Diagnostic> {
-        self.diagnostic(span, "reference activity is unsupported in while loops".into(), "reference uses through a backedge require future cyclic loan/lifetime analysis; KED-012 permits only ownership-stable owned Copy activity", None)
+        self.diagnostic(span, "reference activity is unsupported in while loops".into(), "reference uses through a backedge require future cyclic loan/lifetime analysis; KED-013 permits owned Copy and iteration-local Move activity only", None)
     }
     fn loop_type(&self, ty: ExprType, span: Span) -> OwnershipResult {
         match ty {
             ExprType::SharedRef(_) | ExprType::MutableRef(_) => Err(self.loop_reference_error(span)),
-            ExprType::Record(_) => Err(self.diagnostic(span, "non-Copy ownership activity is unsupported in while loops".into(), "non-Copy use through a backedge requires future cyclic ownership analysis; KED-012 permits only ownership-stable Copy activity", None)),
-            ExprType::Bool | ExprType::Range(_) | ExprType::IntegerLiteral => Ok(()),
+            ExprType::Record(_) if self.loop_scope.as_ref().is_some_and(|scope| scope.condition) => Err(self.diagnostic(span, "non-Copy ownership activity is unsupported in while conditions".into(), "recurring condition ownership requires future generalized cyclic ownership analysis; only the loop body permits iteration-local Move values", None)),
+            ExprType::Record(_) | ExprType::Bool | ExprType::Range(_) | ExprType::IntegerLiteral => Ok(()),
         }
     }
     fn same_loop_state(&self, header: &Self) -> bool {
@@ -308,19 +312,20 @@ impl<'a> Checker<'a> {
         self.assert_no_holds();
         let header = self.clone();
         let mut iteration = self.clone();
-        iteration.loop_depth += 1;
+        iteration.loop_scope = Some(LoopScope {
+            header_places: header.states.keys().copied().collect(),
+            condition: true,
+        });
         iteration.expression(condition, Transfer::Return(function))?;
         iteration.expire();
+        iteration
+            .loop_scope
+            .as_mut()
+            .expect("current loop")
+            .condition = false;
         iteration.statements(body, function)?;
-        iteration.loop_depth -= 1;
-        // Body-local owners/handles cannot become loop-carried state. Permitted
-        // Copy declarations create no tracked Move or loan state in the first place.
-        iteration
-            .states
-            .retain(|place, _| header.states.contains_key(place));
-        iteration
-            .handles
-            .retain(|place, _| header.handles.contains_key(place));
+        iteration.loop_scope = self.loop_scope.clone();
+        iteration.scope_loop_locals(&header);
         iteration.assert_no_holds();
         if !iteration.same_loop_state(&header) {
             return Err(self.diagnostic(span, "while loop does not preserve ownership and loan state".into(), "the current loop subset requires equal header/backedge state; general cyclic ownership/lifetime analysis remains future work", None));
@@ -329,6 +334,14 @@ impl<'a> Checker<'a> {
         // continuation advances; no repeated reference counts or fixed point exist.
         self.remaining = iteration.remaining;
         Ok(())
+    }
+    fn scope_loop_locals(&mut self, header: &Self) {
+        // Static body-local IDs may evolve within this iteration, but do not
+        // become header state. This is lexical cleanup, not runtime destruction.
+        self.states
+            .retain(|place, _| header.states.contains_key(place));
+        self.handles
+            .retain(|place, _| header.handles.contains_key(place));
     }
     fn conditional(
         &mut self,
@@ -403,7 +416,7 @@ impl<'a> Checker<'a> {
         expression: &TypedExpr,
         transfer: Transfer,
     ) -> OwnershipResult<Option<LoanId>> {
-        if self.loop_depth > 0 {
+        if self.loop_scope.is_some() {
             self.loop_type(expression.ty, expression.span)?;
             if matches!(
                 expression.kind,
@@ -618,6 +631,14 @@ impl<'a> Checker<'a> {
         span: Span,
         transfer: Transfer,
     ) -> OwnershipResult<Option<LoanId>> {
+        if self
+            .loop_scope
+            .as_ref()
+            .is_some_and(|scope| scope.header_places.contains(&place))
+            && matches!(self.metadata(place).1, ValueType::Record(_))
+        {
+            return Err(self.diagnostic(span, format!("cannot move pre-existing non-Copy value `{}` in while loop", self.metadata(place).0), "the transfer would change pre-existing ownership state across a backedge and requires future generalized cyclic ownership analysis; only iteration-local Move values may transfer in the loop body", None));
+        }
         self.available(place, span)?;
         if let Some(loan) = self.conflict(place, None) {
             let name = self.metadata(place).0;
@@ -1155,7 +1176,7 @@ mod tests {
         c.statements(&f.body[2..3], f.id).unwrap();
         assert!(c.same_loop_state(&header));
         assert_ne!(c.remaining, header.remaining);
-        assert_eq!(c.loop_depth, 0);
+        assert!(c.loop_scope.is_none());
         assert_eq!(c.states.len(), 1); // Untouched record parameter only.
         assert_eq!(c.handles.len(), 1); // No body-local provenance escapes.
         c.statements(&f.body[3..], f.id).unwrap();
@@ -1176,7 +1197,7 @@ mod tests {
     #[test]
     fn forbidden_loop_activity_cannot_silently_change_outer_state() {
         for (body, message) in [
-            ("fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { let moved = ticket; } return ticket; }", "non-Copy ownership activity"),
+            ("fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { let moved = ticket; } return ticket; }", "pre-existing non-Copy value"),
             ("fn f(flag: bool, value: Percent) -> Percent { while flag { let view = &value; } return value; }", "reference activity"),
         ] {
             let p = typed(body);
@@ -1186,7 +1207,7 @@ mod tests {
             let header = c.clone();
             let error = c.statements(&f.body[..1], f.id).unwrap_err();
             assert!(error.message.contains(message));
-            assert!(error.required.contains("future cyclic"));
+            assert!(error.required.contains("future cyclic") || error.required.contains("future generalized cyclic"));
             assert!(c.same_loop_state(&header));
         }
     }
@@ -1259,5 +1280,180 @@ mod tests {
         }
         check(&p).unwrap();
         assert_eq!(before, crate::mir::lower(&p));
+    }
+    #[test]
+    fn iteration_local_move_states_evolve_then_leave_header_unchanged() {
+        let p = typed("fn fresh() -> Ticket { return fresh(); } fn consume(value: Ticket) -> bool { return true; } fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { let first = fresh(); let second = first; let unused = fresh(); let done = consume(second); } return ticket; }");
+        let f = p.functions()[2].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.expire();
+        let header = c.clone();
+        let ValueStatement::While {
+            condition, body, ..
+        } = &f.body[0]
+        else {
+            panic!()
+        };
+        let mut iteration = c.clone();
+        iteration.loop_scope = Some(LoopScope {
+            header_places: header.states.keys().copied().collect(),
+            condition: true,
+        });
+        iteration
+            .expression(condition, Transfer::Return(f.id))
+            .unwrap();
+        iteration.loop_scope.as_mut().unwrap().condition = false;
+        iteration.statements(body, f.id).unwrap();
+        let places: Vec<_> = body
+            .iter()
+            .map(|s| match s {
+                ValueStatement::Let { local, .. } => Place::Local(*local),
+                _ => panic!(),
+            })
+            .collect();
+        assert!(matches!(iteration.states[&places[0]], State::Moved { .. }));
+        assert!(matches!(iteration.states[&places[1]], State::Moved { .. }));
+        assert_eq!(iteration.states[&places[2]], State::Available);
+        assert!(!iteration.same_loop_state(&header));
+        iteration.scope_loop_locals(&header);
+        assert!(iteration.same_loop_state(&header));
+        assert_eq!(iteration.states.len(), 1);
+        // Actual loop checking uses the same cleanup, including owners not consumed
+        // explicitly; scope exit does not imply runtime destruction or cleanup code.
+        c.statements(&f.body[..1], f.id).unwrap();
+        assert!(c.same_loop_state(&header));
+        assert!(c.loop_scope.is_none());
+        c.statements(&f.body[1..], f.id).unwrap();
+    }
+    #[test]
+    fn carried_move_and_replacement_failures_preserve_original_checker_state() {
+        for body in [
+            "fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { let moved = ticket; } return ticket; }",
+            "fn consume(value: Ticket) -> bool { return true; } fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { let done = consume(ticket); } return ticket; }",
+            "fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { if flag { let moved = ticket; } } return ticket; }",
+            "fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { while flag { let moved = ticket; } } return ticket; }",
+            "fn fresh() -> Ticket { return fresh(); } fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { let mut local = fresh(); local = ticket; } return ticket; }",
+            "fn fresh() -> Ticket { return fresh(); } fn pair(first: Ticket, second: Ticket) -> bool { return true; } fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { let local = fresh(); let done = pair(local, ticket); } return ticket; }",
+        ] {
+            let p = typed(body);
+            let f = p.functions().last().unwrap().as_ordinary().unwrap();
+            let mut c = Checker::new(&p, f);
+            c.expire();
+            let header = c.clone();
+            let error = c.statements(&f.body[..1], f.id).unwrap_err();
+            assert!(error.message.contains("pre-existing non-Copy") || error.message.contains("cannot replace non-Copy"));
+            assert!(c.same_loop_state(&header));
+            assert_eq!(c.remaining, header.remaining);
+            // The transfer guard itself is atomic, independently of loop cloning.
+            c.loop_scope = Some(LoopScope { header_places: header.states.keys().copied().collect(), condition: false });
+            assert!(c.consume(Place::Parameter(f.parameters[1]), f.span, Transfer::Return(f.id)).is_err());
+            assert!(c.same_loop_state(&header));
+            assert_eq!(c.remaining, header.remaining);
+        }
+    }
+    #[test]
+    fn nested_loop_header_protects_outer_iteration_owner_without_mutation() {
+        let p = typed("fn fresh() -> Ticket { return fresh(); } fn f(flag: bool) -> bool { while flag { let outer = fresh(); while flag { let moved = outer; } } return flag; }");
+        let f = p.functions()[1].as_ordinary().unwrap();
+        let ValueStatement::While { body, .. } = &f.body[0] else {
+            panic!()
+        };
+        let mut c = Checker::new(&p, f);
+        c.loop_scope = Some(LoopScope {
+            header_places: c.states.keys().copied().collect(),
+            condition: false,
+        });
+        c.statements(&body[..1], f.id).unwrap();
+        let ValueStatement::Let { local, .. } = body[0] else {
+            panic!()
+        };
+        let owner = Place::Local(local);
+        assert!(!c
+            .loop_scope
+            .as_ref()
+            .unwrap()
+            .header_places
+            .contains(&owner));
+        let outer = c.clone();
+        let error = c.statements(&body[1..], f.id).unwrap_err();
+        assert!(error
+            .message
+            .contains("pre-existing non-Copy value `outer`"));
+        assert_eq!(c.states[&owner], State::Available);
+        assert!(c.same_loop_state(&outer));
+        assert_eq!(c.remaining, outer.remaining);
+    }
+    #[test]
+    fn lexical_cleanup_cannot_hide_drift_of_a_header_owner() {
+        let p = typed("fn fresh() -> Ticket { return fresh(); } fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { let local = fresh(); } return ticket; }");
+        let f = p.functions()[1].as_ordinary().unwrap();
+        let c = Checker::new(&p, f);
+        let mut drift = c.clone();
+        drift.states.insert(
+            Place::Parameter(f.parameters[1]),
+            State::Moved {
+                span: f.span,
+                transfer: Transfer::Return(f.id),
+            },
+        );
+        let ValueStatement::While { body, .. } = &f.body[0] else {
+            panic!()
+        };
+        let ValueStatement::Let { local, .. } = body[0] else {
+            panic!()
+        };
+        drift.states.insert(Place::Local(local), State::Available);
+        drift.scope_loop_locals(&c);
+        assert!(!drift.states.contains_key(&Place::Local(local)));
+        assert!(!drift.same_loop_state(&c));
+    }
+    #[test]
+    fn iteration_local_acceptance_and_carried_rejections_ignore_display_names() {
+        fn rename(p: &mut Program) {
+            for r in &mut p.ranges {
+                r.name = "display".into();
+            }
+            for r in &mut p.records {
+                r.name = "display".into();
+            }
+            for field in &mut p.fields {
+                field.name = "display".into();
+            }
+            for parameter in &mut p.parameters {
+                parameter.name = "display".into();
+            }
+            for local in &mut p.locals {
+                local.name = "display".into();
+            }
+            for function in &mut p.functions {
+                if let crate::hir::Function::Ordinary(f) = function {
+                    f.name = "display".into();
+                }
+            }
+        }
+        for body in [
+            "fn fresh() -> Ticket { return fresh(); } fn consume(ticket: Ticket) -> bool { return true; } fn f(flag: bool) -> bool { while flag { let first = fresh(); let second = first; if flag { let done = consume(second); } else { let done = consume(second); } } return flag; }",
+            "fn fresh() -> Ticket { return fresh(); } fn consume(ticket: Ticket) -> bool { return true; } fn f(flag: bool) -> bool { while flag { let first = fresh(); while flag { let second = fresh(); let done = consume(second); } let done = consume(first); } return flag; }",
+        ] {
+            let mut p = typed(body);
+            check(&p).unwrap();
+            let before = crate::mir::lower(&p);
+            rename(&mut p);
+            check(&p).unwrap();
+            assert_eq!(before, crate::mir::lower(&p));
+        }
+        for body in [
+            "fn f(flag: bool, ticket: Ticket) -> bool { while flag { let moved = ticket; } return flag; }",
+            "fn fresh() -> Ticket { return fresh(); } fn f(flag: bool) -> bool { while flag { let outer = fresh(); while flag { let moved = outer; } } return flag; }",
+        ] {
+            let mut p = typed(body);
+            let before = check(&p).unwrap_err();
+            rename(&mut p);
+            let after = check(&p).unwrap_err();
+            assert_eq!(before[0].span, after[0].span);
+            assert_eq!(before[0].required, after[0].required);
+            assert_eq!(before[0].known, after[0].known);
+            assert!(after[0].message.contains("pre-existing non-Copy value `display`"));
+        }
     }
 }
