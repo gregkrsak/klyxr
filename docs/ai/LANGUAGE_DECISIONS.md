@@ -479,8 +479,8 @@ and loans do not escape.
 
 KED-009 refines the existing ownership phase above MIR. It adds no syntax, loops,
 reborrowing, reference returns, explicit lifetimes, conditional values, destruction,
-or generalized CFG lifetime inference. General MIR dataflow and loops remain
-unresolved under OQ-024/OQ-026.
+or generalized CFG lifetime inference. General MIR dataflow and cyclic loan analysis remain
+unresolved under OQ-024/OQ-026; KD-027 later settles narrow statement loops.
 
 
 ---
@@ -575,10 +575,51 @@ swap, take, or replace behavior is implied.
 AST, resolved statements, typed HIR, and MIR use a dedicated Assign node. HIR/MIR
 retain the canonical destination LocalId, typed RHS, and statement span. Straight-line
 lowering adds no blocks; branch lowering uses the current branch block. MIR remains
-deterministic and acyclic with explicit Branch/Goto/Return terminators. KED-010
+deterministic with explicit Branch/Goto/Return terminators (acyclic in KED-011;
+KD-027 later adds loop backedges). KED-010
 conditional initialization still emits mutually exclusive Let statements, not Assign.
 
 KED-011 adds no loops/backedges, fixed-point analysis, general ownership dataflow,
 SSA, phi, block parameters, general temporaries/result slots, definite assignment,
 non-Copy replacement, reference replacement, execution, or verification expansion.
 OQ-022/OQ-024/OQ-025/OQ-026 retain broader mutation and control-flow design.
+
+
+## KD-027 — Ordinary while loops with loop-stable ownership
+
+**Status:** Accepted
+
+Ordinary `while condition { statements }` is a pre-test, zero-or-more-iteration
+statement. The condition must be exactly Bool. Braces are required; the block has
+no trailing semicolon or result value. Nested loops and statement conditionals
+are permitted. Each body is a lexical child scope: declarations are ordered,
+visible names cannot be shadowed, and canonical LocalIds are static source
+identities, not new identities for each iteration. One final function-level return
+remains required; loop-local returns are unsupported.
+
+KED-012 permits ownership-stable owned Copy Bool/named-range activity in the
+condition and body, including KD-026 direct reassignment, Copy calls/locals,
+and KD-025 Copy conditional initialization. Header and backedge ownership/loan
+states must agree after body-local state is scoped away. Untouched outside Move
+owners and references may persist unchanged. Outside live loans still constrain
+owner access and assignment; a dead pre-loop loan is not resurrected.
+
+All reference activity in the condition/body (creation, handle use/transfer,
+arguments, dereference and write-through) and all non-Copy activity (including
+fresh record call results and nested consumption) are rejected pending cyclic
+ownership/lifetime analysis. A reference being Copy does not bypass this boundary.
+Finite future-use counts remain outside-continuation bookkeeping, not cyclic NLL.
+Ownership remains above MIR with one permitted-iteration stability check and no
+fixed-point solver or second checker.
+
+MIR lowers while to existing Goto/Branch primitives: preheader to header, header
+to body or exit, and body back to header. Mutable locals retain source LocalIds;
+Let remains initialization and Assign remains mutation. MIR is no longer globally
+acyclic. Structural validation accepts cycles, checks targets/reachability/types,
+and makes no termination claim. Constant conditions do not remove either edge.
+
+No break/continue/for/unconditional loop, labels, loop values, early returns,
+phi/SSA/block parameters, generalized temporaries, destruction, reference returns,
+reborrowing, execution, code generation, verified loops, invariants/variants, or
+termination checking is introduced. OQ-024/OQ-026 retain cyclic lifetime/ownership
+and broader control-flow questions.

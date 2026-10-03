@@ -1,0 +1,9 @@
+// Intentional Ownership failure: cyclic reference activity is future work.
+type Percent = range 0..100;
+fn bad(flag: bool, value: Percent) -> Percent {
+    while flag {
+        let view = &value;
+        let observed = *view;
+    }
+    return value;
+}

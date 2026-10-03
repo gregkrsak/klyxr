@@ -156,7 +156,6 @@ fn conditional_value_syntax_is_rejected() {
 #[test]
 fn unsupported_control_flow_and_branch_returns_are_rejected() {
     for statements in [
-        "while flag {}",
         "for flag {}",
         "match flag {}",
         "if flag { return true; }",

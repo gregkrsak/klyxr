@@ -79,10 +79,7 @@ impl MirFunction {
             let Some(mark) = marks.get(id.0) else {
                 return Err("invalid block target");
             };
-            if *mark == 1 {
-                return Err("cyclic control flow");
-            }
-            if *mark == 2 {
+            if *mark != 0 {
                 return Ok(());
             }
             marks[id.0] = 1;
@@ -139,8 +136,8 @@ impl MirFunction {
         if marks.contains(&0) {
             return Err("unreachable block");
         }
-        // An acyclic finite graph whose only leaves are Return reaches Return on
-        // every path. Table indices give unique IDs; each block owns one terminator.
+        // Indexed storage gives unique IDs and one terminator per block. Cycles
+        // are legal; structural validity makes no claim that Return is reached.
         Ok(())
     }
 }
@@ -295,6 +292,30 @@ impl Builder {
                     value: value.clone(),
                     span: *span,
                 }),
+                ValueStatement::While {
+                    condition, body, ..
+                } => {
+                    let header = self.reserve();
+                    let body_target = self.reserve();
+                    let exit = self.reserve();
+                    self.finish(
+                        current,
+                        std::mem::take(&mut statements),
+                        Terminator::Goto { target: header },
+                    );
+                    self.finish(
+                        header,
+                        Vec::new(),
+                        Terminator::Branch {
+                            condition: condition.clone(),
+                            then_target: body_target,
+                            else_target: exit,
+                        },
+                    );
+                    let (end, body) = self.body(body_target, body);
+                    self.finish(end, body, Terminator::Goto { target: header });
+                    current = exit;
+                }
                 ValueStatement::If {
                     condition,
                     then_body,
@@ -528,7 +549,7 @@ mod tests {
         assert!(after[0].message.contains("`display` may have been moved"));
     }
     #[test]
-    fn validator_rejects_invalid_entry_target_cycle_and_unreachable_block() {
+    fn validator_rejects_invalid_entry_target_and_unreachable_block() {
         let original = lower(&program()).functions()[1].clone();
         let mut f = original.clone();
         f.entry = BasicBlockId(f.blocks.len());
@@ -538,9 +559,6 @@ mod tests {
             target: BasicBlockId(f.blocks.len()),
         };
         assert_eq!(f.validate(), Err("invalid block target"));
-        let mut f = original.clone();
-        f.blocks[0].terminator = Terminator::Goto { target: f.entry };
-        assert_eq!(f.validate(), Err("cyclic control flow"));
         let mut f = original.clone();
         f.blocks.push(original.blocks.last().unwrap().clone());
         assert_eq!(f.validate(), Err("unreachable block"));
@@ -552,6 +570,37 @@ mod tests {
             panic!()
         };
         condition.ty = hir::ExprType::IntegerLiteral;
+        assert_eq!(f.validate(), Err("non-Bool branch condition"));
+    }
+    #[test]
+    fn validator_accepts_cycles_without_claiming_termination() {
+        let p = compile_source("fn f() -> bool { return true; }").unwrap();
+        let mut f = lower(&p).functions()[0].clone();
+        f.blocks[0].terminator = Terminator::Goto { target: f.entry };
+        assert_eq!(f.validate(), Ok(())); // No Return is required for structural validity.
+        f.blocks[0].terminator = Terminator::Goto {
+            target: BasicBlockId(1),
+        };
+        assert_eq!(f.validate(), Err("invalid block target"));
+    }
+    #[test]
+    fn validator_checks_structure_of_nested_cyclic_cfgs() {
+        let p = compile_source("fn f(flag: bool) -> bool { let mut current = flag; while current { while flag { current = flag; } current = false; } return current; }").unwrap();
+        let original = lower(&p).functions()[0].clone();
+        assert_eq!(original.validate(), Ok(()));
+        let mut f = original.clone();
+        f.blocks.push(original.blocks.last().unwrap().clone());
+        assert_eq!(f.validate(), Err("unreachable block"));
+        let mut f = original;
+        let branch = f
+            .blocks
+            .iter_mut()
+            .find_map(|b| match &mut b.terminator {
+                Terminator::Branch { condition, .. } => Some(condition),
+                _ => None,
+            })
+            .unwrap();
+        branch.ty = hir::ExprType::IntegerLiteral;
         assert_eq!(f.validate(), Err("non-Bool branch condition"));
     }
 }

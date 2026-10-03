@@ -146,6 +146,30 @@ fn value_statements(
     let mut body = Vec::new();
     for (index, statement) in statements.iter().enumerate() {
         let statement = match statement {
+            ResolvedValueStatement::While {
+                condition,
+                body,
+                span,
+            } => {
+                let condition = expression(program, functions, condition)?;
+                if condition.ty != ExprType::Bool {
+                    return Err(Diagnostic::semantic(
+                        condition.span,
+                        "while condition must have type Bool",
+                        format!(
+                            "found {}; there is no truthiness conversion",
+                            display_type(program, condition.ty)
+                        ),
+                    )
+                    .into());
+                }
+                let body = value_statements(program, functions, body, return_type, false)?;
+                hir::ValueStatement::While {
+                    condition,
+                    body,
+                    span: *span,
+                }
+            }
             ResolvedValueStatement::If {
                 condition,
                 then_body,
