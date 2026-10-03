@@ -278,6 +278,11 @@ pub struct ValueFunction {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueStatement {
+    While {
+        condition: TypedExpr,
+        body: Vec<ValueStatement>,
+        span: Span,
+    },
     Assign {
         local: LocalId,
         value: TypedExpr,

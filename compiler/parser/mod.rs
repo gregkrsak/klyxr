@@ -223,7 +223,17 @@ impl Parser<'_> {
         let mut body = Vec::new();
         while !self.at(&TokenKind::RBrace) {
             let span = self.peek().span;
-            if self.at(&TokenKind::If) {
+            if self.at(&TokenKind::While) {
+                self.advance();
+                let condition = self.parse_expression(0)?;
+                self.expect(&TokenKind::LBrace)?;
+                let (loop_body, end) = self.parse_value_block(false)?;
+                body.push(ValueStatement::While {
+                    condition,
+                    body: loop_body,
+                    span: Span { end, ..span },
+                });
+            } else if self.at(&TokenKind::If) {
                 self.advance();
                 let condition = self.parse_expression(0)?;
                 self.expect(&TokenKind::LBrace)?;
@@ -287,7 +297,7 @@ impl Parser<'_> {
             } else if self.at(&TokenKind::Return) {
                 if !allow_return {
                     return Err(self.error(
-                        "branch-local returns are unsupported; use one final function-level return"
+                        "branch-local returns are unsupported (including loop bodies); use one final function-level return"
                             .into(),
                     ));
                 }

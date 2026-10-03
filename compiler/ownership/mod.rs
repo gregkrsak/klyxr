@@ -1,12 +1,12 @@
-//! Acyclic owned moves, whole-value loans, and Copy-safe borrowed access in ordinary HIR.
+//! Owned moves, acyclic whole-value loans, and loop-stable Copy state in ordinary HIR.
 //! Availability and active loans are orthogonal private state; no runtime behavior.
 use std::collections::BTreeMap;
 
 use crate::{
     diagnostics::Diagnostic,
     hir::{
-        BorrowKind, ExprKind, FunctionId, LocalId, ParameterId, ParameterType, Place, Program,
-        TypedExpr, ValueFunction, ValueStatement, ValueType,
+        BorrowKind, ExprKind, ExprType, FunctionId, LocalId, ParameterId, ParameterType, Place,
+        Program, TypedExpr, ValueFunction, ValueStatement, ValueType,
     },
     lexer::Span,
 };
@@ -24,6 +24,14 @@ fn future_uses(statements: &[ValueStatement]) -> FutureUses {
 fn count_statements(statements: &[ValueStatement], uses: &mut FutureUses) {
     for statement in statements {
         match statement {
+            ValueStatement::While {
+                condition, body, ..
+            } => {
+                // Finite suffix bookkeeping only: recurring handle/Move uses
+                // are rejected during loop checking, never modeled by this count.
+                count_expression(condition, uses);
+                count_statements(body, uses);
+            }
             ValueStatement::If {
                 condition,
                 then_body,
@@ -143,6 +151,7 @@ struct Checker<'a> {
     handles: BTreeMap<Place, LoanId>,
     remaining: FutureUses,
     next_loan: usize,
+    loop_depth: usize,
 }
 impl<'a> Checker<'a> {
     fn new(program: &'a Program, function: &ValueFunction) -> Self {
@@ -153,6 +162,7 @@ impl<'a> Checker<'a> {
             handles: BTreeMap::new(),
             remaining: future_uses(&function.body),
             next_loan: 0,
+            loop_depth: 0,
         };
         for id in &function.parameters {
             if let ParameterType::Value(ty) = program.parameter(*id).ty {
@@ -183,6 +193,13 @@ impl<'a> Checker<'a> {
     ) -> OwnershipResult {
         for statement in statements {
             match statement {
+                ValueStatement::While {
+                    condition,
+                    body,
+                    span,
+                } => {
+                    self.while_loop(condition, body, *span, function)?;
+                }
                 ValueStatement::If {
                     condition,
                     then_body,
@@ -205,6 +222,9 @@ impl<'a> Checker<'a> {
                 }
                 ValueStatement::Assign { local, value, span } => {
                     let place = Place::Local(*local);
+                    if self.loop_depth > 0 {
+                        self.loop_type(self.program.local(*local).ty.into(), *span)?;
+                    }
                     if ownership_kind(self.program.local(*local).ty) != OwnershipKind::Copy {
                         return Err(self.diagnostic(*span, format!("cannot replace non-Copy owned local `{}`", self.metadata(place).0), "replacement would displace an owned value; displacement/destruction semantics are not yet defined; KED-011 permits only Copy-safe direct local reassignment", None));
                     }
@@ -224,6 +244,9 @@ impl<'a> Checker<'a> {
                     value,
                     span,
                 } => {
+                    if self.loop_depth > 0 {
+                        return Err(self.loop_reference_error(*span));
+                    }
                     let loan = self.borrowed_access(*reference, *span, true)?;
                     // A final target use must still protect the whole write statement,
                     // including RHS dereferences and nested calls that trigger expiry.
@@ -243,6 +266,68 @@ impl<'a> Checker<'a> {
             }
             self.expire();
         }
+        Ok(())
+    }
+    fn loop_reference_error(&self, span: Span) -> Box<Diagnostic> {
+        self.diagnostic(span, "reference activity is unsupported in while loops".into(), "reference uses through a backedge require future cyclic loan/lifetime analysis; KED-012 permits only ownership-stable owned Copy activity", None)
+    }
+    fn loop_type(&self, ty: ExprType, span: Span) -> OwnershipResult {
+        match ty {
+            ExprType::SharedRef(_) | ExprType::MutableRef(_) => Err(self.loop_reference_error(span)),
+            ExprType::Record(_) => Err(self.diagnostic(span, "non-Copy ownership activity is unsupported in while loops".into(), "non-Copy use through a backedge requires future cyclic ownership analysis; KED-012 permits only ownership-stable Copy activity", None)),
+            ExprType::Bool | ExprType::Range(_) | ExprType::IntegerLiteral => Ok(()),
+        }
+    }
+    fn same_loop_state(&self, header: &Self) -> bool {
+        // Compare availability, not diagnostic move sites/transfers. Loan spans,
+        // display names and syntactic FutureUses are likewise not semantic state.
+        let availability = |state: &State| std::mem::discriminant(state);
+        self.states
+            .iter()
+            .map(|(p, s)| (p, availability(s)))
+            .eq(header.states.iter().map(|(p, s)| (p, availability(s))))
+            && self.handles == header.handles
+            && self
+                .loans
+                .iter()
+                .map(|(id, l)| (id, l.owner, l.kind, l.held))
+                .eq(header
+                    .loans
+                    .iter()
+                    .map(|(id, l)| (id, l.owner, l.kind, l.held)))
+            && self.next_loan == header.next_loan
+    }
+    fn while_loop(
+        &mut self,
+        condition: &TypedExpr,
+        body: &[ValueStatement],
+        span: Span,
+        function: FunctionId,
+    ) -> OwnershipResult {
+        self.expire();
+        self.assert_no_holds();
+        let header = self.clone();
+        let mut iteration = self.clone();
+        iteration.loop_depth += 1;
+        iteration.expression(condition, Transfer::Return(function))?;
+        iteration.expire();
+        iteration.statements(body, function)?;
+        iteration.loop_depth -= 1;
+        // Body-local owners/handles cannot become loop-carried state. Permitted
+        // Copy declarations create no tracked Move or loan state in the first place.
+        iteration
+            .states
+            .retain(|place, _| header.states.contains_key(place));
+        iteration
+            .handles
+            .retain(|place, _| header.handles.contains_key(place));
+        iteration.assert_no_holds();
+        if !iteration.same_loop_state(&header) {
+            return Err(self.diagnostic(span, "while loop does not preserve ownership and loan state".into(), "the current loop subset requires equal header/backedge state; general cyclic ownership/lifetime analysis remains future work", None));
+        }
+        // Equality also covers the zero-iteration exit. Only the finite outside
+        // continuation advances; no repeated reference counts or fixed point exist.
+        self.remaining = iteration.remaining;
         Ok(())
     }
     fn conditional(
@@ -318,6 +403,15 @@ impl<'a> Checker<'a> {
         expression: &TypedExpr,
         transfer: Transfer,
     ) -> OwnershipResult<Option<LoanId>> {
+        if self.loop_depth > 0 {
+            self.loop_type(expression.ty, expression.span)?;
+            if matches!(
+                expression.kind,
+                ExprKind::Borrow { .. } | ExprKind::Deref { .. }
+            ) {
+                return Err(self.loop_reference_error(expression.span));
+            }
+        }
         match &expression.kind {
             ExprKind::IfValue {
                 condition,
@@ -1048,5 +1142,122 @@ mod tests {
             assert_eq!(before[0].known, after[0].known);
             assert!(after[0].message.contains("display"));
         }
+    }
+    #[test]
+    fn loops_preserve_header_state_and_scope_nested_copy_locals() {
+        let p = typed("fn f(flag: bool, value: Percent, ticket: Ticket) -> Percent { let mut owned = value; let view = &owned; while flag { let copied = owned; if flag { let observed = copied; } while flag { let nested = copied; } } return *view; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        c.expire();
+        let header = c.clone();
+        assert_eq!(header.loans.len(), 1);
+        c.statements(&f.body[2..3], f.id).unwrap();
+        assert!(c.same_loop_state(&header));
+        assert_ne!(c.remaining, header.remaining);
+        assert_eq!(c.loop_depth, 0);
+        assert_eq!(c.states.len(), 1); // Untouched record parameter only.
+        assert_eq!(c.handles.len(), 1); // No body-local provenance escapes.
+        c.statements(&f.body[3..], f.id).unwrap();
+        assert!(c.loans.is_empty());
+    }
+    #[test]
+    fn expired_loans_do_not_resurrect_at_backedges() {
+        let p = typed("fn f(flag: bool, value: Percent) -> Percent { let mut owned = value; let view = &owned; let observed = *view; while flag { owned = value; while flag { owned = owned; } } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..3], f.id).unwrap();
+        assert!(c.loans.is_empty());
+        let header = c.clone();
+        c.statements(&f.body[3..4], f.id).unwrap();
+        assert!(c.same_loop_state(&header));
+        assert!(c.loans.is_empty());
+    }
+    #[test]
+    fn forbidden_loop_activity_cannot_silently_change_outer_state() {
+        for (body, message) in [
+            ("fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { let moved = ticket; } return ticket; }", "non-Copy ownership activity"),
+            ("fn f(flag: bool, value: Percent) -> Percent { while flag { let view = &value; } return value; }", "reference activity"),
+        ] {
+            let p = typed(body);
+            let f = p.functions()[0].as_ordinary().unwrap();
+            let mut c = Checker::new(&p, f);
+            c.expire();
+            let header = c.clone();
+            let error = c.statements(&f.body[..1], f.id).unwrap_err();
+            assert!(error.message.contains(message));
+            assert!(error.required.contains("future cyclic"));
+            assert!(c.same_loop_state(&header));
+        }
+    }
+    #[test]
+    fn loop_state_equality_detects_drift_but_ignores_display_metadata() {
+        let mut p = typed("fn f(flag: bool, value: Percent, ticket: Ticket) -> Percent { let mut owned = value; let view = &owned; while flag { let copied = owned; } return *view; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let mut drift = c.clone();
+        drift.states.insert(
+            Place::Parameter(f.parameters[2]),
+            State::ConditionalMove { span: f.span },
+        );
+        assert!(!drift.same_loop_state(&c));
+        let mut drift = c.clone();
+        drift.handles.clear();
+        assert!(!drift.same_loop_state(&c));
+        let mut drift = c.clone();
+        drift.loans.clear();
+        assert!(!drift.same_loop_state(&c));
+        let mut drift = c.clone();
+        drift.next_loan += 1;
+        assert!(!drift.same_loop_state(&c));
+        let mut metadata = c.clone();
+        for loan in metadata.loans.values_mut() {
+            loan.span = Span {
+                start: 0,
+                end: 0,
+                ..f.span
+            };
+        }
+        assert!(metadata.same_loop_state(&c));
+        let owner = Place::Parameter(f.parameters[2]);
+        metadata.states.insert(
+            owner,
+            State::Moved {
+                span: f.span,
+                transfer: Transfer::Return(f.id),
+            },
+        );
+        let mut same_availability = metadata.clone();
+        same_availability.states.insert(
+            owner,
+            State::Moved {
+                span: Span {
+                    start: 0,
+                    end: 0,
+                    ..f.span
+                },
+                transfer: Transfer::Local(p.locals()[0].id),
+            },
+        );
+        assert!(same_availability.same_loop_state(&metadata));
+        let before = crate::mir::lower(&p);
+        check(&p).unwrap();
+        for local in &mut p.locals {
+            local.name = "display".into();
+        }
+        for param in &mut p.parameters {
+            param.name = "display".into();
+        }
+        for range in &mut p.ranges {
+            range.name = "display".into();
+        }
+        for f in &mut p.functions {
+            if let crate::hir::Function::Ordinary(f) = f {
+                f.name = "display".into();
+            }
+        }
+        check(&p).unwrap();
+        assert_eq!(before, crate::mir::lower(&p));
     }
 }

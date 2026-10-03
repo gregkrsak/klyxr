@@ -70,7 +70,7 @@ Original spelling remains available for source-aware tooling.
 ## 4. Ownership and regions
 
 Availability (Available/Moved) and active shared/exclusive loans are orthogonal.
-The current straight-line and acyclic-branch prototype checks these together in `compiler/ownership`.
+The current prototype checks moves, acyclic loans, and narrow Copy loop stability together in `compiler/ownership`.
 Stored loans follow derived reference handles through last use; direct reference
 arguments remain call-held through the receiving call. Broader regions/lifetimes
 are future architecture; explicit syntax remains open under OQ-009/OQ-024.
@@ -243,7 +243,7 @@ pipeline is source → lexer → parser → AST → explicit name resolution →
 and value-flow type checking → typed HIR → core ownership, loan, and borrowed-access checking →
 ordinary MIR CFG lowering (ordinary functions) or specialized
 integer contract proof (verified functions) → diagnostics. This implements KD-012, KD-018, KD-019,
-KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, and KD-026 only for the documented
+KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, and KD-027 only for the documented
 subset; the broader pipeline above remains accepted architecture/future work.
 
 The AST preserves textual declarations, parameter types, explicit ordinary
@@ -377,7 +377,7 @@ Ownership remains above MIR in `compiler/ownership`; there is no second checker,
 MIR ownership pass, general dataflow framework, or fixed-point solver. This is
 whole-value liveness for structured acyclic statement and initializer branches, not arbitrary CFG borrowing
 or a claim of Rust borrow-checker equivalence. OQ-024/OQ-026 retain general lifetimes,
-loops, reborrowing, escaping references, and broader MIR ownership dataflow.
+cyclic lifetime analysis, reborrowing, escaping references, and broader MIR ownership dataflow.
 
 `compiler/mir` lowers only ordinary typed HIR after frontend ownership checks.
 `mir::lower(&program)` leaves `compile_source`'s canonical HIR result unchanged.
@@ -388,9 +388,9 @@ or value Return terminator. Expressions retain their typed HIR trees. Structured
 recursive lowering allocates blocks deterministically, gives every fallthrough
 an explicit Goto, and emits the final source return as a terminator. Empty else
 branches use a direct false edge to the join. A structural validator checks entry,
-targets, reachability, acyclicity, and Bool conditions; unique IDs and single
-terminators follow from indexed storage and the block type. Every finite path ends
-in Return. MIR discovers no new source semantic errors. The CLI exercises lowering.
+targets, reachability, and Bool conditions; unique IDs and single
+terminators follow from indexed storage and the block type. KED-012 permits cycles;
+visited tracking terminates validation without claiming paths reach Return. MIR discovers no new source semantic errors. The CLI exercises lowering.
 
 KED-010 adds initializer-only conditional values with mandatory else and exactly
 one expression per branch. AST/resolved/typed HIR retain explicit IfValue nodes;
@@ -436,17 +436,17 @@ Non-Copy replacement fails before either owner is consumed or displaced.
 MIR Assign retains the source LocalId, typed RHS, and span; it is distinct from
 Let initialization and DerefAssign. Straight-line lowering adds no blocks; branch
 assignments stay in the current block. Expression validation also inspects Assign
-RHSs for hidden IfValue nodes. MIR's cycle rejection is unchanged. There is no
+RHSs for hidden IfValue nodes. KED-012 subsequently replaces MIR cycle rejection with cycle-safe reachability. There is no
 second ownership engine, general place model, reference provenance replacement,
-destruction, loop/backedge, or fixed-point infrastructure.
+destruction or fixed-point infrastructure. KED-012 adds loop backedges as described below.
 
 The implemented ordinary path now includes initialization, conditional initialization,
 Copy-safe mutable-local reassignment, and explicit dereference write-through →
-ownership/path-sensitive acyclic loans → acyclic MIR Let/Assign/DerefAssign statements
+ownership/path-sensitive acyclic loans and Copy loop stability → MIR Let/Assign/DerefAssign statements
 with explicit Branch/Goto/Return terminators. Ordinary code remains non-executable
 and unverified, and the specialized battery path remains unchanged.
 
-There are no phi nodes, block parameters/results, SSA, loops, general temporaries,
+There are no phi nodes, block parameters/results, SSA, general temporaries,
 cleanup edges, execution, or MIR backend/verifier consumers. The specialized
 verified path stays on HIR and retains its proof counts and numerical kernel.
 OQ-026 records future control-flow/value-flow/MIR dataflow design.
@@ -468,4 +468,34 @@ Empty admissible domains are explicitly rejected by this prototype.
 The exact grammar, mathematical argument, CLI behavior, and limitations live in
 `compiler/README.md`. The broader language's representation, assurance-boundary,
 invariant, and snapshot rules remain open. Relevant entries: KD-005, KD-006, KD-012,
-KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, DP-008, DP-009, and OQ-018 through OQ-026.
+KD-013, KD-014, KD-015, KD-017, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, DP-008, DP-009, and OQ-018 through OQ-026.
+
+
+### KED-012: while and cyclic MIR
+
+AST, resolved statements and typed HIR preserve explicit While condition/body/span.
+Resolution gives the body a child scope using the existing canonical LocalId
+allocator; type checking establishes exact Bool before ownership. Ordinary branch
+and loop bodies cannot contain returns. Verified syntax remains separate.
+
+The existing HIR ownership checker enters a private loop mode and analyzes one
+permitted iteration from a header snapshot. Every nested expression/statement must
+use only owned Copy values; reference activity and non-Copy values reject with
+source-oriented future cyclic-analysis diagnostics. The check compares outer Move
+availability, handle provenance, loans (including balanced operation holds), and
+loan allocation state at the backedge after body-local state is scoped away.
+Nested loops use the same check independently. FutureUses only advances the finite
+outside suffix; prohibited recurring handles are never approximated by one count.
+Outside live loans are preserved and still checked by Copy owner access/assignment.
+There is no fixed-point, MIR ownership pass, or second engine.
+
+Deterministic lowering reserves a header/body/exit, emits Goto from the preheader,
+Branch at the header, and Goto from the completed body back to the header. Nested
+if/value-initialization joins and nested loops compose recursively. Existing typed
+expressions and canonical source IDs survive; no MIR While instruction is needed.
+The validator uses visited marks to accept cycles while retaining target,
+reachability, Bool and hidden-IfValue checks. It makes no termination claim and
+retains body/exit edges for constant conditions. The ordinary pipeline is source
+→ AST → resolution → typed HIR → ownership/acyclic loans/Copy loop stability →
+MIR CFG. Backend and verification lowering remain unimplemented; the specialized
+battery proof path and numerical kernel remain unchanged.

@@ -156,6 +156,10 @@ boundaries. OQ-021 remains authoritative for unresolved constrained arithmetic
 and literal-conversion rules. Copy customization and destruction remain under OQ-023.
 
 
+KED-012 permits nested statement while for ownership-stable Copy state only.
+Loop-local returns, loop values, early/multiple returns and general loop control
+remain unresolved.
+
 ## OQ-023 — Copy customization, cloning, partial moves, and destruction
 
 KED-005 establishes the core owned `Copy` / move distinction. KED-006 classifies
@@ -210,13 +214,17 @@ Still open:
 - reference mutation beyond Copy-safe whole-value write-through;
 - two-phase borrows;
 - temporary lifetime extension and borrowing arbitrary temporary expressions;
-- loops/backedges and general CFG lifetime inference;
+- cyclic loan/lifetime analysis across loops/backedges and general CFG lifetime inference;
 - reference-valued branch results;
 - borrowing interaction with closures and destructors;
 - interior mutability and smart-pointer borrowing;
 - FFI reference/lifetime boundaries.
 
 OQ-009 remains authoritative for the broader explicit lifetime syntax question.
+
+KED-012 leaves reference activity through while conditions/bodies unsupported.
+Untouched outside handles/loans persist unchanged and still constrain Copy owner
+access; this is not cyclic lifetime inference or reference use across backedges.
 
 ## OQ-025 — General mutation, place expressions, and replacement semantics
 
@@ -245,6 +253,10 @@ OQ-023 remains authoritative for Copy customization and destruction. OQ-024
 remains authoritative for advanced borrowing, reborrowing, dereference coercions,
 escaping references, and field/partial borrowing.
 
+KED-012 permits KD-026 owned Copy reassignment in nested while/if bodies only
+when ownership and loan state is stable. General mutation across cyclic ownership,
+non-Copy replacement and destruction remain unresolved.
+
 ## OQ-026 — General control flow, conditional values, and MIR dataflow
 
 KED-008 establishes only acyclic statement conditionals and the first ordinary MIR CFG.
@@ -266,7 +278,7 @@ Still open:
 - general conditional expressions and branch-result type unification beyond exact types;
 - join values without a source local destination, arbitrary temporaries, and SSA;
 - block parameters / phi-like representations;
-- loops/backedges, `while` / `for`, `break` / `continue`, and fixed-point analysis;
+- generalized cyclic ownership/loans and fixed-point analysis, `for`, `break` / `continue`, loop values and labels;
 - early returns, multiple return paths, divergence / bottom types, and `match` lowering;
 - definite initialization and uninitialized locals;
 - full MIR-based ownership dataflow and maximally precise path-sensitive loan analysis;
@@ -278,4 +290,12 @@ KED-011 adds a distinct acyclic MIR Assign statement for already initialized Cop
 locals. This prepares ordinary loop-carried Copy state for a separately authorized
 future directive; it adds no loops, backedges, fixed points, SSA, or definite assignment.
 
-KED-008/KED-010/KED-011 MIR choices do not settle or preclude these broader features.
+KED-012 settles pre-test statement while and cyclic MIR for ownership-stable
+owned Copy state (KD-027), including nested loops and if/while composition.
+MIR is no longer globally acyclic; structural validity is not a termination proof.
+The checker remains above MIR and compares header/backedge state for one permitted
+iteration, without generalized cyclic dataflow. Non-Copy activity in loops,
+cyclic reference liveness, verified loops/invariants/variants and termination
+checking remain open, alongside the questions above.
+
+KED-008/KED-010/KED-011/KED-012 MIR choices do not settle or preclude these broader features.

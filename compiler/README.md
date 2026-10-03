@@ -120,7 +120,7 @@ proof, or runtime checks. For example, `return current - used;` can type as Perc
 that every result meets Percent's bounds. The verifier ignores ordinary functions
 as proof targets. Plain `fn` does not yet implement the full `safe` assurance model,
 with only core moves and whole-value, straight-line/acyclic, non-escaping borrowing
-implemented under KD-004, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, and KD-026. Ordinary calls may target only ordinary functions; verified
+implemented under KD-004, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, and KD-027. Ordinary calls may target only ordinary functions; verified
 contracts/body expressions cannot call functions, and top-level harness calls may
 target only verified functions. These rejections leave OQ-019 unresolved.
 
@@ -338,12 +338,12 @@ fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
 required, parenthesized conditions use existing expression syntax, and nesting
 is supported. Conditions must type exactly as Bool, including ordinary calls
 returning Bool. No truthiness conversion is permitted. Conditional values are initializer-only under KED-010, described below.
-Branches contain lets, existing dereference writes, and nested if statements.
+Branches contain lets, existing dereference writes, and nested if/while statements.
 Each branch is a lexical child scope: outer bindings remain visible, locals enter
 only after their initializer, visible-name shadowing is rejected, and branch
 locals cannot escape or cross into siblings. Siblings may reuse a spelling with
 distinct canonical LocalIds. One explicit final function-level return remains
-required. Branch-local returns and `else if` shorthand are rejected, as are loops,
+required. Branch-local returns and `else if` shorthand are rejected, as are
 match, break/continue, and expression statements. Copy-safe local reassignment
 is permitted under KED-011.
 
@@ -372,13 +372,14 @@ paths; nesting recursively builds real CFG edges. Empty else is normalized to
 the false join edge. Every fallthrough is explicit, and the final source return
 is a terminator. Allocation order is deterministic, without making block numbering
 source semantics. `MirFunction::validate()` checks targets, entry, reachability,
-acyclicity, and Bool conditions. Indexed tables give unique IDs; the block type
-requires one terminator. A finite acyclic graph has only Return leaves.
+Bool conditions, and hidden conditional values. Indexed tables give unique IDs; the block type
+requires one terminator. KED-012 adds cycle-safe visited tracking; validation accepts
+cycles and does not claim that Return is reached.
 
 The CLI exercises MIR lowering before success. There is no MIR source-error phase,
 execution, interpretation, code generation, or proof of ordinary logic. The verified
 battery path remains HIR-only and excludes ordinary conditionals. MIR has no phi,
-block parameters/results, SSA, loops, temporary flattening, cleanup, backend, or
+block parameters/results, SSA, temporary flattening, cleanup, backend, or
 verification consumer. KD-023 settles this boundary; OQ-026 retains broader
 conditional expressions, control flow, and dataflow. See `examples/if_control_flow.klx`
 and intentional Ownership failure `examples/if_move_fail.klx`.
@@ -427,10 +428,10 @@ Existing explicit `*reference = expression;` retains KED-007 write holds and rul
 AST/HIR `ValueStatement` and MIR `Statement` publicly add `Assign`; exhaustive
 library matches must handle the new variant. HIR/MIR retain a canonical LocalId,
 typed RHS, and complete statement span. MIR emits a distinct Assign in the current
-block, adds no blocks for straight-line writes, and remains deterministic/acyclic.
+block, adds no blocks for straight-line writes, and remains deterministic. KED-012 adds cyclic control flow.
 Validation rejects hidden IfValue nodes in assignment RHSs. `compile_source` and
 `mir::lower` signatures remain unchanged. No generalized place/dataflow model,
-loops/backedges, SSA, phi/block parameters, result slots, definite assignment,
+general cyclic ownership/lifetime inference, SSA, phi/block parameters, result slots, definite assignment,
 execution, or ordinary verification is introduced.
 
 See `examples/local_reassignment.klx` and the intentional future-use loan conflict
@@ -475,7 +476,7 @@ reassignment, SSA, a phi, a block parameter, or a general temporary/result slot.
 The syntax is accepted only as a complete local initializer or complete nested
 branch result. Conditional values in returns, call arguments, unary/binary operands,
 parenthesized expressions, and dereference-write RHSs remain rejected. General
-value blocks, reference joins, loops, early returns, and general definite assignment
+value blocks, reference joins, early returns, and general definite assignment
 remain unresolved. Statement `if` retains its existing grammar and optional else.
 Ordinary functions remain non-executable and unverified; the battery proof path
 is unchanged. See `examples/conditional_value.klx` and the joined-move rejection
@@ -531,7 +532,7 @@ escape, and unrelated sibling-created provenance is never merged.
 These rules belong to the existing ownership checker over typed HIR, before MIR.
 `compile_source`, HIR, and MIR APIs are unchanged; newly accepted programs lower
 to the same validated acyclic CFG forms. KD-024 settles only whole-value loans
-across the current structured acyclic subset. Loops, arbitrary CFG lifetime inference,
+across the structured acyclic subset. Cyclic loan analysis, arbitrary CFG lifetime inference,
 reborrowing, reference returns, lifetime syntax, field/partial borrowing, reference-valued conditional
 results, early returns, destruction, execution, and code generation remain unsupported.
 See `examples/path_sensitive_borrowing.klx` and the intentional post-join-loan
@@ -680,7 +681,7 @@ replacement are ownership errors. Non-reference dereference, shared writes, and
 RHS mismatches are Type errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, and KD-026 only for the documented subset.
+This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, and KD-027 only for the documented subset.
 General type inference, advanced borrowing/ownership, effects, MIR backend/verification lowering, VIR,
 and broader HIR features remain future work.
 
@@ -745,13 +746,13 @@ The prototype does not implement ownership beyond core ordinary moves and
 whole-value acyclic loans, reference returns, explicit lifetimes, reborrowing,
 auto-dereference, non-Copy replacement, field/reference mutation beyond Copy-safe
 whole-value writes, partial borrowing, general replacement, destruction,
-effects, runtime contracts, expressions beyond this subset, loops, quantifiers,
+effects, runtime contracts, expressions beyond this subset, general cyclic ownership/loans, quantifiers,
 multiple fields, record invariants, SMT/VIR or MIR backend/verification lowering, or machine-code generation. In particular,
 `examples/effects.klx` is illustrative and is rejected rather than analyzed.
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, and KD-026,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, and KD-027,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
@@ -823,3 +824,60 @@ The failing examples are intentional:
 - `move_fail.klx`: returning a record parameter after moving it into a local.
 - `borrow_fail.klx`: moving an owner while a later reference use keeps its shared loan live.
 - `deref_mutation_fail.klx`: replacing a non-Copy record before displacement/destruction semantics exist.
+
+
+## Statement while and cyclic MIR (KED-012)
+
+```klyxr
+fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
+    let mut current = value;
+    let mut running = flag;
+    while running {
+        current = replacement;
+        current = current;
+        running = false;
+    }
+    return current;
+}
+```
+
+This is a pre-test, zero-or-more-iteration statement with an exact Bool condition.
+Braces are mandatory, without a trailing semicolon. Nested while and statement
+if/else compose; bodies are lexical child scopes with ordered declarations, no
+visible-name shadowing, and static canonical LocalIds. Body locals cannot escape.
+The one final function-level return remains required. While expressions, loop-local
+returns, break/continue/for/unconditional loop and labels remain unsupported.
+
+Only owned Copy Bool/named-range activity is allowed in conditions and bodies:
+Copy calls/reads/locals, direct mutable-local reassignment, and KED-010 Copy
+conditional initialization. All reference activity (including shared Copy handles,
+borrow creation, arguments, aliases, dereference and write-through) and non-Copy
+record activity (including fresh call results) is rejected by ownership with an
+explanation that cyclic ownership/lifetime analysis is future work. Existing
+Type restrictions can reject malformed operations earlier. Constant false does
+not bypass these checks.
+
+The HIR ownership checker analyzes one permitted iteration and requires equal
+outer Move availability, handle provenance, active loans and loan allocation state
+at the header/backedge after body-local state is scoped away. Nested loops use the
+same invariant. Untouched outside records and references remain valid. Outside
+loans with post-loop handle uses remain live and constrain Copy owner reads/writes
+inside the loop; last pre-loop use can end a loan before entry. Dead loans never
+resurrect. Finite future-use counts are only outside-continuation bookkeeping;
+recurring references are rejected, not modeled by counting syntax once.
+
+MIR lowers through existing terminators: preheader Goto header; header Branch Bool
+to body or exit; completed body Goto header; exit continues to the final Return.
+Nested statement/value joins compose with this real backedge. Let initializes,
+Assign mutates the same source LocalId; no temporary, phi, SSA or block parameter
+is synthesized. Lowering is deterministic. Validation accepts reachable cycles
+with valid targets and Bool conditions; it still rejects hidden IfValue nodes.
+A self-cycle without Return is structurally valid. Both edges remain for true/false
+constants, and no termination, execution or ordinary verification is claimed.
+
+Ownership stays above MIR with no fixed-point solver or second engine. Reference
+activity/non-Copy transfer across backedges, full MIR dataflow, destruction,
+verified loops/invariants/variants, and termination checking remain unresolved
+under OQ-024/OQ-026. The battery verifier and 1,800-case affine cross-check are
+unchanged. See `examples/while_copy.klx`, `examples/while_nested.klx`, and intentional
+failures `examples/while_reference_fail.klx` / `examples/while_move_fail.klx`.

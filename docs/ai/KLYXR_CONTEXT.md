@@ -49,8 +49,8 @@ Once they are part of the program, the compiler and verifier should be able to r
 
 ## Current implementation status
 
-An executable compiler prototype, written in Rust, supports ordinary acyclic
-value functions alongside a narrow one-field record/signed-integer contract subset.
+An executable compiler prototype, written in Rust, supports ordinary
+value functions with statement conditionals and ownership-stable Copy while loops alongside a narrow one-field record/signed-integer contract subset.
 Explicit resolution assigns compilation-local function, parameter, local, type,
 field, and top-level binding IDs. Expression and value-flow type checking produce
 canonical typed HIR. Public HIR inspection remains read-only; names/spans are
@@ -108,7 +108,7 @@ LocalId; moved sources retain KD-023 conditional unavailability. KD-024 path-spe
 loan expiry and holds apply. MIR leaves initialize the canonical destination and
 Goto a common join; no IfValue remains hidden in MIR expressions. There is no
 phi, block parameter, SSA, general temporary/result slot, definite-assignment
-solver, loop, early return, cleanup, or MIR-based ownership solver. Conditional
+solver, early return, cleanup, or MIR-based ownership solver. KED-012 later adds narrow statement loops. Conditional
 values in returns/call arguments/general expression positions remain open under
 OQ-022/OQ-024/OQ-026.
 
@@ -120,9 +120,24 @@ before mutation, completes operation holds and last-use expiry, then the write
 checks that no shared/exclusive loan of the target remains active. Self/repeated
 assignment is valid; KD-024 sibling-path and post-join liveness remain unchanged.
 AST/HIR/MIR distinguish Assign from Let and DerefAssign, preserving the existing
-LocalId. MIR remains acyclic. Assignment expressions, compound/chained/projected
+LocalId. KED-011 MIR was acyclic; KED-012 introduces real backedges. Assignment expressions, compound/chained/projected
 assignment, conditional-value RHSs, reference replacement, non-Copy displacement,
-loops, destruction, and general dataflow remain unsupported.
+destruction, and general dataflow remain unsupported.
+
+KED-012 adds pre-test statement `while` with exact Bool conditions, nested lexical
+body scopes, and ordinary if/while composition (KD-027). Loop activity is owned
+Copy Bool/range only: existing direct assignment and conditional initialization
+compose. Reference creation/use/dereference/write-through and non-Copy activity
+are rejected in conditions and bodies pending cyclic ownership/lifetime analysis.
+One permitted iteration must preserve the header's Move availability, reference
+provenance and active loans after body locals are scoped away. Outside owners and
+references may remain untouched; outside live loans still constrain Copy owner
+reads/writes, while dead pre-loop loans stay dead. There is no fixed-point solver.
+MIR uses Goto → header Branch → body/exit, with body Goto back to header. Its
+validator now accepts cycles with visited tracking; structural validity does not
+prove termination. Both constant-condition edges remain. Break/continue/for,
+loop values, early returns, verified loops, and general cyclic ownership/loans
+remain unresolved. Ordinary loops are neither executed nor proven.
 
 Ordinary functions are parsed, resolved, type-checked, and ownership-checked,
 including loan and borrowed-access legality, and lowered to ordinary MIR, but not executed or proven. A range result type does not establish that the

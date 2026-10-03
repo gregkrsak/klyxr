@@ -1,0 +1,16 @@
+// Nested cyclic MIR with owned Copy state; not executed or verified.
+type Percent = range 0..100;
+fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
+    let mut current = value;
+    let mut running = flag;
+    while running {
+        let selected = if flag { replacement } else { current };
+        let mut inner = flag;
+        while inner {
+            if flag { current = selected; } else { current = value; }
+            inner = false;
+        }
+        running = false;
+    }
+    return current;
+}

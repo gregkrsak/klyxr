@@ -64,6 +64,11 @@ pub(crate) struct ResolvedValueFunction {
 }
 #[derive(Debug)]
 pub(crate) enum ResolvedValueStatement {
+    While {
+        condition: ResolvedExpr,
+        body: Vec<ResolvedValueStatement>,
+        span: Span,
+    },
     Assign {
         target: hir::Place,
         value: ResolvedExpr,
@@ -453,6 +458,15 @@ impl Resolver {
         let mut body = Vec::new();
         for statement in statements {
             body.push(match statement {
+                ast::ValueStatement::While {
+                    condition,
+                    body,
+                    span,
+                } => ResolvedValueStatement::While {
+                    condition: self.expression(condition, scope, false)?,
+                    body: self.value_statements(function, body, &mut scope.clone())?,
+                    span: *span,
+                },
                 ast::ValueStatement::If {
                     condition,
                     then_body,

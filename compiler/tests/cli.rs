@@ -264,3 +264,36 @@ fn local_reassignment_cli_reports_frontend_only_and_borrow_conflict() {
         assert!(text.contains("ownership checking stopped"));
     }
 }
+
+#[test]
+fn while_cli_reports_frontend_only_and_cyclic_ownership_boundaries() {
+    for command in ["check", "verify"] {
+        for file in ["while_copy.klx", "while_nested.klx"] {
+            let output = run(&[command, &example(file)]);
+            assert!(output.status.success());
+            assert!(output.stderr.is_empty());
+            let text = String::from_utf8(output.stdout).unwrap();
+            assert!(text.contains("not executed or verified"));
+            assert!(text.contains("function bodies proven: 0"));
+            assert!(text.contains("ordinary MIR control-flow lowering passed: 1 functions"));
+        }
+        for (file, message) in [
+            (
+                "while_reference_fail.klx",
+                "reference activity is unsupported in while loops",
+            ),
+            (
+                "while_move_fail.klx",
+                "non-Copy ownership activity is unsupported in while loops",
+            ),
+        ] {
+            let output = run(&[command, &example(file)]);
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            let text = String::from_utf8(output.stderr).unwrap();
+            assert!(text.contains(message));
+            assert!(text.contains("future cyclic"));
+            assert!(text.contains("ownership checking stopped"));
+        }
+    }
+}

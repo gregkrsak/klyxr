@@ -84,6 +84,11 @@ pub enum BorrowKind {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueStatement {
+    While {
+        condition: Expr,
+        body: Vec<ValueStatement>,
+        span: Span,
+    },
     Assign {
         target: String,
         value: Expr,
