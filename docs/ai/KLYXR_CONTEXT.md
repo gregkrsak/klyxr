@@ -50,7 +50,7 @@ Once they are part of the program, the compiler and verifier should be able to r
 ## Current implementation status
 
 An executable compiler prototype, written in Rust, supports ordinary
-value functions with statement conditionals and ownership-stable Copy while loops alongside a narrow one-field record/signed-integer contract subset.
+value functions with statement conditionals and ownership-stable while loops with iteration-local Move values alongside a narrow one-field record/signed-integer contract subset.
 Explicit resolution assigns compilation-local function, parameter, local, type,
 field, and top-level binding IDs. Expression and value-flow type checking produce
 canonical typed HIR. Public HIR inspection remains read-only; names/spans are
@@ -125,10 +125,11 @@ assignment, conditional-value RHSs, reference replacement, non-Copy displacement
 destruction, and general dataflow remain unsupported.
 
 KED-012 adds pre-test statement `while` with exact Bool conditions, nested lexical
-body scopes, and ordinary if/while composition (KD-027). Loop activity is owned
+body scopes, and ordinary if/while composition (KD-027). KED-012 loop activity was owned
 Copy Bool/range only: existing direct assignment and conditional initialization
 compose. Reference creation/use/dereference/write-through and non-Copy activity
-are rejected in conditions and bodies pending cyclic ownership/lifetime analysis.
+were rejected in conditions and bodies pending cyclic ownership/lifetime analysis.
+KED-013 subsequently relaxes only iteration-local Move activity in bodies.
 One permitted iteration must preserve the header's Move availability, reference
 provenance and active loans after body locals are scoped away. Outside owners and
 references may remain untouched; outside live loans still constrain Copy owner
@@ -138,6 +139,17 @@ validator now accepts cycles with visited tracking; structural validity does not
 prove termination. Both constant-condition edges remain. Break/continue/for,
 loop values, early returns, verified loops, and general cyclic ownership/loans
 remain unresolved. Ordinary loops are neither executed nor proven.
+
+KED-013 permits iteration-local Move ownership in ordinary while bodies (KD-028):
+fresh record call results, transfer chains, by-value consumption, and existing
+acyclic branch joins. Every loop snapshots its own pre-existing Move place set;
+outer-loop locals are pre-existing at an inner header and cannot move there.
+Body-local availability evolves normally and is scoped away before comparing
+remaining header/backedge state. Pre-existing owners cannot transfer in the loop,
+non-Copy conditions remain forbidden, references remain forbidden, and non-Copy
+replacement remains unresolved. Lexical cleanup is not runtime destruction.
+No syntax, HIR/MIR representation, second ownership engine, or fixed-point solver
+is added. Ordinary record construction and execution remain absent.
 
 Ordinary functions are parsed, resolved, type-checked, and ownership-checked,
 including loan and borrowed-access legality, and lowered to ordinary MIR, but not executed or proven. A range result type does not establish that the

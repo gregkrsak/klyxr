@@ -1,0 +1,12 @@
+// Intentional Ownership failure: a pre-loop owner cannot move across a backedge.
+type Percent = range 0..100;
+record Ticket { value: Percent }
+fn consume(ticket: Ticket) -> bool { return true; }
+fn bad(ticket: Ticket, flag: bool) -> bool {
+    let mut running = flag;
+    while running {
+        let done = consume(ticket);
+        running = false;
+    }
+    return running;
+}

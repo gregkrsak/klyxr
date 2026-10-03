@@ -111,7 +111,7 @@ fn run() -> Result<(), i32> {
             "  calls checked: {} (argument ranges, mutable access, preconditions)",
             report.calls_checked
         );
-        println!("  scope: ordinary control flow with loop-stable Copy state and specialized signed i64 contract prototype; general ownership, effects, and code generation are not implemented");
+        println!("  scope: ordinary control flow with loop-stable Copy state and iteration-local Move ownership and specialized signed i64 contract prototype; general ownership, effects, and code generation are not implemented");
         return Ok(());
     }
 

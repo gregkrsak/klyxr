@@ -150,17 +150,17 @@ reject!(
     "Ownership",
     "reference activity"
 );
-reject!(record_by_value_call, "fn consume(ticket: Ticket) -> bool { return true; } fn f(flag: bool, ticket: Ticket) -> bool { while flag { let consumed = consume(ticket); } return true; }", "Ownership", "non-Copy ownership activity");
+reject!(record_by_value_call, "fn consume(ticket: Ticket) -> bool { return true; } fn f(flag: bool, ticket: Ticket) -> bool { while flag { let consumed = consume(ticket); } return true; }", "Ownership", "pre-existing non-Copy value");
 reject!(record_condition_call, "fn consume(ticket: Ticket) -> bool { return true; } fn f(ticket: Ticket) -> bool { while consume(ticket) {} return true; }", "Ownership", "cyclic ownership analysis");
 reject!(
     non_copy_body_local,
     "fn f(flag: bool, ticket: Ticket) -> bool { while flag { let moved = ticket; } return true; }",
     "Ownership",
-    "non-Copy ownership activity"
+    "pre-existing non-Copy value"
 );
-reject!(fresh_non_copy_call_result, "fn fresh() -> Ticket { return fresh(); } fn f(flag: bool) -> bool { while flag { let made = fresh(); } return true; }", "Ownership", "non-Copy ownership activity");
-reject!(nested_branch_move, "fn consume(ticket: Ticket) -> bool { return true; } fn f(flag: bool, ticket: Ticket) -> bool { while flag { if flag { let done = consume(ticket); } } return true; }", "Ownership", "non-Copy ownership activity");
-reject!(record_replacement_inside_loop, "fn f(flag: bool, first: Ticket, second: Ticket) -> Ticket { let mut current = first; while flag { current = second; } return current; }", "Ownership", "non-Copy ownership activity");
+accept!(fresh_non_copy_call_result, "fn fresh() -> Ticket { return fresh(); } fn f(flag: bool) -> bool { while flag { let made = fresh(); } return true; }");
+reject!(nested_branch_move, "fn consume(ticket: Ticket) -> bool { return true; } fn f(flag: bool, ticket: Ticket) -> bool { while flag { if flag { let done = consume(ticket); } } return true; }", "Ownership", "pre-existing non-Copy value");
+reject!(record_replacement_inside_loop, "fn f(flag: bool, first: Ticket, second: Ticket) -> Ticket { let mut current = first; while flag { current = second; } return current; }", "Ownership", "cannot replace non-Copy");
 reject!(reference_in_conditional_value_leaf, "fn f(flag: bool, view: &Percent, a: Percent) -> Percent { while flag { let chosen = if flag { a } else { *view }; } return a; }", "Ownership", "reference activity");
 reject!(
     constant_false_does_not_relax_loop_restrictions,
