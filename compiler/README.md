@@ -120,7 +120,7 @@ proof, or runtime checks. For example, `return current - used;` can type as Perc
 that every result meets Percent's bounds. The verifier ignores ordinary functions
 as proof targets. Plain `fn` does not yet implement the full `safe` assurance model,
 with only core moves and whole-value, straight-line/acyclic, non-escaping borrowing
-implemented under KD-004, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, and KD-028. Ordinary calls may target only ordinary functions; verified
+implemented under KD-004, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, and KD-029. Ordinary calls may target only ordinary functions; verified
 contracts/body expressions cannot call functions, and top-level harness calls may
 target only verified functions. These rejections leave OQ-019 unresolved.
 
@@ -681,7 +681,7 @@ replacement are ownership errors. Non-reference dereference, shared writes, and
 RHS mismatches are Type errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, and KD-028 only for the documented subset.
+This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, and KD-029 only for the documented subset.
 General type inference, advanced borrowing/ownership, effects, MIR backend/verification lowering, VIR,
 and broader HIR features remain future work.
 
@@ -752,7 +752,7 @@ multiple fields, record invariants, SMT/VIR or MIR backend/verification lowering
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, and KD-028,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, and KD-029,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
@@ -856,7 +856,8 @@ record activity (including fresh call results) was rejected by ownership with an
 explanation that cyclic ownership/lifetime analysis is future work. Existing
 Type restrictions can reject malformed operations earlier. KED-013 permits
 iteration-local Move activity in bodies as described below; conditions and
-reference restrictions remain unchanged. Constant false does not bypass checks.
+pre-existing-handle and condition restrictions remain. KED-014 permits new body
+borrowing as described below. Constant false does not bypass checks.
 
 The HIR ownership checker analyzes one permitted iteration and requires equal
 outer Move availability, handle provenance, active loans and loan allocation state
@@ -918,7 +919,8 @@ before an inner loop cannot move within the inner loop, but may remain untouched
 there and be consumed afterward in the outer iteration. Body-local state is removed
 before comparing header/backedge state. Static LocalIds remain unchanged across
 iterations; names/spans are diagnostic metadata. Outside ownership and loans stay
-protected, and no reference activity or non-Copy replacement is allowed in loops.
+protected. KED-014 subsequently permits iteration-local body borrowing;
+pre-existing-handle use and non-Copy replacement remain forbidden.
 Conditions retain KED-012's Copy-only restriction, including nested call arguments.
 
 AST/parser/resolver/type/HIR/MIR representations and public APIs are unchanged.
@@ -931,3 +933,49 @@ See `examples/while_iteration_move.klx` and intentional failures
 `examples/while_carried_move_fail.klx` / `examples/while_nested_carried_move_fail.klx`.
 KD-028 settles this refinement; OQ-022/OQ-023/OQ-024/OQ-025/OQ-026 retain broader
 control flow, destruction/replacement, and cyclic ownership/lifetime questions.
+
+
+## Iteration-local borrowing (KED-014)
+
+```klyxr
+fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
+    let mut owned = value;
+    let mut running = flag;
+    while running {
+        let view = &owned;
+        let observed = *view;
+        let access = &mut owned;
+        *access = replacement;
+        running = false;
+    }
+    return owned;
+}
+```
+
+New body references may borrow both pre-existing owners and iteration-local Move
+owners. Existing shared copies, mutable-handle moves, call/write holds, dereference,
+Copy-safe mutation and path-sensitive acyclic last-use behavior apply. Local records
+may move after their final borrow use. Conditions remain reference-free. Handles
+already present at the current loop header may persist untouched but cannot be
+used anywhere in its condition/body. Their active loans still constrain new borrows
+and owner access; dead loans never resurrect. An outer-created handle is pre-existing
+at an inner header, so it cannot be used there but may be used afterward in the
+outer iteration. No constant-condition pruning bypasses these rules.
+
+Lexical cleanup removes body-local handles/availability and expires loans. The
+checker proves every new loan/provenance is gone before restoring the header loan
+allocator, then compares remaining semantic state to the header. Safe transient
+ID reuse cannot conceal surviving loans. Names/spans and finite continuation counts
+are excluded from semantic equality. This remains one cloned-iteration check above
+MIR, with unchanged deterministic Branch/Goto backedges, no second engine or cyclic
+fixed-point inference. Ordinary functions remain non-executable and unverified.
+
+See `examples/while_iteration_borrow.klx`, `examples/while_iteration_mut_borrow.klx`,
+and `examples/while_iteration_move_borrow.klx`. Intentional failures
+`examples/while_carried_reference_fail.klx` and
+`examples/while_nested_reference_fail.klx` demonstrate relative header boundaries.
+KD-029 settles only this subset. OQ-024/OQ-026 retain stable loop-carried reference
+use and general cyclic lifetimes. Reference returns/results/reassignment,
+reborrowing, implicit coercions, partial loans, non-Copy dereference/replacement,
+destruction and execution remain unsupported. The specialized battery verifier
+and independent 1,800-case mathematical cross-check are unchanged.

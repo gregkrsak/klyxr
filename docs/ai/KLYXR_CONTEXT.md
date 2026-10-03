@@ -129,7 +129,8 @@ body scopes, and ordinary if/while composition (KD-027). KED-012 loop activity w
 Copy Bool/range only: existing direct assignment and conditional initialization
 compose. Reference creation/use/dereference/write-through and non-Copy activity
 were rejected in conditions and bodies pending cyclic ownership/lifetime analysis.
-KED-013 subsequently relaxes only iteration-local Move activity in bodies.
+KED-013 subsequently permits iteration-local Move activity; KED-014 also permits
+iteration-local borrowing in bodies, as described below.
 One permitted iteration must preserve the header's Move availability, reference
 provenance and active loans after body locals are scoped away. Outside owners and
 references may remain untouched; outside live loans still constrain Copy owner
@@ -146,7 +147,7 @@ acyclic branch joins. Every loop snapshots its own pre-existing Move place set;
 outer-loop locals are pre-existing at an inner header and cannot move there.
 Body-local availability evolves normally and is scoped away before comparing
 remaining header/backedge state. Pre-existing owners cannot transfer in the loop,
-non-Copy conditions remain forbidden, references remain forbidden, and non-Copy
+non-Copy conditions remain forbidden, KED-014 refines the body-reference boundary, and non-Copy
 replacement remains unresolved. Lexical cleanup is not runtime destruction.
 No syntax, HIR/MIR representation, second ownership engine, or fixed-point solver
 is added. Ordinary record construction and execution remain absent.
@@ -166,7 +167,7 @@ for every admissible input of the supported structure, and tracks state between
 literal-argument harness calls. Calls across function kinds are rejected; OQ-019,
 OQ-021 through OQ-026 retain the broader assurance, arithmetic, function,
 Copy/destruction, advanced borrowing, and general mutation questions.
-General ownership beyond core moves and acyclic whole-value loans, effects, runtime
+General cyclic ownership/lifetimes beyond iteration-local moves and borrowing, effects, runtime
 contracts, VIR, MIR backend/verification lowering, SMT integration,
 and machine-code generation remain unimplemented. Read `compiler/README.md`
 before making claims about what the executable establishes.
@@ -336,3 +337,27 @@ When assisting with Klyxr:
 6. Prefer diagnostics and tooling that explain *why* a rule exists.
 7. When comparing Klyxr with Rust or Ada/SPARK, be respectful and technically defensible.
 8. Treat the repository, not any one conversation, as canonical project memory.
+
+
+### KED-014: iteration-local borrowing
+
+KD-029 permits fresh body references to pre-existing owned Copy/record values and
+iteration-local Move owners. Existing shared aliases, mutable-handle transfers,
+call holds, named dereference, Copy-safe writes and acyclic path-sensitive last-use
+rules apply. A borrowed local record can move after its loan ends. Each loop
+captures canonical header handle identities and loan provenance: these handles
+remain unusable within that loop, even when dead, but may persist untouched.
+Live header loans continue constraining compatible owner access/new borrows.
+While conditions remain reference-free; non-Copy condition/transfer and replacement
+boundaries are unchanged. Nested loops classify outer-created handles as
+pre-existing and restore the outer boundary afterward.
+
+After one cloned iteration, lexical cleanup removes body handles and availability,
+then expires loans. The checker proves no iteration-created loan or surviving
+handle provenance remains before restoring the header allocator; semantic header
+comparison still checks availability, handles, active loans and allocation state.
+Names/spans and finite FutureUses counts remain diagnostic/continuation metadata.
+This permits safe reuse of transient private LoanIds without hiding provenance.
+No generalized cyclic NLL, fixed-point solver, second checker, syntax, HIR/MIR
+surface change, runtime destruction, execution or verification is introduced.
+Stable loop-carried reference use remains future work under OQ-024/OQ-026.

@@ -667,4 +667,49 @@ solver, general loop-carried Move joins, second checker, MIR ownership annotatio
 SSA/phi/block parameters, syntax, conversions, execution, or termination proof is
 introduced. MIR retains KD-027's existing lowering and cyclic validation.
 OQ-022/OQ-023/OQ-025/OQ-026 retain broader ownership/control-flow questions;
-iteration-local borrowing and cyclic lifetimes remain open under OQ-024.
+KD-029 subsequently permits iteration-local body borrowing; cyclic lifetimes and
+pre-existing-handle use remain open under OQ-024.
+
+
+---
+
+## KD-029 — Iteration-Local Borrowing in While Loops
+
+**Status:** Accepted
+
+Ordinary while bodies may create and use whole-value references whose provenance
+is created after the current loop header and fully discharged before its backedge.
+Both pre-existing owners and iteration-local Move owners may be borrowed, subject
+to existing exact nominal types, mutability, capability and conflict rules. Shared
+aliases, mutable-handle moves, reference call arguments, named dereference and
+Copy-safe write-through retain KD-021/KD-022 rules, including complete call/write
+holds. KD-024 path-sensitive last-use rules apply within acyclic body branches.
+An iteration-local record may move after its final loan use; borrowing does not
+permit moving a pre-existing non-Copy owner or materializing/replacing a non-Copy
+referent.
+
+Reference handles present at the current header may persist untouched but cannot
+be read, aliased, transferred, passed to calls, dereferenced or written through
+inside that loop. Their live loans still constrain owner access and new borrows;
+dead pre-loop loans never resurrect. While conditions remain reference-free and
+retain KD-027/KD-028 Copy-only restrictions. Constant conditions do not prune checks.
+Nested loops establish relative boundaries: an outer-created reference is
+pre-existing at an inner header and must remain untouched there, though it may
+be used after the inner loop in its containing iteration. Compatible fresh inner
+borrows remain permitted.
+
+The existing typed-HIR checker analyzes one cloned iteration. Lexical cleanup
+removes body-local handles/availability and expires their loans. Before restoring
+the header's private loan allocator, it proves that no newly allocated loan or
+surviving handle provenance remains. Remaining ownership availability, handle
+provenance and active loans must equal the header semantically. Diagnostic names,
+spans and finite continuation counts are excluded from that equality. Allocator
+reuse cannot conceal escaping provenance or collide with a surviving loan.
+Cleanup is compile-time bookkeeping, not runtime destruction.
+
+This refines KD-027/KD-028's historical body-reference restriction only. No syntax,
+public HIR annotations, MIR construct, second checker, cyclic lifetime/fixed-point
+solver or execution is introduced. MIR retains existing deterministic Branch/Goto
+backedges. Stable loop-carried reference use, reference returns, reference-valued
+conditional results, reference-local reassignment, reborrowing, explicit lifetimes,
+partial borrowing and generalized cyclic NLL remain unresolved under OQ-024/OQ-026.

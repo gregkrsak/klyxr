@@ -148,7 +148,19 @@ pub fn check(program: &Program) -> Result<(), Vec<Diagnostic>> {
 #[derive(Clone)]
 struct LoopScope {
     header_places: BTreeSet<Place>,
+    header_handles: BTreeSet<Place>,
+    header_loans: BTreeSet<LoanId>,
     condition: bool,
+}
+impl LoopScope {
+    fn new(header: &Checker<'_>, condition: bool) -> Self {
+        Self {
+            header_places: header.states.keys().copied().collect(),
+            header_handles: header.handles.keys().copied().collect(),
+            header_loans: header.loans.keys().copied().collect(),
+            condition,
+        }
+    }
 }
 #[derive(Clone)]
 struct Checker<'a> {
@@ -248,9 +260,6 @@ impl<'a> Checker<'a> {
                     value,
                     span,
                 } => {
-                    if self.loop_scope.is_some() {
-                        return Err(self.loop_reference_error(*span));
-                    }
                     let loan = self.borrowed_access(*reference, *span, true)?;
                     // A final target use must still protect the whole write statement,
                     // including RHS dereferences and nested calls that trigger expiry.
@@ -273,14 +282,37 @@ impl<'a> Checker<'a> {
         Ok(())
     }
     fn loop_reference_error(&self, span: Span) -> Box<Diagnostic> {
-        self.diagnostic(span, "reference activity is unsupported in while loops".into(), "reference uses through a backedge require future cyclic loan/lifetime analysis; KED-013 permits owned Copy and iteration-local Move activity only", None)
+        self.diagnostic(span, "reference activity is unsupported in while conditions".into(), "recurring condition reference activity requires future cyclic loan/lifetime analysis; iteration-local borrowing is permitted only in the body", None)
+    }
+    fn loop_handle(&self, reference: Place, span: Span) -> OwnershipResult {
+        if let Some(scope) = &self.loop_scope {
+            if scope.condition {
+                return Err(self.loop_reference_error(span));
+            }
+            if scope.header_handles.contains(&reference)
+                || self
+                    .handles
+                    .get(&reference)
+                    .is_some_and(|id| scope.header_loans.contains(id))
+            {
+                return Err(self.diagnostic(span, format!("cannot use pre-existing reference handle `{}` inside while loop", self.metadata(reference).0), "using a header reference through a backedge requires future cyclic loan/lifetime analysis; only iteration-created handles/provenance may be used in this body", None));
+            }
+        }
+        Ok(())
     }
     fn loop_type(&self, ty: ExprType, span: Span) -> OwnershipResult {
-        match ty {
-            ExprType::SharedRef(_) | ExprType::MutableRef(_) => Err(self.loop_reference_error(span)),
-            ExprType::Record(_) if self.loop_scope.as_ref().is_some_and(|scope| scope.condition) => Err(self.diagnostic(span, "non-Copy ownership activity is unsupported in while conditions".into(), "recurring condition ownership requires future generalized cyclic ownership analysis; only the loop body permits iteration-local Move values", None)),
-            ExprType::Record(_) | ExprType::Bool | ExprType::Range(_) | ExprType::IntegerLiteral => Ok(()),
+        if self
+            .loop_scope
+            .as_ref()
+            .is_some_and(|scope| scope.condition)
+        {
+            match ty {
+                ExprType::SharedRef(_) | ExprType::MutableRef(_) => return Err(self.loop_reference_error(span)),
+                ExprType::Record(_) => return Err(self.diagnostic(span, "non-Copy ownership activity is unsupported in while conditions".into(), "recurring condition ownership requires future generalized cyclic ownership analysis; only the loop body permits iteration-local Move values", None)),
+                _ => {}
+            }
         }
+        Ok(())
     }
     fn same_loop_state(&self, header: &Self) -> bool {
         // Compare availability, not diagnostic move sites/transfers. Loan spans,
@@ -312,10 +344,7 @@ impl<'a> Checker<'a> {
         self.assert_no_holds();
         let header = self.clone();
         let mut iteration = self.clone();
-        iteration.loop_scope = Some(LoopScope {
-            header_places: header.states.keys().copied().collect(),
-            condition: true,
-        });
+        iteration.loop_scope = Some(LoopScope::new(&header, true));
         iteration.expression(condition, Transfer::Return(function))?;
         iteration.expire();
         iteration
@@ -325,7 +354,7 @@ impl<'a> Checker<'a> {
             .condition = false;
         iteration.statements(body, function)?;
         iteration.loop_scope = self.loop_scope.clone();
-        iteration.scope_loop_locals(&header);
+        iteration.finish_loop_provenance(&header, span)?;
         iteration.assert_no_holds();
         if !iteration.same_loop_state(&header) {
             return Err(self.diagnostic(span, "while loop does not preserve ownership and loan state".into(), "the current loop subset requires equal header/backedge state; general cyclic ownership/lifetime analysis remains future work", None));
@@ -333,6 +362,22 @@ impl<'a> Checker<'a> {
         // Equality also covers the zero-iteration exit. Only the finite outside
         // continuation advances; no repeated reference counts or fixed point exist.
         self.remaining = iteration.remaining;
+        Ok(())
+    }
+    fn finish_loop_provenance(&mut self, header: &Self, span: Span) -> OwnershipResult {
+        self.scope_loop_locals(header);
+        self.expire();
+        // Never roll the allocator back until every new loan and every surviving
+        // handle referring to newly allocated provenance is proven absent.
+        if self.loans.keys().any(|id| !header.loans.contains_key(id))
+            || self.handles.values().any(|id| id.0 >= header.next_loan)
+        {
+            return Err(self.diagnostic(span, "iteration-created reference state survives while backedge".into(), "all newly created handles and loans must be fully discharged before the current loop backedge; allocator reuse cannot hide surviving provenance", None));
+        }
+        if self.next_loan < header.next_loan {
+            return Err(self.diagnostic(span, "while loop does not preserve loan allocation state".into(), "loan allocation must remain monotonic during an iteration; normalization is permitted only after proving newly allocated provenance absent", None));
+        }
+        self.next_loan = header.next_loan;
         Ok(())
     }
     fn scope_loop_locals(&mut self, header: &Self) {
@@ -418,12 +463,6 @@ impl<'a> Checker<'a> {
     ) -> OwnershipResult<Option<LoanId>> {
         if self.loop_scope.is_some() {
             self.loop_type(expression.ty, expression.span)?;
-            if matches!(
-                expression.kind,
-                ExprKind::Borrow { .. } | ExprKind::Deref { .. }
-            ) {
-                return Err(self.loop_reference_error(expression.span));
-            }
         }
         match &expression.kind {
             ExprKind::IfValue {
@@ -512,6 +551,7 @@ impl<'a> Checker<'a> {
         span: Span,
         write: bool,
     ) -> OwnershipResult<LoanId> {
+        self.loop_handle(reference, span)?;
         self.available(reference, span)?;
         let referent = match self.metadata(reference).1 {
             ValueType::SharedRef(ty) | ValueType::MutableRef(ty) => ty.value_type(),
@@ -596,6 +636,13 @@ impl<'a> Checker<'a> {
         })
     }
     fn borrow(&mut self, place: Place, kind: BorrowKind, span: Span) -> OwnershipResult<LoanId> {
+        if self
+            .loop_scope
+            .as_ref()
+            .is_some_and(|scope| scope.condition)
+        {
+            return Err(self.loop_reference_error(span));
+        }
         self.available(place, span)?;
         if kind == BorrowKind::Mutable
             && !matches!(place, Place::Local(id) if self.program.local(id).mutable)
@@ -631,6 +678,12 @@ impl<'a> Checker<'a> {
         span: Span,
         transfer: Transfer,
     ) -> OwnershipResult<Option<LoanId>> {
+        if matches!(
+            self.metadata(place).1,
+            ValueType::SharedRef(_) | ValueType::MutableRef(_)
+        ) {
+            self.loop_handle(place, span)?;
+        }
         if self
             .loop_scope
             .as_ref()
@@ -1198,7 +1251,7 @@ mod tests {
     fn forbidden_loop_activity_cannot_silently_change_outer_state() {
         for (body, message) in [
             ("fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { let moved = ticket; } return ticket; }", "pre-existing non-Copy value"),
-            ("fn f(flag: bool, value: Percent) -> Percent { while flag { let view = &value; } return value; }", "reference activity"),
+            ("fn f(flag: bool, view: &Percent) -> Percent { while flag { let observed = *view; } return *view; }", "pre-existing reference handle"),
         ] {
             let p = typed(body);
             let f = p.functions()[0].as_ordinary().unwrap();
@@ -1295,10 +1348,7 @@ mod tests {
             panic!()
         };
         let mut iteration = c.clone();
-        iteration.loop_scope = Some(LoopScope {
-            header_places: header.states.keys().copied().collect(),
-            condition: true,
-        });
+        iteration.loop_scope = Some(LoopScope::new(&header, true));
         iteration
             .expression(condition, Transfer::Return(f.id))
             .unwrap();
@@ -1345,7 +1395,7 @@ mod tests {
             assert!(c.same_loop_state(&header));
             assert_eq!(c.remaining, header.remaining);
             // The transfer guard itself is atomic, independently of loop cloning.
-            c.loop_scope = Some(LoopScope { header_places: header.states.keys().copied().collect(), condition: false });
+            c.loop_scope = Some(LoopScope::new(&header, false));
             assert!(c.consume(Place::Parameter(f.parameters[1]), f.span, Transfer::Return(f.id)).is_err());
             assert!(c.same_loop_state(&header));
             assert_eq!(c.remaining, header.remaining);
@@ -1359,10 +1409,7 @@ mod tests {
             panic!()
         };
         let mut c = Checker::new(&p, f);
-        c.loop_scope = Some(LoopScope {
-            header_places: c.states.keys().copied().collect(),
-            condition: false,
-        });
+        c.loop_scope = Some(LoopScope::new(&c, false));
         c.statements(&body[..1], f.id).unwrap();
         let ValueStatement::Let { local, .. } = body[0] else {
             panic!()
@@ -1454,6 +1501,260 @@ mod tests {
             assert_eq!(before[0].required, after[0].required);
             assert_eq!(before[0].known, after[0].known);
             assert!(after[0].message.contains("pre-existing non-Copy value `display`"));
+        }
+    }
+    #[test]
+    fn header_handle_guards_are_atomic_for_transfer_read_and_write() {
+        let p = typed("fn f(flag: bool, access: &mut Percent, value: Percent) -> Percent { while flag { let next = access; } return value; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.expire();
+        let header = c.clone();
+        let reference = Place::Parameter(f.parameters[1]);
+        c.loop_scope = Some(LoopScope::new(&header, false));
+        assert!(c
+            .consume(reference, f.span, Transfer::Return(f.id))
+            .unwrap_err()
+            .message
+            .contains("pre-existing reference handle"));
+        for write in [false, true] {
+            assert!(c
+                .borrowed_access(reference, f.span, write)
+                .unwrap_err()
+                .message
+                .contains("pre-existing reference handle"));
+        }
+        assert!(c.same_loop_state(&header));
+        assert_eq!(c.remaining, header.remaining);
+        assert!(c.loans.values().all(|loan| loan.held == 0));
+        c.loop_scope.as_mut().unwrap().condition = true;
+        assert!(c
+            .borrowed_access(reference, f.span, false)
+            .unwrap_err()
+            .message
+            .contains("while conditions"));
+        assert!(c.same_loop_state(&header));
+        assert_eq!(c.remaining, header.remaining);
+    }
+    #[test]
+    fn body_loans_and_aliases_evolve_then_cleanup_restores_header_allocator() {
+        let p = typed("fn f(flag: bool, value: Percent) -> Percent { let mut current = value; let outside = &value; while flag { let view = &value; let alias = view; let observed = *alias; let access = &mut current; *access = observed; } return *outside; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let header = c.clone();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        let mut iteration = c.clone();
+        iteration.loop_scope = Some(LoopScope::new(&header, false));
+        iteration.statements(&body[..2], f.id).unwrap();
+        let ValueStatement::Let { local: view, .. } = body[0] else {
+            panic!()
+        };
+        let ValueStatement::Let { local: alias, .. } = body[1] else {
+            panic!()
+        };
+        let provenance = iteration.handles[&Place::Local(view)];
+        assert_eq!(provenance, iteration.handles[&Place::Local(alias)]);
+        assert_eq!(provenance.0, header.next_loan);
+        assert!(iteration.loans.contains_key(&provenance));
+        iteration.statements(&body[2..], f.id).unwrap();
+        assert!(iteration.next_loan > header.next_loan);
+        assert!(iteration.handles.len() > header.handles.len());
+        iteration.finish_loop_provenance(&header, *span).unwrap();
+        assert!(iteration.same_loop_state(&header));
+        assert_eq!(iteration.next_loan, header.next_loan);
+        c.statements(&f.body[2..3], f.id).unwrap();
+        assert!(c.same_loop_state(&header));
+    }
+    #[test]
+    fn allocator_normalization_cannot_hide_surviving_loan_or_handle() {
+        let p = typed("fn f(view: &Percent, value: Percent) -> Percent { return *view; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let header = Checker::new(&p, f);
+        let reference = Place::Parameter(f.parameters[0]);
+        let owner = Place::Parameter(f.parameters[1]);
+        for dangling in [false, true] {
+            let mut broken = header.clone();
+            let new = broken.add_loan(Some(owner), BorrowKind::Shared, f.span);
+            // Fault injection: a header handle must never acquire new provenance.
+            broken.handles.insert(reference, new);
+            if dangling {
+                broken.loans.remove(&new);
+            }
+            let allocated = broken.next_loan;
+            let error = broken.finish_loop_provenance(&header, f.span).unwrap_err();
+            assert!(error
+                .message
+                .contains("iteration-created reference state survives"));
+            assert_eq!(broken.next_loan, allocated);
+            assert_eq!(broken.handles[&reference], new);
+        }
+        let mut broken = header.clone();
+        let new = broken.add_loan(Some(owner), BorrowKind::Mutable, f.span);
+        broken.loans.get_mut(&new).unwrap().held = 1; // Escaped operation hold.
+        let allocated = broken.next_loan;
+        assert!(broken.finish_loop_provenance(&header, f.span).is_err());
+        assert_eq!(broken.next_loan, allocated);
+        assert!(broken.loans.contains_key(&new));
+        let mut broken = header.clone();
+        broken.next_loan -= 1;
+        assert!(broken
+            .finish_loop_provenance(&header, f.span)
+            .unwrap_err()
+            .message
+            .contains("allocation state"));
+        assert_ne!(broken.next_loan, header.next_loan);
+    }
+    #[test]
+    fn lexical_handle_cleanup_expires_loan_before_safe_allocator_reuse() {
+        let p = typed(
+            "fn f(value: Percent) -> Percent { while false { let view = &value; } return value; }",
+        );
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let header = Checker::new(&p, f);
+        let ValueStatement::While { body, span, .. } = &f.body[0] else {
+            panic!()
+        };
+        let ValueStatement::Let { local, .. } = body[0] else {
+            panic!()
+        };
+        let mut iteration = header.clone();
+        let new = iteration.add_loan(
+            Some(Place::Parameter(f.parameters[0])),
+            BorrowKind::Shared,
+            *span,
+        );
+        iteration.handles.insert(Place::Local(local), new);
+        // A branch/body scoped handle cannot escape even with stale suffix counts.
+        iteration.remaining.insert(Place::Local(local), 1);
+        iteration.expire();
+        assert!(iteration.loans.contains_key(&new));
+        iteration.finish_loop_provenance(&header, *span).unwrap();
+        assert!(!iteration.handles.contains_key(&Place::Local(local)));
+        assert!(!iteration.loans.contains_key(&new));
+        assert!(iteration.same_loop_state(&header));
+    }
+    #[test]
+    fn post_loop_loan_reuse_cannot_alias_transient_provenance_or_header_loan() {
+        let p = typed("fn f(flag: bool, value: Percent) -> Percent { let mut first = value; let mut second = value; let outside = &first; while flag { let view = &second; let before = *view; } let access = &mut second; *access = value; return *outside; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..3], f.id).unwrap();
+        let header = c.clone();
+        c.statements(&f.body[3..4], f.id).unwrap();
+        assert!(c.same_loop_state(&header));
+        let reused = LoanId(header.next_loan);
+        assert!(!c.loans.contains_key(&reused));
+        c.statements(&f.body[4..5], f.id).unwrap();
+        let ValueStatement::Let { local: access, .. } = f.body[4] else {
+            panic!()
+        };
+        let ValueStatement::Let { local: second, .. } = f.body[1] else {
+            panic!()
+        };
+        assert_eq!(c.handles[&Place::Local(access)], reused);
+        assert_eq!(c.loans[&reused].owner, Some(Place::Local(second)));
+        assert_eq!(c.loans[&reused].kind, BorrowKind::Mutable);
+        assert_eq!(c.loans.len(), 2);
+        for (place, id) in &header.handles {
+            assert_eq!(c.handles[place], *id);
+        }
+        c.statements(&f.body[5..], f.id).unwrap();
+        assert!(c.loans.is_empty());
+    }
+    #[test]
+    fn nested_loops_preserve_outer_provenance_and_restore_relative_boundary() {
+        let p = typed("fn f(flag: bool, value: Percent) -> Percent { while flag { let outer = &value; while flag { let inner = &value; let observed = *inner; } let later = *outer; } return value; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[0] else {
+            panic!()
+        };
+        let mut c = Checker::new(&p, f);
+        let header = c.clone();
+        c.loop_scope = Some(LoopScope::new(&header, false));
+        c.statements(&body[..1], f.id).unwrap();
+        let ValueStatement::Let { local, .. } = body[0] else {
+            panic!()
+        };
+        let outer = Place::Local(local);
+        let provenance = c.handles[&outer];
+        let before_inner = c.clone();
+        c.statements(&body[1..2], f.id).unwrap();
+        assert!(c.same_loop_state(&before_inner));
+        assert!(c.loop_handle(outer, *span).is_ok()); // Restored outer boundary.
+        let mut inner = c.clone();
+        inner.loop_scope = Some(LoopScope::new(&c, false));
+        assert!(inner
+            .loop_handle(outer, *span)
+            .unwrap_err()
+            .message
+            .contains("pre-existing reference handle"));
+        assert!(c.loans.contains_key(&provenance));
+        c.statements(&body[2..], f.id).unwrap();
+        c.finish_loop_provenance(&header, *span).unwrap();
+        assert!(c.same_loop_state(&header));
+    }
+    #[test]
+    fn untouched_exclusive_header_loan_remains_semantically_identical() {
+        let p = typed("fn f(flag: bool, value: Percent) -> Percent { let mut first = value; let mut second = value; let outside = &mut first; while flag { let inside = &mut second; *inside = value; } return *outside; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..3], f.id).unwrap();
+        let header = c.clone();
+        c.statements(&f.body[3..4], f.id).unwrap();
+        assert!(c.same_loop_state(&header));
+        assert_eq!(c.loans.len(), 1);
+        assert_eq!(c.loans.values().next().unwrap().kind, BorrowKind::Mutable);
+    }
+    #[test]
+    fn iteration_borrowing_uses_identity_independent_of_display_metadata() {
+        fn rename(p: &mut Program) {
+            for r in &mut p.ranges {
+                r.name = "display".into();
+            }
+            for r in &mut p.records {
+                r.name = "display".into();
+            }
+            for f in &mut p.fields {
+                f.name = "display".into();
+            }
+            for v in &mut p.parameters {
+                v.name = "display".into();
+            }
+            for v in &mut p.locals {
+                v.name = "display".into();
+            }
+            for f in &mut p.functions {
+                if let crate::hir::Function::Ordinary(f) = f {
+                    f.name = "display".into();
+                }
+            }
+        }
+        for body in [
+            "fn f(flag: bool, value: Percent) -> Percent { let mut current = value; while flag { let view = &current; if flag { let alias = view; let before = *alias; } else { let access = &mut current; *access = value; } } return current; }",
+            "fn f(flag: bool, value: Percent) -> Percent { while flag { let outer = &value; while flag { let inner = &value; let before = *inner; } let after = *outer; } return value; }",
+        ] {
+            let mut p = typed(body);
+            check(&p).unwrap();
+            let before = crate::mir::lower(&p);
+            rename(&mut p);
+            check(&p).unwrap();
+            assert_eq!(before, crate::mir::lower(&p));
+        }
+        for body in [
+            "fn f(flag: bool, view: &Percent) -> Percent { while flag { let before = *view; } return *view; }",
+            "fn f(flag: bool, value: Percent) -> Percent { while flag { let outer = &value; while flag { let before = *outer; } } return value; }",
+        ] {
+            let mut p = typed(body);
+            let before = check(&p).unwrap_err();
+            rename(&mut p);
+            let after = check(&p).unwrap_err();
+            assert_eq!(before[0].span, after[0].span);
+            assert_eq!(before[0].required, after[0].required);
+            assert_eq!(before[0].known, after[0].known);
+            assert!(after[0].message.contains("pre-existing reference handle `display`"));
         }
     }
 }
