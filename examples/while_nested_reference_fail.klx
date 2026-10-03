@@ -1,0 +1,11 @@
+// Intentional failure: outer-created view is pre-existing at the inner header.
+type Percent = range 0..100;
+fn bad(flag: bool, value: Percent) -> Percent {
+    while flag {
+        let view = &value;
+        while flag {
+            let observed = *view;
+        }
+    }
+    return value;
+}

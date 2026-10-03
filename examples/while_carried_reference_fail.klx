@@ -1,4 +1,4 @@
-// Intentional Ownership failure: pre-existing handle use is future work.
+// Intentional failure: a header handle needs future cyclic lifetime analysis.
 type Percent = range 0..100;
 fn bad(flag: bool, value: Percent) -> Percent {
     let view = &value;

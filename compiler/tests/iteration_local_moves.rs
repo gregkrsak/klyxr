@@ -138,8 +138,8 @@ reject!(
     "pre-existing non-Copy"
 );
 reject!(constant_value_branch_does_not_hide_carried_move, "fn run(flag: bool, ticket: Ticket) -> bool { while flag { let chosen = if true { fresh() } else { ticket }; } return true; }", "Ownership", "pre-existing non-Copy");
-reject!(borrow_of_iteration_local_still_forbidden, "fn run(flag: bool) -> bool { while flag { let ticket = fresh(); let view = &ticket; } return true; }", "Ownership", "reference activity");
-reject!(direct_iteration_local_borrow_argument_still_forbidden, "fn run(flag: bool) -> bool { while flag { let ticket = fresh(); let done = inspect(&ticket); } return true; }", "Ownership", "reference activity");
+accept!(borrow_of_iteration_local, "fn run(flag: bool) -> bool { while flag { let ticket = fresh(); let view = &ticket; } return true; }");
+accept!(direct_iteration_local_borrow_argument, "fn run(flag: bool) -> bool { while flag { let ticket = fresh(); let done = inspect(&ticket); } return true; }");
 
 #[test]
 fn cyclic_mir_keeps_static_move_locals_and_call_ids_without_extra_blocks() {

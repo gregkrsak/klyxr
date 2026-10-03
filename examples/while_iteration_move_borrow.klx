@@ -1,0 +1,17 @@
+// Frontend/MIR fixture only. Recursive factory is not executed or proven.
+type Percent = range 0..100;
+record Ticket { value: Percent }
+fn fresh_ticket() -> Ticket { return fresh_ticket(); }
+fn inspect(ticket: &Ticket) -> bool { return true; }
+fn consume(ticket: Ticket) -> bool { return true; }
+fn run(flag: bool) -> bool {
+    let mut running = flag;
+    while running {
+        let ticket = fresh_ticket();
+        let view = &ticket;
+        let checked = inspect(view);
+        let done = consume(ticket);
+        running = false;
+    }
+    return running;
+}

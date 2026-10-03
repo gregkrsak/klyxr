@@ -280,7 +280,7 @@ fn while_cli_reports_frontend_only_and_cyclic_ownership_boundaries() {
         for (file, message) in [
             (
                 "while_reference_fail.klx",
-                "reference activity is unsupported in while loops",
+                "cannot use pre-existing reference handle",
             ),
             (
                 "while_move_fail.klx",
@@ -321,6 +321,41 @@ fn iteration_local_move_cli_parity_and_nested_boundary_diagnostics() {
                 "cannot move pre-existing non-Copy value `{owner}` in while loop"
             )));
             assert!(text.contains("future generalized cyclic ownership analysis"));
+            assert!(text.contains("-->"));
+            assert!(text.contains("ownership checking stopped"));
+        }
+    }
+}
+
+#[test]
+fn iteration_local_borrow_cli_parity_and_relative_reference_boundaries() {
+    for command in ["check", "verify"] {
+        for file in [
+            "while_iteration_borrow.klx",
+            "while_iteration_mut_borrow.klx",
+            "while_iteration_move_borrow.klx",
+        ] {
+            let output = run(&[command, &example(file)]);
+            assert!(output.status.success());
+            assert!(output.stderr.is_empty());
+            let text = String::from_utf8(output.stdout).unwrap();
+            assert!(text.contains("ordinary MIR control-flow lowering passed"));
+            assert!(text.contains("not executed or verified"));
+            assert!(text.contains("function bodies proven: 0"));
+            assert!(text.contains("iteration-local Move/borrowing"));
+        }
+        for file in [
+            "while_carried_reference_fail.klx",
+            "while_nested_reference_fail.klx",
+        ] {
+            let output = run(&[command, &example(file)]);
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            let text = String::from_utf8(output.stderr).unwrap();
+            assert!(
+                text.contains("cannot use pre-existing reference handle `view` inside while loop")
+            );
+            assert!(text.contains("future cyclic"));
             assert!(text.contains("-->"));
             assert!(text.contains("ownership checking stopped"));
         }
