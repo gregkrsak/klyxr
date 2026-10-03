@@ -35,7 +35,9 @@ fn count_statements(statements: &[ValueStatement], uses: &mut FutureUses) {
                 count_statements(else_body, uses);
             }
             ValueStatement::Let { initializer, .. } => count_expression(initializer, uses),
-            ValueStatement::Return { value, .. } => count_expression(value, uses),
+            ValueStatement::Return { value, .. } | ValueStatement::Assign { value, .. } => {
+                count_expression(value, uses)
+            }
             ValueStatement::DerefAssign {
                 reference, value, ..
             } => {
@@ -200,6 +202,22 @@ impl<'a> Checker<'a> {
                     if let Some(loan) = loan {
                         self.handles.insert(place, loan);
                     }
+                }
+                ValueStatement::Assign { local, value, span } => {
+                    let place = Place::Local(*local);
+                    if ownership_kind(self.program.local(*local).ty) != OwnershipKind::Copy {
+                        return Err(self.diagnostic(*span, format!("cannot replace non-Copy owned local `{}`", self.metadata(place).0), "replacement would displace an owned value; displacement/destruction semantics are not yet defined; KED-011 permits only Copy-safe direct local reassignment", None));
+                    }
+                    // The RHS sees the old value. Unlike write-through, direct
+                    // assignment does not hold a target loan during RHS evaluation.
+                    self.expression(value, Transfer::Local(*local))?;
+                    self.expire();
+                    self.available(place, *span)?;
+                    if let Some(loan) = self.conflict(place, Some(BorrowKind::Mutable)) {
+                        return Err(self.diagnostic(*span, format!("cannot assign `{}` while it is borrowed", self.metadata(place).0), "direct assignment requires exclusive mutation access; any active shared or exclusive borrow conflicts with the write", Some(loan.span)));
+                    }
+                    // Copy replacement leaves the existing owner available and
+                    // creates neither a new identity nor loan provenance.
                 }
                 ValueStatement::DerefAssign {
                     reference,
@@ -619,6 +637,33 @@ mod tests {
         let ast = parse_source(&format!("{DECLARATIONS} {body}")).unwrap();
         types::check(resolve::resolve(&ast).unwrap()).unwrap()
     }
+    #[test]
+    fn non_copy_assignment_rejects_before_consuming_either_owner() {
+        let source = "type Percent = range 0..100; record Ticket { value: Percent } fn f(first: Ticket, second: Ticket) -> Ticket { let mut current = first; current = second; return current; }";
+        let program =
+            types::check(resolve::resolve(&parse_source(source).unwrap()).unwrap()).unwrap();
+        let function = program.functions()[0].as_ordinary().unwrap();
+        let mut checker = Checker::new(&program, function);
+        checker
+            .statements(&function.body[..1], function.id)
+            .unwrap();
+        let before = checker.states.clone();
+        let error = checker
+            .statements(&function.body[1..2], function.id)
+            .unwrap_err();
+        assert!(error.message.contains("cannot replace non-Copy"));
+        assert_eq!(before, checker.states);
+        assert_eq!(
+            checker.states[&Place::Local(program.locals()[0].id)],
+            State::Available
+        );
+        assert_eq!(
+            checker.states[&Place::Parameter(function.parameters[1])],
+            State::Available
+        );
+        assert!(checker.loans.is_empty());
+    }
+
     #[test]
     fn classification_uses_canonical_value_types_not_aggregate_fields_or_names() {
         let mut program = compile_source(DECLARATIONS).unwrap();

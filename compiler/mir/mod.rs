@@ -8,6 +8,11 @@ pub struct BasicBlockId(usize);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
+    Assign {
+        local: LocalId,
+        value: TypedExpr,
+        span: Span,
+    },
     Let {
         local: LocalId,
         initializer: TypedExpr,
@@ -114,7 +119,7 @@ impl MirFunction {
             for statement in &block.statements {
                 let expression = match statement {
                     Statement::Let { initializer, .. } => initializer,
-                    Statement::DerefAssign { value, .. } => value,
+                    Statement::DerefAssign { value, .. } | Statement::Assign { value, .. } => value,
                 };
                 if contains_conditional(expression) {
                     return Err("conditional value must lower to control flow");
@@ -274,6 +279,13 @@ impl Builder {
                         });
                     }
                 }
+                ValueStatement::Assign { local, value, span } => {
+                    statements.push(Statement::Assign {
+                        local: *local,
+                        value: value.clone(),
+                        span: *span,
+                    })
+                }
                 ValueStatement::DerefAssign {
                     reference,
                     value,
@@ -326,6 +338,60 @@ impl Builder {
 mod tests {
     use super::*;
     use crate::{compile_source, ownership, parse_source, resolve, types};
+    #[test]
+    fn assignment_identity_shape_and_loan_outcomes_ignore_metadata() {
+        let source = "type Percent = range 0..100; fn next(value: Percent) -> Percent { return value; } fn f(flag: bool, value: Percent) -> Percent { let mut current = if flag { value } else { value }; let view = &current; if flag { let observed = *view; } else { current = next(current); } return current; }";
+        let mut program = compile_source(source).unwrap();
+        let original = lower(&program);
+        for range in &mut program.ranges {
+            range.name = "display".into();
+        }
+        for parameter in &mut program.parameters {
+            parameter.name = "display".into();
+        }
+        for local in &mut program.locals {
+            local.name = "display".into();
+        }
+        for function in &mut program.functions {
+            if let hir::Function::Ordinary(f) = function {
+                f.name = "display".into();
+            }
+        }
+        ownership::check(&program).unwrap();
+        assert_eq!(original, lower(&program));
+        let source = source.replace("return current;", "return *view;");
+        let mut program =
+            types::check(resolve::resolve(&parse_source(&source).unwrap()).unwrap()).unwrap();
+        let original = ownership::check(&program).unwrap_err();
+        for local in &mut program.locals {
+            local.name = "display".into();
+        }
+        let renamed = ownership::check(&program).unwrap_err();
+        assert_eq!(original[0].span, renamed[0].span);
+        assert!(renamed[0].message.contains("cannot assign"));
+    }
+    #[test]
+    fn validator_rejects_hidden_if_value_in_assignment_rhs() {
+        let program = compile_source("fn f(flag: bool) -> bool { let mut value = if flag { true } else { false }; value = true; return value; }").unwrap();
+        let hir::ValueStatement::Let { initializer, .. } =
+            &program.functions()[0].as_ordinary().unwrap().body[0]
+        else {
+            panic!()
+        };
+        let mut mir = lower(&program);
+        for block in &mut mir.functions[0].blocks {
+            for statement in &mut block.statements {
+                if let Statement::Assign { value, .. } = statement {
+                    *value = initializer.clone();
+                }
+            }
+        }
+        assert_eq!(
+            mir.functions[0].validate(),
+            Err("conditional value must lower to control flow")
+        );
+    }
+
     #[test]
     fn conditional_value_identity_and_ownership_ignore_display_names() {
         let source = "type Percent = range 0..100; record Ticket { value: Percent } fn id(a: Ticket) -> Ticket { return a; } fn f(flag: bool, a: Ticket, b: Ticket) -> Ticket { let chosen = if flag { id(a) } else { if flag { b } else { a } }; return chosen; }";

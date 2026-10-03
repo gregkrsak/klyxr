@@ -266,7 +266,7 @@ fn arbitrary_dereference_operands_and_field_projection_remain_unsupported() {
     }
 }
 #[test]
-fn assignment_expressions_compound_assignment_and_owner_reassignment_stay_absent() {
+fn assignment_expressions_compound_assignment_and_projected_writes_stay_absent() {
     for body in [
         "let result = (*value = true); return result;",
         "return (*value = true);",
@@ -275,7 +275,6 @@ fn assignment_expressions_compound_assignment_and_owner_reassignment_stay_absent
         "*value += true; return true;",
         "*value *= true; return true;",
         "(*value)++; return true;",
-        "let mut owned = true; owned = false; return true;",
         "value = other; return true;",
         "(*value).field = true; return true;",
         "value.field = true; return true;",

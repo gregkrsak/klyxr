@@ -400,7 +400,8 @@ move by value. Borrowing, cloning, mutable reborrowing, and reference coercions
 are never inserted implicitly.
 
 KED-006 implements only whole-value, straight-line, non-escaping borrowing.
-`let mut` marks an owned local as exclusively borrowable; it enables no reassignment.
+`let mut` marked an owned local as exclusively borrowable; KED-006 itself added
+no reassignment. KD-026 later permits narrow Copy-safe direct local reassignment.
 KED-006 does not establish explicit lifetime syntax, reference returns, dereference
 semantics, partial borrowing, or mutation through references.
 
@@ -423,6 +424,7 @@ KED-007 implements directly named ordinary reference access and dedicated
 `*reference = expression;` statements only. It does not establish owned-local
 reassignment, non-Copy replacement, destructors/Drop, field access or mutation,
 auto-deref, reborrowing, compound assignment, assignment expressions, or control flow.
+KD-026 later establishes a separate narrow Copy-safe owned-local reassignment form.
 
 ---
 
@@ -526,3 +528,57 @@ parenthesized conditional values, dereference writes, and general expression
 positions remain unsupported. It settles no statement-containing value blocks,
 reference lifetime joins, early returns, loops, destruction, execution, or general
 MIR value-flow strategy. These boundaries remain open under OQ-022/OQ-024/OQ-026.
+
+
+---
+
+## KD-026 — Copy-safe direct local reassignment
+
+**Status:** Accepted
+
+An ordinary local declared with `let mut` / `let mutable` may be directly
+reassigned when it holds an owned non-reference Copy value. Initially the
+permitted target types are Bool and named constrained ranges:
+
+```klyxr
+let mut current = start;
+current = next(current);
+```
+
+The target is one directly named, in-scope mutable local. Parameters and immutable
+locals are not assignable. The RHS must have the exact same concrete type,
+including nominal range identity. There is no contextual integer-literal
+materialization, conversion, structural matching, or implicit clone.
+
+Assignment is a statement with a required semicolon and produces no value.
+It remains distinct from Let initialization and explicit DerefAssign write-through.
+Chained/compound assignment, projected/field/index targets, assignment expressions,
+and conditional values on an assignment RHS remain unsupported.
+
+For this directly named form, RHS evaluation occurs before mutation. Existing
+RHS ownership effects and call holds complete, last-use loans may expire, and
+then the write requires exclusive mutation access: any active shared or exclusive
+loan of the target conflicts. This allows Copy self-assignment and final reference
+reads/calls on the RHS before the write when no future handle use keeps the loan
+active. KD-024 continuation-aware path-sensitive expiry remains authoritative in
+branches; a post-join reference use protects the owner on every relevant path.
+Assignment creates no loan or new local identity, moves nothing out of the target,
+and leaves the Copy owner available. This rule does not settle evaluation order
+for future generalized place assignments.
+
+Reference-local reassignment is rejected during typing because provenance/lifetime
+replacement remains unresolved. Mutable record locals remain non-Copy: exact-typed
+replacement is rejected during ownership checking before consuming either owner,
+until displacement/destruction semantics are defined. No destruction, leak, clone,
+swap, take, or replace behavior is implied.
+
+AST, resolved statements, typed HIR, and MIR use a dedicated Assign node. HIR/MIR
+retain the canonical destination LocalId, typed RHS, and statement span. Straight-line
+lowering adds no blocks; branch lowering uses the current branch block. MIR remains
+deterministic and acyclic with explicit Branch/Goto/Return terminators. KED-010
+conditional initialization still emits mutually exclusive Let statements, not Assign.
+
+KED-011 adds no loops/backedges, fixed-point analysis, general ownership dataflow,
+SSA, phi, block parameters, general temporaries/result slots, definite assignment,
+non-Copy replacement, reference replacement, execution, or verification expansion.
+OQ-022/OQ-024/OQ-025/OQ-026 retain broader mutation and control-flow design.

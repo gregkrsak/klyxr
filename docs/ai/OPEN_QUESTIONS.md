@@ -121,7 +121,8 @@ exclusive borrowing only. It introduces no assignment or mutable owned parameter
 The core straight-line, non-escaping loan rules now fall under KD-021; advanced
 reference semantics remain under OQ-024. KED-007 adds explicit dereference and
 Copy-safe write-through as a distinct accepted operation (KD-022). `let mut`
-still does not enable direct owned-local reassignment; that remains open.
+did not enable direct owned-local reassignment under KED-007. KED-011 now settles
+only direct reassignment of mutable Bool/named-range Copy locals (KD-026).
 
 KED-008 adds ordinary statement `if` / optional `else`, with nested lexical
 branch scopes. Ordinary functions still require one final function-level return;
@@ -138,7 +139,8 @@ Still open:
 - early returns and multiple control-flow return paths;
 - conditional values in returns, call arguments, and general expression positions;
 - statement-containing value blocks and broader owned branch-result semantics;
-- reassignment and broader mutable-local semantics;
+- non-Copy replacement, reference-local reassignment, and broader mutable-local semantics;
+- compound assignment, projected places, and conditional values on assignment RHSs;
 - mutable owned parameters;
 - reference returns and escaping-reference interfaces;
 - expression-bodied function shorthand;
@@ -221,11 +223,14 @@ OQ-009 remains authoritative for the broader explicit lifetime syntax question.
 KED-007 settles only explicit dereference and Copy-safe whole-value write-through.
 KED-008 permits those operations inside `if` branches. It does not settle general
 mutation across loops or complex control flow, or non-Copy replacement/destruction.
+KED-011 settles only direct mutable Bool/named-range local Copy reassignment
+(KD-026), with exact typing, RHS-first/write-second ordering, and active-loan checks.
+It introduces no generalized place evaluation-order rule.
 
 Still open:
 
 - non-Copy replacement and the fate/destruction of displaced values;
-- direct local reassignment;
+- reference-local reassignment and provenance/lifetime replacement;
 - general place-expression architecture;
 - field/projected assignment, partial mutation, and aggregate mutation;
 - compound assignment;
@@ -269,4 +274,8 @@ Still open:
 - destruction / cleanup edges and exceptional / unwind control flow;
 - eventual MIR expression-lowering granularity.
 
-KED-008/KED-010 MIR choices do not settle or preclude these broader features.
+KED-011 adds a distinct acyclic MIR Assign statement for already initialized Copy
+locals. This prepares ordinary loop-carried Copy state for a separately authorized
+future directive; it adds no loops, backedges, fixed points, SSA, or definite assignment.
+
+KED-008/KED-010/KED-011 MIR choices do not settle or preclude these broader features.

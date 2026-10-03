@@ -1,0 +1,9 @@
+type Percent = range 0..100;
+
+// The future shared-reference use keeps the loan active across reassignment.
+fn invalid(start: Percent, replacement: Percent) -> Percent {
+    let mut current = start;
+    let view = &current;
+    current = replacement;
+    return *view;
+}

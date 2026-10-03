@@ -269,6 +269,21 @@ impl Parser<'_> {
                     value,
                     span: Span { end, ..span },
                 });
+            } else if matches!(self.peek_kind(), TokenKind::Ident(_))
+                && self
+                    .tokens
+                    .get(self.current + 1)
+                    .is_some_and(|token| matches!(token.kind, TokenKind::Equal))
+            {
+                let target = self.expect_ident()?;
+                self.expect(&TokenKind::Equal)?;
+                let value = self.parse_expression(0)?;
+                let end = self.expect(&TokenKind::Semicolon)?.span.end;
+                body.push(ValueStatement::Assign {
+                    target,
+                    value,
+                    span: Span { end, ..span },
+                });
             } else if self.at(&TokenKind::Return) {
                 if !allow_return {
                     return Err(self.error(
@@ -290,7 +305,7 @@ impl Parser<'_> {
                     return Err(self.error("return must be the final statement; statements after return are not supported".into()));
                 }
             } else {
-                return Err(self.error("value-returning Klyxr functions require `return expression;`; bare expressions and local assignment are not supported".into()));
+                return Err(self.error("value-returning Klyxr functions require `return expression;`; bare expression statements are not supported".into()));
             }
         }
         let end = self.expect(&TokenKind::RBrace)?.span.end;

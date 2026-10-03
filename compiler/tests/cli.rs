@@ -244,3 +244,23 @@ fn conditional_initializer_cli_parity() {
         assert!(text.contains("conditional_value_move_fail.klx"));
     }
 }
+
+#[test]
+fn local_reassignment_cli_reports_frontend_only_and_borrow_conflict() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("local_reassignment.klx")]);
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("not executed or verified"));
+        assert!(text.contains("function bodies proven: 0"));
+        let output = run(&[command, &example("local_reassignment_borrow_fail.klx")]);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let text = String::from_utf8(output.stderr).unwrap();
+        assert!(text.contains("cannot assign `current` while it is borrowed"));
+        assert!(text.contains("conflicting borrow began at line 6"));
+        assert!(text.contains("local_reassignment_borrow_fail.klx:7:5"));
+        assert!(text.contains("ownership checking stopped"));
+    }
+}

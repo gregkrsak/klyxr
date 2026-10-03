@@ -64,6 +64,11 @@ pub(crate) struct ResolvedValueFunction {
 }
 #[derive(Debug)]
 pub(crate) enum ResolvedValueStatement {
+    Assign {
+        target: hir::Place,
+        value: ResolvedExpr,
+        span: Span,
+    },
     If {
         condition: ResolvedExpr,
         then_body: Vec<ResolvedValueStatement>,
@@ -489,6 +494,28 @@ impl Resolver {
                         name: name.clone(),
                         mutable: *mutable,
                         initializer,
+                        span: *span,
+                    }
+                }
+                ast::ValueStatement::Assign {
+                    target,
+                    value,
+                    span,
+                } => {
+                    let target = match scope.values.get(target) {
+                        Some(Reference::Local(id)) => hir::Place::Local(*id),
+                        Some(Reference::Parameter(id)) => hir::Place::Parameter(*id),
+                        None => {
+                            return Err(error(
+                                *span,
+                                format!("unknown assignment target `{target}`"),
+                                "assign a local declared earlier in the current lexical scope",
+                            ))
+                        }
+                    };
+                    ResolvedValueStatement::Assign {
+                        target,
+                        value: self.expression(value, scope, false)?,
                         span: *span,
                     }
                 }
