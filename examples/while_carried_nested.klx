@@ -1,0 +1,14 @@
+// Frontend/MIR only. The outer-local reference is carried by the inner loop.
+fn observe(flag: bool, value: bool) -> bool {
+    let mut outer = flag;
+    while outer {
+        let view = &value;
+        let mut inner = flag;
+        while inner {
+            let seen = *view;
+            inner = false;
+        }
+        outer = false;
+    }
+    return value;
+}

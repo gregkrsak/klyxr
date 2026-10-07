@@ -1,10 +1,11 @@
-// Intentional failure: outer-created view is pre-existing at the inner header.
+// Intentional failure: outer-created mutable access cannot move inside inner loop.
 type Percent = range 0..100;
 fn bad(flag: bool, value: Percent) -> Percent {
+    let mut owned = value;
     while flag {
-        let view = &value;
+        let access = &mut owned;
         while flag {
-            let observed = *view;
+            let moved = access;
         }
     }
     return value;

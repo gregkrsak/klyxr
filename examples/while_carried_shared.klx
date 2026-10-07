@@ -1,0 +1,12 @@
+// Frontend/MIR only. Shared carried provenance survives each checked backedge.
+type Percent = range 0..100;
+fn observe(flag: bool, value: Percent) -> Percent {
+    let mut running = flag;
+    let view = &value;
+    while running {
+        let alias = view;
+        let seen = *alias;
+        running = false;
+    }
+    return value;
+}

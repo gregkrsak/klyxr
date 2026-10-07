@@ -130,23 +130,21 @@ accept!(
 );
 accept!(mutable_borrow_creation_in_body, "fn f(flag: bool, a: Percent) -> Percent { let mut current = a; while flag { let access = &mutable current; } return current; }");
 reject!(borrow_creation_in_condition, "fn inspect(view: &Percent) -> bool { return true; } fn f(a: Percent) -> Percent { while inspect(&a) {} return a; }", "Ownership", "reference activity");
-reject!(dereference_in_body, "fn f(flag: bool, view: &Percent) -> Percent { while flag { let observed = *view; } return *view; }", "Ownership", "cyclic loan/lifetime analysis");
+accept!(dereference_in_body, "fn f(flag: bool, view: &Percent) -> Percent { while flag { let observed = *view; } return *view; }");
 reject!(
     dereference_in_condition,
     "fn f(view: &bool) -> bool { while *view {} return true; }",
     "Ownership",
     "reference activity"
 );
-reject!(write_through_in_body, "fn f(flag: bool, access: &mut Percent, a: Percent) -> Percent { while flag { *access = a; } return a; }", "Ownership", "pre-existing reference handle");
-reject!(reference_call_argument, "fn inspect(view: &Percent) -> bool { return true; } fn f(flag: bool, view: &Percent) -> bool { while flag { let observed = inspect(view); } return true; }", "Ownership", "pre-existing reference handle");
-reject!(mutable_handle_call_argument, "fn inspect(access: &mut Percent) -> bool { return true; } fn f(flag: bool, access: &mut Percent) -> bool { while flag { let observed = inspect(access); } return true; }", "Ownership", "pre-existing reference handle");
+accept!(write_through_in_body, "fn f(flag: bool, access: &mut Percent, a: Percent) -> Percent { while flag { *access = a; } return a; }");
+accept!(reference_call_argument, "fn inspect(view: &Percent) -> bool { return true; } fn f(flag: bool, view: &Percent) -> bool { while flag { let observed = inspect(view); } return true; }");
+reject!(mutable_handle_call_argument, "fn inspect(access: &mut Percent) -> bool { return true; } fn f(flag: bool, access: &mut Percent) -> bool { while flag { let observed = inspect(access); } return true; }", "Ownership", "loop-carried mutable reference");
 reject!(condition_reference_call_argument, "fn inspect(view: &Percent) -> bool { return true; } fn f(view: &Percent) -> bool { while inspect(view) {} return true; }", "Ownership", "reference activity");
 accept!(direct_borrow_call_argument, "fn inspect(view: &Percent) -> bool { return true; } fn f(flag: bool, a: Percent) -> bool { while flag { let observed = inspect(&a); } return true; }");
-reject!(
+accept!(
     reference_valued_body_alias,
-    "fn f(flag: bool, view: &Percent) -> bool { while flag { let alias = view; } return true; }",
-    "Ownership",
-    "pre-existing reference handle"
+    "fn f(flag: bool, view: &Percent) -> bool { while flag { let alias = view; } return true; }"
 );
 reject!(record_by_value_call, "fn consume(ticket: Ticket) -> bool { return true; } fn f(flag: bool, ticket: Ticket) -> bool { while flag { let consumed = consume(ticket); } return true; }", "Ownership", "pre-existing non-Copy value");
 reject!(record_condition_call, "fn consume(ticket: Ticket) -> bool { return true; } fn f(ticket: Ticket) -> bool { while consume(ticket) {} return true; }", "Ownership", "cyclic ownership analysis");
@@ -159,7 +157,7 @@ reject!(
 accept!(fresh_non_copy_call_result, "fn fresh() -> Ticket { return fresh(); } fn f(flag: bool) -> bool { while flag { let made = fresh(); } return true; }");
 reject!(nested_branch_move, "fn consume(ticket: Ticket) -> bool { return true; } fn f(flag: bool, ticket: Ticket) -> bool { while flag { if flag { let done = consume(ticket); } } return true; }", "Ownership", "pre-existing non-Copy value");
 reject!(record_replacement_inside_loop, "fn f(flag: bool, first: Ticket, second: Ticket) -> Ticket { let mut current = first; while flag { current = second; } return current; }", "Ownership", "cannot replace non-Copy");
-reject!(reference_in_conditional_value_leaf, "fn f(flag: bool, view: &Percent, a: Percent) -> Percent { while flag { let chosen = if flag { a } else { *view }; } return a; }", "Ownership", "pre-existing reference handle");
+accept!(reference_in_conditional_value_leaf, "fn f(flag: bool, view: &Percent, a: Percent) -> Percent { while flag { let chosen = if flag { a } else { *view }; } return a; }");
 accept!(
     constant_false_does_not_relax_loop_restrictions,
     "fn f(a: Percent) -> Percent { while false { let view = &a; } return a; }"

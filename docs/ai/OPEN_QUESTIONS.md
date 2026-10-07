@@ -165,7 +165,17 @@ including fresh record results, transfers and existing branch joins. Conditions
 remain Copy-only; scopes and the single final return are unchanged. General
 loop-carried ownership and cyclic reference use remain unresolved. KED-014 permits
 iteration-local body borrowing (KD-029), with reference-free while conditions and
-no use of handles present at the current header.
+historically no use of handles present at the current header; KD-030 refines this
+with stable carried access.
+
+
+KED-015 settles stable loop-carried reference access only (KD-030): scoped
+recurrent obligations retain exact original provenance across every accepted
+backedge, and false-exit liveness discharges only the current frame. Outer frames
+and post-loop uses remain authoritative. Mutable carried handles cannot transfer;
+while conditions stay reference-free. Generalized cyclic lifetime inference,
+fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
+escaping references and broader control flow remain unresolved.
 
 ## OQ-023 — Copy customization, cloning, partial moves, and destruction
 
@@ -240,11 +250,20 @@ access; this is not cyclic lifetime inference or reference use across backedges.
 KED-014 permits iteration-local borrowing in while bodies (KD-029), refining
 KED-013's historical restriction. Fresh body provenance must be gone at the
 backedge before allocator restoration. Untouched header handles/loans persist
-unchanged and constrain new borrows; their use inside that loop, all while-condition
-reference activity, generalized cyclic NLL and fixed-point lifetime inference
-remain unsupported. Nested headers make outer-created handles pre-existing.
+unchanged and constrain new borrows. KD-030 subsequently permits stable carried
+use, but all while-condition reference activity, generalized cyclic NLL and
+fixed-point lifetime inference remain unsupported. Nested headers make outer-created handles pre-existing.
 Reborrowing, reference returns/results/reassignment, explicit lifetimes and
 field/partial loans remain unresolved.
+
+
+KED-015 settles stable loop-carried reference access only (KD-030): scoped
+recurrent obligations retain exact original provenance across every accepted
+backedge, and false-exit liveness discharges only the current frame. Outer frames
+and post-loop uses remain authoritative. Mutable carried handles cannot transfer;
+while conditions stay reference-free. Generalized cyclic lifetime inference,
+fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
+escaping references and broader control flow remain unresolved.
 
 ## OQ-025 — General mutation, place expressions, and replacement semantics
 
@@ -281,8 +300,17 @@ KED-013 permits transfers of iteration-local Move values, not replacement.
 Direct reassignment of any non-Copy owner, including body-local owners, remains
 unsupported pending displacement/destruction semantics. KED-014 permits existing
 Copy-safe write-through using fresh body references, not replacement or destruction.
-Pre-existing handles remain unusable inside that loop; generalized cyclic mutation
+KD-030 permits stable carried Copy-safe access/write-through; generalized cyclic mutation
 and lifetime analysis remain open.
+
+
+KED-015 settles stable loop-carried reference access only (KD-030): scoped
+recurrent obligations retain exact original provenance across every accepted
+backedge, and false-exit liveness discharges only the current frame. Outer frames
+and post-loop uses remain authoritative. Mutable carried handles cannot transfer;
+while conditions stay reference-free. Generalized cyclic lifetime inference,
+fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
+escaping references and broader control flow remain unresolved.
 
 ## OQ-026 — General control flow, conditional values, and MIR dataflow
 
@@ -340,6 +368,15 @@ dataflow, reference inference, MIR ownership, or a new IR representation.
 KED-014 adds only iteration-local borrowing to that one-iteration HIR model
 (KD-029). Finite continuation-aware liveness applies inside each permitted body;
 new handles/loans must be discharged before the backedge and allocator restoration.
-It does not settle stable loop-carried reference use, generalized cyclic NLL,
+KD-030 subsequently settles stable carried access. It does not settle generalized cyclic NLL,
 fixed-point ownership/loan dataflow, MIR ownership, reference-result joins,
 termination, verified loops or any broader control-flow question above.
+
+
+KED-015 settles stable loop-carried reference access only (KD-030): scoped
+recurrent obligations retain exact original provenance across every accepted
+backedge, and false-exit liveness discharges only the current frame. Outer frames
+and post-loop uses remain authoritative. Mutable carried handles cannot transfer;
+while conditions stay reference-free. Generalized cyclic lifetime inference,
+fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
+escaping references and broader control flow remain unresolved.
