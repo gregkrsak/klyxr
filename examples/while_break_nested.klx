@@ -1,0 +1,16 @@
+// Inner break targets the inner exit; outer continue targets the outer header.
+fn update(flag: bool, stop: bool) -> bool {
+    let mut value = false;
+    while flag {
+        while stop {
+            value = true;
+            break;
+        }
+        if stop {
+            break;
+        } else {
+            continue;
+        }
+    }
+    return value;
+}

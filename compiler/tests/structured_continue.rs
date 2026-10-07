@@ -124,7 +124,7 @@ reject!(
 );
 reject!(
     unsupported_break,
-    "fn f(flag: bool) -> bool { while flag { break; } return flag; }",
+    "fn f(flag: bool) -> bool { while flag { break outer; } return flag; }",
     "Parse",
     ""
 );

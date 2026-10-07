@@ -1,0 +1,14 @@
+// A checked non-breaking body path uses this carried reference.
+// Recurrence still protects its owner before break is reached.
+fn update(flag: bool, stop: bool) -> bool {
+    let mut value = false;
+    let view = &value;
+    while flag {
+        if stop {
+            value = true;
+            break;
+        }
+        let observed = *view;
+    }
+    return value;
+}

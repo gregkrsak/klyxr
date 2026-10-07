@@ -84,6 +84,9 @@ pub enum BorrowKind {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueStatement {
+    Break {
+        span: Span,
+    },
     Continue {
         span: Span,
     },
@@ -124,7 +127,7 @@ impl ValueStatement {
     // Narrow structural fallthrough only: a while always retains its false exit.
     pub(crate) fn falls_through(&self) -> bool {
         match self {
-            Self::Continue { .. } => false,
+            Self::Continue { .. } | Self::Break { .. } => false,
             Self::If {
                 then_body,
                 else_body,

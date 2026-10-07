@@ -162,7 +162,7 @@ pub fn lower(program: &hir::Program) -> MirProgram {
         .map(|f| {
             let mut builder = Builder {
                 blocks: Vec::new(),
-                loop_headers: Vec::new(),
+                loop_targets: Vec::new(),
             };
             let entry = builder.reserve();
             let (last, statements) = builder
@@ -196,7 +196,7 @@ pub fn lower(program: &hir::Program) -> MirProgram {
 }
 struct Builder {
     blocks: Vec<Option<BasicBlock>>,
-    loop_headers: Vec<BasicBlockId>,
+    loop_targets: Vec<(BasicBlockId, BasicBlockId)>,
 }
 impl Builder {
     fn reserve(&mut self) -> BasicBlockId {
@@ -258,8 +258,13 @@ impl Builder {
         let mut statements = Vec::new();
         for statement in body {
             match statement {
+                ValueStatement::Break { .. } => {
+                    let target = self.loop_targets.last().expect("checked innermost loop").1;
+                    self.finish(current, statements, Terminator::Goto { target });
+                    return None;
+                }
                 ValueStatement::Continue { .. } => {
-                    let target = *self.loop_headers.last().expect("checked innermost loop");
+                    let target = self.loop_targets.last().expect("checked innermost loop").0;
                     self.finish(current, statements, Terminator::Goto { target });
                     return None;
                 }
@@ -323,11 +328,11 @@ impl Builder {
                             else_target: exit,
                         },
                     );
-                    self.loop_headers.push(header);
+                    self.loop_targets.push((header, exit));
                     if let Some((end, body)) = self.body(body_target, body) {
                         self.finish(end, body, Terminator::Goto { target: header });
                     }
-                    assert_eq!(self.loop_headers.pop(), Some(header));
+                    assert_eq!(self.loop_targets.pop(), Some((header, exit)));
                     current = exit;
                 }
                 ValueStatement::If {
@@ -391,7 +396,7 @@ impl Builder {
 // Structural source fallthrough only; while retains its real false exit.
 fn falls_through(body: &[ValueStatement]) -> bool {
     match body.last() {
-        Some(ValueStatement::Continue { .. }) => false,
+        Some(ValueStatement::Continue { .. } | ValueStatement::Break { .. }) => false,
         Some(ValueStatement::If {
             then_body,
             else_body,
