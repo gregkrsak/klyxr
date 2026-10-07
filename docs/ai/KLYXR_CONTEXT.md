@@ -137,7 +137,7 @@ references may remain untouched; outside live loans still constrain Copy owner
 reads/writes, while dead pre-loop loans stay dead. There is no fixed-point solver.
 MIR uses Goto → header Branch → body/exit, with body Goto back to header. Its
 validator now accepts cycles with visited tracking; structural validity does not
-prove termination. Both constant-condition edges remain. Break/continue/for,
+prove termination. Both constant-condition edges remain. Break/for (KD-031 now settles unlabeled statement continue),
 loop values, early returns, verified loops, and general cyclic ownership/loans
 remain unresolved. Ordinary loops are neither executed nor proven.
 
@@ -393,3 +393,41 @@ and statements restore their pre-operation snapshot on error, including partiall
 consumed counts and operation holds. Canonical HIR/MIR and public APIs are unchanged.
 No generalized cyclic lifetime/fixed-point solver, second checker, MIR borrowing,
 execution, destruction or termination proof is implemented.
+
+
+### KED-016: structured continue and explicit backedges
+
+AST, resolved statements and typed HIR preserve Continue/span. Parser and resolver lexical
+loop depth reject use outside an ordinary while; recursive loop/branch structure
+identifies the innermost target. Structural block checks reject any suffix after
+a direct continue or an all-terminating conditional. Loops still have a false
+exit, including constant conditions and all-continuing bodies. No general
+unreachable-code analysis is implemented.
+
+The existing ownership checker carries immutable header snapshots and finite
+outside continuations on a private nested target stack. Statement analysis returns
+fallthrough or a previously validated continue; conditionals analyze each arm in
+source order and join only surviving fallthrough states. A single surviving arm
+keeps its actual effects while branch-local state is scoped away. Each explicit
+continue runs the existing lexical provenance cleanup, safe allocator normalization,
+and exact header comparison transactionally with recurrent frames still active.
+Normal bottom-of-body backedges use that same invariant. No continue discharges
+an obligation frame; failed analysis restores its complete entering snapshot.
+
+Finite future-use summaries are computed backwards over structured syntax before
+forward ownership operations. A continue substitutes its loop's outside finite
+continuation for the skipped same-iteration suffix. Statement branches receive
+separate summaries; a pre-dispatch summary retains uses possible on either edge.
+Expression-level counts and existing call/write holds remain unchanged. Recurrent
+LoanId sets remain separate from FutureUses and retain exact provenance even with
+zero finite counts and zero holds. The independently checked header-condition false
+state, not a fabricated body fallthrough, supplies the loop exit. Only its current
+frame is discharged; enclosing frames and post-loop finite uses still protect loans.
+
+MIR maintains a nested header stack and returns an optional live tail. Continue
+finishes the current block with the existing Goto to that header. No new terminator
+or ownership annotation is introduced. Only real fallthrough arms create joins or
+lower a suffix, so all emitted blocks remain reachable under the unchanged
+validator. The header false exit still exists when all body paths continue.
+Canonical source IDs, deterministic lowering, and the verified proof path remain
+unchanged. No generalized CFG/fixed-point machinery or competing checker is added.

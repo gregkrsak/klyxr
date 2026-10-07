@@ -761,3 +761,44 @@ No syntax, MIR ownership engine, cyclic fixed-point solver, general lifetime
 inference, reference reassignment/returns/results, escaping references, reborrowing,
 coercion, partial borrowing, destruction, execution or termination proof is added.
 OQ-024/OQ-026 retain those broader lifetime/control-flow questions.
+
+
+---
+
+## KD-031 — Structured continue in while loops
+
+**Status:** Accepted
+
+An unlabeled `continue;` statement transfers control to the innermost enclosing
+ordinary while header. It is an independently checked explicit backedge: carried
+availability, handle mappings, exact continuously active LoanId/owner/kind,
+balanced operation holds, and scoped recurrent obligations must equal the header
+state after iteration-local cleanup. Fresh provenance must be absent before safe
+allocator normalization. A continue never discharges current or enclosing
+recurrent obligations. Existing carried Move restrictions remain unchanged.
+
+Continue has no same-iteration finite continuation, but retains the finite
+post-loop continuation because the condition-false exit remains a real successor.
+Path-specific summaries must establish this distinction before operations preceding
+a continue. A body-local loan needed only by a skipped suffix may expire on that
+path; a recurrent carried loan or post-loop use still protects the owner. Finite
+future uses, recurrent obligations, and operation holds remain separate reasons
+for loan activity. No loan may expire and later reactivate on one path.
+
+Direct continue terminates its current lexical block. A statement conditional
+whose checked arms both terminate has no fallthrough; a following statement in
+that block is rejected structurally, including nested conditionals. Only actual
+fallthrough arms participate in a suffix join; a single survivor retains its
+ownership effects. No constant-path pruning or generalized unreachable-code
+policy is established. A while retains its checked false exit even if every body
+path continues, independently of any body fallthrough. False exit discharges only
+that loop's obligation frame and applies outside suffix liveness; enclosing
+obligations remain authoritative.
+
+AST/resolution/typed HIR contain an explicit statement form. The single ownership
+checker uses bounded recursive structured flow and transactional backedge cleanup;
+a failure restores availability, provenance, finite uses, obligations, holds,
+allocator, lexical scope, and loop target/header context. MIR reuses Goto to the
+innermost header, emitting joins/suffixes only for real fallthrough paths. This
+settles no labels, break, loop values, early returns, generalized CFG/fixed-point
+ownership, MIR borrowing, reborrowing, destruction, execution or verification.

@@ -64,6 +64,9 @@ pub(crate) struct ResolvedValueFunction {
 }
 #[derive(Debug)]
 pub(crate) enum ResolvedValueStatement {
+    Continue {
+        span: Span,
+    },
     While {
         condition: ResolvedExpr,
         body: Vec<ResolvedValueStatement>,
@@ -454,17 +457,33 @@ impl Resolver {
         function: FunctionId,
         statements: &[ast::ValueStatement],
         scope: &mut Scope,
+        loop_depth: usize,
     ) -> ResolutionResult<Vec<ResolvedValueStatement>> {
         let mut body = Vec::new();
-        for statement in statements {
+        for (index, statement) in statements.iter().enumerate() {
             body.push(match statement {
+                ast::ValueStatement::Continue { span } => {
+                    if loop_depth == 0 {
+                        return Err(error(
+                            *span,
+                            "continue is permitted only inside an ordinary while loop",
+                            "continue targets the innermost enclosing while",
+                        ));
+                    }
+                    ResolvedValueStatement::Continue { span: *span }
+                }
                 ast::ValueStatement::While {
                     condition,
                     body,
                     span,
                 } => ResolvedValueStatement::While {
                     condition: self.expression(condition, scope, false)?,
-                    body: self.value_statements(function, body, &mut scope.clone())?,
+                    body: self.value_statements(
+                        function,
+                        body,
+                        &mut scope.clone(),
+                        loop_depth + 1,
+                    )?,
                     span: *span,
                 },
                 ast::ValueStatement::If {
@@ -475,11 +494,12 @@ impl Resolver {
                 } => {
                     let condition = self.expression(condition, scope, false)?;
                     let then_body =
-                        self.value_statements(function, then_body, &mut scope.clone())?;
+                        self.value_statements(function, then_body, &mut scope.clone(), loop_depth)?;
                     let else_body = self.value_statements(
                         function,
                         else_body.as_deref().unwrap_or(&[]),
                         &mut scope.clone(),
+                        loop_depth,
                     )?;
                     ResolvedValueStatement::If {
                         condition,
@@ -547,6 +567,16 @@ impl Resolver {
                     span: *span,
                 },
             });
+            // Public AST callers receive the same structural boundary as source
+            // parsing; malformed manually edited blocks must not reach MIR.
+            if index + 1 < statements.len() && !statement.falls_through() {
+                let span = match statement {
+                    ast::ValueStatement::Continue { span }
+                    | ast::ValueStatement::If { span, .. } => *span,
+                    _ => unreachable!("only continue/conditional can terminate here"),
+                };
+                return Err(error(span, "statements after a continue path with no fallthrough are unsupported", "continue must terminate its lexical block; only real fallthrough paths can have a suffix"));
+            }
         }
         Ok(body)
     }
@@ -615,7 +645,7 @@ impl Resolver {
                         .values
                         .insert(p.name.clone(), Reference::Parameter(*id));
                 }
-                let body = self.value_statements(id, &f.body, &mut scope)?;
+                let body = self.value_statements(id, &f.body, &mut scope, 0)?;
                 Ok(ResolvedFunction::Ordinary(ResolvedValueFunction {
                     id,
                     name: f.name.clone(),

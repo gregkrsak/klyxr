@@ -206,7 +206,7 @@ impl Parser<'_> {
         self.expect(&TokenKind::Arrow)?;
         let return_type = self.parse_value_type()?;
         self.expect(&TokenKind::LBrace)?;
-        let (body, end) = self.parse_value_block(true)?;
+        let (body, end) = self.parse_value_block(true, 0)?;
         Ok(ValueFunction {
             name,
             parameters,
@@ -219,15 +219,26 @@ impl Parser<'_> {
     fn parse_value_block(
         &mut self,
         allow_return: bool,
+        loop_depth: usize,
     ) -> Result<(Vec<ValueStatement>, usize), ParseError> {
         let mut body = Vec::new();
         while !self.at(&TokenKind::RBrace) {
             let span = self.peek().span;
-            if self.at(&TokenKind::While) {
+            if self.at(&TokenKind::Continue) {
+                if loop_depth == 0 {
+                    return Err(self
+                        .error("continue is permitted only inside an ordinary while loop".into()));
+                }
+                self.advance();
+                let end = self.expect(&TokenKind::Semicolon)?.span.end;
+                body.push(ValueStatement::Continue {
+                    span: Span { end, ..span },
+                });
+            } else if self.at(&TokenKind::While) {
                 self.advance();
                 let condition = self.parse_expression(0)?;
                 self.expect(&TokenKind::LBrace)?;
-                let (loop_body, end) = self.parse_value_block(false)?;
+                let (loop_body, end) = self.parse_value_block(false, loop_depth + 1)?;
                 body.push(ValueStatement::While {
                     condition,
                     body: loop_body,
@@ -237,11 +248,11 @@ impl Parser<'_> {
                 self.advance();
                 let condition = self.parse_expression(0)?;
                 self.expect(&TokenKind::LBrace)?;
-                let (then_body, mut end) = self.parse_value_block(false)?;
+                let (then_body, mut end) = self.parse_value_block(false, loop_depth)?;
                 let else_body = if self.at(&TokenKind::Else) {
                     self.advance();
                     self.expect(&TokenKind::LBrace)?;
-                    let (body, branch_end) = self.parse_value_block(false)?;
+                    let (body, branch_end) = self.parse_value_block(false, loop_depth)?;
                     end = branch_end;
                     Some(body)
                 } else {
@@ -316,6 +327,16 @@ impl Parser<'_> {
                 }
             } else {
                 return Err(self.error("value-returning Klyxr functions require `return expression;`; bare expression statements are not supported".into()));
+            }
+            if !body.last().expect("parsed statement").falls_through()
+                && !self.at(&TokenKind::RBrace)
+            {
+                let message = if matches!(body.last(), Some(ValueStatement::Continue { .. })) {
+                    "statements after continue are unsupported in the current lexical block"
+                } else {
+                    "statements after a conditional with no fallthrough are unsupported in the current lexical block"
+                };
+                return Err(self.error(message.into()));
             }
         }
         let end = self.expect(&TokenKind::RBrace)?.span.end;

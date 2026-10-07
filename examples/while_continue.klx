@@ -1,0 +1,13 @@
+// A continuing path skips the iteration-local reference's only future use.
+fn update(flag: bool, skip: bool) -> bool {
+    let mut value = false;
+    while flag {
+        let view = &value;
+        if skip {
+            value = true;
+            continue;
+        }
+        let observed = *view;
+    }
+    return value;
+}

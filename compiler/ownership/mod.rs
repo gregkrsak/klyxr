@@ -1,6 +1,9 @@
 //! Owned moves, acyclic loans, and stable structured-loop references in ordinary HIR.
 //! Availability and active loans are orthogonal private state; no runtime behavior.
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    rc::Rc,
+};
 
 use crate::{
     diagnostics::Diagnostic,
@@ -24,6 +27,7 @@ fn future_uses(statements: &[ValueStatement]) -> FutureUses {
 fn count_statements(statements: &[ValueStatement], uses: &mut FutureUses) {
     for statement in statements {
         match statement {
+            ValueStatement::Continue { .. } => {}
             ValueStatement::While {
                 condition, body, ..
             } => {
@@ -98,6 +102,54 @@ fn with_branch_uses(continuation: &FutureUses, branch: &FutureUses) -> FutureUse
     future
 }
 
+// Finite, syntax-directed summaries. A continue replaces the same-iteration
+// suffix with the target loop's outside continuation. Recurrence is NOT encoded
+// here: the independently scoped LoanId obligations remain authoritative.
+fn block_future(
+    body: &[ValueStatement],
+    after: &FutureUses,
+    continuing: &FutureUses,
+) -> FutureUses {
+    let mut future = after.clone();
+    for statement in body.iter().rev() {
+        future = statement_future(statement, &future, continuing);
+    }
+    future
+}
+fn statement_future(
+    statement: &ValueStatement,
+    after: &FutureUses,
+    continuing: &FutureUses,
+) -> FutureUses {
+    match statement {
+        ValueStatement::Continue { .. } => continuing.clone(),
+        ValueStatement::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            let mut future = block_future(then_body, after, continuing);
+            for (place, count) in block_future(else_body, after, continuing) {
+                let entry = future.entry(place).or_default();
+                *entry = (*entry).max(count);
+            }
+            count_expression(condition, &mut future);
+            future
+        }
+        _ => {
+            let mut future = after.clone();
+            count_statements(std::slice::from_ref(statement), &mut future);
+            future
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Flow {
+    Fallthrough,
+    Continue,
+}
+
 // Discover syntactic reference-place uses on all checked paths, including nested
 // loops. This set creates scoped recurrent obligations; it is not FutureUses.
 fn reference_uses(body: &[ValueStatement]) -> BTreeSet<Place> {
@@ -137,6 +189,7 @@ fn reference_uses(body: &[ValueStatement]) -> BTreeSet<Place> {
     fn statements(body: &[ValueStatement], uses: &mut BTreeSet<Place>) {
         for statement in body {
             match statement {
+                ValueStatement::Continue { .. } => {}
                 ValueStatement::While {
                     condition, body, ..
                 } => {
@@ -235,6 +288,13 @@ impl LoopScope {
         }
     }
 }
+// Each saved header predates pushing its own target. Rc shares immutable
+// snapshots among branch copies; nesting is a finite stack, never a CFG solver.
+#[derive(Clone)]
+struct LoopTarget<'a> {
+    header: Rc<Checker<'a>>,
+    outside: FutureUses,
+}
 #[derive(Clone)]
 struct Checker<'a> {
     program: &'a Program,
@@ -246,6 +306,7 @@ struct Checker<'a> {
     loop_scope: Option<LoopScope>,
     // One frame per structured loop; branches inherit all enclosing obligations.
     recurrent: Vec<BTreeSet<LoanId>>,
+    targets: Vec<LoopTarget<'a>>,
 }
 impl<'a> Checker<'a> {
     fn new(program: &'a Program, function: &ValueFunction) -> Self {
@@ -258,6 +319,7 @@ impl<'a> Checker<'a> {
             next_loan: 0,
             loop_scope: None,
             recurrent: Vec::new(),
+            targets: Vec::new(),
         };
         for id in &function.parameters {
             if let ParameterType::Value(ty) = program.parameter(*id).ty {
@@ -279,24 +341,72 @@ impl<'a> Checker<'a> {
         checker
     }
     fn body(&mut self, function: &ValueFunction) -> OwnershipResult {
-        self.statements(&function.body, function.id)
+        assert_eq!(
+            self.statements_with(&function.body, function.id, &FutureUses::new())?,
+            Flow::Fallthrough
+        );
+        Ok(())
     }
+    #[cfg(test)]
     fn statements(
         &mut self,
         statements: &[ValueStatement],
         function: FunctionId,
     ) -> OwnershipResult {
-        for statement in statements {
-            let before = self.clone();
-            if let Err(error) = self.statement(statement, function) {
-                *self = before;
-                return Err(error);
+        let mut after = self.remaining.clone();
+        subtract_uses(&mut after, &future_uses(statements));
+        self.statements_with(statements, function, &after)
+            .map(|_| ())
+    }
+    fn statements_with(
+        &mut self,
+        statements: &[ValueStatement],
+        function: FunctionId,
+        after: &FutureUses,
+    ) -> OwnershipResult<Flow> {
+        let call_before = self.clone();
+        let continuing = self
+            .targets
+            .last()
+            .map(|t| t.outside.clone())
+            .unwrap_or_default();
+        let mut suffix = after.clone();
+        let mut summaries = Vec::with_capacity(statements.len());
+        for statement in statements.iter().rev() {
+            let before = statement_future(statement, &suffix, &continuing);
+            summaries.push((before.clone(), suffix));
+            suffix = before;
+        }
+        summaries.reverse();
+        self.remaining = suffix;
+        self.expire();
+        for (statement, (before_uses, after_uses)) in statements.iter().zip(summaries) {
+            self.remaining = before_uses;
+            self.expire();
+            match self.statement(statement, function, &after_uses) {
+                Ok(Flow::Continue) => return Ok(Flow::Continue),
+                Ok(Flow::Fallthrough) => {
+                    self.remaining = after_uses;
+                    self.expire();
+                }
+                Err(error) => {
+                    *self = call_before;
+                    return Err(error);
+                }
             }
         }
-        Ok(())
+        self.remaining = after.clone();
+        self.expire();
+        Ok(Flow::Fallthrough)
     }
-    fn statement(&mut self, statement: &ValueStatement, function: FunctionId) -> OwnershipResult {
+    fn statement(
+        &mut self,
+        statement: &ValueStatement,
+        function: FunctionId,
+        after: &FutureUses,
+    ) -> OwnershipResult<Flow> {
         match statement {
+            ValueStatement::Continue { span } => return self.continue_edge(*span),
             ValueStatement::While {
                 condition,
                 body,
@@ -310,7 +420,7 @@ impl<'a> Checker<'a> {
                 else_body,
                 ..
             } => {
-                self.conditional(condition, then_body, else_body, function)?;
+                return self.conditional(condition, then_body, else_body, function, after);
             }
             ValueStatement::Let {
                 local, initializer, ..
@@ -363,7 +473,7 @@ impl<'a> Checker<'a> {
             }
         }
         self.expire();
-        Ok(())
+        Ok(Flow::Fallthrough)
     }
     fn loop_reference_error(&self, span: Span) -> Box<Diagnostic> {
         self.diagnostic(span, "reference activity is unsupported in while conditions".into(), "recurring condition reference activity requires future cyclic loan/lifetime analysis; reference access is permitted only in the body", None)
@@ -420,8 +530,12 @@ impl<'a> Checker<'a> {
         function: FunctionId,
     ) -> OwnershipResult {
         self.assert_no_holds();
-        // Establish obligations before any expiry or body operation. Missing
-        // provenance is an error, never a reason to reconstruct an old loan.
+        let mut outside = self.remaining.clone();
+        let mut loop_uses = future_uses(body);
+        count_expression(condition, &mut loop_uses);
+        subtract_uses(&mut outside, &loop_uses);
+        // Establish obligations before any expiry or body operation. No missing
+        // provenance may be reconstructed, even on a path skipping its body use.
         let mut iteration = self.clone();
         let mut obligations = BTreeSet::new();
         for place in reference_uses(body) {
@@ -434,7 +548,7 @@ impl<'a> Checker<'a> {
         }
         iteration.recurrent.push(obligations);
         iteration.expire();
-        let header = iteration.clone();
+        let header = Rc::new(iteration.clone());
         iteration.loop_scope = Some(LoopScope::new(&header, true));
         iteration.expression(condition, Transfer::Return(function))?;
         iteration.expire();
@@ -443,18 +557,43 @@ impl<'a> Checker<'a> {
             .as_mut()
             .expect("current loop")
             .condition = false;
-        iteration.statements(body, function)?;
-        iteration.loop_scope = self.loop_scope.clone();
-        iteration.validate_loop_backedge(&header, span)?;
-        iteration
+        // The real false edge is independent of body fallthrough. It remains
+        // available when every checked body path takes a continue backedge.
+        let mut false_exit = iteration.clone();
+        iteration.targets.push(LoopTarget {
+            header: header.clone(),
+            outside: outside.clone(),
+        });
+        if iteration.statements_with(body, function, &outside)? == Flow::Fallthrough {
+            iteration.validate_loop_backedge(&header, span)?;
+        }
+        // Continue validated independently with every obligation still active.
+        false_exit
             .recurrent
             .pop()
             .expect("current loop obligation frame");
-        // The false exit uses the finite suffix, not the backedge obligation.
-        // Enclosing frames remain active, including obligations for the same ID.
-        iteration.expire();
-        *self = iteration;
+        false_exit.loop_scope = self.loop_scope.clone();
+        false_exit.remaining = outside;
+        false_exit.expire();
+        *self = false_exit;
         Ok(())
+    }
+    fn continue_edge(&mut self, span: Span) -> OwnershipResult<Flow> {
+        let before = self.clone();
+        let target = self
+            .targets
+            .last()
+            .expect("resolved continue inside while")
+            .clone();
+        // Cleanup and comparison precede (and never perform) frame discharge.
+        match self.validate_loop_backedge(&target.header, span) {
+            Ok(()) => Ok(Flow::Continue),
+            Err(mut error) => {
+                error.message = format!("continue backedge rejected: {}", error.message);
+                *self = before;
+                Err(error)
+            }
+        }
     }
     fn validate_loop_backedge(&mut self, header: &Self, span: Span) -> OwnershipResult {
         self.finish_loop_provenance(header, span)?;
@@ -495,20 +634,31 @@ impl<'a> Checker<'a> {
         then_body: &[ValueStatement],
         else_body: &[ValueStatement],
         function: FunctionId,
-    ) -> OwnershipResult {
-        // Condition effects occur once, before either branch starts.
+        after: &FutureUses,
+    ) -> OwnershipResult<Flow> {
         self.expression(condition, Transfer::Return(function))?;
         self.expire();
-        // The current suffix contains both possible branches and their common
-        // continuation. Keep their union through the condition, then give each
-        // edge only its own branch uses plus the continuation after the join.
-        let then_uses = future_uses(then_body);
-        let else_uses = future_uses(else_body);
-        let (mut then_state, mut else_state, continuation) = self.split(&then_uses, &else_uses);
-        then_state.statements(then_body, function)?;
-        else_state.statements(else_body, function)?;
-        self.join(then_state, else_state, continuation);
-        Ok(())
+        self.assert_no_holds();
+        let mut yes = self.clone();
+        let mut no = self.clone();
+        let yes_flow = yes.statements_with(then_body, function, after)?;
+        let no_flow = no.statements_with(else_body, function, after)?;
+        match (yes_flow, no_flow) {
+            (Flow::Continue, Flow::Continue) => return Ok(Flow::Continue),
+            (Flow::Fallthrough, Flow::Fallthrough) => self.join(yes, no, after.clone()),
+            _ => {
+                let mut survivor = if yes_flow == Flow::Fallthrough {
+                    yes
+                } else {
+                    no
+                };
+                survivor.assert_no_holds();
+                survivor.scope_loop_locals(self);
+                survivor.expire();
+                *self = survivor;
+            }
+        }
+        Ok(Flow::Fallthrough)
     }
     fn split(&self, then_uses: &FutureUses, else_uses: &FutureUses) -> (Self, Self, FutureUses) {
         let mut continuation = self.remaining.clone();
@@ -1893,6 +2043,11 @@ mod tests {
         assert_eq!(actual.remaining, before.remaining);
         assert_eq!(actual.next_loan, before.next_loan);
         assert_eq!(actual.recurrent, before.recurrent);
+        assert_eq!(actual.targets.len(), before.targets.len());
+        for (actual, before) in actual.targets.iter().zip(&before.targets) {
+            assert_eq!(actual.outside, before.outside);
+            assert!(Rc::ptr_eq(&actual.header, &before.header));
+        }
         let loans = |c: &Checker<'_>| {
             c.loans
                 .iter()
@@ -2280,5 +2435,293 @@ mod tests {
         assert_eq!(before[0].required, after[0].required);
         assert_eq!(before[0].known, after[0].known);
         assert!(after[0].message.contains("display"));
+    }
+
+    fn install_continue_target<'a>(
+        c: &mut Checker<'a>,
+        body: &[ValueStatement],
+        outside: FutureUses,
+    ) -> Checker<'a> {
+        let header = pin_body(c, body);
+        c.targets.push(LoopTarget {
+            header: Rc::new(header.clone()),
+            outside,
+        });
+        header
+    }
+    #[test]
+    fn continue_preserves_recurrent_only_shared_and_mutable_provenance() {
+        for source in [
+            "fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { let seen = *view; continue; } return owned; }",
+            "fn f(flag: bool) -> bool { let mut owned = false; let access = &mut owned; while flag { *access = true; continue; } return owned; }",
+        ] {
+            let p = typed(source); let f = p.functions()[0].as_ordinary().unwrap();
+            let mut c = Checker::new(&p, f); c.statements(&f.body[..2], f.id).unwrap();
+            let ValueStatement::While { body, span, .. } = &f.body[2] else { panic!() };
+            let header = install_continue_target(&mut c, body, FutureUses::new());
+            let id = *c.loans.keys().next().unwrap();
+            c.remaining.clear(); c.expire();
+            assert!(c.loans.contains_key(&id)); assert_eq!(c.loans[&id].held, 0);
+            assert_eq!(c.continue_edge(*span).unwrap(), Flow::Continue);
+            assert!(c.same_loop_state(&header));
+            assert_eq!(c.loans[&id].owner, header.loans[&id].owner);
+            assert_eq!(c.loans[&id].kind, header.loans[&id].kind);
+            assert_eq!(c.recurrent, header.recurrent); // Continue never discharges a frame.
+            assert_eq!(c.targets.len(), 1);
+        }
+    }
+    #[test]
+    fn continue_validation_cleanup_failure_restores_every_state_field() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { let alias = view; let seen = *alias; continue; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut c, body, FutureUses::new());
+        c.statements_with(&body[..2], f.id, &FutureUses::new())
+            .unwrap();
+        let carried = *header.loans.keys().next().unwrap();
+        for fault in 0..5 {
+            let mut broken = c.clone();
+            match fault {
+                0 => broken.loans.get_mut(&carried).unwrap().owner = None,
+                1 => broken.loans.get_mut(&carried).unwrap().kind = BorrowKind::Mutable,
+                2 => {
+                    broken.loans.remove(&carried);
+                }
+                3 => {
+                    broken.recurrent.clear();
+                }
+                _ => {
+                    *broken.handles.values_mut().next().unwrap() = LoanId(999);
+                }
+            }
+            let before = broken.clone();
+            let e = broken.continue_edge(*span).unwrap_err();
+            assert!(e.message.contains("continue backedge rejected"));
+            assert_atomic(&broken, &before); // Alias cleanup must also roll back.
+            assert!(broken.handles.len() > header.handles.len());
+        }
+    }
+    #[test]
+    fn continue_allocator_cannot_hide_surviving_fresh_loan_or_handle() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { let seen = *view; continue; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut c, body, FutureUses::new());
+        for surviving_handle in [false, true] {
+            let mut broken = c.clone();
+            let fresh = broken.add_loan(None, BorrowKind::Shared, *span);
+            if surviving_handle {
+                let place = *header.handles.keys().next().unwrap();
+                broken.handles.insert(place, fresh);
+                broken.remaining.insert(place, 1);
+            } else {
+                broken.loans.get_mut(&fresh).unwrap().held = 1;
+            }
+            let before = broken.clone();
+            assert!(broken
+                .continue_edge(*span)
+                .unwrap_err()
+                .message
+                .contains("iteration-created reference state"));
+            assert_atomic(&broken, &before);
+            assert!(broken.next_loan > header.next_loan);
+            assert!(broken.loans.contains_key(&fresh));
+        }
+    }
+    #[test]
+    fn continue_rejects_injected_carried_availability_change_atomically() {
+        let p = typed(
+            "fn f(flag: bool, ticket: Ticket) -> bool { while flag { continue; } return flag; }",
+        );
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        let ValueStatement::While { body, span, .. } = &f.body[0] else {
+            panic!()
+        };
+        install_continue_target(&mut c, body, FutureUses::new());
+        c.states.insert(
+            Place::Parameter(f.parameters[1]),
+            State::Moved {
+                span: *span,
+                transfer: Transfer::Return(f.id),
+            },
+        );
+        let before = c.clone();
+        assert!(c
+            .continue_edge(*span)
+            .unwrap_err()
+            .message
+            .contains("does not preserve"));
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn continue_cleans_transient_local_provenance_before_allocator_reset() {
+        let p = typed("fn f(flag: bool) -> bool { let mut owned = false; while flag { let access = &mut owned; *access = true; continue; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body, .. } = &f.body[1] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut c, body, FutureUses::new());
+        assert_eq!(
+            c.statements_with(body, f.id, &FutureUses::new()).unwrap(),
+            Flow::Continue
+        );
+        assert!(c.same_loop_state(&header));
+        assert!(c.handles.is_empty());
+        assert!(c.loans.is_empty());
+        assert_eq!(c.next_loan, header.next_loan);
+    }
+    #[test]
+    fn continue_edge_future_is_known_before_conflicting_owner_operation() {
+        let p = typed("fn f(flag: bool) -> bool { let mut owned = false; while flag { let view = &owned; if flag { owned = true; continue; } let seen = *view; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body, .. } = &f.body[1] else {
+            panic!()
+        };
+        install_continue_target(&mut c, body, FutureUses::new());
+        let ValueStatement::If { then_body, .. } = &body[1] else {
+            panic!()
+        };
+        let after = future_uses(&body[2..]);
+        let before = block_future(then_body, &after, &FutureUses::new());
+        let ValueStatement::Let { local, .. } = &body[0] else {
+            panic!()
+        };
+        assert_eq!(before.get(&Place::Local(*local)).copied().unwrap_or(0), 0);
+        assert!(after[&Place::Local(*local)] > 0);
+        assert_eq!(
+            c.statements_with(body, f.id, &FutureUses::new()).unwrap(),
+            Flow::Fallthrough
+        );
+        assert!(c.loans.is_empty());
+    }
+    #[test]
+    fn all_continue_false_exit_is_independent_and_retains_post_loop_suffix_only() {
+        for post_use in [false, true] {
+            let suffix = if post_use {
+                "return *view;"
+            } else {
+                "return owned;"
+            };
+            let p = typed(&format!("fn f(flag: bool) -> bool {{ let owned = false; let view = &owned; while flag {{ if flag {{ let seen = *view; continue; }} else {{ continue; }} }} {suffix} }}"));
+            let f = p.functions()[0].as_ordinary().unwrap();
+            let mut c = Checker::new(&p, f);
+            c.statements(&f.body[..2], f.id).unwrap();
+            let id = *c.loans.keys().next().unwrap();
+            c.statements(&f.body[2..3], f.id).unwrap();
+            assert!(c.targets.is_empty());
+            assert!(c.recurrent.is_empty());
+            assert!(c.loop_scope.is_none());
+            assert_eq!(c.loans.contains_key(&id), post_use);
+            c.statements(&f.body[3..], f.id).unwrap();
+            assert!(c.loans.is_empty());
+        }
+    }
+    #[test]
+    fn nested_all_continue_false_exit_preserves_outer_frame_and_target() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { while flag { if flag { let seen = *view; continue; } else { continue; } } continue; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        let outer = install_continue_target(&mut c, body, FutureUses::new());
+        c.statements_with(&body[..1], f.id, &FutureUses::new())
+            .unwrap();
+        assert_eq!(c.recurrent, outer.recurrent);
+        assert_eq!(c.targets.len(), 1);
+        assert!(c.same_loop_state(&outer));
+        c.remaining.clear();
+        c.expire();
+        assert_eq!(c.loans.len(), 1);
+        assert_eq!(c.continue_edge(*span).unwrap(), Flow::Continue);
+        assert!(c.same_loop_state(&outer));
+    }
+    #[test]
+    fn failed_nested_continue_operation_restores_parent_target_and_summary() {
+        let p = typed("fn f(flag: bool) -> bool { let mut owned = false; let view = &owned; while flag { while flag { owned = true; let seen = *view; continue; } continue; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, .. } = &f.body[2] else {
+            panic!()
+        };
+        install_continue_target(&mut c, body, FutureUses::new());
+        let before = c.clone();
+        assert!(c
+            .statements_with(body, f.id, &FutureUses::new())
+            .unwrap_err()
+            .message
+            .contains("cannot assign"));
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn continue_metadata_renaming_preserves_identity_cfg_and_ownership() {
+        let mut p = typed("fn f(flag: bool) -> bool { let mut owned = false; let view = &owned; while flag { if flag { let alias = view; let seen = *alias; continue; } else { continue; } } return owned; }");
+        check(&p).unwrap();
+        let before = crate::mir::lower(&p);
+        for local in &mut p.locals {
+            local.name = "renamed".into();
+        }
+        for parameter in &mut p.parameters {
+            parameter.name = "renamed".into();
+        }
+        check(&p).unwrap();
+        assert_eq!(before, crate::mir::lower(&p));
+    }
+
+    #[test]
+    fn outer_local_inner_continue_retains_original_id_then_outer_cleanup_reclaims_it() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; while flag { let view = &owned; while flag { let seen = *view; continue; } continue; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[1] else {
+            panic!()
+        };
+        let outer = install_continue_target(&mut c, body, FutureUses::new());
+        let uses = future_uses(&body[1..]);
+        c.statements_with(&body[..1], f.id, &uses).unwrap();
+        let id = *c.loans.keys().next().unwrap();
+        let ValueStatement::While {
+            body: inner_body,
+            span: inner_span,
+            ..
+        } = &body[1]
+        else {
+            panic!()
+        };
+        let inner = install_continue_target(&mut c, inner_body, FutureUses::new());
+        c.remaining.clear();
+        c.expire();
+        assert_eq!(c.recurrent.len(), 2);
+        assert_eq!(c.continue_edge(*inner_span).unwrap(), Flow::Continue);
+        assert!(c.same_loop_state(&inner));
+        assert!(c.loans.contains_key(&id));
+        assert_eq!(c.targets.len(), 2);
+        assert_eq!(c.recurrent.len(), 2);
+        // Emulate the checked inner false edge: only its frame/context ends.
+        c.recurrent.pop();
+        c.targets.pop();
+        c.loop_scope = Some(LoopScope::new(&outer, false));
+        c.expire();
+        assert!(c.loans.is_empty());
+        assert_eq!(c.continue_edge(*span).unwrap(), Flow::Continue);
+        assert!(c.same_loop_state(&outer));
+        assert_eq!(c.next_loan, outer.next_loan);
+        assert!(c.handles.is_empty());
     }
 }

@@ -160,9 +160,14 @@ pub fn lower(program: &hir::Program) -> MirProgram {
         .iter()
         .filter_map(|f| f.as_ordinary())
         .map(|f| {
-            let mut builder = Builder { blocks: Vec::new() };
+            let mut builder = Builder {
+                blocks: Vec::new(),
+                loop_headers: Vec::new(),
+            };
             let entry = builder.reserve();
-            let (last, statements) = builder.body(entry, &f.body[..f.body.len() - 1]);
+            let (last, statements) = builder
+                .body(entry, &f.body[..f.body.len() - 1])
+                .expect("function-level fallthrough");
             let ValueStatement::Return { value, .. } = f.body.last().expect("checked final return")
             else {
                 unreachable!("checked final return")
@@ -191,6 +196,7 @@ pub fn lower(program: &hir::Program) -> MirProgram {
 }
 struct Builder {
     blocks: Vec<Option<BasicBlock>>,
+    loop_headers: Vec<BasicBlockId>,
 }
 impl Builder {
     fn reserve(&mut self) -> BasicBlockId {
@@ -248,10 +254,15 @@ impl Builder {
         &mut self,
         mut current: BasicBlockId,
         body: &[ValueStatement],
-    ) -> (BasicBlockId, Vec<Statement>) {
+    ) -> Option<(BasicBlockId, Vec<Statement>)> {
         let mut statements = Vec::new();
         for statement in body {
             match statement {
+                ValueStatement::Continue { .. } => {
+                    let target = *self.loop_headers.last().expect("checked innermost loop");
+                    self.finish(current, statements, Terminator::Goto { target });
+                    return None;
+                }
                 ValueStatement::Let {
                     local,
                     initializer,
@@ -312,8 +323,11 @@ impl Builder {
                             else_target: exit,
                         },
                     );
-                    let (end, body) = self.body(body_target, body);
-                    self.finish(end, body, Terminator::Goto { target: header });
+                    self.loop_headers.push(header);
+                    if let Some((end, body)) = self.body(body_target, body) {
+                        self.finish(end, body, Terminator::Goto { target: header });
+                    }
+                    assert_eq!(self.loop_headers.pop(), Some(header));
                     current = exit;
                 }
                 ValueStatement::If {
@@ -328,22 +342,41 @@ impl Builder {
                     } else {
                         Some(self.reserve())
                     };
-                    let join = self.reserve();
+                    let join = if falls_through(then_body) || falls_through(else_body) {
+                        Some(self.reserve())
+                    } else {
+                        None
+                    };
                     self.finish(
                         current,
                         std::mem::take(&mut statements),
                         Terminator::Branch {
                             condition: condition.clone(),
                             then_target,
-                            else_target: else_target.unwrap_or(join),
+                            else_target: else_target.or(join).expect("false edge"),
                         },
                     );
-                    let (end, body) = self.body(then_target, then_body);
-                    self.finish(end, body, Terminator::Goto { target: join });
-                    if let Some(target) = else_target {
-                        let (end, body) = self.body(target, else_body);
-                        self.finish(end, body, Terminator::Goto { target: join });
+                    if let Some((end, body)) = self.body(then_target, then_body) {
+                        self.finish(
+                            end,
+                            body,
+                            Terminator::Goto {
+                                target: join.expect("then fallthrough"),
+                            },
+                        );
                     }
+                    if let Some(target) = else_target {
+                        if let Some((end, body)) = self.body(target, else_body) {
+                            self.finish(
+                                end,
+                                body,
+                                Terminator::Goto {
+                                    target: join.expect("else fallthrough"),
+                                },
+                            );
+                        }
+                    }
+                    let join = join?;
                     current = join;
                 }
                 ValueStatement::Return { .. } => {
@@ -351,7 +384,20 @@ impl Builder {
                 }
             }
         }
-        (current, statements)
+        Some((current, statements))
+    }
+}
+
+// Structural source fallthrough only; while retains its real false exit.
+fn falls_through(body: &[ValueStatement]) -> bool {
+    match body.last() {
+        Some(ValueStatement::Continue { .. }) => false,
+        Some(ValueStatement::If {
+            then_body,
+            else_body,
+            ..
+        }) => falls_through(then_body) || falls_through(else_body),
+        _ => true,
     }
 }
 
