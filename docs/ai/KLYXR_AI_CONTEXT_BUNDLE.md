@@ -150,7 +150,7 @@ references may remain untouched; outside live loans still constrain Copy owner
 reads/writes, while dead pre-loop loans stay dead. There is no fixed-point solver.
 MIR uses Goto → header Branch → body/exit, with body Goto back to header. Its
 validator now accepts cycles with visited tracking; structural validity does not
-prove termination. Both constant-condition edges remain. Break/continue/for,
+prove termination. Both constant-condition edges remain. Break/for (KD-031 now settles unlabeled statement continue),
 loop values, early returns, verified loops, and general cyclic ownership/loans
 remain unresolved. Ordinary loops are neither executed nor proven.
 
@@ -406,6 +406,44 @@ and statements restore their pre-operation snapshot on error, including partiall
 consumed counts and operation holds. Canonical HIR/MIR and public APIs are unchanged.
 No generalized cyclic lifetime/fixed-point solver, second checker, MIR borrowing,
 execution, destruction or termination proof is implemented.
+
+
+### KED-016: structured continue and explicit backedges
+
+AST, resolved statements and typed HIR preserve Continue/span. Parser and resolver lexical
+loop depth reject use outside an ordinary while; recursive loop/branch structure
+identifies the innermost target. Structural block checks reject any suffix after
+a direct continue or an all-terminating conditional. Loops still have a false
+exit, including constant conditions and all-continuing bodies. No general
+unreachable-code analysis is implemented.
+
+The existing ownership checker carries immutable header snapshots and finite
+outside continuations on a private nested target stack. Statement analysis returns
+fallthrough or a previously validated continue; conditionals analyze each arm in
+source order and join only surviving fallthrough states. A single surviving arm
+keeps its actual effects while branch-local state is scoped away. Each explicit
+continue runs the existing lexical provenance cleanup, safe allocator normalization,
+and exact header comparison transactionally with recurrent frames still active.
+Normal bottom-of-body backedges use that same invariant. No continue discharges
+an obligation frame; failed analysis restores its complete entering snapshot.
+
+Finite future-use summaries are computed backwards over structured syntax before
+forward ownership operations. A continue substitutes its loop's outside finite
+continuation for the skipped same-iteration suffix. Statement branches receive
+separate summaries; a pre-dispatch summary retains uses possible on either edge.
+Expression-level counts and existing call/write holds remain unchanged. Recurrent
+LoanId sets remain separate from FutureUses and retain exact provenance even with
+zero finite counts and zero holds. The independently checked header-condition false
+state, not a fabricated body fallthrough, supplies the loop exit. Only its current
+frame is discharged; enclosing frames and post-loop finite uses still protect loans.
+
+MIR maintains a nested header stack and returns an optional live tail. Continue
+finishes the current block with the existing Goto to that header. No new terminator
+or ownership annotation is introduced. Only real fallthrough arms create joins or
+lower a suffix, so all emitted blocks remain reachable under the unchanged
+validator. The header false exit still exists when all body paths continue.
+Canonical source IDs, deterministic lowering, and the verified proof path remain
+unchanged. No generalized CFG/fixed-point machinery or competing checker is added.
 
 <!-- END KLYXR_CONTEXT.md -->
 
@@ -1248,6 +1286,47 @@ inference, reference reassignment/returns/results, escaping references, reborrow
 coercion, partial borrowing, destruction, execution or termination proof is added.
 OQ-024/OQ-026 retain those broader lifetime/control-flow questions.
 
+
+---
+
+## KD-031 — Structured continue in while loops
+
+**Status:** Accepted
+
+An unlabeled `continue;` statement transfers control to the innermost enclosing
+ordinary while header. It is an independently checked explicit backedge: carried
+availability, handle mappings, exact continuously active LoanId/owner/kind,
+balanced operation holds, and scoped recurrent obligations must equal the header
+state after iteration-local cleanup. Fresh provenance must be absent before safe
+allocator normalization. A continue never discharges current or enclosing
+recurrent obligations. Existing carried Move restrictions remain unchanged.
+
+Continue has no same-iteration finite continuation, but retains the finite
+post-loop continuation because the condition-false exit remains a real successor.
+Path-specific summaries must establish this distinction before operations preceding
+a continue. A body-local loan needed only by a skipped suffix may expire on that
+path; a recurrent carried loan or post-loop use still protects the owner. Finite
+future uses, recurrent obligations, and operation holds remain separate reasons
+for loan activity. No loan may expire and later reactivate on one path.
+
+Direct continue terminates its current lexical block. A statement conditional
+whose checked arms both terminate has no fallthrough; a following statement in
+that block is rejected structurally, including nested conditionals. Only actual
+fallthrough arms participate in a suffix join; a single survivor retains its
+ownership effects. No constant-path pruning or generalized unreachable-code
+policy is established. A while retains its checked false exit even if every body
+path continues, independently of any body fallthrough. False exit discharges only
+that loop's obligation frame and applies outside suffix liveness; enclosing
+obligations remain authoritative.
+
+AST/resolution/typed HIR contain an explicit statement form. The single ownership
+checker uses bounded recursive structured flow and transactional backedge cleanup;
+a failure restores availability, provenance, finite uses, obligations, holds,
+allocator, lexical scope, and loop target/header context. MIR reuses Goto to the
+innermost header, emitting joins/suffixes only for real fallthrough paths. This
+settles no labels, break, loop values, early returns, generalized CFG/fixed-point
+ownership, MIR borrowing, reborrowing, destruction, execution or verification.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -1843,6 +1922,44 @@ consumed counts and operation holds. Canonical HIR/MIR and public APIs are uncha
 No generalized cyclic lifetime/fixed-point solver, second checker, MIR borrowing,
 execution, destruction or termination proof is implemented.
 
+
+### KED-016: structured continue and explicit backedges
+
+AST, resolved statements and typed HIR preserve Continue/span. Parser and resolver lexical
+loop depth reject use outside an ordinary while; recursive loop/branch structure
+identifies the innermost target. Structural block checks reject any suffix after
+a direct continue or an all-terminating conditional. Loops still have a false
+exit, including constant conditions and all-continuing bodies. No general
+unreachable-code analysis is implemented.
+
+The existing ownership checker carries immutable header snapshots and finite
+outside continuations on a private nested target stack. Statement analysis returns
+fallthrough or a previously validated continue; conditionals analyze each arm in
+source order and join only surviving fallthrough states. A single surviving arm
+keeps its actual effects while branch-local state is scoped away. Each explicit
+continue runs the existing lexical provenance cleanup, safe allocator normalization,
+and exact header comparison transactionally with recurrent frames still active.
+Normal bottom-of-body backedges use that same invariant. No continue discharges
+an obligation frame; failed analysis restores its complete entering snapshot.
+
+Finite future-use summaries are computed backwards over structured syntax before
+forward ownership operations. A continue substitutes its loop's outside finite
+continuation for the skipped same-iteration suffix. Statement branches receive
+separate summaries; a pre-dispatch summary retains uses possible on either edge.
+Expression-level counts and existing call/write holds remain unchanged. Recurrent
+LoanId sets remain separate from FutureUses and retain exact provenance even with
+zero finite counts and zero holds. The independently checked header-condition false
+state, not a fabricated body fallthrough, supplies the loop exit. Only its current
+frame is discharged; enclosing frames and post-loop finite uses still protect loans.
+
+MIR maintains a nested header stack and returns an optional live tail. Continue
+finishes the current block with the existing Goto to that header. No new terminator
+or ownership annotation is introduced. Only real fallthrough arms create joins or
+lower a suffix, so all emitted blocks remain reachable under the unchanged
+validator. The header false exit still exists when all body paths continue.
+Canonical source IDs, deterministic lowering, and the verified proof path remain
+unchanged. No generalized CFG/fixed-point machinery or competing checker is added.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -2028,6 +2145,17 @@ while conditions stay reference-free. Generalized cyclic lifetime inference,
 fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
 escaping references and broader control flow remain unresolved.
 
+
+KED-016 settles unlabeled statement continue to the innermost while header
+(KD-031). Each explicit backedge preserves exact carried state and all recurrent
+frames before cleanup validation completes. Continue removes only the skipped
+same-iteration finite suffix; post-loop finite uses remain required. The real
+false exit exists even when every body path continues and discharges only its own
+frame. Structured no-fallthrough suffix rejection is narrow, not a general
+unreachable-code policy. Break/labels/loop values, early returns, generalized
+cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
+destruction and execution remain unresolved.
+
 ## OQ-023 — Copy customization, cloning, partial moves, and destruction
 
 KED-005 establishes the core owned `Copy` / move distinction. KED-006 classifies
@@ -2116,6 +2244,17 @@ while conditions stay reference-free. Generalized cyclic lifetime inference,
 fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
 escaping references and broader control flow remain unresolved.
 
+
+KED-016 settles unlabeled statement continue to the innermost while header
+(KD-031). Each explicit backedge preserves exact carried state and all recurrent
+frames before cleanup validation completes. Continue removes only the skipped
+same-iteration finite suffix; post-loop finite uses remain required. The real
+false exit exists even when every body path continues and discharges only its own
+frame. Structured no-fallthrough suffix rejection is narrow, not a general
+unreachable-code policy. Break/labels/loop values, early returns, generalized
+cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
+destruction and execution remain unresolved.
+
 ## OQ-025 — General mutation, place expressions, and replacement semantics
 
 KED-007 settles only explicit dereference and Copy-safe whole-value write-through.
@@ -2163,6 +2302,17 @@ while conditions stay reference-free. Generalized cyclic lifetime inference,
 fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
 escaping references and broader control flow remain unresolved.
 
+
+KED-016 settles unlabeled statement continue to the innermost while header
+(KD-031). Each explicit backedge preserves exact carried state and all recurrent
+frames before cleanup validation completes. Continue removes only the skipped
+same-iteration finite suffix; post-loop finite uses remain required. The real
+false exit exists even when every body path continues and discharges only its own
+frame. Structured no-fallthrough suffix rejection is narrow, not a general
+unreachable-code policy. Break/labels/loop values, early returns, generalized
+cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
+destruction and execution remain unresolved.
+
 ## OQ-026 — General control flow, conditional values, and MIR dataflow
 
 KED-008 establishes only acyclic statement conditionals and the first ordinary MIR CFG.
@@ -2184,7 +2334,7 @@ Still open:
 - general conditional expressions and branch-result type unification beyond exact types;
 - join values without a source local destination, arbitrary temporaries, and SSA;
 - block parameters / phi-like representations;
-- generalized cyclic ownership/loans and fixed-point analysis, `for`, `break` / `continue`, loop values and labels;
+- generalized cyclic ownership/loans and fixed-point analysis, `for`, `break`, loop values and labels (KD-031 settles unlabeled `continue`);
 - early returns, multiple return paths, divergence / bottom types, and `match` lowering;
 - definite initialization and uninitialized locals;
 - full MIR-based ownership dataflow and maximally precise path-sensitive loan analysis;
@@ -2231,5 +2381,16 @@ and post-loop uses remain authoritative. Mutable carried handles cannot transfer
 while conditions stay reference-free. Generalized cyclic lifetime inference,
 fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
 escaping references and broader control flow remain unresolved.
+
+
+KED-016 settles unlabeled statement continue to the innermost while header
+(KD-031). Each explicit backedge preserves exact carried state and all recurrent
+frames before cleanup validation completes. Continue removes only the skipped
+same-iteration finite suffix; post-loop finite uses remain required. The real
+false exit exists even when every body path continues and discharges only its own
+frame. Structured no-fallthrough suffix rejection is narrow, not a general
+unreachable-code policy. Break/labels/loop values, early returns, generalized
+cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
+destruction and execution remain unresolved.
 
 <!-- END OPEN_QUESTIONS.md -->

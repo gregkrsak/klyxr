@@ -120,7 +120,7 @@ proof, or runtime checks. For example, `return current - used;` can type as Perc
 that every result meets Percent's bounds. The verifier ignores ordinary functions
 as proof targets. Plain `fn` does not yet implement the full `safe` assurance model,
 with only core moves and whole-value, straight-line/acyclic, non-escaping borrowing
-implemented under KD-004, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, and KD-030. Ordinary calls may target only ordinary functions; verified
+implemented under KD-004, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, and KD-031. Ordinary calls may target only ordinary functions; verified
 contracts/body expressions cannot call functions, and top-level harness calls may
 target only verified functions. These rejections leave OQ-019 unresolved.
 
@@ -338,13 +338,13 @@ fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
 required, parenthesized conditions use existing expression syntax, and nesting
 is supported. Conditions must type exactly as Bool, including ordinary calls
 returning Bool. No truthiness conversion is permitted. Conditional values are initializer-only under KED-010, described below.
-Branches contain lets, existing dereference writes, and nested if/while statements.
+Branches contain lets, existing dereference writes, direct Copy assignment, and nested if/while statements; within while they may also end with continue.
 Each branch is a lexical child scope: outer bindings remain visible, locals enter
 only after their initializer, visible-name shadowing is rejected, and branch
 locals cannot escape or cross into siblings. Siblings may reuse a spelling with
 distinct canonical LocalIds. One explicit final function-level return remains
 required. Branch-local returns and `else if` shorthand are rejected, as are
-match, break/continue, and expression statements. Copy-safe local reassignment
+match, break, and expression statements. Unlabeled continue is supported only inside while. Copy-safe local reassignment
 is permitted under KED-011.
 
 Ownership evaluates the condition once before splitting state. Both branches
@@ -681,7 +681,7 @@ replacement are ownership errors. Non-reference dereference, shared writes, and
 RHS mismatches are Type errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, and KD-030 only for the documented subset.
+This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, and KD-031 only for the documented subset.
 General type inference, advanced borrowing/ownership, effects, MIR backend/verification lowering, VIR,
 and broader HIR features remain future work.
 
@@ -752,7 +752,7 @@ multiple fields, record invariants, SMT/VIR or MIR backend/verification lowering
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, and KD-030,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, and KD-031,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
@@ -846,7 +846,7 @@ Braces are mandatory, without a trailing semicolon. Nested while and statement
 if/else compose; bodies are lexical child scopes with ordered declarations, no
 visible-name shadowing, and static canonical LocalIds. Body locals cannot escape.
 The one final function-level return remains required. While expressions, loop-local
-returns, break/continue/for/unconditional loop and labels remain unsupported.
+returns, break/for/unconditional loop and labels remain unsupported. KD-031 adds only unlabeled statement continue.
 
 KED-012 initially allowed only owned Copy Bool/named-range activity in conditions and bodies:
 Copy calls/reads/locals, direct mutable-local reassignment, and KED-010 Copy
@@ -1030,3 +1030,60 @@ KD-030 adds no syntax, generalized cyclic NLL/fixed-point solver, second checker
 MIR lifetime analysis, reference conditions/reassignment/returns/results, reborrowing,
 coercions, non-Copy replacement, destruction, execution or termination proof.
 The existing cyclic MIR and specialized battery proof path are unchanged.
+
+
+## Structured continue (KED-016 / KD-031)
+
+An unlabeled `continue;` is an ordinary statement inside while or its nested
+statement branches. It targets the innermost while header. The semicolon is
+mandatory; values, labels, break, expressions, and verified loops remain unsupported.
+Direct continue must end its lexical block. A conditional whose arms both continue
+also terminates that block; any following statement is rejected structurally.
+A loop itself still has its real condition-false exit and may have a suffix.
+
+```klyxr
+fn update(flag: bool, skip: bool) -> bool {
+    let mut value = false;
+    while flag {
+        let view = &value;
+        if skip {
+            value = true;
+            continue;
+        }
+        let observed = *view;
+    }
+    return value;
+}
+```
+
+Here the iteration-local shared loan ends on the skip path **before** the
+assignment: the later `*view` is not reachable on that path. Move `view`'s
+creation before while and its recurrent obligation instead protects `value`
+across every continue, even paths skipping the read. A post-loop reference use
+independently protects its owner through the loop and continue paths. Lexical
+existence alone does not keep a loan alive. Finite future uses, recurrent LoanId
+obligations, and explicit call/write holds are independent retention reasons.
+
+Every continue is validated against its own loop header, just like the normal
+bottom backedge: carried Move availability and exact reference/loan provenance
+must be unchanged, holds must balance, and fresh iteration-local provenance must
+be gone before allocator reset. Current and enclosing recurrent frames stay active
+through validation and are never discharged by continue. Failure restores complete
+checker state. With one conditional arm continuing, only the actual fallthrough
+arm contributes its effects to the suffix; with both continuing there is no join.
+Iteration-local Move values may be scoped away without runtime destruction.
+
+When all body paths continue, the separately checked header false edge still
+provides the loop exit. Only false-exit processing removes the current recurrent
+frame; enclosing frames and post-loop finite uses remain authoritative. Constant
+conditions and apparently one-shot loops receive the same checks. Nested continue
+targets the inner header; after inner false exit, outer continue targets the outer
+header. MIR uses the existing Goto and optional live tails; no unreachable join or
+suffix is emitted and structural validation is unchanged.
+
+See `examples/while_continue.klx`, `examples/while_continue_nested.klx`, and
+`examples/while_continue_recurrent_fail.klx`. Ordinary code is neither executed
+nor proven. This introduces no reborrowing, generalized fixed-point/CFG ownership,
+second checker, MIR loan pass, break, labels, loop values, general unreachable-code
+policy, destruction, or termination proof. The verified battery path and its
+1,800-case affine numerical cross-check are unchanged.

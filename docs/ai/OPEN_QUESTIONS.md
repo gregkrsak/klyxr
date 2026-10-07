@@ -177,6 +177,17 @@ while conditions stay reference-free. Generalized cyclic lifetime inference,
 fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
 escaping references and broader control flow remain unresolved.
 
+
+KED-016 settles unlabeled statement continue to the innermost while header
+(KD-031). Each explicit backedge preserves exact carried state and all recurrent
+frames before cleanup validation completes. Continue removes only the skipped
+same-iteration finite suffix; post-loop finite uses remain required. The real
+false exit exists even when every body path continues and discharges only its own
+frame. Structured no-fallthrough suffix rejection is narrow, not a general
+unreachable-code policy. Break/labels/loop values, early returns, generalized
+cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
+destruction and execution remain unresolved.
+
 ## OQ-023 — Copy customization, cloning, partial moves, and destruction
 
 KED-005 establishes the core owned `Copy` / move distinction. KED-006 classifies
@@ -265,6 +276,17 @@ while conditions stay reference-free. Generalized cyclic lifetime inference,
 fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
 escaping references and broader control flow remain unresolved.
 
+
+KED-016 settles unlabeled statement continue to the innermost while header
+(KD-031). Each explicit backedge preserves exact carried state and all recurrent
+frames before cleanup validation completes. Continue removes only the skipped
+same-iteration finite suffix; post-loop finite uses remain required. The real
+false exit exists even when every body path continues and discharges only its own
+frame. Structured no-fallthrough suffix rejection is narrow, not a general
+unreachable-code policy. Break/labels/loop values, early returns, generalized
+cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
+destruction and execution remain unresolved.
+
 ## OQ-025 — General mutation, place expressions, and replacement semantics
 
 KED-007 settles only explicit dereference and Copy-safe whole-value write-through.
@@ -312,6 +334,17 @@ while conditions stay reference-free. Generalized cyclic lifetime inference,
 fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
 escaping references and broader control flow remain unresolved.
 
+
+KED-016 settles unlabeled statement continue to the innermost while header
+(KD-031). Each explicit backedge preserves exact carried state and all recurrent
+frames before cleanup validation completes. Continue removes only the skipped
+same-iteration finite suffix; post-loop finite uses remain required. The real
+false exit exists even when every body path continues and discharges only its own
+frame. Structured no-fallthrough suffix rejection is narrow, not a general
+unreachable-code policy. Break/labels/loop values, early returns, generalized
+cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
+destruction and execution remain unresolved.
+
 ## OQ-026 — General control flow, conditional values, and MIR dataflow
 
 KED-008 establishes only acyclic statement conditionals and the first ordinary MIR CFG.
@@ -333,7 +366,7 @@ Still open:
 - general conditional expressions and branch-result type unification beyond exact types;
 - join values without a source local destination, arbitrary temporaries, and SSA;
 - block parameters / phi-like representations;
-- generalized cyclic ownership/loans and fixed-point analysis, `for`, `break` / `continue`, loop values and labels;
+- generalized cyclic ownership/loans and fixed-point analysis, `for`, `break`, loop values and labels (KD-031 settles unlabeled `continue`);
 - early returns, multiple return paths, divergence / bottom types, and `match` lowering;
 - definite initialization and uninitialized locals;
 - full MIR-based ownership dataflow and maximally precise path-sensitive loan analysis;
@@ -380,3 +413,14 @@ and post-loop uses remain authoritative. Mutable carried handles cannot transfer
 while conditions stay reference-free. Generalized cyclic lifetime inference,
 fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
 escaping references and broader control flow remain unresolved.
+
+
+KED-016 settles unlabeled statement continue to the innermost while header
+(KD-031). Each explicit backedge preserves exact carried state and all recurrent
+frames before cleanup validation completes. Continue removes only the skipped
+same-iteration finite suffix; post-loop finite uses remain required. The real
+false exit exists even when every body path continues and discharges only its own
+frame. Structured no-fallthrough suffix rejection is narrow, not a general
+unreachable-code policy. Break/labels/loop values, early returns, generalized
+cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
+destruction and execution remain unresolved.

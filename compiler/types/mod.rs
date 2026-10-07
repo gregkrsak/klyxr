@@ -146,6 +146,9 @@ fn value_statements(
     let mut body = Vec::new();
     for (index, statement) in statements.iter().enumerate() {
         let statement = match statement {
+            ResolvedValueStatement::Continue { span } => {
+                hir::ValueStatement::Continue { span: *span }
+            }
             ResolvedValueStatement::While {
                 condition,
                 body,
