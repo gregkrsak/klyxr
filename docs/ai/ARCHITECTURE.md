@@ -243,7 +243,7 @@ pipeline is source → lexer → parser → AST → explicit name resolution →
 and value-flow type checking → typed HIR → core ownership, loan, and borrowed-access checking →
 ordinary MIR CFG lowering (ordinary functions) or specialized
 integer contract proof (verified functions) → diagnostics. This implements KD-012, KD-018, KD-019,
-KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, and KD-028 only for the documented
+KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, and KD-030 only for the documented
 subset; the broader pipeline above remains accepted architecture/future work.
 
 The AST preserves textual declarations, parameter types, explicit ordinary
@@ -317,7 +317,7 @@ with continuation-aware path-specific future-use counts (KED-009) and operation-
 calls and (under KED-007) whole write statements.
 Shared copies and mutable moves retain loan identity across LocalIds. Loans expire
 when no potentially available derived handle has future uses on the current path
-and no call/write holds the loan. ConditionalMove blocks handle use but does not
+and no call/write hold or KD-030 recurrent obligation retains the loan. ConditionalMove blocks handle use but does not
 by itself eliminate a loan active on another incoming path. Local
 transfers attach destination provenance before expiry; final-use arguments attach
 call holds before expiry. Reference parameters have external provenance without
@@ -377,7 +377,7 @@ Ownership remains above MIR in `compiler/ownership`; there is no second checker,
 MIR ownership pass, general dataflow framework, or fixed-point solver. This is
 whole-value liveness for structured acyclic statement and initializer branches, not arbitrary CFG borrowing
 or a claim of Rust borrow-checker equivalence. OQ-024/OQ-026 retain general lifetimes,
-cyclic lifetime analysis, reborrowing, escaping references, and broader MIR ownership dataflow.
+generalized cyclic lifetime analysis beyond KD-030, reborrowing, escaping references, and broader MIR ownership dataflow.
 
 `compiler/mir` lowers only ordinary typed HIR after frontend ownership checks.
 `mir::lower(&program)` leaves `compile_source`'s canonical HIR result unchanged.
@@ -521,7 +521,8 @@ body-local availability/provenance, and compares remaining state semantically wi
 its header. Source names, diagnostic move sites, spans and finite FutureUses counts
 remain excluded from equality. Body-local Available/Moved/ConditionalMove states
 may evolve normally and disappear at lexical exit without runtime destruction.
-Outside handles/loans remain unchanged and constrain owner access as before.
+Outside handles/loans remain unchanged at accepted backedges and constrain owner
+access as before; KD-030 distinguishes false-exit liveness.
 
 No AST, resolver, type, HIR or MIR representation change is required. Existing
 Let/call expressions and Branch/Goto backedges retain static LocalIds, exact types,
@@ -538,7 +539,8 @@ iteration-local Move owners. Existing shared aliases, mutable-handle transfers,
 call holds, named dereference, Copy-safe writes and acyclic path-sensitive last-use
 rules apply. A borrowed local record can move after its loan ends. Each loop
 captures canonical header handle identities and loan provenance: these handles
-remain unusable within that loop, even when dead, but may persist untouched.
+were unusable under KED-014 but could persist untouched. KD-030 subsequently
+permits stable carried access without loan resurrection.
 Live header loans continue constraining compatible owner access/new borrows.
 While conditions remain reference-free; non-Copy condition/transfer and replacement
 boundaries are unchanged. Nested loops classify outer-created handles as
@@ -552,4 +554,35 @@ Names/spans and finite FutureUses counts remain diagnostic/continuation metadata
 This permits safe reuse of transient private LoanIds without hiding provenance.
 No generalized cyclic NLL, fixed-point solver, second checker, syntax, HIR/MIR
 surface change, runtime destruction, execution or verification is introduced.
-Stable loop-carried reference use remains future work under OQ-024/OQ-026.
+KED-015 subsequently permits stable carried access through scoped recurrent
+obligations; generalized cyclic lifetimes remain open under OQ-024/OQ-026.
+
+
+### KED-015: stable loop-carried reference access
+
+KD-030 distinguishes straight-line references, iteration-local loop references,
+and stable loop-carried references. Existing header shared handles may be read,
+passed to calls and copied into body-local aliases; mutable handles may be read
+and used for Copy-safe writes, but cannot move into bindings or by-value calls.
+Reference conditions, reference replacement, reborrowing and carried owned Move
+changes remain unsupported. Constant and apparently one-shot loops do not weaken
+recurrent protection.
+
+The same typed-HIR checker discovers canonical header reference uses in both
+branches and nested bodies. Private scoped sets of original LoanIds provide
+recurrent retention independently of finite FutureUses and operation holds.
+Branches inherit all frames: a skipped use cannot expire the recurrent loan.
+Loans retain their identity/owner/kind continuously, without refreshing, sentinel
+counts or repeated body analysis. Nested loops add frames and discharge only their
+own obligations. Outer-created provenance may be carried by an inner loop but
+must still die before the outer backedge under KD-029.
+
+Lexical cleanup removes body-local aliases and new provenance; allocator
+normalization cannot conceal surviving new loans. Exact backedge validation runs
+with obligations still active. Only then is the current frame discharged and
+false-exit suffix liveness applied, preserving enclosing obligations and post-loop
+uses. With neither, the loan can end and owner access resume. Compound expressions
+and statements restore their pre-operation snapshot on error, including partially
+consumed counts and operation holds. Canonical HIR/MIR and public APIs are unchanged.
+No generalized cyclic lifetime/fixed-point solver, second checker, MIR borrowing,
+execution, destruction or termination proof is implemented.

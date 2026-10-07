@@ -280,7 +280,7 @@ fn while_cli_reports_frontend_only_and_cyclic_ownership_boundaries() {
         for (file, message) in [
             (
                 "while_reference_fail.klx",
-                "cannot use pre-existing reference handle",
+                "cannot move loop-carried mutable reference",
             ),
             (
                 "while_move_fail.klx",
@@ -292,7 +292,9 @@ fn while_cli_reports_frontend_only_and_cyclic_ownership_boundaries() {
             assert!(output.stdout.is_empty());
             let text = String::from_utf8(output.stderr).unwrap();
             assert!(text.contains(message));
-            assert!(text.contains("future cyclic") || text.contains("future generalized cyclic"));
+            assert!(
+                text.contains("unchanged provenance") || text.contains("future generalized cyclic")
+            );
             assert!(text.contains("ownership checking stopped"));
         }
     }
@@ -352,12 +354,36 @@ fn iteration_local_borrow_cli_parity_and_relative_reference_boundaries() {
             assert_eq!(output.status.code(), Some(1));
             assert!(output.stdout.is_empty());
             let text = String::from_utf8(output.stderr).unwrap();
-            assert!(
-                text.contains("cannot use pre-existing reference handle `view` inside while loop")
-            );
-            assert!(text.contains("future cyclic"));
+            assert!(text.contains("cannot move loop-carried mutable reference `access`"));
+            assert!(text.contains("unchanged provenance"));
             assert!(text.contains("-->"));
             assert!(text.contains("ownership checking stopped"));
         }
+    }
+}
+
+#[test]
+fn stable_carried_reference_cli_parity_and_recurrent_conflict() {
+    for command in ["check", "verify"] {
+        for file in [
+            "while_carried_shared.klx",
+            "while_carried_mutable.klx",
+            "while_carried_nested.klx",
+        ] {
+            let output = run(&[command, &example(file)]);
+            assert!(output.status.success());
+            assert!(output.stderr.is_empty());
+            let text = String::from_utf8(output.stdout).unwrap();
+            assert!(text.contains("not executed or verified"));
+            assert!(text.contains("function bodies proven: 0"));
+            assert!(text.contains("ordinary MIR control-flow lowering passed"));
+        }
+        let output = run(&[command, &example("while_recurrent_borrow_fail.klx")]);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let text = String::from_utf8(output.stderr).unwrap();
+        assert!(text.contains("cannot assign `owned` while it is borrowed"));
+        assert!(text.contains("-->"));
+        assert!(text.contains("ownership checking stopped"));
     }
 }

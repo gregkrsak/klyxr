@@ -1,4 +1,4 @@
-//! Owned moves, acyclic whole-value loans, and iteration-local loop ownership in ordinary HIR.
+//! Owned moves, acyclic loans, and stable structured-loop references in ordinary HIR.
 //! Availability and active loans are orthogonal private state; no runtime behavior.
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -27,8 +27,8 @@ fn count_statements(statements: &[ValueStatement], uses: &mut FutureUses) {
             ValueStatement::While {
                 condition, body, ..
             } => {
-                // Finite suffix bookkeeping only: recurring handle/Move uses
-                // are rejected during loop checking, never modeled by this count.
+                // Finite traversal/suffix bookkeeping only. Recurrent loan
+                // obligations are discovered and retained separately, not counted.
                 count_expression(condition, uses);
                 count_statements(body, uses);
             }
@@ -96,6 +96,79 @@ fn with_branch_uses(continuation: &FutureUses, branch: &FutureUses) -> FutureUse
         *future.entry(*place).or_default() += count;
     }
     future
+}
+
+// Discover syntactic reference-place uses on all checked paths, including nested
+// loops. This set creates scoped recurrent obligations; it is not FutureUses.
+fn reference_uses(body: &[ValueStatement]) -> BTreeSet<Place> {
+    fn expression(expr: &TypedExpr, uses: &mut BTreeSet<Place>) {
+        match &expr.kind {
+            ExprKind::Parameter(id) => {
+                uses.insert(Place::Parameter(*id));
+            }
+            ExprKind::Local(id) => {
+                uses.insert(Place::Local(*id));
+            }
+            ExprKind::Deref { reference } => {
+                uses.insert(*reference);
+            }
+            ExprKind::Call { arguments, .. } => {
+                for argument in arguments {
+                    expression(argument, uses);
+                }
+            }
+            ExprKind::IfValue {
+                condition,
+                then_value,
+                else_value,
+            } => {
+                expression(condition, uses);
+                expression(then_value, uses);
+                expression(else_value, uses);
+            }
+            ExprKind::Unary { operand, .. } => expression(operand, uses),
+            ExprKind::Binary { left, right, .. } => {
+                expression(left, uses);
+                expression(right, uses);
+            }
+            _ => {}
+        }
+    }
+    fn statements(body: &[ValueStatement], uses: &mut BTreeSet<Place>) {
+        for statement in body {
+            match statement {
+                ValueStatement::While {
+                    condition, body, ..
+                } => {
+                    expression(condition, uses);
+                    statements(body, uses);
+                }
+                ValueStatement::If {
+                    condition,
+                    then_body,
+                    else_body,
+                    ..
+                } => {
+                    expression(condition, uses);
+                    statements(then_body, uses);
+                    statements(else_body, uses);
+                }
+                ValueStatement::Let { initializer, .. } => expression(initializer, uses),
+                ValueStatement::Assign { value, .. } | ValueStatement::Return { value, .. } => {
+                    expression(value, uses)
+                }
+                ValueStatement::DerefAssign {
+                    reference, value, ..
+                } => {
+                    uses.insert(*reference);
+                    expression(value, uses);
+                }
+            }
+        }
+    }
+    let mut uses = BTreeSet::new();
+    statements(body, &mut uses);
+    uses
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -171,6 +244,8 @@ struct Checker<'a> {
     remaining: FutureUses,
     next_loan: usize,
     loop_scope: Option<LoopScope>,
+    // One frame per structured loop; branches inherit all enclosing obligations.
+    recurrent: Vec<BTreeSet<LoanId>>,
 }
 impl<'a> Checker<'a> {
     fn new(program: &'a Program, function: &ValueFunction) -> Self {
@@ -182,6 +257,7 @@ impl<'a> Checker<'a> {
             remaining: future_uses(&function.body),
             next_loan: 0,
             loop_scope: None,
+            recurrent: Vec::new(),
         };
         for id in &function.parameters {
             if let ParameterType::Value(ty) = program.parameter(*id).ty {
@@ -211,92 +287,94 @@ impl<'a> Checker<'a> {
         function: FunctionId,
     ) -> OwnershipResult {
         for statement in statements {
-            match statement {
-                ValueStatement::While {
-                    condition,
-                    body,
-                    span,
-                } => {
-                    self.while_loop(condition, body, *span, function)?;
-                }
-                ValueStatement::If {
-                    condition,
-                    then_body,
-                    else_body,
-                    ..
-                } => {
-                    self.conditional(condition, then_body, else_body, function)?;
-                }
-                ValueStatement::Let {
-                    local, initializer, ..
-                } => {
-                    let loan = self.expression(initializer, Transfer::Local(*local))?;
-                    let place = Place::Local(*local);
-                    if ownership_kind(self.program.local(*local).ty) == OwnershipKind::Move {
-                        self.states.insert(place, State::Available);
-                    }
-                    if let Some(loan) = loan {
-                        self.handles.insert(place, loan);
-                    }
-                }
-                ValueStatement::Assign { local, value, span } => {
-                    let place = Place::Local(*local);
-                    if ownership_kind(self.program.local(*local).ty) != OwnershipKind::Copy {
-                        return Err(self.diagnostic(*span, format!("cannot replace non-Copy owned local `{}`", self.metadata(place).0), "replacement would displace an owned value; displacement/destruction semantics are not yet defined; KED-011 permits only Copy-safe direct local reassignment", None));
-                    }
-                    // The RHS sees the old value. Unlike write-through, direct
-                    // assignment does not hold a target loan during RHS evaluation.
-                    self.expression(value, Transfer::Local(*local))?;
-                    self.expire();
-                    self.available(place, *span)?;
-                    if let Some(loan) = self.conflict(place, Some(BorrowKind::Mutable)) {
-                        return Err(self.diagnostic(*span, format!("cannot assign `{}` while it is borrowed", self.metadata(place).0), "direct assignment requires exclusive mutation access; any active shared or exclusive borrow conflicts with the write", Some(loan.span)));
-                    }
-                    // Copy replacement leaves the existing owner available and
-                    // creates neither a new identity nor loan provenance.
-                }
-                ValueStatement::DerefAssign {
-                    reference,
-                    value,
-                    span,
-                } => {
-                    let loan = self.borrowed_access(*reference, *span, true)?;
-                    // A final target use must still protect the whole write statement,
-                    // including RHS dereferences and nested calls that trigger expiry.
-                    self.loans
-                        .get_mut(&loan)
-                        .expect("live write provenance")
-                        .held += 1;
-                    self.expression(value, Transfer::WriteThrough(*reference))?;
-                    // RHS calls may transfer this move-only handle. That must not
-                    // leave an apparently valid write through a now-moved handle.
-                    self.available(*reference, *span)?;
-                    self.loans.get_mut(&loan).expect("write-held loan").held -= 1;
-                }
-                ValueStatement::Return { value, .. } => {
-                    self.expression(value, Transfer::Return(function))?;
-                }
+            let before = self.clone();
+            if let Err(error) = self.statement(statement, function) {
+                *self = before;
+                return Err(error);
             }
-            self.expire();
         }
         Ok(())
     }
-    fn loop_reference_error(&self, span: Span) -> Box<Diagnostic> {
-        self.diagnostic(span, "reference activity is unsupported in while conditions".into(), "recurring condition reference activity requires future cyclic loan/lifetime analysis; iteration-local borrowing is permitted only in the body", None)
+    fn statement(&mut self, statement: &ValueStatement, function: FunctionId) -> OwnershipResult {
+        match statement {
+            ValueStatement::While {
+                condition,
+                body,
+                span,
+            } => {
+                self.while_loop(condition, body, *span, function)?;
+            }
+            ValueStatement::If {
+                condition,
+                then_body,
+                else_body,
+                ..
+            } => {
+                self.conditional(condition, then_body, else_body, function)?;
+            }
+            ValueStatement::Let {
+                local, initializer, ..
+            } => {
+                let loan = self.expression(initializer, Transfer::Local(*local))?;
+                let place = Place::Local(*local);
+                if ownership_kind(self.program.local(*local).ty) == OwnershipKind::Move {
+                    self.states.insert(place, State::Available);
+                }
+                if let Some(loan) = loan {
+                    self.handles.insert(place, loan);
+                }
+            }
+            ValueStatement::Assign { local, value, span } => {
+                let place = Place::Local(*local);
+                if ownership_kind(self.program.local(*local).ty) != OwnershipKind::Copy {
+                    return Err(self.diagnostic(*span, format!("cannot replace non-Copy owned local `{}`", self.metadata(place).0), "replacement would displace an owned value; displacement/destruction semantics are not yet defined; KED-011 permits only Copy-safe direct local reassignment", None));
+                }
+                // The RHS sees the old value. Unlike write-through, direct
+                // assignment does not hold a target loan during RHS evaluation.
+                self.expression(value, Transfer::Local(*local))?;
+                self.expire();
+                self.available(place, *span)?;
+                if let Some(loan) = self.conflict(place, Some(BorrowKind::Mutable)) {
+                    return Err(self.diagnostic(*span, format!("cannot assign `{}` while it is borrowed", self.metadata(place).0), "direct assignment requires exclusive mutation access; any active shared or exclusive borrow conflicts with the write", Some(loan.span)));
+                }
+                // Copy replacement leaves the existing owner available and
+                // creates neither a new identity nor loan provenance.
+            }
+            ValueStatement::DerefAssign {
+                reference,
+                value,
+                span,
+            } => {
+                let loan = self.borrowed_access(*reference, *span, true)?;
+                // A final target use must still protect the whole write statement,
+                // including RHS dereferences and nested calls that trigger expiry.
+                self.loans
+                    .get_mut(&loan)
+                    .expect("live write provenance")
+                    .held += 1;
+                self.expression(value, Transfer::WriteThrough(*reference))?;
+                // RHS calls may transfer this move-only handle. That must not
+                // leave an apparently valid write through a now-moved handle.
+                self.available(*reference, *span)?;
+                self.loans.get_mut(&loan).expect("write-held loan").held -= 1;
+            }
+            ValueStatement::Return { value, .. } => {
+                self.expression(value, Transfer::Return(function))?;
+            }
+        }
+        self.expire();
+        Ok(())
     }
-    fn loop_handle(&self, reference: Place, span: Span) -> OwnershipResult {
-        if let Some(scope) = &self.loop_scope {
-            if scope.condition {
-                return Err(self.loop_reference_error(span));
-            }
-            if scope.header_handles.contains(&reference)
-                || self
-                    .handles
-                    .get(&reference)
-                    .is_some_and(|id| scope.header_loans.contains(id))
-            {
-                return Err(self.diagnostic(span, format!("cannot use pre-existing reference handle `{}` inside while loop", self.metadata(reference).0), "using a header reference through a backedge requires future cyclic loan/lifetime analysis; only iteration-created handles/provenance may be used in this body", None));
-            }
+    fn loop_reference_error(&self, span: Span) -> Box<Diagnostic> {
+        self.diagnostic(span, "reference activity is unsupported in while conditions".into(), "recurring condition reference activity requires future cyclic loan/lifetime analysis; reference access is permitted only in the body", None)
+    }
+    fn loop_handle(&self, _reference: Place, span: Span) -> OwnershipResult {
+        if self
+            .loop_scope
+            .as_ref()
+            .is_some_and(|scope| scope.condition)
+        {
+            return Err(self.loop_reference_error(span));
         }
         Ok(())
     }
@@ -332,6 +410,7 @@ impl<'a> Checker<'a> {
                     .iter()
                     .map(|(id, l)| (id, l.owner, l.kind, l.held)))
             && self.next_loan == header.next_loan
+            && self.recurrent == header.recurrent
     }
     fn while_loop(
         &mut self,
@@ -340,10 +419,22 @@ impl<'a> Checker<'a> {
         span: Span,
         function: FunctionId,
     ) -> OwnershipResult {
-        self.expire();
         self.assert_no_holds();
-        let header = self.clone();
+        // Establish obligations before any expiry or body operation. Missing
+        // provenance is an error, never a reason to reconstruct an old loan.
         let mut iteration = self.clone();
+        let mut obligations = BTreeSet::new();
+        for place in reference_uses(body) {
+            if let Some(id) = iteration.handles.get(&place) {
+                if !iteration.loans.contains_key(id) {
+                    return Err(self.diagnostic(span, "required loop-carried loan is no longer active".into(), "a carried reference must retain its original continuously active provenance; expired loans cannot be reconstructed", None));
+                }
+                obligations.insert(*id);
+            }
+        }
+        iteration.recurrent.push(obligations);
+        iteration.expire();
+        let header = iteration.clone();
         iteration.loop_scope = Some(LoopScope::new(&header, true));
         iteration.expression(condition, Transfer::Return(function))?;
         iteration.expire();
@@ -354,14 +445,24 @@ impl<'a> Checker<'a> {
             .condition = false;
         iteration.statements(body, function)?;
         iteration.loop_scope = self.loop_scope.clone();
-        iteration.finish_loop_provenance(&header, span)?;
-        iteration.assert_no_holds();
-        if !iteration.same_loop_state(&header) {
-            return Err(self.diagnostic(span, "while loop does not preserve ownership and loan state".into(), "the current loop subset requires equal header/backedge state; general cyclic ownership/lifetime analysis remains future work", None));
+        iteration.validate_loop_backedge(&header, span)?;
+        iteration
+            .recurrent
+            .pop()
+            .expect("current loop obligation frame");
+        // The false exit uses the finite suffix, not the backedge obligation.
+        // Enclosing frames remain active, including obligations for the same ID.
+        iteration.expire();
+        *self = iteration;
+        Ok(())
+    }
+    fn validate_loop_backedge(&mut self, header: &Self, span: Span) -> OwnershipResult {
+        self.finish_loop_provenance(header, span)?;
+        self.assert_no_holds();
+        // This check precedes discharge of the current recurrent frame.
+        if !self.same_loop_state(header) {
+            return Err(self.diagnostic(span, "while loop does not preserve ownership and loan state".into(), "every accepted backedge must preserve carried availability and exact continuously active loan identity/owner/kind; general cyclic ownership/lifetime analysis remains future work", None));
         }
-        // Equality also covers the zero-iteration exit. Only the finite outside
-        // continuation advances; no repeated reference counts or fixed point exist.
-        self.remaining = iteration.remaining;
         Ok(())
     }
     fn finish_loop_provenance(&mut self, header: &Self, span: Span) -> OwnershipResult {
@@ -457,6 +558,20 @@ impl<'a> Checker<'a> {
         );
     }
     fn expression(
+        &mut self,
+        expression: &TypedExpr,
+        transfer: Transfer,
+    ) -> OwnershipResult<Option<LoanId>> {
+        let before = self.clone();
+        match self.expression_inner(expression, transfer) {
+            Ok(loan) => Ok(loan),
+            Err(error) => {
+                *self = before;
+                Err(error)
+            }
+        }
+    }
+    fn expression_inner(
         &mut self,
         expression: &TypedExpr,
         transfer: Transfer,
@@ -569,13 +684,15 @@ impl<'a> Checker<'a> {
             };
             return Err(self.diagnostic(span, message, "only Copy referents may be materialized or replaced through references; no cloning, displacement, or destruction is implicit", None));
         }
+        let id = self.live_handle(reference, span)?;
         if let Some(remaining) = self.remaining.get_mut(&reference) {
             *remaining -= 1;
         }
-        Ok(*self
-            .handles
-            .get(&reference)
-            .expect("typed reference handle has provenance"))
+        Ok(id)
+    }
+    fn live_handle(&self, place: Place, span: Span) -> OwnershipResult<LoanId> {
+        self.handles.get(&place).copied().filter(|id| self.loans.contains_key(id))
+            .ok_or_else(|| self.diagnostic(span, format!("reference `{}` no longer has an active loan", self.metadata(place).0), "reference access requires continuously active original provenance; loans cannot resurrect", None))
     }
     fn metadata(&self, place: Place) -> (&str, ValueType) {
         match place {
@@ -610,8 +727,10 @@ impl<'a> Checker<'a> {
         let handles = &self.handles;
         let remaining = &self.remaining;
         let states = &self.states;
+        let recurrent = &self.recurrent;
         self.loans.retain(|id, loan| {
             loan.held > 0
+                || recurrent.iter().any(|frame| frame.contains(id))
                 || handles.iter().any(|(place, handle)| {
                     handle == id
                         && remaining.get(place).copied().unwrap_or(0) > 0
@@ -683,6 +802,17 @@ impl<'a> Checker<'a> {
             ValueType::SharedRef(_) | ValueType::MutableRef(_)
         ) {
             self.loop_handle(place, span)?;
+            if matches!(self.metadata(place).1, ValueType::MutableRef(_))
+                && self.loop_scope.as_ref().is_some_and(|scope| {
+                    scope.header_handles.contains(&place)
+                        || self
+                            .handles
+                            .get(&place)
+                            .is_some_and(|id| scope.header_loans.contains(id))
+                })
+            {
+                return Err(self.diagnostic(span, format!("cannot move loop-carried mutable reference `{}`", self.metadata(place).0), "a carried mutable handle must remain available with unchanged provenance across every backedge; by-value arguments remain moves, not implicit reborrows", None));
+            }
         }
         if self
             .loop_scope
@@ -693,6 +823,9 @@ impl<'a> Checker<'a> {
             return Err(self.diagnostic(span, format!("cannot move pre-existing non-Copy value `{}` in while loop", self.metadata(place).0), "the transfer would change pre-existing ownership state across a backedge and requires future generalized cyclic ownership analysis; only iteration-local Move values may transfer in the loop body", None));
         }
         self.available(place, span)?;
+        if self.handles.contains_key(&place) {
+            self.live_handle(place, span)?;
+        }
         if let Some(loan) = self.conflict(place, None) {
             let name = self.metadata(place).0;
             let message = if loan.kind == BorrowKind::Mutable {
@@ -1251,7 +1384,7 @@ mod tests {
     fn forbidden_loop_activity_cannot_silently_change_outer_state() {
         for (body, message) in [
             ("fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { let moved = ticket; } return ticket; }", "pre-existing non-Copy value"),
-            ("fn f(flag: bool, view: &Percent) -> Percent { while flag { let observed = *view; } return *view; }", "pre-existing reference handle"),
+            ("fn f(flag: bool, access: &mut Percent, value: Percent) -> Percent { while flag { let moved = access; } return value; }", "loop-carried mutable reference"),
         ] {
             let p = typed(body);
             let f = p.functions()[0].as_ordinary().unwrap();
@@ -1260,7 +1393,7 @@ mod tests {
             let header = c.clone();
             let error = c.statements(&f.body[..1], f.id).unwrap_err();
             assert!(error.message.contains(message));
-            assert!(error.required.contains("future cyclic") || error.required.contains("future generalized cyclic"));
+            assert!(error.required.contains("unchanged provenance") || error.required.contains("future generalized cyclic"));
             assert!(c.same_loop_state(&header));
         }
     }
@@ -1504,7 +1637,7 @@ mod tests {
         }
     }
     #[test]
-    fn header_handle_guards_are_atomic_for_transfer_read_and_write() {
+    fn header_handle_transfer_and_condition_guards_are_atomic() {
         let p = typed("fn f(flag: bool, access: &mut Percent, value: Percent) -> Percent { while flag { let next = access; } return value; }");
         let f = p.functions()[0].as_ordinary().unwrap();
         let mut c = Checker::new(&p, f);
@@ -1516,25 +1649,20 @@ mod tests {
             .consume(reference, f.span, Transfer::Return(f.id))
             .unwrap_err()
             .message
-            .contains("pre-existing reference handle"));
+            .contains("loop-carried mutable reference"));
+        assert!(c.same_loop_state(&header));
+        assert_eq!(c.remaining, header.remaining);
+        c.loop_scope.as_mut().unwrap().condition = true;
         for write in [false, true] {
             assert!(c
                 .borrowed_access(reference, f.span, write)
                 .unwrap_err()
                 .message
-                .contains("pre-existing reference handle"));
+                .contains("while conditions"));
         }
         assert!(c.same_loop_state(&header));
         assert_eq!(c.remaining, header.remaining);
-        assert!(c.loans.values().all(|loan| loan.held == 0));
-        c.loop_scope.as_mut().unwrap().condition = true;
-        assert!(c
-            .borrowed_access(reference, f.span, false)
-            .unwrap_err()
-            .message
-            .contains("while conditions"));
-        assert!(c.same_loop_state(&header));
-        assert_eq!(c.remaining, header.remaining);
+        c.assert_no_holds();
     }
     #[test]
     fn body_loans_and_aliases_evolve_then_cleanup_restores_header_allocator() {
@@ -1686,11 +1814,13 @@ mod tests {
         assert!(c.loop_handle(outer, *span).is_ok()); // Restored outer boundary.
         let mut inner = c.clone();
         inner.loop_scope = Some(LoopScope::new(&c, false));
+        assert!(inner.loop_handle(outer, *span).is_ok());
         assert!(inner
-            .loop_handle(outer, *span)
-            .unwrap_err()
-            .message
-            .contains("pre-existing reference handle"));
+            .loop_scope
+            .as_ref()
+            .unwrap()
+            .header_handles
+            .contains(&outer));
         assert!(c.loans.contains_key(&provenance));
         c.statements(&body[2..], f.id).unwrap();
         c.finish_loop_provenance(&header, *span).unwrap();
@@ -1744,8 +1874,8 @@ mod tests {
             assert_eq!(before, crate::mir::lower(&p));
         }
         for body in [
-            "fn f(flag: bool, view: &Percent) -> Percent { while flag { let before = *view; } return *view; }",
-            "fn f(flag: bool, value: Percent) -> Percent { while flag { let outer = &value; while flag { let before = *outer; } } return value; }",
+            "fn f(flag: bool, access: &mut Percent, value: Percent) -> Percent { while flag { let moved = access; } return value; }",
+            "fn f(flag: bool, value: Percent) -> Percent { let mut owned = value; while flag { let access = &mut owned; while flag { let moved = access; } } return value; }",
         ] {
             let mut p = typed(body);
             let before = check(&p).unwrap_err();
@@ -1754,7 +1884,401 @@ mod tests {
             assert_eq!(before[0].span, after[0].span);
             assert_eq!(before[0].required, after[0].required);
             assert_eq!(before[0].known, after[0].known);
-            assert!(after[0].message.contains("pre-existing reference handle `display`"));
+            assert!(after[0].message.contains("loop-carried mutable reference `display`"));
         }
+    }
+    fn assert_atomic(actual: &Checker<'_>, before: &Checker<'_>) {
+        assert_eq!(actual.states, before.states);
+        assert_eq!(actual.handles, before.handles);
+        assert_eq!(actual.remaining, before.remaining);
+        assert_eq!(actual.next_loan, before.next_loan);
+        assert_eq!(actual.recurrent, before.recurrent);
+        let loans = |c: &Checker<'_>| {
+            c.loans
+                .iter()
+                .map(|(id, l)| (*id, l.owner, l.kind, l.span, l.held))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(loans(actual), loans(before));
+        let scope = |c: &Checker<'_>| {
+            c.loop_scope.as_ref().map(|s| {
+                (
+                    s.header_places.clone(),
+                    s.header_handles.clone(),
+                    s.header_loans.clone(),
+                    s.condition,
+                )
+            })
+        };
+        assert_eq!(scope(actual), scope(before));
+    }
+    fn pin_body<'a>(c: &mut Checker<'a>, body: &[ValueStatement]) -> Checker<'a> {
+        let finite = c.remaining.clone();
+        let frame = reference_uses(body)
+            .iter()
+            .filter_map(|p| c.handles.get(p).copied())
+            .collect();
+        c.recurrent.push(frame);
+        assert_eq!(finite, c.remaining); // Obligations never encode or repair counts.
+        c.expire();
+        let header = c.clone();
+        c.loop_scope = Some(LoopScope::new(&header, false));
+        header
+    }
+    #[test]
+    fn recurrent_shared_identity_survives_reads_aliases_and_cleanup() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { let first = *view; let alias = view; let second = *alias; let last = *view; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        let header = pin_body(&mut c, body);
+        let id = *header.loans.keys().next().unwrap();
+        for statement in body {
+            c.statements(std::slice::from_ref(statement), f.id).unwrap();
+            assert_eq!(c.loans.len(), 1);
+            assert!(c.loans.contains_key(&id));
+            assert_eq!(c.loans[&id].owner, header.loans[&id].owner);
+        }
+        assert!(c.handles.len() > header.handles.len());
+        c.validate_loop_backedge(&header, *span).unwrap();
+        assert!(c.same_loop_state(&header));
+        assert_eq!(c.handles, header.handles); // Alias removed, original still live.
+        assert!(c.loans.contains_key(&id)); // Checked before obligation discharge.
+        c.recurrent.pop();
+        c.expire();
+        assert!(c.loans.is_empty());
+    }
+    #[test]
+    fn recurrent_mutable_reads_and_copy_writes_preserve_exact_provenance() {
+        let p = typed("fn f(flag: bool) -> bool { let mut owned = false; let access = &mut owned; while flag { let first = *access; *access = *access; *access = true; let second = *access; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        let header = pin_body(&mut c, body);
+        for statement in body {
+            c.statements(std::slice::from_ref(statement), f.id).unwrap();
+            assert_eq!(c.handles, header.handles);
+            assert_eq!(c.states, header.states);
+            assert_eq!(c.loans.len(), 1);
+            c.assert_no_holds();
+        }
+        c.validate_loop_backedge(&header, *span).unwrap();
+        assert!(c.same_loop_state(&header));
+    }
+    #[test]
+    fn skipped_branch_and_zero_finite_counts_cannot_expire_recurrent_loan() {
+        let p = typed("fn f(flag: bool, choice: bool) -> bool { let owned = false; let view = &owned; while flag { if choice { let seen = *view; } } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        let header = pin_body(&mut c, body);
+        let ValueStatement::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } = &body[0]
+        else {
+            panic!()
+        };
+        c.expression(condition, Transfer::Return(f.id)).unwrap();
+        let (mut yes, mut no, suffix) = c.split(&future_uses(then_body), &future_uses(else_body));
+        no.remaining.clear();
+        no.expire();
+        assert_eq!(no.loans.len(), 1); // Skipped use cannot open a protection gap.
+        yes.statements(then_body, f.id).unwrap();
+        assert_eq!(yes.loans.len(), 1);
+        c.join(yes, no, suffix);
+        assert_eq!(c.loans.len(), 1);
+        c.validate_loop_backedge(&header, *span).unwrap();
+    }
+    #[test]
+    fn false_exit_uses_suffix_not_backedge_liveness() {
+        for later in [false, true] {
+            let source = if later {
+                "fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { let seen = *view; } return *view; }"
+            } else {
+                "fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { let seen = *view; } return owned; }"
+            };
+            let p = typed(source);
+            let f = p.functions()[0].as_ordinary().unwrap();
+            let mut c = Checker::new(&p, f);
+            c.statements(&f.body[..2], f.id).unwrap();
+            let id = *c.loans.keys().next().unwrap();
+            c.statements(&f.body[2..3], f.id).unwrap();
+            assert!(c.recurrent.is_empty());
+            assert_eq!(c.loans.contains_key(&id), later);
+            c.statements(&f.body[3..], f.id).unwrap();
+            assert!(c.loans.is_empty());
+        }
+    }
+    #[test]
+    fn inner_exit_keeps_enclosing_obligation_even_without_finite_uses() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { while flag { let seen = *view; } } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        let header = pin_body(&mut c, body);
+        c.statements(body, f.id).unwrap();
+        assert_eq!(c.recurrent.len(), 1);
+        assert_eq!(c.recurrent, header.recurrent);
+        assert_eq!(c.loans.len(), 1);
+        for place in header.handles.keys() {
+            assert_eq!(c.remaining[place], 0);
+        }
+        c.validate_loop_backedge(&header, *span).unwrap();
+        c.recurrent.pop();
+        c.expire();
+        assert!(c.loans.is_empty());
+    }
+    #[test]
+    fn outer_iteration_local_provenance_carries_inner_then_dies_before_outer_backedge() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; while flag { let view = &owned; while flag { let seen = *view; } let after = *view; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[1] else {
+            panic!()
+        };
+        let header = pin_body(&mut c, body);
+        assert!(header.recurrent[0].is_empty());
+        c.statements(&body[..1], f.id).unwrap();
+        let id = *c.loans.keys().next().unwrap();
+        let inner_header = c.clone();
+        c.statements(&body[1..2], f.id).unwrap();
+        assert!(c.same_loop_state(&inner_header));
+        assert!(c.loans.contains_key(&id));
+        c.statements(&body[2..], f.id).unwrap();
+        assert!(c.loans.is_empty());
+        c.validate_loop_backedge(&header, *span).unwrap();
+        assert_eq!(c.next_loan, header.next_loan);
+        assert!(c.handles.is_empty());
+    }
+    #[test]
+    fn expired_carried_provenance_cannot_be_resurrected_at_loop_entry() {
+        let p = typed("fn f(flag: bool, view: &bool) -> bool { while flag { let seen = *view; } return flag; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.loans.clear();
+        let before = c.clone();
+        let ValueStatement::While {
+            condition,
+            body,
+            span,
+        } = &f.body[0]
+        else {
+            panic!()
+        };
+        assert!(c
+            .while_loop(condition, body, *span, f.id)
+            .unwrap_err()
+            .message
+            .contains("no longer active"));
+        assert_atomic(&c, &before);
+        let place = Place::Parameter(f.parameters[1]);
+        assert!(c.borrowed_access(place, *span, false).is_err());
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn backedge_validation_rejects_identity_owner_kind_and_obligation_drift() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { let seen = *view; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        let header = pin_body(&mut c, body);
+        c.statements(body, f.id).unwrap();
+        let id = *header.loans.keys().next().unwrap();
+        let mut missing = c.clone();
+        missing.loans.remove(&id);
+        assert!(missing.validate_loop_backedge(&header, *span).is_err());
+        let mut changed_owner = c.clone();
+        changed_owner.loans.get_mut(&id).unwrap().owner = None;
+        assert!(changed_owner
+            .validate_loop_backedge(&header, *span)
+            .is_err());
+        let mut changed_kind = c.clone();
+        changed_kind.loans.get_mut(&id).unwrap().kind = BorrowKind::Mutable;
+        assert!(changed_kind.validate_loop_backedge(&header, *span).is_err());
+        let mut released = c.clone();
+        released.recurrent.pop();
+        released.expire();
+        assert!(released.loans.is_empty());
+        assert!(released.validate_loop_backedge(&header, *span).is_err());
+        let mut refreshed = c.clone();
+        let loan = refreshed.add_loan(header.loans[&id].owner, BorrowKind::Shared, *span);
+        *refreshed.handles.values_mut().next().unwrap() = loan;
+        let allocation = refreshed.next_loan;
+        assert!(refreshed
+            .validate_loop_backedge(&header, *span)
+            .unwrap_err()
+            .message
+            .contains("survives while backedge"));
+        assert_eq!(refreshed.next_loan, allocation); // Normalization cannot hide refresh.
+    }
+    #[test]
+    fn failed_carried_transfer_and_write_rhs_are_fully_atomic() {
+        let p = typed("fn sink(access: &mut bool) -> bool { return false; } fn f(flag: bool) -> bool { let mut owned = false; let access = &mut owned; while flag { *access = sink(access); } return owned; }");
+        let f = p.functions()[1].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, .. } = &f.body[2] else {
+            panic!()
+        };
+        pin_body(&mut c, body);
+        let before = c.clone();
+        let reference = *c.handles.keys().next().unwrap();
+        assert!(c
+            .consume(reference, f.span, Transfer::Return(f.id))
+            .unwrap_err()
+            .message
+            .contains("loop-carried mutable"));
+        assert_atomic(&c, &before);
+        assert!(c
+            .statements(body, f.id)
+            .unwrap_err()
+            .message
+            .contains("loop-carried mutable"));
+        assert_atomic(&c, &before);
+        c.assert_no_holds();
+        let ValueStatement::DerefAssign { value, .. } = &body[0] else {
+            panic!()
+        };
+        let id = c.handles[&reference];
+        c.loans.get_mut(&id).unwrap().held = 1;
+        let held_before = c.clone();
+        assert!(c
+            .expression(value, Transfer::WriteThrough(reference))
+            .is_err());
+        assert_atomic(&c, &held_before); // Failed RHS preserves its caller's existing hold.
+    }
+    #[test]
+    fn nested_call_failure_restores_earlier_argument_counts_and_holds() {
+        let p = typed("fn sink(access: &mut bool) -> bool { return false; } fn both(view: &bool, value: bool) -> bool { return value; } fn f(flag: bool) -> bool { let first = false; let view = &first; let mut second = false; let access = &mut second; while flag { let done = both(view, sink(access)); } return false; }");
+        let f = p.functions()[2].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..4], f.id).unwrap();
+        let ValueStatement::While { body, .. } = &f.body[4] else {
+            panic!()
+        };
+        pin_body(&mut c, body);
+        let before = c.clone();
+        let ValueStatement::Let { initializer, .. } = &body[0] else {
+            panic!()
+        };
+        assert!(c.expression(initializer, Transfer::Return(f.id)).is_err());
+        assert_atomic(&c, &before);
+        c.assert_no_holds();
+    }
+    #[test]
+    fn failed_recurrent_owner_assignment_restores_rhs_liveness() {
+        let p = typed("fn f(flag: bool) -> bool { let mut owned = false; let view = &owned; while flag { owned = *view; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, .. } = &f.body[2] else {
+            panic!()
+        };
+        pin_body(&mut c, body);
+        let before = c.clone();
+        assert!(c
+            .statements(body, f.id)
+            .unwrap_err()
+            .message
+            .contains("cannot assign"));
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn recurrent_conflicting_borrow_rejects_without_allocator_or_hold_changes() {
+        let p = typed("fn f(flag: bool) -> bool { let mut owned = false; let access = &mut owned; while flag { let other = &owned; *access = true; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, .. } = &f.body[2] else {
+            panic!()
+        };
+        pin_body(&mut c, body);
+        let before = c.clone();
+        let owner = c.loans.values().next().unwrap().owner.unwrap();
+        assert!(c
+            .borrow(owner, BorrowKind::Shared, f.span)
+            .unwrap_err()
+            .message
+            .contains("exclusive borrow"));
+        assert_atomic(&c, &before);
+        assert!(c.statements(&body[..1], f.id).is_err());
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn post_loop_new_loan_cannot_alias_carried_or_transient_provenance() {
+        let p = typed("fn f(flag: bool) -> bool { let mut owned = false; let view = &owned; while flag { let seen = *view; let temporary = &owned; let second = *temporary; } let access = &mut owned; *access = true; return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let carried = *c.loans.keys().next().unwrap();
+        let allocator = c.next_loan;
+        c.statements(&f.body[2..3], f.id).unwrap();
+        assert!(c.loans.is_empty());
+        assert_eq!(c.next_loan, allocator);
+        c.statements(&f.body[3..4], f.id).unwrap();
+        let fresh = *c.loans.keys().next().unwrap();
+        assert_ne!(carried, fresh);
+        assert_eq!(fresh, LoanId(allocator));
+        assert_eq!(c.loans[&fresh].kind, BorrowKind::Mutable);
+        c.statements(&f.body[4..], f.id).unwrap();
+        assert!(c.loans.is_empty());
+    }
+    #[test]
+    fn recurrent_semantics_and_mir_ignore_all_diagnostic_display_names() {
+        fn rename(p: &mut Program) {
+            for r in &mut p.ranges {
+                r.name = "display".into();
+            }
+            for r in &mut p.records {
+                r.name = "display".into();
+            }
+            for field in &mut p.fields {
+                field.name = "display".into();
+            }
+            for parameter in &mut p.parameters {
+                parameter.name = "display".into();
+            }
+            for local in &mut p.locals {
+                local.name = "display".into();
+            }
+            for f in &mut p.functions {
+                if let crate::hir::Function::Ordinary(f) = f {
+                    f.name = "display".into();
+                }
+            }
+        }
+        let mut p = typed("fn f(flag: bool, value: Percent) -> Percent { let view = &value; while flag { let alias = view; while flag { let seen = *alias; } } return value; }");
+        check(&p).unwrap();
+        let before = crate::mir::lower(&p);
+        rename(&mut p);
+        check(&p).unwrap();
+        assert_eq!(before, crate::mir::lower(&p));
+        let mut p = typed("fn f(flag: bool) -> bool { let mut owned = false; let view = &owned; while flag { let seen = *view; owned = true; } return owned; }");
+        let before = check(&p).unwrap_err();
+        rename(&mut p);
+        let after = check(&p).unwrap_err();
+        assert_eq!(before[0].span, after[0].span);
+        assert_eq!(before[0].required, after[0].required);
+        assert_eq!(before[0].known, after[0].known);
+        assert!(after[0].message.contains("display"));
     }
 }

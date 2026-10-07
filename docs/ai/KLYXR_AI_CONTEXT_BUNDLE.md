@@ -180,7 +180,7 @@ for every admissible input of the supported structure, and tracks state between
 literal-argument harness calls. Calls across function kinds are rejected; OQ-019,
 OQ-021 through OQ-026 retain the broader assurance, arithmetic, function,
 Copy/destruction, advanced borrowing, and general mutation questions.
-General cyclic ownership/lifetimes beyond iteration-local moves and borrowing, effects, runtime
+General cyclic ownership/lifetimes beyond iteration-local moves/borrowing and stable carried access, effects, runtime
 contracts, VIR, MIR backend/verification lowering, SMT integration,
 and machine-code generation remain unimplemented. Read `compiler/README.md`
 before making claims about what the executable establishes.
@@ -359,7 +359,8 @@ iteration-local Move owners. Existing shared aliases, mutable-handle transfers,
 call holds, named dereference, Copy-safe writes and acyclic path-sensitive last-use
 rules apply. A borrowed local record can move after its loan ends. Each loop
 captures canonical header handle identities and loan provenance: these handles
-remain unusable within that loop, even when dead, but may persist untouched.
+were unusable under KED-014 but could persist untouched. KD-030 subsequently
+permits stable carried access without loan resurrection.
 Live header loans continue constraining compatible owner access/new borrows.
 While conditions remain reference-free; non-Copy condition/transfer and replacement
 boundaries are unchanged. Nested loops classify outer-created handles as
@@ -373,7 +374,38 @@ Names/spans and finite FutureUses counts remain diagnostic/continuation metadata
 This permits safe reuse of transient private LoanIds without hiding provenance.
 No generalized cyclic NLL, fixed-point solver, second checker, syntax, HIR/MIR
 surface change, runtime destruction, execution or verification is introduced.
-Stable loop-carried reference use remains future work under OQ-024/OQ-026.
+KED-015 subsequently permits stable carried access through scoped recurrent
+obligations; generalized cyclic lifetimes remain open under OQ-024/OQ-026.
+
+
+### KED-015: stable loop-carried reference access
+
+KD-030 distinguishes straight-line references, iteration-local loop references,
+and stable loop-carried references. Existing header shared handles may be read,
+passed to calls and copied into body-local aliases; mutable handles may be read
+and used for Copy-safe writes, but cannot move into bindings or by-value calls.
+Reference conditions, reference replacement, reborrowing and carried owned Move
+changes remain unsupported. Constant and apparently one-shot loops do not weaken
+recurrent protection.
+
+The same typed-HIR checker discovers canonical header reference uses in both
+branches and nested bodies. Private scoped sets of original LoanIds provide
+recurrent retention independently of finite FutureUses and operation holds.
+Branches inherit all frames: a skipped use cannot expire the recurrent loan.
+Loans retain their identity/owner/kind continuously, without refreshing, sentinel
+counts or repeated body analysis. Nested loops add frames and discharge only their
+own obligations. Outer-created provenance may be carried by an inner loop but
+must still die before the outer backedge under KD-029.
+
+Lexical cleanup removes body-local aliases and new provenance; allocator
+normalization cannot conceal surviving new loans. Exact backedge validation runs
+with obligations still active. Only then is the current frame discharged and
+false-exit suffix liveness applied, preserving enclosing obligations and post-loop
+uses. With neither, the loan can end and owner access resume. Compound expressions
+and statements restore their pre-operation snapshot on error, including partially
+consumed counts and operation holds. Canonical HIR/MIR and public APIs are unchanged.
+No generalized cyclic lifetime/fixed-point solver, second checker, MIR borrowing,
+execution, destruction or termination proof is implemented.
 
 <!-- END KLYXR_CONTEXT.md -->
 
@@ -1122,7 +1154,8 @@ SSA/phi/block parameters, syntax, conversions, execution, or termination proof i
 introduced. MIR retains KD-027's existing lowering and cyclic validation.
 OQ-022/OQ-023/OQ-025/OQ-026 retain broader ownership/control-flow questions;
 KD-029 subsequently permits iteration-local body borrowing; cyclic lifetimes and
-pre-existing-handle use remain open under OQ-024.
+KD-030 subsequently permits stable carried access; generalized cyclic lifetime
+inference remains open under OQ-024.
 
 
 ---
@@ -1164,9 +1197,56 @@ Cleanup is compile-time bookkeeping, not runtime destruction.
 This refines KD-027/KD-028's historical body-reference restriction only. No syntax,
 public HIR annotations, MIR construct, second checker, cyclic lifetime/fixed-point
 solver or execution is introduced. MIR retains existing deterministic Branch/Goto
-backedges. Stable loop-carried reference use, reference returns, reference-valued
+backedges. KD-030 subsequently settles stable carried access with recurrent
+obligations. Reference returns, reference-valued
 conditional results, reference-local reassignment, reborrowing, explicit lifetimes,
 partial borrowing and generalized cyclic NLL remain unresolved under OQ-024/OQ-026.
+
+
+---
+
+## KD-030 — Stable Loop-Carried Reference Access
+
+**Status:** Accepted
+
+A reference present at a structured loop header may be used repeatedly within
+that loop when its availability, provenance, and required loan state are preserved
+across every accepted backedge. If the carried reference is used on any checked
+body path, its required loan remains continuously active across every accepted
+backedge regardless of constant-condition or one-shot reasoning. Loop-backedge
+liveness is distinct from false-exit continuation liveness. Newly created
+iteration-local provenance must still be discharged before the current loop's
+backedge. This does not establish generalized cyclic lifetime inference.
+
+Shared carried handles remain Copy and may be read, passed to existing calls or
+copied into iteration-local aliases. Mutable carried handles may be dereferenced
+and used for existing Copy-safe writes, but remain Move: binding transfers and
+by-value call arguments reject rather than becoming implicit reborrows. Referent
+Copy mutation does not change handle provenance. Existing capability/conflict,
+nominal typing, operation-hold and non-Copy access/replacement rules remain intact.
+
+Recurrent loan obligations are separate from finite continuation FutureUses and
+operation holds. Discovery includes both checked branches and nested bodies.
+Scoped nested obligations retain the original LoanId, owner and kind continuously;
+inner false-exit removes only its own frame. Backedge cleanup and exact semantic
+validation precede obligation discharge. No expiry/refresh/reconstruction, fake
+infinite counts or path-specific release can implement recurrence. On false exit,
+ordinary suffix liveness and enclosing obligations determine whether a loan ends.
+An unused lexical handle does not itself keep a loan alive.
+
+An outer-iteration-local reference may be carried at an inner header but its
+new provenance must still disappear before the outer backedge under KD-029.
+Body-local aliases of existing provenance disappear without killing an obligated
+carried loan. New provenance is checked before allocator normalization. Failed
+reference operations preserve availability, liveness, holds, loan and provenance
+state. Names/spans remain metadata; identity and scope are canonical.
+
+KED-015 refines the existing one-iteration typed-HIR ownership checker. While
+conditions remain reference-free and carried owned Move changes remain forbidden.
+No syntax, MIR ownership engine, cyclic fixed-point solver, general lifetime
+inference, reference reassignment/returns/results, escaping references, reborrowing,
+coercion, partial borrowing, destruction, execution or termination proof is added.
+OQ-024/OQ-026 retain those broader lifetime/control-flow questions.
 
 <!-- END LANGUAGE_DECISIONS.md -->
 
@@ -1419,7 +1499,7 @@ pipeline is source → lexer → parser → AST → explicit name resolution →
 and value-flow type checking → typed HIR → core ownership, loan, and borrowed-access checking →
 ordinary MIR CFG lowering (ordinary functions) or specialized
 integer contract proof (verified functions) → diagnostics. This implements KD-012, KD-018, KD-019,
-KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, and KD-028 only for the documented
+KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, and KD-030 only for the documented
 subset; the broader pipeline above remains accepted architecture/future work.
 
 The AST preserves textual declarations, parameter types, explicit ordinary
@@ -1493,7 +1573,7 @@ with continuation-aware path-specific future-use counts (KED-009) and operation-
 calls and (under KED-007) whole write statements.
 Shared copies and mutable moves retain loan identity across LocalIds. Loans expire
 when no potentially available derived handle has future uses on the current path
-and no call/write holds the loan. ConditionalMove blocks handle use but does not
+and no call/write hold or KD-030 recurrent obligation retains the loan. ConditionalMove blocks handle use but does not
 by itself eliminate a loan active on another incoming path. Local
 transfers attach destination provenance before expiry; final-use arguments attach
 call holds before expiry. Reference parameters have external provenance without
@@ -1553,7 +1633,7 @@ Ownership remains above MIR in `compiler/ownership`; there is no second checker,
 MIR ownership pass, general dataflow framework, or fixed-point solver. This is
 whole-value liveness for structured acyclic statement and initializer branches, not arbitrary CFG borrowing
 or a claim of Rust borrow-checker equivalence. OQ-024/OQ-026 retain general lifetimes,
-cyclic lifetime analysis, reborrowing, escaping references, and broader MIR ownership dataflow.
+generalized cyclic lifetime analysis beyond KD-030, reborrowing, escaping references, and broader MIR ownership dataflow.
 
 `compiler/mir` lowers only ordinary typed HIR after frontend ownership checks.
 `mir::lower(&program)` leaves `compile_source`'s canonical HIR result unchanged.
@@ -1697,7 +1777,8 @@ body-local availability/provenance, and compares remaining state semantically wi
 its header. Source names, diagnostic move sites, spans and finite FutureUses counts
 remain excluded from equality. Body-local Available/Moved/ConditionalMove states
 may evolve normally and disappear at lexical exit without runtime destruction.
-Outside handles/loans remain unchanged and constrain owner access as before.
+Outside handles/loans remain unchanged at accepted backedges and constrain owner
+access as before; KD-030 distinguishes false-exit liveness.
 
 No AST, resolver, type, HIR or MIR representation change is required. Existing
 Let/call expressions and Branch/Goto backedges retain static LocalIds, exact types,
@@ -1714,7 +1795,8 @@ iteration-local Move owners. Existing shared aliases, mutable-handle transfers,
 call holds, named dereference, Copy-safe writes and acyclic path-sensitive last-use
 rules apply. A borrowed local record can move after its loan ends. Each loop
 captures canonical header handle identities and loan provenance: these handles
-remain unusable within that loop, even when dead, but may persist untouched.
+were unusable under KED-014 but could persist untouched. KD-030 subsequently
+permits stable carried access without loan resurrection.
 Live header loans continue constraining compatible owner access/new borrows.
 While conditions remain reference-free; non-Copy condition/transfer and replacement
 boundaries are unchanged. Nested loops classify outer-created handles as
@@ -1728,7 +1810,38 @@ Names/spans and finite FutureUses counts remain diagnostic/continuation metadata
 This permits safe reuse of transient private LoanIds without hiding provenance.
 No generalized cyclic NLL, fixed-point solver, second checker, syntax, HIR/MIR
 surface change, runtime destruction, execution or verification is introduced.
-Stable loop-carried reference use remains future work under OQ-024/OQ-026.
+KED-015 subsequently permits stable carried access through scoped recurrent
+obligations; generalized cyclic lifetimes remain open under OQ-024/OQ-026.
+
+
+### KED-015: stable loop-carried reference access
+
+KD-030 distinguishes straight-line references, iteration-local loop references,
+and stable loop-carried references. Existing header shared handles may be read,
+passed to calls and copied into body-local aliases; mutable handles may be read
+and used for Copy-safe writes, but cannot move into bindings or by-value calls.
+Reference conditions, reference replacement, reborrowing and carried owned Move
+changes remain unsupported. Constant and apparently one-shot loops do not weaken
+recurrent protection.
+
+The same typed-HIR checker discovers canonical header reference uses in both
+branches and nested bodies. Private scoped sets of original LoanIds provide
+recurrent retention independently of finite FutureUses and operation holds.
+Branches inherit all frames: a skipped use cannot expire the recurrent loan.
+Loans retain their identity/owner/kind continuously, without refreshing, sentinel
+counts or repeated body analysis. Nested loops add frames and discharge only their
+own obligations. Outer-created provenance may be carried by an inner loop but
+must still die before the outer backedge under KD-029.
+
+Lexical cleanup removes body-local aliases and new provenance; allocator
+normalization cannot conceal surviving new loans. Exact backedge validation runs
+with obligations still active. Only then is the current frame discharged and
+false-exit suffix liveness applied, preserving enclosing obligations and post-loop
+uses. With neither, the loan can end and owner access resume. Compound expressions
+and statements restore their pre-operation snapshot on error, including partially
+consumed counts and operation holds. Canonical HIR/MIR and public APIs are unchanged.
+No generalized cyclic lifetime/fixed-point solver, second checker, MIR borrowing,
+execution, destruction or termination proof is implemented.
 
 <!-- END ARCHITECTURE.md -->
 
@@ -1903,7 +2016,17 @@ including fresh record results, transfers and existing branch joins. Conditions
 remain Copy-only; scopes and the single final return are unchanged. General
 loop-carried ownership and cyclic reference use remain unresolved. KED-014 permits
 iteration-local body borrowing (KD-029), with reference-free while conditions and
-no use of handles present at the current header.
+historically no use of handles present at the current header; KD-030 refines this
+with stable carried access.
+
+
+KED-015 settles stable loop-carried reference access only (KD-030): scoped
+recurrent obligations retain exact original provenance across every accepted
+backedge, and false-exit liveness discharges only the current frame. Outer frames
+and post-loop uses remain authoritative. Mutable carried handles cannot transfer;
+while conditions stay reference-free. Generalized cyclic lifetime inference,
+fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
+escaping references and broader control flow remain unresolved.
 
 ## OQ-023 — Copy customization, cloning, partial moves, and destruction
 
@@ -1978,11 +2101,20 @@ access; this is not cyclic lifetime inference or reference use across backedges.
 KED-014 permits iteration-local borrowing in while bodies (KD-029), refining
 KED-013's historical restriction. Fresh body provenance must be gone at the
 backedge before allocator restoration. Untouched header handles/loans persist
-unchanged and constrain new borrows; their use inside that loop, all while-condition
-reference activity, generalized cyclic NLL and fixed-point lifetime inference
-remain unsupported. Nested headers make outer-created handles pre-existing.
+unchanged and constrain new borrows. KD-030 subsequently permits stable carried
+use, but all while-condition reference activity, generalized cyclic NLL and
+fixed-point lifetime inference remain unsupported. Nested headers make outer-created handles pre-existing.
 Reborrowing, reference returns/results/reassignment, explicit lifetimes and
 field/partial loans remain unresolved.
+
+
+KED-015 settles stable loop-carried reference access only (KD-030): scoped
+recurrent obligations retain exact original provenance across every accepted
+backedge, and false-exit liveness discharges only the current frame. Outer frames
+and post-loop uses remain authoritative. Mutable carried handles cannot transfer;
+while conditions stay reference-free. Generalized cyclic lifetime inference,
+fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
+escaping references and broader control flow remain unresolved.
 
 ## OQ-025 — General mutation, place expressions, and replacement semantics
 
@@ -2019,8 +2151,17 @@ KED-013 permits transfers of iteration-local Move values, not replacement.
 Direct reassignment of any non-Copy owner, including body-local owners, remains
 unsupported pending displacement/destruction semantics. KED-014 permits existing
 Copy-safe write-through using fresh body references, not replacement or destruction.
-Pre-existing handles remain unusable inside that loop; generalized cyclic mutation
+KD-030 permits stable carried Copy-safe access/write-through; generalized cyclic mutation
 and lifetime analysis remain open.
+
+
+KED-015 settles stable loop-carried reference access only (KD-030): scoped
+recurrent obligations retain exact original provenance across every accepted
+backedge, and false-exit liveness discharges only the current frame. Outer frames
+and post-loop uses remain authoritative. Mutable carried handles cannot transfer;
+while conditions stay reference-free. Generalized cyclic lifetime inference,
+fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
+escaping references and broader control flow remain unresolved.
 
 ## OQ-026 — General control flow, conditional values, and MIR dataflow
 
@@ -2078,8 +2219,17 @@ dataflow, reference inference, MIR ownership, or a new IR representation.
 KED-014 adds only iteration-local borrowing to that one-iteration HIR model
 (KD-029). Finite continuation-aware liveness applies inside each permitted body;
 new handles/loans must be discharged before the backedge and allocator restoration.
-It does not settle stable loop-carried reference use, generalized cyclic NLL,
+KD-030 subsequently settles stable carried access. It does not settle generalized cyclic NLL,
 fixed-point ownership/loan dataflow, MIR ownership, reference-result joins,
 termination, verified loops or any broader control-flow question above.
+
+
+KED-015 settles stable loop-carried reference access only (KD-030): scoped
+recurrent obligations retain exact original provenance across every accepted
+backedge, and false-exit liveness discharges only the current frame. Outer frames
+and post-loop uses remain authoritative. Mutable carried handles cannot transfer;
+while conditions stay reference-free. Generalized cyclic lifetime inference,
+fixed points, MIR ownership, provenance replacement/reborrowing, reference returns,
+escaping references and broader control flow remain unresolved.
 
 <!-- END OPEN_QUESTIONS.md -->

@@ -76,13 +76,13 @@ accept!(mutable_iteration_record_borrow_then_move, "fn run(flag: bool) -> bool {
 accept!(constant_false_body_borrow_checked_normally, "fn run(value: Percent) -> Percent { while false { let view = &value; let observed = *view; } return value; }");
 accept!(constant_true_body_borrow_checked_normally, "fn run(value: Percent) -> Percent { while true { let view = &value; let observed = *view; } return value; }");
 
-reject!(header_reference_parameter_deref, "fn run(flag: bool, view: &Percent) -> Percent { while flag { let observed = *view; } return *view; }", "Ownership", "pre-existing reference handle `view`");
-reject!(header_reference_local_deref, "fn run(flag: bool, value: Percent) -> Percent { let view = &value; while flag { let observed = *view; } return value; }", "Ownership", "pre-existing reference handle");
-reject!(header_shared_call_argument, "fn run(flag: bool, view: &Percent) -> Percent { while flag { let observed = read(view); } return *view; }", "Ownership", "pre-existing reference handle");
-reject!(header_shared_alias, "fn run(flag: bool, view: &Percent) -> Percent { while flag { let alias = view; } return *view; }", "Ownership", "pre-existing reference handle");
-reject!(header_mutable_transfer, "fn run(flag: bool, access: &mut Percent) -> Percent { while flag { let next = access; } return *access; }", "Ownership", "pre-existing reference handle");
-reject!(header_mutable_call_argument, "fn run(flag: bool, access: &mut Percent, value: Percent) -> Percent { while flag { let done = sink(access); } return value; }", "Ownership", "pre-existing reference handle");
-reject!(header_mutable_write_through, "fn run(flag: bool, access: &mut Percent, value: Percent) -> Percent { while flag { *access = value; } return value; }", "Ownership", "pre-existing reference handle");
+accept!(header_reference_parameter_deref, "fn run(flag: bool, view: &Percent) -> Percent { while flag { let observed = *view; } return *view; }");
+accept!(header_reference_local_deref, "fn run(flag: bool, value: Percent) -> Percent { let view = &value; while flag { let observed = *view; } return value; }");
+accept!(header_shared_call_argument, "fn run(flag: bool, view: &Percent) -> Percent { while flag { let observed = read(view); } return *view; }");
+accept!(header_shared_alias, "fn run(flag: bool, view: &Percent) -> Percent { while flag { let alias = view; } return *view; }");
+reject!(header_mutable_transfer, "fn run(flag: bool, access: &mut Percent) -> Percent { while flag { let next = access; } return *access; }", "Ownership", "loop-carried mutable reference");
+reject!(header_mutable_call_argument, "fn run(flag: bool, access: &mut Percent, value: Percent) -> Percent { while flag { let done = sink(access); } return value; }", "Ownership", "loop-carried mutable reference");
+accept!(header_mutable_write_through, "fn run(flag: bool, access: &mut Percent, value: Percent) -> Percent { while flag { *access = value; } return value; }");
 reject!(
     while_condition_direct_borrow,
     "fn run(ticket: Ticket) -> bool { while inspect(&ticket) {} return true; }",
@@ -101,8 +101,8 @@ reject!(
     "Ownership",
     "reference activity is unsupported in while conditions"
 );
-reject!(inner_loop_uses_outer_created_reference, "fn run(flag: bool, value: Percent) -> Percent { while flag { let view = &value; while flag { let observed = *view; } } return value; }", "Ownership", "pre-existing reference handle `view`");
-reject!(inner_loop_transfers_outer_mutable_reference, "fn run(flag: bool, value: Percent) -> Percent { let mut current = value; while flag { let access = &mut current; while flag { let next = access; } } return current; }", "Ownership", "pre-existing reference handle `access`");
+accept!(inner_loop_uses_outer_created_reference, "fn run(flag: bool, value: Percent) -> Percent { while flag { let view = &value; while flag { let observed = *view; } } return value; }");
+reject!(inner_loop_transfers_outer_mutable_reference, "fn run(flag: bool, value: Percent) -> Percent { let mut current = value; while flag { let access = &mut current; while flag { let next = access; } } return current; }", "Ownership", "loop-carried mutable reference `access`");
 reject!(inner_condition_outer_handle_rejected_as_condition, "fn run(flag: bool, value: Percent) -> Percent { while flag { let view = &value; while owner(*view) {} } return value; }", "Ownership", "unsupported in while conditions");
 reject!(live_shared_header_loan_blocks_new_mutable_borrow, "fn run(flag: bool, value: Percent) -> Percent { let mut current = value; let view = &current; while flag { let access = &mut current; } return *view; }", "Ownership", "while shared borrow is active");
 reject!(live_exclusive_header_loan_blocks_new_shared_borrow, "fn run(flag: bool, value: Percent) -> Percent { let mut current = value; let access = &mut current; while flag { let view = &current; } return *access; }", "Ownership", "while exclusive borrow is active");
@@ -135,17 +135,13 @@ reject!(reborrowing_not_added, "fn run(flag: bool, value: Percent) -> Percent { 
 reject!(immutable_mutable_borrow_rule_preserved, "fn run(flag: bool, value: Percent) -> Percent { while flag { let access = &mut value; } return value; }", "Ownership", "immutable value");
 reject!(nominal_referent_identity_preserved, "fn run(flag: bool, value: Other) -> Other { while flag { let observed = read(&value); } return value; }", "Type", "expected &Percent, found &Other");
 reject!(mutable_to_shared_coercion_not_added, "fn run(flag: bool, value: Percent) -> Percent { let mut current = value; while flag { let access = &mut current; let observed = read(access); } return current; }", "Type", "argument type mismatch");
-reject!(
-    constant_false_does_not_allow_header_handle_use,
-    "fn run(view: &Percent) -> bool { while false { let observed = *view; } return true; }",
-    "Ownership",
-    "pre-existing reference handle"
+accept!(
+    constant_false_checks_stable_header_handle_use,
+    "fn run(view: &Percent) -> bool { while false { let observed = *view; } return true; }"
 );
-reject!(
-    constant_true_does_not_allow_header_handle_use,
-    "fn run(view: &Percent) -> bool { while true { let observed = *view; } return true; }",
-    "Ownership",
-    "pre-existing reference handle"
+accept!(
+    constant_true_checks_stable_header_handle_use,
+    "fn run(view: &Percent) -> bool { while true { let observed = *view; } return true; }"
 );
 
 #[test]

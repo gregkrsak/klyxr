@@ -373,7 +373,7 @@ It is part of the language philosophy.
 > **Klyxr is an early-stage language project.**
 >
 > The compiler, verifier, syntax, semantics, and tooling are still being designed and prototyped.
-> An executable Rust-based prototype now resolves and type-checks ordinary value functions, checks core moves, path-sensitive whole-value loans across straight-line code and acyclic branches, and explicit Copy-safe borrowed access/mutation, supports initializer-only owned/Copy conditional values and direct Copy-safe mutable-local reassignment, supports ownership-stable statement `while` with Copy state and iteration-local Move ownership and lowers `if`/`else`, conditional initializers, and loops to ordinary MIR CFGs with real backedges, and supports a narrow verified integer/record subset. It proves supported subtraction safety, field-range preservation, and postconditions, and checks call preconditions using state updated by earlier calls. General ownership, effects, runtime contracts, and code generation are not yet implemented.
+> An executable Rust-based prototype now resolves and type-checks ordinary value functions, checks core moves, path-sensitive whole-value loans across straight-line code and acyclic branches, and explicit Copy-safe borrowed access/mutation, supports initializer-only owned/Copy conditional values and direct Copy-safe mutable-local reassignment, supports ownership-stable statement `while` with Copy state, iteration-local Move/borrowing and stable carried-reference access and lowers `if`/`else`, conditional initializers, and loops to ordinary MIR CFGs with real backedges, and supports a narrow verified integer/record subset. It proves supported subtraction safety, field-range preservation, and postconditions, and checks call preconditions using state updated by earlier calls. General ownership, effects, runtime contracts, and code generation are not yet implemented.
 > The badges at the top of this README are **live GitHub Actions status badges** for this repository's `build`, `tests`, `verify`, and `docs` workflows. These workflows build the prototype, run its regression tests in debug and optimized builds, exercise successful and failing contract examples, and validate documentation assets. They do not establish production readiness.
 
 Try the current prototype from the repository root with Rust/rustup installed:
@@ -398,7 +398,7 @@ Current design areas include:
 - [x] visible trusted / unsafe boundaries
 - [ ] compiler MVP
 - [x] core move and whole-value loan checker with acyclic branch joins
-- [x] nested statement while, Copy-state loop stability, iteration-local Move ownership, and cyclic MIR (no execution or termination proof)
+- [x] nested statement while, Copy-state loop stability, iteration-local Move/borrowing, stable carried references, and cyclic MIR (no execution or termination proof)
 - [ ] advanced borrowing and destruction
 - [ ] verifier integration
 - [ ] standard library
