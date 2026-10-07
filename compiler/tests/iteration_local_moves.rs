@@ -83,7 +83,7 @@ accept!(constant_true_still_classifies_iteration_local, "fn run() -> bool { whil
 
 reject!(carried_parameter_to_binding, "fn run(flag: bool, ticket: Ticket) -> bool { while flag { let moved = ticket; } return true; }", "Ownership", "pre-existing non-Copy value `ticket`");
 reject!(carried_local_to_call, "fn run(flag: bool) -> bool { let ticket = fresh(); while flag { let done = consume(ticket); } return true; }", "Ownership", "pre-existing non-Copy value `ticket`");
-reject!(carried_parameter_to_call, "fn run(flag: bool, ticket: Ticket) -> bool { while flag { let done = consume(ticket); } return true; }", "Ownership", "across a backedge");
+reject!(carried_parameter_to_call, "fn run(flag: bool, ticket: Ticket) -> bool { while flag { let done = consume(ticket); } return true; }", "Ownership", "pre-existing-state boundary");
 reject!(carried_in_one_nested_branch, "fn run(flag: bool, ticket: Ticket) -> bool { while flag { if flag { let done = consume(ticket); } } return true; }", "Ownership", "pre-existing non-Copy");
 reject!(carried_in_both_nested_branches, "fn run(flag: bool, ticket: Ticket) -> bool { while flag { if flag { let done = consume(ticket); } else { let done = consume(ticket); } } return true; }", "Ownership", "pre-existing non-Copy");
 reject!(carried_in_nested_loop, "fn run(flag: bool, ticket: Ticket) -> bool { while flag { while flag { let done = consume(ticket); } } return true; }", "Ownership", "pre-existing non-Copy");

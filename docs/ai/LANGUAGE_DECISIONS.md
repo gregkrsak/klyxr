@@ -802,3 +802,56 @@ allocator, lexical scope, and loop target/header context. MIR reuses Goto to the
 innermost header, emitting joins/suffixes only for real fallthrough paths. This
 settles no labels, break, loop values, early returns, generalized CFG/fixed-point
 ownership, MIR borrowing, reborrowing, destruction, execution or verification.
+
+
+---
+
+## KD-032 — Structured `break` in `while` Loops
+
+**Status:** Accepted
+
+An unlabeled `break;` transfers control to the continuation of the innermost
+enclosing ordinary `while`. Every break edge is an explicit loop-exit edge and
+must normalize to the same canonical ownership/reference exit state as the loop's
+ordinary condition-false exit. Before any permitted normalization reduction that
+could erase evidence, the checker must validate the corresponding ownership,
+provenance, recurrent-frame, nesting, and operation-hold integrity against the
+saved target-loop context. Target-loop iteration-local state is then cleaned,
+exactly the target loop's recurrent-obligation frame is discharged, enclosing
+recurrent frames are preserved, and the target loop's outside finite continuation
+is applied before expiry and canonical-exit comparison. Recurrent protection
+remains active until the break statement is reached; KED-017 does not retroactively
+weaken earlier operations on a path that later breaks. An unconditional break
+terminates its current lexical statement block. KED-017 introduces no labels,
+break values, loop values, generalized unreachable-code analysis, generalized
+cyclic ownership/lifetime fixed point, arbitrary exit-state merging, path-sensitive
+relaxation of pre-existing non-Copy loop ownership, reborrowing, or new MIR terminator.
+
+The canonical false exit is derived independently from the checked header
+condition, outside finite continuation, and enclosing frames before inspecting
+break candidates. Normalization is a restricted, non-repairing projection of the
+actual candidate: carried availability/provenance and enclosing obligations cannot
+be reset to manufacture equality. Integrity checks precede local cleanup, exact
+frame discharge, expiry, and safe allocator normalization whenever those reductions
+could erase corruption evidence. Holds must balance; newly allocated provenance
+must be absent before allocator reuse. Failed validation restores the complete
+entering candidate, including an injected defect, rather than repairing it.
+
+Finite same-iteration suffix uses skipped by break are removed before preceding
+operations on that path; outside finite uses and separate recurrent LoanId
+obligations remain authoritative. Recurrence is not discharged early. Nested
+break removes exactly one frame even when that frame is empty. Original carried
+LoanId/owner/kind remain continuously active whenever an enclosing obligation or
+post-loop use requires them; recurrence-only loans may end at exit without
+reactivation. Lexical cleanup adds no runtime destruction.
+
+Only actual fallthrough arms participate in a suffix join. Both-break and mixed
+break/continue conditionals have zero lexical fallthrough. A while retains its
+checked condition-false exit even if all body paths terminate or its condition is
+a Boolean constant. Bottom backedges and explicit continue backedges keep the
+existing exact header-state rule; break exits instead compare to canonical false
+exit. Pre-existing non-Copy Move restrictions remain unchanged on terminal paths.
+AST, resolution, and typed HIR preserve Break/span and canonical source identities.
+MIR uses existing Goto to the innermost loop exit, with no synthetic join for
+all-terminal arms. Ownership remains above MIR in the single structured checker.
+OQ-022/OQ-024/OQ-025/OQ-026 retain broader control-flow and lifetime design.

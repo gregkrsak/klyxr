@@ -150,7 +150,7 @@ references may remain untouched; outside live loans still constrain Copy owner
 reads/writes, while dead pre-loop loans stay dead. There is no fixed-point solver.
 MIR uses Goto → header Branch → body/exit, with body Goto back to header. Its
 validator now accepts cycles with visited tracking; structural validity does not
-prove termination. Both constant-condition edges remain. Break/for (KD-031 now settles unlabeled statement continue),
+prove termination. Both constant-condition edges remain. For and labeled loop transfers (KD-031/KD-032 settle unlabeled continue/break),
 loop values, early returns, verified loops, and general cyclic ownership/loans
 remain unresolved. Ordinary loops are neither executed nor proven.
 
@@ -444,6 +444,52 @@ lower a suffix, so all emitted blocks remain reachable under the unchanged
 validator. The header false exit still exists when all body paths continue.
 Canonical source IDs, deterministic lowering, and the verified proof path remain
 unchanged. No generalized CFG/fixed-point machinery or competing checker is added.
+
+
+### KED-017: structured break and canonical loop exits
+
+AST, resolution, and typed ordinary HIR contain Break/span. Parser and resolver
+reject placement outside while, labels/values, and suffixes after a direct break
+or recursively all-terminal conditional. Actual edge class and lexical
+fallthrough are distinct: mixed Break/Continue arms have no surviving suffix
+state. The single HIR ownership checker retains immutable header, canonical false
+exit, and outside-continuation snapshots on a finite nested target stack.
+
+The four structured loop edges have distinct contracts:
+
+| Edge | Ownership/reference boundary | Recurrent frames | Existing MIR |
+| --- | --- | --- | --- |
+| Ordinary bottom backedge | Exact header state after local cleanup | Retain current and enclosing | Goto header |
+| Explicit continue backedge | Independently validate exact header state | Retain current and enclosing | Goto header |
+| Ordinary condition-false exit | Independently derive canonical exit before body candidates | Discharge exactly current; retain enclosing | Header Branch false target |
+| Explicit break exit | Validate actual normalized candidate against saved canonical exit | Discharge exactly target; retain enclosing | Goto innermost exit |
+
+Canonical false exit comes from the checked condition state, outside finite uses,
+and outer obligations. A candidate never supplies or replaces it. Break first
+checks invariants whose evidence could disappear: exact frame membership/position,
+outer context, carried handle mapping and original active LoanId/owner/kind, and
+balanced operation holds. This is bounded integrity checking, not raw header
+state equality. Then the actual candidate installs captured outside uses before
+expiry, scopes target-iteration locals, pops exactly the target frame/context,
+expires with outer obligations and finite uses, proves fresh provenance absent,
+and safely normalizes its allocator. Semantic comparison does not repair carried
+availability or provenance. All steps are transactional; failure restores the
+actual entering snapshot, including faults and canonical-exit target context.
+
+Finite backward summaries cut skipped same-iteration suffixes before preceding
+operations. Recurrent sets remain separate and active until break itself; post-loop
+finite uses independently protect loans. Nested exits preserve outer frames and
+continuous LoanIds, including when the removed inner frame is empty. A recurrent-only
+loan may end when no outer or outside retention reason remains. No resurrection,
+pre-existing Move relaxation, generalized fixed point, or second checker is added.
+
+MIR maintains header/exit pairs and optional live tails. Break finishes its block
+with existing Goto to the innermost exit; continue still targets the header. No
+all-terminal suffix join is emitted; nested target restoration is deterministic.
+The validator is unchanged. Constant and all-breaking bodies retain false edges.
+Private tests inspect normalized candidates before loop consumption and inject
+pre-reduction and post-cleanup faults. The specialized verifier and its 1,800-case
+affine cross-check remain unchanged; ordinary code is not executed or proven.
 
 <!-- END KLYXR_CONTEXT.md -->
 
@@ -1327,6 +1373,59 @@ innermost header, emitting joins/suffixes only for real fallthrough paths. This
 settles no labels, break, loop values, early returns, generalized CFG/fixed-point
 ownership, MIR borrowing, reborrowing, destruction, execution or verification.
 
+
+---
+
+## KD-032 — Structured `break` in `while` Loops
+
+**Status:** Accepted
+
+An unlabeled `break;` transfers control to the continuation of the innermost
+enclosing ordinary `while`. Every break edge is an explicit loop-exit edge and
+must normalize to the same canonical ownership/reference exit state as the loop's
+ordinary condition-false exit. Before any permitted normalization reduction that
+could erase evidence, the checker must validate the corresponding ownership,
+provenance, recurrent-frame, nesting, and operation-hold integrity against the
+saved target-loop context. Target-loop iteration-local state is then cleaned,
+exactly the target loop's recurrent-obligation frame is discharged, enclosing
+recurrent frames are preserved, and the target loop's outside finite continuation
+is applied before expiry and canonical-exit comparison. Recurrent protection
+remains active until the break statement is reached; KED-017 does not retroactively
+weaken earlier operations on a path that later breaks. An unconditional break
+terminates its current lexical statement block. KED-017 introduces no labels,
+break values, loop values, generalized unreachable-code analysis, generalized
+cyclic ownership/lifetime fixed point, arbitrary exit-state merging, path-sensitive
+relaxation of pre-existing non-Copy loop ownership, reborrowing, or new MIR terminator.
+
+The canonical false exit is derived independently from the checked header
+condition, outside finite continuation, and enclosing frames before inspecting
+break candidates. Normalization is a restricted, non-repairing projection of the
+actual candidate: carried availability/provenance and enclosing obligations cannot
+be reset to manufacture equality. Integrity checks precede local cleanup, exact
+frame discharge, expiry, and safe allocator normalization whenever those reductions
+could erase corruption evidence. Holds must balance; newly allocated provenance
+must be absent before allocator reuse. Failed validation restores the complete
+entering candidate, including an injected defect, rather than repairing it.
+
+Finite same-iteration suffix uses skipped by break are removed before preceding
+operations on that path; outside finite uses and separate recurrent LoanId
+obligations remain authoritative. Recurrence is not discharged early. Nested
+break removes exactly one frame even when that frame is empty. Original carried
+LoanId/owner/kind remain continuously active whenever an enclosing obligation or
+post-loop use requires them; recurrence-only loans may end at exit without
+reactivation. Lexical cleanup adds no runtime destruction.
+
+Only actual fallthrough arms participate in a suffix join. Both-break and mixed
+break/continue conditionals have zero lexical fallthrough. A while retains its
+checked condition-false exit even if all body paths terminate or its condition is
+a Boolean constant. Bottom backedges and explicit continue backedges keep the
+existing exact header-state rule; break exits instead compare to canonical false
+exit. Pre-existing non-Copy Move restrictions remain unchanged on terminal paths.
+AST, resolution, and typed HIR preserve Break/span and canonical source identities.
+MIR uses existing Goto to the innermost loop exit, with no synthetic join for
+all-terminal arms. Ownership remains above MIR in the single structured checker.
+OQ-022/OQ-024/OQ-025/OQ-026 retain broader control-flow and lifetime design.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -1960,6 +2059,52 @@ validator. The header false exit still exists when all body paths continue.
 Canonical source IDs, deterministic lowering, and the verified proof path remain
 unchanged. No generalized CFG/fixed-point machinery or competing checker is added.
 
+
+### KED-017: structured break and canonical loop exits
+
+AST, resolution, and typed ordinary HIR contain Break/span. Parser and resolver
+reject placement outside while, labels/values, and suffixes after a direct break
+or recursively all-terminal conditional. Actual edge class and lexical
+fallthrough are distinct: mixed Break/Continue arms have no surviving suffix
+state. The single HIR ownership checker retains immutable header, canonical false
+exit, and outside-continuation snapshots on a finite nested target stack.
+
+The four structured loop edges have distinct contracts:
+
+| Edge | Ownership/reference boundary | Recurrent frames | Existing MIR |
+| --- | --- | --- | --- |
+| Ordinary bottom backedge | Exact header state after local cleanup | Retain current and enclosing | Goto header |
+| Explicit continue backedge | Independently validate exact header state | Retain current and enclosing | Goto header |
+| Ordinary condition-false exit | Independently derive canonical exit before body candidates | Discharge exactly current; retain enclosing | Header Branch false target |
+| Explicit break exit | Validate actual normalized candidate against saved canonical exit | Discharge exactly target; retain enclosing | Goto innermost exit |
+
+Canonical false exit comes from the checked condition state, outside finite uses,
+and outer obligations. A candidate never supplies or replaces it. Break first
+checks invariants whose evidence could disappear: exact frame membership/position,
+outer context, carried handle mapping and original active LoanId/owner/kind, and
+balanced operation holds. This is bounded integrity checking, not raw header
+state equality. Then the actual candidate installs captured outside uses before
+expiry, scopes target-iteration locals, pops exactly the target frame/context,
+expires with outer obligations and finite uses, proves fresh provenance absent,
+and safely normalizes its allocator. Semantic comparison does not repair carried
+availability or provenance. All steps are transactional; failure restores the
+actual entering snapshot, including faults and canonical-exit target context.
+
+Finite backward summaries cut skipped same-iteration suffixes before preceding
+operations. Recurrent sets remain separate and active until break itself; post-loop
+finite uses independently protect loans. Nested exits preserve outer frames and
+continuous LoanIds, including when the removed inner frame is empty. A recurrent-only
+loan may end when no outer or outside retention reason remains. No resurrection,
+pre-existing Move relaxation, generalized fixed point, or second checker is added.
+
+MIR maintains header/exit pairs and optional live tails. Break finishes its block
+with existing Goto to the innermost exit; continue still targets the header. No
+all-terminal suffix join is emitted; nested target restoration is deterministic.
+The validator is unchanged. Constant and all-breaking bodies retain false edges.
+Private tests inspect normalized candidates before loop consumption and inject
+pre-reduction and post-cleanup faults. The specialized verifier and its 1,800-case
+affine cross-check remain unchanged; ordinary code is not executed or proven.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -2152,9 +2297,21 @@ frames before cleanup validation completes. Continue removes only the skipped
 same-iteration finite suffix; post-loop finite uses remain required. The real
 false exit exists even when every body path continues and discharges only its own
 frame. Structured no-fallthrough suffix rejection is narrow, not a general
-unreachable-code policy. Break/labels/loop values, early returns, generalized
+unreachable-code policy. Labels/loop values, early returns, generalized
 cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
 destruction and execution remain unresolved.
+
+KED-017 settles unlabeled statement break to the innermost while continuation
+(KD-032). Each independently validated break candidate normalizes to the saved
+condition-false canonical exit. Pre-reduction integrity checks protect carried
+provenance, exact frame nesting and balanced holds before cleanup/expiry can erase
+evidence. Exactly the target frame ends; enclosing obligations and outside finite
+uses remain authoritative. Skipped iteration suffixes do not weaken recurrence
+before break. Mixed break/continue arms have zero fallthrough, without arbitrary
+exit merging or terminal-path relaxation of pre-existing Move restrictions.
+Labeled transfers, break/loop values, generalized cyclic ownership/lifetime fixed
+points, MIR ownership, unreachable-code policy, reborrowing, destruction, execution
+and termination proof remain unresolved.
 
 ## OQ-023 — Copy customization, cloning, partial moves, and destruction
 
@@ -2251,9 +2408,21 @@ frames before cleanup validation completes. Continue removes only the skipped
 same-iteration finite suffix; post-loop finite uses remain required. The real
 false exit exists even when every body path continues and discharges only its own
 frame. Structured no-fallthrough suffix rejection is narrow, not a general
-unreachable-code policy. Break/labels/loop values, early returns, generalized
+unreachable-code policy. Labels/loop values, early returns, generalized
 cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
 destruction and execution remain unresolved.
+
+KED-017 settles unlabeled statement break to the innermost while continuation
+(KD-032). Each independently validated break candidate normalizes to the saved
+condition-false canonical exit. Pre-reduction integrity checks protect carried
+provenance, exact frame nesting and balanced holds before cleanup/expiry can erase
+evidence. Exactly the target frame ends; enclosing obligations and outside finite
+uses remain authoritative. Skipped iteration suffixes do not weaken recurrence
+before break. Mixed break/continue arms have zero fallthrough, without arbitrary
+exit merging or terminal-path relaxation of pre-existing Move restrictions.
+Labeled transfers, break/loop values, generalized cyclic ownership/lifetime fixed
+points, MIR ownership, unreachable-code policy, reborrowing, destruction, execution
+and termination proof remain unresolved.
 
 ## OQ-025 — General mutation, place expressions, and replacement semantics
 
@@ -2309,9 +2478,21 @@ frames before cleanup validation completes. Continue removes only the skipped
 same-iteration finite suffix; post-loop finite uses remain required. The real
 false exit exists even when every body path continues and discharges only its own
 frame. Structured no-fallthrough suffix rejection is narrow, not a general
-unreachable-code policy. Break/labels/loop values, early returns, generalized
+unreachable-code policy. Labels/loop values, early returns, generalized
 cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
 destruction and execution remain unresolved.
+
+KED-017 settles unlabeled statement break to the innermost while continuation
+(KD-032). Each independently validated break candidate normalizes to the saved
+condition-false canonical exit. Pre-reduction integrity checks protect carried
+provenance, exact frame nesting and balanced holds before cleanup/expiry can erase
+evidence. Exactly the target frame ends; enclosing obligations and outside finite
+uses remain authoritative. Skipped iteration suffixes do not weaken recurrence
+before break. Mixed break/continue arms have zero fallthrough, without arbitrary
+exit merging or terminal-path relaxation of pre-existing Move restrictions.
+Labeled transfers, break/loop values, generalized cyclic ownership/lifetime fixed
+points, MIR ownership, unreachable-code policy, reborrowing, destruction, execution
+and termination proof remain unresolved.
 
 ## OQ-026 — General control flow, conditional values, and MIR dataflow
 
@@ -2334,7 +2515,7 @@ Still open:
 - general conditional expressions and branch-result type unification beyond exact types;
 - join values without a source local destination, arbitrary temporaries, and SSA;
 - block parameters / phi-like representations;
-- generalized cyclic ownership/loans and fixed-point analysis, `for`, `break`, loop values and labels (KD-031 settles unlabeled `continue`);
+- generalized cyclic ownership/loans and fixed-point analysis, `for`, loop values and labels (KD-031/KD-032 settle unlabeled `continue`/`break`);
 - early returns, multiple return paths, divergence / bottom types, and `match` lowering;
 - definite initialization and uninitialized locals;
 - full MIR-based ownership dataflow and maximally precise path-sensitive loan analysis;
@@ -2389,8 +2570,20 @@ frames before cleanup validation completes. Continue removes only the skipped
 same-iteration finite suffix; post-loop finite uses remain required. The real
 false exit exists even when every body path continues and discharges only its own
 frame. Structured no-fallthrough suffix rejection is narrow, not a general
-unreachable-code policy. Break/labels/loop values, early returns, generalized
+unreachable-code policy. Labels/loop values, early returns, generalized
 cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
 destruction and execution remain unresolved.
+
+KED-017 settles unlabeled statement break to the innermost while continuation
+(KD-032). Each independently validated break candidate normalizes to the saved
+condition-false canonical exit. Pre-reduction integrity checks protect carried
+provenance, exact frame nesting and balanced holds before cleanup/expiry can erase
+evidence. Exactly the target frame ends; enclosing obligations and outside finite
+uses remain authoritative. Skipped iteration suffixes do not weaken recurrence
+before break. Mixed break/continue arms have zero fallthrough, without arbitrary
+exit merging or terminal-path relaxation of pre-existing Move restrictions.
+Labeled transfers, break/loop values, generalized cyclic ownership/lifetime fixed
+points, MIR ownership, unreachable-code policy, reborrowing, destruction, execution
+and termination proof remain unresolved.
 
 <!-- END OPEN_QUESTIONS.md -->

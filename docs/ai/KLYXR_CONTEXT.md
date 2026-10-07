@@ -137,7 +137,7 @@ references may remain untouched; outside live loans still constrain Copy owner
 reads/writes, while dead pre-loop loans stay dead. There is no fixed-point solver.
 MIR uses Goto → header Branch → body/exit, with body Goto back to header. Its
 validator now accepts cycles with visited tracking; structural validity does not
-prove termination. Both constant-condition edges remain. Break/for (KD-031 now settles unlabeled statement continue),
+prove termination. Both constant-condition edges remain. For and labeled loop transfers (KD-031/KD-032 settle unlabeled continue/break),
 loop values, early returns, verified loops, and general cyclic ownership/loans
 remain unresolved. Ordinary loops are neither executed nor proven.
 
@@ -431,3 +431,49 @@ lower a suffix, so all emitted blocks remain reachable under the unchanged
 validator. The header false exit still exists when all body paths continue.
 Canonical source IDs, deterministic lowering, and the verified proof path remain
 unchanged. No generalized CFG/fixed-point machinery or competing checker is added.
+
+
+### KED-017: structured break and canonical loop exits
+
+AST, resolution, and typed ordinary HIR contain Break/span. Parser and resolver
+reject placement outside while, labels/values, and suffixes after a direct break
+or recursively all-terminal conditional. Actual edge class and lexical
+fallthrough are distinct: mixed Break/Continue arms have no surviving suffix
+state. The single HIR ownership checker retains immutable header, canonical false
+exit, and outside-continuation snapshots on a finite nested target stack.
+
+The four structured loop edges have distinct contracts:
+
+| Edge | Ownership/reference boundary | Recurrent frames | Existing MIR |
+| --- | --- | --- | --- |
+| Ordinary bottom backedge | Exact header state after local cleanup | Retain current and enclosing | Goto header |
+| Explicit continue backedge | Independently validate exact header state | Retain current and enclosing | Goto header |
+| Ordinary condition-false exit | Independently derive canonical exit before body candidates | Discharge exactly current; retain enclosing | Header Branch false target |
+| Explicit break exit | Validate actual normalized candidate against saved canonical exit | Discharge exactly target; retain enclosing | Goto innermost exit |
+
+Canonical false exit comes from the checked condition state, outside finite uses,
+and outer obligations. A candidate never supplies or replaces it. Break first
+checks invariants whose evidence could disappear: exact frame membership/position,
+outer context, carried handle mapping and original active LoanId/owner/kind, and
+balanced operation holds. This is bounded integrity checking, not raw header
+state equality. Then the actual candidate installs captured outside uses before
+expiry, scopes target-iteration locals, pops exactly the target frame/context,
+expires with outer obligations and finite uses, proves fresh provenance absent,
+and safely normalizes its allocator. Semantic comparison does not repair carried
+availability or provenance. All steps are transactional; failure restores the
+actual entering snapshot, including faults and canonical-exit target context.
+
+Finite backward summaries cut skipped same-iteration suffixes before preceding
+operations. Recurrent sets remain separate and active until break itself; post-loop
+finite uses independently protect loans. Nested exits preserve outer frames and
+continuous LoanIds, including when the removed inner frame is empty. A recurrent-only
+loan may end when no outer or outside retention reason remains. No resurrection,
+pre-existing Move relaxation, generalized fixed point, or second checker is added.
+
+MIR maintains header/exit pairs and optional live tails. Break finishes its block
+with existing Goto to the innermost exit; continue still targets the header. No
+all-terminal suffix join is emitted; nested target restoration is deterministic.
+The validator is unchanged. Constant and all-breaking bodies retain false edges.
+Private tests inspect normalized candidates before loop consumption and inject
+pre-reduction and post-cleanup faults. The specialized verifier and its 1,800-case
+affine cross-check remain unchanged; ordinary code is not executed or proven.

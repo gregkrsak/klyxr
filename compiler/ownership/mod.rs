@@ -27,7 +27,7 @@ fn future_uses(statements: &[ValueStatement]) -> FutureUses {
 fn count_statements(statements: &[ValueStatement], uses: &mut FutureUses) {
     for statement in statements {
         match statement {
-            ValueStatement::Continue { .. } => {}
+            ValueStatement::Continue { .. } | ValueStatement::Break { .. } => {}
             ValueStatement::While {
                 condition, body, ..
             } => {
@@ -102,7 +102,7 @@ fn with_branch_uses(continuation: &FutureUses, branch: &FutureUses) -> FutureUse
     future
 }
 
-// Finite, syntax-directed summaries. A continue replaces the same-iteration
+// Finite, syntax-directed summaries. Break/continue replace the same-iteration
 // suffix with the target loop's outside continuation. Recurrence is NOT encoded
 // here: the independently scoped LoanId obligations remain authoritative.
 fn block_future(
@@ -122,7 +122,7 @@ fn statement_future(
     continuing: &FutureUses,
 ) -> FutureUses {
     match statement {
-        ValueStatement::Continue { .. } => continuing.clone(),
+        ValueStatement::Continue { .. } | ValueStatement::Break { .. } => continuing.clone(),
         ValueStatement::If {
             condition,
             then_body,
@@ -148,6 +148,8 @@ fn statement_future(
 enum Flow {
     Fallthrough,
     Continue,
+    Break,
+    NoFallthrough,
 }
 
 // Discover syntactic reference-place uses on all checked paths, including nested
@@ -189,7 +191,7 @@ fn reference_uses(body: &[ValueStatement]) -> BTreeSet<Place> {
     fn statements(body: &[ValueStatement], uses: &mut BTreeSet<Place>) {
         for statement in body {
             match statement {
-                ValueStatement::Continue { .. } => {}
+                ValueStatement::Continue { .. } | ValueStatement::Break { .. } => {}
                 ValueStatement::While {
                     condition, body, ..
                 } => {
@@ -271,7 +273,7 @@ pub fn check(program: &Program) -> Result<(), Vec<Diagnostic>> {
 }
 // Each nested loop owns a distinct header boundary. Branch snapshots inherit it;
 // locals introduced in an outer iteration are pre-existing at an inner header.
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct LoopScope {
     header_places: BTreeSet<Place>,
     header_handles: BTreeSet<Place>,
@@ -293,6 +295,7 @@ impl LoopScope {
 #[derive(Clone)]
 struct LoopTarget<'a> {
     header: Rc<Checker<'a>>,
+    exit: Rc<Checker<'a>>,
     outside: FutureUses,
 }
 #[derive(Clone)]
@@ -384,11 +387,11 @@ impl<'a> Checker<'a> {
             self.remaining = before_uses;
             self.expire();
             match self.statement(statement, function, &after_uses) {
-                Ok(Flow::Continue) => return Ok(Flow::Continue),
                 Ok(Flow::Fallthrough) => {
                     self.remaining = after_uses;
                     self.expire();
                 }
+                Ok(flow) => return Ok(flow),
                 Err(error) => {
                     *self = call_before;
                     return Err(error);
@@ -407,6 +410,7 @@ impl<'a> Checker<'a> {
     ) -> OwnershipResult<Flow> {
         match statement {
             ValueStatement::Continue { span } => return self.continue_edge(*span),
+            ValueStatement::Break { span } => return self.break_edge(*span),
             ValueStatement::While {
                 condition,
                 body,
@@ -557,26 +561,114 @@ impl<'a> Checker<'a> {
             .as_mut()
             .expect("current loop")
             .condition = false;
-        // The real false edge is independent of body fallthrough. It remains
-        // available when every checked body path takes a continue backedge.
-        let mut false_exit = iteration.clone();
+        // Capture the normalized canonical false exit BEFORE inspecting any
+        // candidate. A break can validate against it but can never define it.
+        let false_exit = Rc::new(iteration.false_exit(&outside, self.loop_scope.clone()));
         iteration.targets.push(LoopTarget {
             header: header.clone(),
+            exit: false_exit.clone(),
             outside: outside.clone(),
         });
         if iteration.statements_with(body, function, &outside)? == Flow::Fallthrough {
             iteration.validate_loop_backedge(&header, span)?;
         }
-        // Continue validated independently with every obligation still active.
-        false_exit
-            .recurrent
-            .pop()
-            .expect("current loop obligation frame");
-        false_exit.loop_scope = self.loop_scope.clone();
-        false_exit.remaining = outside;
-        false_exit.expire();
-        *self = false_exit;
+        // Every terminal edge was independently checked. No arbitrary exit join:
+        // the independently checked false state is the one canonical successor.
+        *self = (*false_exit).clone();
         Ok(())
+    }
+    fn false_exit(&self, outside: &FutureUses, enclosing_scope: Option<LoopScope>) -> Self {
+        let mut exit = self.clone();
+        // Install finite outside uses before any post-discharge expiry.
+        exit.remaining = outside.clone();
+        exit.recurrent.pop().expect("current loop obligation frame");
+        exit.loop_scope = enclosing_scope;
+        exit.expire();
+        exit
+    }
+    fn break_edge(&mut self, span: Span) -> OwnershipResult<Flow> {
+        let before = self.clone();
+        let target = self
+            .targets
+            .last()
+            .expect("resolved break inside while")
+            .clone();
+        let result = (|| {
+            self.break_integrity(&target, span)?;
+            self.project_break_exit(&target, span)?;
+            if !self.same_loop_state(&target.exit) {
+                return Err(self.diagnostic(span, "break exit does not match canonical loop-exit ownership and loan state".into(), "break may clean target-iteration locals and end only its own recurrence; carried availability and surviving provenance cannot be repaired or replaced", None));
+            }
+            Ok(Flow::Break)
+        })();
+        if result.is_err() {
+            *self = before;
+        }
+        result
+    }
+    fn break_integrity(&self, target: &LoopTarget<'a>, span: Span) -> OwnershipResult {
+        let header = &target.header;
+        // Frame evidence would disappear at pop; validate its exact position and
+        // membership (including an empty target frame) and every enclosing frame.
+        if self.recurrent != header.recurrent || self.recurrent.is_empty() {
+            return Err(self.diagnostic(span, "break exit recurrent-obligation integrity check failed".into(), "the exact target frame and every enclosing obligation must remain unchanged until break normalization", None));
+        }
+        let enclosing_targets_match = self.targets.len() == header.targets.len() + 1
+            && self.targets.iter().zip(&header.targets).all(|(a, b)| {
+                Rc::ptr_eq(&a.header, &b.header)
+                    && Rc::ptr_eq(&a.exit, &b.exit)
+                    && a.outside == b.outside
+            });
+        if !enclosing_targets_match
+            || self.loop_scope != Some(LoopScope::new(header, false))
+            || target.outside != target.exit.remaining
+        {
+            return Err(self.diagnostic(span, "break exit target-scope integrity check failed".into(), "break must retain its saved innermost target and canonical outside continuation without changing enclosing loop context", None));
+        }
+        if self.loans.values().any(|loan| loan.held != 0) {
+            return Err(self.diagnostic(span, "break exit has unbalanced operation holds".into(), "call and write holds must complete before loop exit; normalization never clears holds to manufacture equality", None));
+        }
+        // Carried provenance must be continuously valid BEFORE recurrence-only
+        // loans can expire. This is not whole-state header equality: fresh locals,
+        // their availability, handles and loans may still exist before cleanup.
+        for (place, id) in &header.handles {
+            if self.handles.get(place) != Some(id) {
+                return Err(self.diagnostic(span, "break exit changed carried reference provenance".into(), "a carried handle cannot be removed, refreshed or replaced, even if exit expiry would hide the change", None));
+            }
+        }
+        for (id, original) in &header.loans {
+            if !self
+                .loans
+                .get(id)
+                .is_some_and(|loan| loan.owner == original.owner && loan.kind == original.kind)
+            {
+                return Err(self.diagnostic(span, "break exit carried-loan integrity check failed".into(), "original carried loan identity, owner, kind and active status must remain continuously valid before target-frame discharge", None));
+            }
+        }
+        if self
+            .loans
+            .keys()
+            .any(|id| id.0 < header.next_loan && !header.loans.contains_key(id))
+        {
+            return Err(self.diagnostic(
+                span,
+                "break exit contains resurrected carried provenance".into(),
+                "expired loans may not be recreated and then erased by exit normalization",
+                None,
+            ));
+        }
+        Ok(())
+    }
+    fn project_break_exit(&mut self, target: &LoopTarget<'a>, span: Span) -> OwnershipResult {
+        // Restricted, non-repairing projection of THIS candidate, never a copy of
+        // the canonical exit. The integrity gate must precede these reductions.
+        self.remaining = target.outside.clone();
+        self.scope_loop_locals(&target.header);
+        self.recurrent.pop().expect("validated exact target frame");
+        self.targets.pop().expect("validated innermost target");
+        self.loop_scope = target.header.loop_scope.clone();
+        self.expire();
+        self.normalize_loop_allocator(&target.header, span, "break exit")
     }
     fn continue_edge(&mut self, span: Span) -> OwnershipResult<Flow> {
         let before = self.clone();
@@ -607,12 +699,20 @@ impl<'a> Checker<'a> {
     fn finish_loop_provenance(&mut self, header: &Self, span: Span) -> OwnershipResult {
         self.scope_loop_locals(header);
         self.expire();
+        self.normalize_loop_allocator(header, span, "while backedge")
+    }
+    fn normalize_loop_allocator(
+        &mut self,
+        header: &Self,
+        span: Span,
+        edge: &str,
+    ) -> OwnershipResult {
         // Never roll the allocator back until every new loan and every surviving
         // handle referring to newly allocated provenance is proven absent.
         if self.loans.keys().any(|id| !header.loans.contains_key(id))
             || self.handles.values().any(|id| id.0 >= header.next_loan)
         {
-            return Err(self.diagnostic(span, "iteration-created reference state survives while backedge".into(), "all newly created handles and loans must be fully discharged before the current loop backedge; allocator reuse cannot hide surviving provenance", None));
+            return Err(self.diagnostic(span, format!("iteration-created reference state survives {edge}"), "all newly created provenance must be discharged before allocator normalization; allocator reuse cannot hide surviving handles or loans", None));
         }
         if self.next_loan < header.next_loan {
             return Err(self.diagnostic(span, "while loop does not preserve loan allocation state".into(), "loan allocation must remain monotonic during an iteration; normalization is permitted only after proving newly allocated provenance absent", None));
@@ -644,7 +744,9 @@ impl<'a> Checker<'a> {
         let yes_flow = yes.statements_with(then_body, function, after)?;
         let no_flow = no.statements_with(else_body, function, after)?;
         match (yes_flow, no_flow) {
-            (Flow::Continue, Flow::Continue) => return Ok(Flow::Continue),
+            (a, b) if a != Flow::Fallthrough && b != Flow::Fallthrough => {
+                return Ok(if a == b { a } else { Flow::NoFallthrough });
+            }
             (Flow::Fallthrough, Flow::Fallthrough) => self.join(yes, no, after.clone()),
             _ => {
                 let mut survivor = if yes_flow == Flow::Fallthrough {
@@ -961,7 +1063,7 @@ impl<'a> Checker<'a> {
                             .is_some_and(|id| scope.header_loans.contains(id))
                 })
             {
-                return Err(self.diagnostic(span, format!("cannot move loop-carried mutable reference `{}`", self.metadata(place).0), "a carried mutable handle must remain available with unchanged provenance across every backedge; by-value arguments remain moves, not implicit reborrows", None));
+                return Err(self.diagnostic(span, format!("cannot move loop-carried mutable reference `{}`", self.metadata(place).0), "a carried mutable handle must preserve pre-existing availability and unchanged provenance on loop backedges and canonical exits; by-value arguments remain moves, not implicit reborrows", None));
             }
         }
         if self
@@ -970,7 +1072,7 @@ impl<'a> Checker<'a> {
             .is_some_and(|scope| scope.header_places.contains(&place))
             && matches!(self.metadata(place).1, ValueType::Record(_))
         {
-            return Err(self.diagnostic(span, format!("cannot move pre-existing non-Copy value `{}` in while loop", self.metadata(place).0), "the transfer would change pre-existing ownership state across a backedge and requires future generalized cyclic ownership analysis; only iteration-local Move values may transfer in the loop body", None));
+            return Err(self.diagnostic(span, format!("cannot move pre-existing non-Copy value `{}` in while loop", self.metadata(place).0), "the conservative pre-existing-state boundary applies to loop backedges and canonical exits alike; terminal break paths do not relax it; only iteration-local Move values may transfer in the loop body; future generalized cyclic ownership analysis remains unresolved", None));
         }
         self.available(place, span)?;
         if self.handles.contains_key(&place) {
@@ -2047,6 +2149,7 @@ mod tests {
         for (actual, before) in actual.targets.iter().zip(&before.targets) {
             assert_eq!(actual.outside, before.outside);
             assert!(Rc::ptr_eq(&actual.header, &before.header));
+            assert!(Rc::ptr_eq(&actual.exit, &before.exit));
         }
         let loans = |c: &Checker<'_>| {
             c.loans
@@ -2443,8 +2546,10 @@ mod tests {
         outside: FutureUses,
     ) -> Checker<'a> {
         let header = pin_body(c, body);
+        let exit = Rc::new(header.false_exit(&outside, header.loop_scope.clone()));
         c.targets.push(LoopTarget {
             header: Rc::new(header.clone()),
+            exit,
             outside,
         });
         header
@@ -2723,5 +2828,523 @@ mod tests {
         assert!(c.same_loop_state(&outer));
         assert_eq!(c.next_loan, outer.next_loan);
         assert!(c.handles.is_empty());
+    }
+
+    // Inspect the actual normalized edge before while_loop consumes it. Public
+    // acceptance alone could otherwise conceal an unvalidated break candidate.
+    #[test]
+    fn break_recurrent_only_candidate_reduces_to_independent_false_exit() {
+        for handle in ["let view = &owned;", "let view = &mut owned;"] {
+            let p = typed(&format!("fn f(flag: bool) -> bool {{ let mut owned = false; {handle} while flag {{ let seen = *view; break; }} return owned; }}"));
+            let f = p.functions()[0].as_ordinary().unwrap();
+            let mut c = Checker::new(&p, f);
+            c.statements(&f.body[..2], f.id).unwrap();
+            let ValueStatement::While { body, span, .. } = &f.body[2] else {
+                panic!()
+            };
+            let header = install_continue_target(&mut c, body, FutureUses::new());
+            let target = c.targets.last().unwrap().clone();
+            let canonical = (*target.exit).clone();
+            let id = *c.loans.keys().next().unwrap();
+            c.remaining.clear();
+            c.expire();
+            assert!(c.recurrent[0].contains(&id));
+            assert!(c.loans.contains_key(&id));
+            assert_eq!(c.break_edge(*span).unwrap(), Flow::Break);
+            assert!(c.same_loop_state(&canonical));
+            assert!(!c.same_loop_state(&header)); // Legitimate exit reduction, not a backedge.
+            assert!(c.recurrent.is_empty());
+            assert!(c.targets.is_empty());
+            assert!(c.loop_scope.is_none());
+            assert!(c.loans.is_empty());
+            assert_eq!(c.handles, header.handles); // Dead spelling does not recreate a loan.
+            assert_eq!(c.next_loan, header.next_loan);
+            assert_atomic(&target.exit, &canonical); // Candidate never defines/replaces it.
+        }
+    }
+    #[test]
+    fn break_installs_outside_before_expiry_and_preserves_original_provenance() {
+        for mutable in [false, true] {
+            for recurrent in [false, true] {
+                let binding = if mutable {
+                    "let view = &mut owned;"
+                } else {
+                    "let view = &owned;"
+                };
+                let use_in_body = if recurrent { "let seen = *view;" } else { "" };
+                let use_after = if mutable {
+                    "*view = true;"
+                } else {
+                    "let later = *view;"
+                };
+                let p = typed(&format!("fn f(flag: bool) -> bool {{ let mut owned = false; {binding} while flag {{ {use_in_body} break; }} {use_after} return owned; }}"));
+                let f = p.functions()[0].as_ordinary().unwrap();
+                let mut c = Checker::new(&p, f);
+                c.statements(&f.body[..2], f.id).unwrap();
+                let ValueStatement::While { body, span, .. } = &f.body[2] else {
+                    panic!()
+                };
+                let outside = future_uses(&f.body[3..]);
+                let header = install_continue_target(&mut c, body, outside.clone());
+                let target = c.targets.last().unwrap().clone();
+                let id = *header.loans.keys().next().unwrap();
+                // Simulate exhausted edge bookkeeping without expiring evidence.
+                c.remaining.clear();
+                assert_eq!(c.break_edge(*span).unwrap(), Flow::Break);
+                assert_eq!(c.remaining, outside);
+                assert!(c.same_loop_state(&target.exit));
+                assert_eq!(c.handles, header.handles);
+                assert_eq!(c.next_loan, header.next_loan);
+                assert_eq!(c.loans[&id].owner, header.loans[&id].owner);
+                assert_eq!(c.loans[&id].kind, header.loans[&id].kind);
+                assert_eq!(c.loans[&id].held, 0);
+                assert!(c.recurrent.is_empty());
+                c.statements(&f.body[3..], f.id).unwrap();
+                assert!(c.loans.is_empty());
+            }
+        }
+    }
+    #[test]
+    fn break_gate_rejects_frame_drift_before_legitimate_pop_hides_it() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { let seen = *view; break; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        install_continue_target(&mut c, body, FutureUses::new());
+        for frame in [BTreeSet::new(), BTreeSet::from([LoanId(999)])] {
+            let mut broken = c.clone();
+            *broken.recurrent.last_mut().unwrap() = frame;
+            let before = broken.clone();
+            let target = broken.targets.last().unwrap().clone();
+            let mut erased = broken.clone();
+            erased.project_break_exit(&target, *span).unwrap();
+            assert!(erased.same_loop_state(&target.exit)); // Cleanup would erase the defect.
+            assert!(broken
+                .break_edge(*span)
+                .unwrap_err()
+                .message
+                .contains("recurrent-obligation integrity"));
+            assert_atomic(&broken, &before); // Restore injected state, not the header.
+        }
+    }
+    #[test]
+    fn break_gate_rejects_carried_corruption_before_recurrent_only_expiry() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { let seen = *view; break; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut c, body, FutureUses::new());
+        let id = *header.loans.keys().next().unwrap();
+        for fault in 0..3 {
+            let mut broken = c.clone();
+            match fault {
+                0 => broken.loans.get_mut(&id).unwrap().owner = None,
+                1 => broken.loans.get_mut(&id).unwrap().kind = BorrowKind::Mutable,
+                _ => {
+                    broken.loans.remove(&id);
+                }
+            }
+            let before = broken.clone();
+            let target = broken.targets.last().unwrap().clone();
+            let mut erased = broken.clone();
+            erased.project_break_exit(&target, *span).unwrap();
+            assert!(erased.same_loop_state(&target.exit)); // All evidence legitimately expires.
+            assert!(broken
+                .break_edge(*span)
+                .unwrap_err()
+                .message
+                .contains("carried-loan integrity"));
+            assert_atomic(&broken, &before);
+        }
+    }
+    #[test]
+    fn break_gate_never_clears_unbalanced_carried_or_fresh_holds() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { let seen = *view; break; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        install_continue_target(&mut c, body, FutureUses::new());
+        for fresh in [false, true] {
+            let mut broken = c.clone();
+            let id = if fresh {
+                broken.add_loan(None, BorrowKind::Shared, *span)
+            } else {
+                *broken.loans.keys().next().unwrap()
+            };
+            broken.loans.get_mut(&id).unwrap().held = 1;
+            let before = broken.clone();
+            assert!(broken
+                .break_edge(*span)
+                .unwrap_err()
+                .message
+                .contains("unbalanced operation holds"));
+            assert_atomic(&broken, &before);
+            assert_eq!(broken.loans[&id].held, 1);
+        }
+    }
+    #[test]
+    fn break_gate_rejects_fresh_or_missing_carried_handle_without_allocator_reset() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { let seen = *view; break; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut c, body, FutureUses::new());
+        let place = *header.handles.keys().next().unwrap();
+        for fault in 0..3 {
+            let mut broken = c.clone();
+            match fault {
+                0 => {
+                    broken.handles.remove(&place);
+                }
+                1 => {
+                    broken.handles.insert(place, LoanId(999));
+                }
+                _ => {
+                    let id = broken.add_loan(None, BorrowKind::Shared, *span);
+                    broken.handles.insert(place, id);
+                }
+            }
+            let before = broken.clone();
+            assert!(broken
+                .break_edge(*span)
+                .unwrap_err()
+                .message
+                .contains("carried reference provenance"));
+            assert_atomic(&broken, &before);
+        }
+    }
+    #[test]
+    fn break_rejects_availability_drift_after_cleanup_and_rolls_back_every_field() {
+        let p = typed("fn f(flag: bool, ticket: Ticket) -> bool { let owned = false; let view = &owned; while flag { let alias = view; let seen = *alias; break; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut c, body, FutureUses::new());
+        c.statements_with(&body[..2], f.id, &FutureUses::new())
+            .unwrap();
+        let ticket = Place::Parameter(f.parameters[1]);
+        c.states.insert(
+            ticket,
+            State::Moved {
+                span: *span,
+                transfer: Transfer::Return(f.id),
+            },
+        );
+        let before = c.clone();
+        let target = c.targets.last().unwrap().clone();
+        c.break_integrity(&target, *span).unwrap(); // No raw whole-state header comparison.
+        let mut projected = c.clone();
+        projected.project_break_exit(&target, *span).unwrap();
+        assert_eq!(projected.states[&ticket], before.states[&ticket]); // Never repair availability.
+        assert_eq!(projected.handles, header.handles);
+        assert!(projected.loans.is_empty());
+        assert!(projected.recurrent.is_empty());
+        assert!(projected.targets.is_empty());
+        assert!(!projected.same_loop_state(&target.exit));
+        assert!(c
+            .break_edge(*span)
+            .unwrap_err()
+            .message
+            .contains("canonical loop-exit"));
+        assert_atomic(&c, &before); // Alias and frame cleanup is transactional too.
+    }
+    #[test]
+    fn break_allocator_proof_precedes_reset_and_failure_is_atomic() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { let seen = *view; break; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut c, body, FutureUses::new());
+        let mut broken = c.clone();
+        broken.next_loan = 0;
+        let before = broken.clone();
+        assert!(broken
+            .break_edge(*span)
+            .unwrap_err()
+            .message
+            .contains("allocation state"));
+        assert_atomic(&broken, &before); // Failed after frame pop and expiry, yet exact rollback.
+        for handle in [false, true] {
+            let mut broken = header.clone();
+            let id = broken.add_loan(None, BorrowKind::Shared, *span);
+            if handle {
+                broken.loans.remove(&id);
+                broken
+                    .handles
+                    .insert(*header.handles.keys().next().unwrap(), id);
+            }
+            let before = broken.clone();
+            assert!(broken
+                .normalize_loop_allocator(&header, *span, "break exit")
+                .unwrap_err()
+                .message
+                .contains("survives break exit"));
+            assert_atomic(&broken, &before);
+        }
+        let mut sibling = c.clone();
+        assert_eq!(sibling.break_edge(*span).unwrap(), Flow::Break);
+        assert_eq!(c.next_loan, header.next_loan);
+        assert_eq!(c.targets.len(), 1);
+    }
+    #[test]
+    fn break_cleans_real_fresh_local_provenance_before_allocator_reuse() {
+        let p = typed("fn f(flag: bool) -> bool { let mut owned = false; while flag { let access = &mut owned; let second = access; *second = true; break; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[1] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut c, body, FutureUses::new());
+        let target = c.targets.last().unwrap().clone();
+        c.statements_with(&body[..3], f.id, &FutureUses::new())
+            .unwrap();
+        assert!(c.next_loan > header.next_loan);
+        assert!(!c.handles.is_empty());
+        assert_eq!(c.break_edge(*span).unwrap(), Flow::Break);
+        assert!(c.same_loop_state(&target.exit));
+        assert!(c.handles.is_empty());
+        assert!(c.loans.is_empty());
+        assert_eq!(c.next_loan, header.next_loan);
+        assert!(c.states.is_empty()); // Branch-local Move handles were scoped, not repaired.
+    }
+    #[test]
+    fn inner_break_pops_exactly_one_frame_even_when_empty_and_preserves_outer_context() {
+        for inner_use in ["", "let inside = *view;"] {
+            let p = typed(&format!("fn f(flag: bool) -> bool {{ let owned = false; let view = &owned; while flag {{ while flag {{ {inner_use} break; }} let seen = *view; continue; }} return owned; }}"));
+            let f = p.functions()[0].as_ordinary().unwrap();
+            let mut c = Checker::new(&p, f);
+            c.statements(&f.body[..2], f.id).unwrap();
+            let ValueStatement::While { body, span, .. } = &f.body[2] else {
+                panic!()
+            };
+            let outer = install_continue_target(&mut c, body, FutureUses::new());
+            let outer_target = c.targets.last().unwrap().clone();
+            let ValueStatement::While {
+                body: inner_body,
+                span: inner_span,
+                ..
+            } = &body[0]
+            else {
+                panic!()
+            };
+            let inner = install_continue_target(&mut c, inner_body, future_uses(&body[1..]));
+            let inner_target = c.targets.last().unwrap().clone();
+            let id = *c.loans.keys().next().unwrap();
+            c.remaining.clear();
+            c.expire();
+            assert_eq!(c.recurrent.len(), 2);
+            assert_eq!(c.recurrent[0], BTreeSet::from([id]));
+            assert_eq!(c.break_edge(*inner_span).unwrap(), Flow::Break);
+            assert!(c.same_loop_state(&inner_target.exit));
+            assert_eq!(c.recurrent, outer.recurrent);
+            assert_eq!(c.loans[&id].owner, inner.loans[&id].owner);
+            assert_eq!(c.loans[&id].kind, inner.loans[&id].kind);
+            assert_eq!(c.targets.len(), 1);
+            assert!(Rc::ptr_eq(&c.targets[0].header, &outer_target.header));
+            assert!(Rc::ptr_eq(&c.targets[0].exit, &outer_target.exit));
+            assert_eq!(c.loop_scope, Some(LoopScope::new(&outer, false)));
+            assert_eq!(c.continue_edge(*span).unwrap(), Flow::Continue);
+            assert!(c.same_loop_state(&outer));
+        }
+    }
+    #[test]
+    fn inner_only_recurrence_can_end_without_popping_empty_outer_frame() {
+        let p = typed("fn f(flag: bool) -> bool { let mut owned = false; while flag { let view = &owned; while flag { let seen = *view; break; } owned = true; break; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[1] else {
+            panic!()
+        };
+        let outer = install_continue_target(&mut c, body, FutureUses::new());
+        c.statements_with(&body[..1], f.id, &future_uses(&body[1..]))
+            .unwrap();
+        let ValueStatement::While {
+            body: inner_body,
+            span: inner_span,
+            ..
+        } = &body[1]
+        else {
+            panic!()
+        };
+        install_continue_target(&mut c, inner_body, future_uses(&body[2..]));
+        let id = *c.loans.keys().next().unwrap();
+        assert!(c.recurrent[1].contains(&id));
+        assert_eq!(c.break_edge(*inner_span).unwrap(), Flow::Break);
+        assert_eq!(c.recurrent, vec![BTreeSet::new()]);
+        assert!(c.loans.is_empty());
+        assert_eq!(c.targets.len(), 1);
+        assert!(c.handles.values().any(|saved| *saved == id));
+        c.statements_with(&body[2..3], f.id, &FutureUses::new())
+            .unwrap();
+        assert_eq!(c.break_edge(*span).unwrap(), Flow::Break);
+        assert_eq!(c.next_loan, outer.next_loan);
+        assert!(c.handles.is_empty());
+        assert!(c.recurrent.is_empty());
+        assert!(c.targets.is_empty());
+    }
+    #[test]
+    fn nested_break_failure_preserves_injected_frames_scope_targets_and_sibling() {
+        let p = typed("fn f(flag: bool, ticket: Ticket) -> bool { let owned = false; let view = &owned; while flag { while flag { break; } let seen = *view; break; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        install_continue_target(&mut c, body, FutureUses::new());
+        let ValueStatement::While {
+            body: inner_body,
+            span: inner_span,
+            ..
+        } = &body[0]
+        else {
+            panic!()
+        };
+        install_continue_target(&mut c, inner_body, future_uses(&body[1..]));
+        for fault in 0..6 {
+            let mut broken = c.clone();
+            match fault {
+                0 => broken.recurrent.swap(0, 1),
+                1 => broken.recurrent[0].clear(),
+                2 => broken.loop_scope.as_mut().unwrap().condition = true,
+                3 => {
+                    broken.targets[0].outside.clear();
+                }
+                4 => {
+                    broken.states.insert(
+                        Place::Parameter(f.parameters[1]),
+                        State::Moved {
+                            span: *inner_span,
+                            transfer: Transfer::Return(f.id),
+                        },
+                    );
+                }
+                _ => broken.next_loan = 0,
+            }
+            // Ensure the last fault is observable even if the original outer map was empty.
+            if fault == 3 {
+                broken.targets[0]
+                    .outside
+                    .insert(Place::Parameter(f.parameters[0]), 99);
+            }
+            let before = broken.clone();
+            assert!(broken.break_edge(*inner_span).is_err());
+            assert_atomic(&broken, &before);
+            let mut sibling = c.clone();
+            assert_eq!(sibling.break_edge(*inner_span).unwrap(), Flow::Break);
+            assert_eq!(sibling.targets.len(), 1);
+            assert_eq!(sibling.break_edge(*span).unwrap(), Flow::Break);
+            assert!(sibling.targets.is_empty());
+            assert!(sibling.recurrent.is_empty());
+        }
+    }
+    #[test]
+    fn break_rejects_recreated_dead_carried_loan_before_exit_erases_it() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { break; } return owned; }");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[2] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut c, body, FutureUses::new());
+        assert!(header.loans.is_empty());
+        let id = *header.handles.values().next().unwrap();
+        c.loans.insert(
+            id,
+            Loan {
+                owner: None,
+                kind: BorrowKind::Shared,
+                span: *span,
+                held: 0,
+            },
+        );
+        let before = c.clone();
+        assert!(c
+            .break_edge(*span)
+            .unwrap_err()
+            .message
+            .contains("resurrected"));
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn all_terminal_mixed_edges_have_no_survivor_or_fabricated_suffix_join() {
+        for arms in [
+            "if flag { break; } else { continue; }",
+            "if flag { continue; } else { break; }",
+        ] {
+            let p = typed(&format!(
+                "fn f(flag: bool) -> bool {{ while flag {{ {arms} }} return true; }}"
+            ));
+            let f = p.functions()[0].as_ordinary().unwrap();
+            let mut c = Checker::new(&p, f);
+            let ValueStatement::While { body, .. } = &f.body[0] else {
+                panic!()
+            };
+            install_continue_target(&mut c, body, FutureUses::new());
+            assert_eq!(
+                c.statements_with(body, f.id, &FutureUses::new()).unwrap(),
+                Flow::NoFallthrough
+            );
+            // The enclosing state is not replaced by either terminal arm.
+            assert_eq!(c.recurrent.len(), 1);
+            assert_eq!(c.targets.len(), 1);
+        }
+    }
+    #[test]
+    fn break_canonical_ids_ignore_all_diagnostic_display_names() {
+        let rename = |p: &mut Program| {
+            for range in &mut p.ranges {
+                range.name = "display".into();
+            }
+            for record in &mut p.records {
+                record.name = "display".into();
+            }
+            for function in &mut p.functions {
+                match function {
+                    crate::hir::Function::Ordinary(f) => f.name = "display".into(),
+                    crate::hir::Function::Verified(f) => f.name = "display".into(),
+                }
+            }
+            for parameter in &mut p.parameters {
+                parameter.name = "display".into();
+            }
+            for local in &mut p.locals {
+                local.name = "display".into();
+            }
+        };
+        let mut p = typed("fn f(flag: bool) -> bool { let mut owned = false; while flag { let view = &owned; if flag { owned = true; break; } let seen = *view; } return owned; }");
+        check(&p).unwrap();
+        let before = crate::mir::lower(&p);
+        rename(&mut p);
+        check(&p).unwrap();
+        assert_eq!(before, crate::mir::lower(&p));
+        let mut p = typed("fn f(flag: bool) -> bool { let mut owned = false; let view = &owned; while flag { if flag { owned = true; break; } let seen = *view; } return owned; }");
+        let before = check(&p).unwrap_err();
+        rename(&mut p);
+        let after = check(&p).unwrap_err();
+        assert_eq!(before[0].span, after[0].span);
+        assert_eq!(before[0].required, after[0].required);
+        assert!(after[0].message.contains("display"));
     }
 }

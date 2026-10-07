@@ -278,6 +278,9 @@ pub struct ValueFunction {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueStatement {
+    Break {
+        span: Span,
+    },
     Continue {
         span: Span,
     },

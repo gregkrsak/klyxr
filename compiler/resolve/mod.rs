@@ -64,6 +64,9 @@ pub(crate) struct ResolvedValueFunction {
 }
 #[derive(Debug)]
 pub(crate) enum ResolvedValueStatement {
+    Break {
+        span: Span,
+    },
     Continue {
         span: Span,
     },
@@ -462,6 +465,16 @@ impl Resolver {
         let mut body = Vec::new();
         for (index, statement) in statements.iter().enumerate() {
             body.push(match statement {
+                ast::ValueStatement::Break { span } => {
+                    if loop_depth == 0 {
+                        return Err(error(
+                            *span,
+                            "break is permitted only inside an ordinary while loop",
+                            "break targets the innermost enclosing while",
+                        ));
+                    }
+                    ResolvedValueStatement::Break { span: *span }
+                }
                 ast::ValueStatement::Continue { span } => {
                     if loop_depth == 0 {
                         return Err(error(
@@ -572,10 +585,11 @@ impl Resolver {
             if index + 1 < statements.len() && !statement.falls_through() {
                 let span = match statement {
                     ast::ValueStatement::Continue { span }
+                    | ast::ValueStatement::Break { span }
                     | ast::ValueStatement::If { span, .. } => *span,
-                    _ => unreachable!("only continue/conditional can terminate here"),
+                    _ => unreachable!("only break/continue/conditional can terminate here"),
                 };
-                return Err(error(span, "statements after a continue path with no fallthrough are unsupported", "continue must terminate its lexical block; only real fallthrough paths can have a suffix"));
+                return Err(error(span, "statements after a terminal path with no fallthrough are unsupported", "break/continue must terminate its lexical block; only real fallthrough paths can have a suffix"));
             }
         }
         Ok(body)

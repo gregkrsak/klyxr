@@ -224,7 +224,18 @@ impl Parser<'_> {
         let mut body = Vec::new();
         while !self.at(&TokenKind::RBrace) {
             let span = self.peek().span;
-            if self.at(&TokenKind::Continue) {
+            if self.at(&TokenKind::Break) {
+                if loop_depth == 0 {
+                    return Err(
+                        self.error("break is permitted only inside an ordinary while loop".into())
+                    );
+                }
+                self.advance();
+                let end = self.expect(&TokenKind::Semicolon)?.span.end;
+                body.push(ValueStatement::Break {
+                    span: Span { end, ..span },
+                });
+            } else if self.at(&TokenKind::Continue) {
                 if loop_depth == 0 {
                     return Err(self
                         .error("continue is permitted only inside an ordinary while loop".into()));
@@ -333,6 +344,8 @@ impl Parser<'_> {
             {
                 let message = if matches!(body.last(), Some(ValueStatement::Continue { .. })) {
                     "statements after continue are unsupported in the current lexical block"
+                } else if matches!(body.last(), Some(ValueStatement::Break { .. })) {
+                    "statements after break are unsupported in the current lexical block"
                 } else {
                     "statements after a conditional with no fallthrough are unsupported in the current lexical block"
                 };

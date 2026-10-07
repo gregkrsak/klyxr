@@ -1,0 +1,13 @@
+// The only future reference use is skipped on the break path.
+fn update(flag: bool, stop: bool) -> bool {
+    let mut value = false;
+    while flag {
+        let view = &value;
+        if stop {
+            value = true;
+            break;
+        }
+        let observed = *view;
+    }
+    return value;
+}
