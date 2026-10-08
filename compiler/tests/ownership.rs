@@ -36,8 +36,8 @@ fn record_signatures_parameters_locals_calls_and_returns_have_canonical_types() 
     let ticket = program.records()[0].id;
     let identity = program.functions()[0].as_ordinary().unwrap();
     let forward = program.functions()[1].as_ordinary().unwrap();
-    assert_eq!(identity.return_type, ValueType::Record(ticket));
-    assert_eq!(forward.return_type, ValueType::Record(ticket));
+    assert_eq!(identity.return_type, Some(ValueType::Record(ticket)));
+    assert_eq!(forward.return_type, Some(ValueType::Record(ticket)));
     assert_eq!(
         program.parameter(forward.parameters[0]).ty,
         ParameterType::Value(ValueType::Record(ticket))

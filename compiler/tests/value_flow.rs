@@ -43,7 +43,7 @@ fn parser_preserves_ordinary_signatures_lets_returns_calls_and_spans() {
     assert_eq!(f.parameters.len(), 3);
     assert_eq!(f.parameters[0].ty.name, "Percent");
     assert_eq!(f.parameters[2].ty.name, "bool");
-    assert_eq!(f.return_type.name, "bool");
+    assert_eq!(f.return_type.as_ref().unwrap().name, "bool");
     let ast::ValueStatement::Let {
         name,
         initializer,
@@ -102,7 +102,7 @@ fn builtin_bool_zero_parameters_and_multiple_parameters_are_typed() {
     assert!(ordinary(&program, 0).parameters.is_empty());
     assert_eq!(ordinary(&program, 1).parameters.len(), 3);
     for f in program.functions() {
-        assert_eq!(f.as_ordinary().unwrap().return_type, ValueType::Bool);
+        assert_eq!(f.as_ordinary().unwrap().return_type, Some(ValueType::Bool));
         assert_eq!(returned(f.as_ordinary().unwrap()).ty, ExprType::Bool);
     }
     assert_eq!(
@@ -121,7 +121,7 @@ fn builtin_bool_zero_parameters_and_multiple_parameters_are_typed() {
 }
 
 #[test]
-fn ordinary_interfaces_accept_records_and_references_but_require_return_types() {
+fn ordinary_value_interfaces_accept_records_and_references_with_exact_results() {
     compile("record R { value: Percent } fn ignore(value: R) -> bool { return true; } fn identity(value: R) -> R { return value; }");
     assert!(
         type_error("record R { value: Percent } fn bad() -> R { return true; }")
@@ -134,12 +134,7 @@ fn ordinary_interfaces_accept_records_and_references_but_require_return_types() 
             .contains("unknown value type")
     );
     compile("fn inspect(value: &Percent) -> bool { return true; } fn exclusive(value: &mut Percent) -> bool { return true; }");
-    for text in [
-        "fn bad(value: Percent) { return value; }",
-        "fn bad() -> () { return true; }",
-    ] {
-        assert!(parse_source(text).is_err(), "{text}");
-    }
+    assert!(parse_source("fn bad() -> () { return true; }").is_err());
 }
 
 #[test]
@@ -178,7 +173,7 @@ fn mutable_copy_assignment_does_not_enable_annotations_or_expression_statements(
     }
     for body in [
         "let x: Percent = value; return x;",
-        "identity(value); return value;",
+        "true; return value;",
         "return if true { value } else { value };",
     ] {
         assert!(

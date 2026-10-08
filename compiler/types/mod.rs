@@ -35,8 +35,12 @@ pub fn check(resolved: ResolvedProgram) -> Result<Program, Vec<Diagnostic>> {
     // forward calls. No ordinary call can produce an escaping reference result.
     for function in &resolved.functions {
         if let ResolvedFunction::Ordinary(f) = function {
-            let ty = value_type(f.return_type, f.span).map_err(|e| vec![*e])?;
-            if matches!(ty, ValueType::SharedRef(_) | ValueType::MutableRef(_)) {
+            let ty = f
+                .return_type
+                .map(|ty| value_type(ty, f.span))
+                .transpose()
+                .map_err(|e| vec![*e])?;
+            if matches!(ty, Some(ValueType::SharedRef(_) | ValueType::MutableRef(_))) {
                 return Err(vec![Diagnostic::semantic(
                     f.span,
                     "reference return types are not supported",
@@ -114,10 +118,61 @@ fn verified_function(
 }
 // Targeted transfers terminate a lexical block but while always retains its
 // false exit. Resolver has already rejected block suffixes after terminal flow.
+fn ordinary_callee(
+    functions: &[ResolvedFunction],
+    function: hir::FunctionId,
+    span: crate::lexer::Span,
+) -> TypeResult<&crate::resolve::ResolvedValueFunction> {
+    let ResolvedFunction::Ordinary(callee) = &functions[function.0] else {
+        return Err(Diagnostic::semantic(
+            span,
+            "ordinary call requires an ordinary function",
+            "mixed-assurance calls are not supported",
+        )
+        .into());
+    };
+    Ok(callee)
+}
+fn call_arguments(
+    program: &Program,
+    functions: &[ResolvedFunction],
+    callee: &crate::resolve::ResolvedValueFunction,
+    arguments: &[ResolvedExpr],
+    span: crate::lexer::Span,
+) -> TypeResult<Vec<TypedExpr>> {
+    if arguments.len() != callee.parameters.len() {
+        return Err(Diagnostic::semantic(
+            span,
+            format!("wrong argument count for `{}`", callee.name),
+            format!(
+                "expected {} arguments, found {}",
+                callee.parameters.len(),
+                arguments.len()
+            ),
+        )
+        .into());
+    }
+    let mut typed = Vec::new();
+    for (argument, parameter) in arguments.iter().zip(&callee.parameters) {
+        let argument = expression(program, functions, argument)?;
+        let ParameterType::Value(expected) = program.parameter(*parameter).ty else {
+            return Err(Diagnostic::semantic(
+                span,
+                "invalid ordinary parameter type",
+                "ordinary signatures require bool, named ranges, or records",
+            )
+            .into());
+        };
+        exact_value(program, &argument, expected, "call argument")?;
+        typed.push(argument);
+    }
+    Ok(typed)
+}
 fn falls_through(body: &[ResolvedValueStatement]) -> bool {
     match body.last() {
         Some(
             ResolvedValueStatement::Return { .. }
+            | ResolvedValueStatement::ReturnNoValue { .. }
             | ResolvedValueStatement::Break { .. }
             | ResolvedValueStatement::Continue { .. },
         ) => false,
@@ -134,8 +189,8 @@ fn value_function(
     functions: &[ResolvedFunction],
     f: &crate::resolve::ResolvedValueFunction,
 ) -> TypeResult<hir::ValueFunction> {
-    let return_type = value_type(f.return_type, f.span)?;
-    if falls_through(&f.body) {
+    let return_type = f.return_type.map(|ty| value_type(ty, f.span)).transpose()?;
+    if return_type.is_some() && falls_through(&f.body) {
         return Err(Diagnostic::semantic(
             f.span,
             "function may reach its closing brace without returning; value-returning Klyxr functions require `return expression;`",
@@ -157,7 +212,7 @@ fn value_statements(
     program: &mut Program,
     functions: &[ResolvedFunction],
     statements: &[ResolvedValueStatement],
-    return_type: ValueType,
+    return_type: Option<ValueType>,
 ) -> TypeResult<Vec<hir::ValueStatement>> {
     let mut body = Vec::new();
     for statement in statements {
@@ -308,7 +363,32 @@ fn value_statements(
                     span: *span,
                 }
             }
+            ResolvedValueStatement::ReturnNoValue { span } => {
+                if return_type.is_some() {
+                    return Err(Diagnostic::semantic(*span, "bare return is permitted only in a no-value function", "value-returning functions require return expression; with the exact declared type").into());
+                }
+                hir::ValueStatement::ReturnNoValue { span: *span }
+            }
+            ResolvedValueStatement::CallNoValue {
+                function,
+                arguments,
+                span,
+            } => {
+                let callee = ordinary_callee(functions, *function, *span)?;
+                if callee.return_type.is_some() {
+                    return Err(Diagnostic::semantic(*span, format!("value-returning function `{}` cannot be called as a statement", callee.name), "values cannot be silently discarded; no-value ordinary calls alone are statements").into());
+                }
+                let arguments = call_arguments(program, functions, callee, arguments, *span)?;
+                hir::ValueStatement::CallNoValue {
+                    function: *function,
+                    arguments,
+                    span: *span,
+                }
+            }
             ResolvedValueStatement::Return { value, span } => {
+                let Some(return_type) = return_type else {
+                    return Err(Diagnostic::semantic(*span, "value return is not permitted in a no-value function", "an omitted result declaration means NoValue, not inference; use return; or normal function completion").into());
+                };
                 let value = expression(program, functions, value)?;
                 exact_value(program, &value, return_type, "return")?;
                 hir::ValueStatement::Return { value, span: *span }
@@ -619,41 +699,12 @@ fn expression(
             function,
             arguments,
         } => {
-            let ResolvedFunction::Ordinary(callee) = &functions[function.0] else {
-                return Err(Diagnostic::semantic(
-                    span,
-                    "ordinary call requires an ordinary value function",
-                    "mixed-assurance calls are not supported",
-                )
-                .into());
+            let callee = ordinary_callee(functions, *function, span)?;
+            let Some(return_type) = callee.return_type else {
+                return Err(Diagnostic::semantic(span, format!("no-value function `{}` cannot be used as an expression", callee.name), "NoValue calls produce no expression value; invoke them only as standalone call statements").into());
             };
-            if arguments.len() != callee.parameters.len() {
-                return Err(Diagnostic::semantic(
-                    span,
-                    format!("wrong argument count for `{}`", callee.name),
-                    format!(
-                        "expected {} arguments, found {}",
-                        callee.parameters.len(),
-                        arguments.len()
-                    ),
-                )
-                .into());
-            }
-            let mut typed = Vec::new();
-            for (argument, parameter) in arguments.iter().zip(&callee.parameters) {
-                let argument = expression(program, functions, argument)?;
-                let ParameterType::Value(expected) = program.parameter(*parameter).ty else {
-                    return Err(Diagnostic::semantic(
-                        span,
-                        "invalid ordinary parameter type",
-                        "ordinary signatures require bool, named ranges, or records",
-                    )
-                    .into());
-                };
-                exact_value(program, &argument, expected, "call argument")?;
-                typed.push(argument);
-            }
-            let ty = value_type(callee.return_type, callee.span)?.into();
+            let typed = call_arguments(program, functions, callee, arguments, span)?;
+            let ty = value_type(return_type, callee.span)?.into();
             (
                 ExprKind::Call {
                     function: *function,

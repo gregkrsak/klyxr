@@ -27,7 +27,9 @@ fn future_uses(statements: &[ValueStatement]) -> FutureUses {
 fn count_statements(statements: &[ValueStatement], uses: &mut FutureUses) {
     for statement in statements {
         match statement {
-            ValueStatement::Continue { .. } | ValueStatement::Break { .. } => {}
+            ValueStatement::Continue { .. }
+            | ValueStatement::Break { .. }
+            | ValueStatement::ReturnNoValue { .. } => {}
             ValueStatement::While {
                 condition, body, ..
             } => {
@@ -45,6 +47,11 @@ fn count_statements(statements: &[ValueStatement], uses: &mut FutureUses) {
                 count_expression(condition, uses);
                 count_statements(then_body, uses);
                 count_statements(else_body, uses);
+            }
+            ValueStatement::CallNoValue { arguments, .. } => {
+                for argument in arguments {
+                    count_expression(argument, uses);
+                }
             }
             ValueStatement::Let { initializer, .. } => count_expression(initializer, uses),
             ValueStatement::Return { value, .. } | ValueStatement::Assign { value, .. } => {
@@ -122,6 +129,7 @@ fn statement_future(
     continuing: &FutureUses,
 ) -> FutureUses {
     match statement {
+        ValueStatement::ReturnNoValue { .. } => FutureUses::new(),
         ValueStatement::Return { value, .. } => {
             let mut uses = FutureUses::new();
             count_expression(value, &mut uses);
@@ -197,7 +205,9 @@ fn reference_uses(body: &[ValueStatement]) -> BTreeSet<Place> {
     fn statements(body: &[ValueStatement], uses: &mut BTreeSet<Place>) {
         for statement in body {
             match statement {
-                ValueStatement::Continue { .. } | ValueStatement::Break { .. } => {}
+                ValueStatement::Continue { .. }
+                | ValueStatement::Break { .. }
+                | ValueStatement::ReturnNoValue { .. } => {}
                 ValueStatement::While {
                     condition, body, ..
                 } => {
@@ -213,6 +223,11 @@ fn reference_uses(body: &[ValueStatement]) -> BTreeSet<Place> {
                     expression(condition, uses);
                     statements(then_body, uses);
                     statements(else_body, uses);
+                }
+                ValueStatement::CallNoValue { arguments, .. } => {
+                    for argument in arguments {
+                        expression(argument, uses);
+                    }
                 }
                 ValueStatement::Let { initializer, .. } => expression(initializer, uses),
                 ValueStatement::Assign { value, .. } | ValueStatement::Return { value, .. } => {
@@ -354,10 +369,13 @@ impl<'a> Checker<'a> {
         checker
     }
     fn body(&mut self, function: &ValueFunction) -> OwnershipResult {
-        assert_eq!(
-            self.statements_with(&function.body, function.id, &FutureUses::new())?,
-            Flow::Return
-        );
+        let flow = self.statements_with(&function.body, function.id, &FutureUses::new())?;
+        if function.return_type.is_some() {
+            assert_eq!(flow, Flow::Return);
+        } else {
+            assert!(matches!(flow, Flow::Return | Flow::Fallthrough));
+            self.complete_no_value(function.span)?;
+        }
         Ok(())
     }
     #[cfg(test)]
@@ -406,7 +424,10 @@ impl<'a> Checker<'a> {
                     // Return owns a narrower transaction: its static operand-only
                     // continuation and pre-operation expiry must NOT be undone.
                     // Enclosing compound operations still retain their own atomicity.
-                    if !matches!(statement, ValueStatement::Return { .. }) {
+                    if !matches!(
+                        statement,
+                        ValueStatement::Return { .. } | ValueStatement::ReturnNoValue { .. }
+                    ) {
                         *self = call_before;
                     }
                     return Err(error);
@@ -424,6 +445,14 @@ impl<'a> Checker<'a> {
         after: &FutureUses,
     ) -> OwnershipResult<Flow> {
         match statement {
+            ValueStatement::ReturnNoValue { span } => return self.bare_return(*span),
+            ValueStatement::CallNoValue {
+                function,
+                arguments,
+                span,
+            } => {
+                self.call_statement(*function, arguments, *span)?;
+            }
             ValueStatement::Continue { span } => return self.continue_edge(*span),
             ValueStatement::Break { span } => return self.break_edge(*span),
             ValueStatement::While {
@@ -496,6 +525,73 @@ impl<'a> Checker<'a> {
     }
     fn loop_reference_error(&self, span: Span) -> Box<Diagnostic> {
         self.diagnostic(span, "reference activity is unsupported in while conditions".into(), "recurring condition reference activity requires future cyclic loan/lifetime analysis; reference access is permitted only in the body", None)
+    }
+    fn complete_no_value(&self, span: Span) -> OwnershipResult {
+        if self.loans.values().any(|loan| loan.held != 0) {
+            return Err(self.diagnostic(span, "no-value function completion requires balanced operation holds".into(), "receiving calls and borrowed writes must complete their holds; completion never clears holds or repairs ownership", None));
+        }
+        Ok(())
+    }
+    fn bare_return(&mut self, span: Span) -> OwnershipResult<Flow> {
+        self.remaining.clear();
+        self.expire();
+        let before = self.clone(); // Empty summary/expiry precede this snapshot.
+                                   // No operand, no terminal-expression permission, no local normalization.
+        match self.complete_no_value(span) {
+            Ok(()) => Ok(Flow::Return),
+            Err(error) => {
+                *self = before;
+                Err(error)
+            }
+        }
+    }
+    fn call_statement(
+        &mut self,
+        function: FunctionId,
+        arguments: &[TypedExpr],
+        span: Span,
+    ) -> OwnershipResult {
+        let before = self.clone(); // Caller prepared finite liveness and expiry.
+        self.terminal_return = false;
+        let result = (|| {
+            self.call_arguments(function, arguments)?;
+            // Unlike nested expression calls, the entire statement must balance.
+            self.complete_no_value(span)
+        })();
+        match result {
+            Ok(()) => {
+                self.terminal_return = before.terminal_return;
+                Ok(())
+            }
+            Err(error) => {
+                *self = before;
+                Err(error)
+            }
+        }
+    }
+    fn call_arguments(&mut self, function: FunctionId, arguments: &[TypedExpr]) -> OwnershipResult {
+        let callee = self
+            .program
+            .function(function)
+            .as_ordinary()
+            .expect("typed ordinary calls");
+        let mut held = Vec::new();
+        for (argument, parameter) in arguments.iter().zip(&callee.parameters) {
+            if let Some(loan) = self.expression(argument, Transfer::Argument(*parameter))? {
+                self.loans
+                    .get_mut(&loan)
+                    .expect("live reference provenance")
+                    .held += 1;
+                held.push(loan);
+            }
+            self.expire();
+        }
+        // Nested calls release only their own holds, never the receiving call's.
+        for id in held {
+            self.loans.get_mut(&id).expect("call-held loan").held -= 1;
+        }
+        self.expire();
+        Ok(())
     }
     fn return_edge(
         &mut self,
@@ -922,29 +1018,7 @@ impl<'a> Checker<'a> {
                 function,
                 arguments,
             } => {
-                let callee = self
-                    .program
-                    .function(*function)
-                    .as_ordinary()
-                    .expect("typed ordinary calls target ordinary functions");
-                let mut held = Vec::new();
-                for (argument, parameter) in arguments.iter().zip(&callee.parameters) {
-                    if let Some(loan) = self.expression(argument, Transfer::Argument(*parameter))? {
-                        // Hold BEFORE expiry, including a handle's final use or move.
-                        self.loans
-                            .get_mut(&loan)
-                            .expect("live reference provenance")
-                            .held += 1;
-                        held.push(loan);
-                    }
-                    self.expire();
-                }
-                // Each nested call releases only its own holds. An outer receiving
-                // call's earlier arguments remain held throughout nested arguments.
-                for id in held {
-                    self.loans.get_mut(&id).expect("call-held loan").held -= 1;
-                }
-                self.expire();
+                self.call_arguments(*function, arguments)?;
                 // Reference returns are forbidden: call results are fresh owned values.
                 Ok(None)
             }
@@ -3848,5 +3922,392 @@ mod tests {
                 .unwrap(),
             Flow::Return
         );
+    }
+
+    // K19-01 tests invoke the statement transaction directly. A surrounding
+    // expression/statement-list/conditional rollback cannot mask a partial commit.
+    const NO_VALUE_HELPERS: &str = "fn observe(view: &bool) {} fn consume(ticket: Ticket) {} fn receive(first: Ticket, held: &bool, last: Ticket) {} fn nested(first: Ticket, held: &bool, last: bool) {} fn touch(access: &mut bool) -> bool { return true; } fn read(view: &bool) -> bool { return *view; } fn shared_bool(view: &bool, last: bool) {} fn reset(access: &mut bool) {}";
+    fn no_value_typed(source: &str) -> Program {
+        typed(&format!("{NO_VALUE_HELPERS} {source}"))
+    }
+    fn statement_call(statement: &ValueStatement) -> (FunctionId, &[TypedExpr], Span) {
+        let ValueStatement::CallNoValue {
+            function,
+            arguments,
+            span,
+        } = statement
+        else {
+            panic!("no-value call")
+        };
+        (*function, arguments, *span)
+    }
+    fn prepare_call(c: &mut Checker<'_>, arguments: &[TypedExpr]) {
+        c.remaining.clear();
+        for argument in arguments {
+            count_expression(argument, &mut c.remaining);
+        }
+        c.expire();
+    }
+    #[test]
+    fn no_value_late_argument_failure_restores_direct_transaction_entry() {
+        let p =
+            no_value_typed("fn f(ticket: Ticket, flag: bool) { receive(ticket, &flag, ticket); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let (callee, args, span) = statement_call(&f.body[0]);
+        prepare_call(&mut c, args);
+        let entry = c.clone();
+        assert!(c
+            .call_statement(callee, args, span)
+            .unwrap_err()
+            .message
+            .contains("moved value"));
+        assert_atomic(&c, &entry);
+        assert_eq!(c.next_loan, 0);
+        assert!(c.loans.is_empty());
+        assert_eq!(
+            c.states[&Place::Parameter(f.parameters[0])],
+            State::Available
+        );
+    }
+    #[test]
+    fn no_value_nested_hold_failure_restores_prefix_move_and_all_borrow_state() {
+        let p=no_value_typed("fn f(ticket: Ticket) { let mut value = false; nested(ticket, &value, touch(&mut value)); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let (callee, args, span) = statement_call(&f.body[1]);
+        prepare_call(&mut c, args);
+        let entry = c.clone();
+        assert!(c
+            .call_statement(callee, args, span)
+            .unwrap_err()
+            .message
+            .contains("shared borrow is active"));
+        assert_atomic(&c, &entry);
+        assert_eq!(c.next_loan, 0);
+        assert!(!c.terminal_return);
+    }
+    #[test]
+    fn no_value_final_call_validation_rolls_back_successful_arguments_without_clearing_fault() {
+        let p = no_value_typed("fn f(ticket: Ticket) { consume(ticket); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let (callee, args, span) = statement_call(&f.body[0]);
+        prepare_call(&mut c, args);
+        let defect = c.add_loan(None, BorrowKind::Shared, span);
+        c.loans.get_mut(&defect).unwrap().held = 1;
+        let entry = c.clone();
+        let mut successful = c.clone();
+        successful.call_arguments(callee, args).unwrap();
+        assert!(matches!(
+            successful.states[&Place::Parameter(f.parameters[0])],
+            State::Moved { .. }
+        ));
+        assert!(c
+            .call_statement(callee, args, span)
+            .unwrap_err()
+            .message
+            .contains("balanced operation holds"));
+        assert_atomic(&c, &entry);
+        assert_eq!(c.loans[&defect].held, 1);
+    }
+    #[test]
+    fn no_value_call_error_preserves_nested_loop_context_recurrence_and_finite_continuation() {
+        let p=no_value_typed("fn f(flag: bool) { let mut owned = false; let view = &owned; while flag { while flag { shared_bool(view, touch(&mut owned)); return; } observe(view); } }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body: outer, .. } = &f.body[2] else {
+            panic!()
+        };
+        install_continue_target(&mut c, outer, FutureUses::new());
+        let ValueStatement::While { body: inner, .. } = &outer[0] else {
+            panic!()
+        };
+        install_continue_target(&mut c, inner, FutureUses::new());
+        let (callee, args, span) = statement_call(&inner[0]);
+        prepare_call(&mut c, args);
+        let entry = c.clone();
+        assert_eq!(entry.recurrent.len(), 2);
+        assert!(c.call_statement(callee, args, span).is_err());
+        assert_atomic(&c, &entry);
+    }
+    #[test]
+    fn no_value_call_never_inherits_value_return_move_permission() {
+        let p = no_value_typed(
+            "fn f(flag: bool, ticket: Ticket) { while flag { consume(ticket); return; } }",
+        );
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let ValueStatement::While { body, .. } = &f.body[0] else {
+            panic!()
+        };
+        install_continue_target(&mut c, body, FutureUses::new());
+        let (callee, args, span) = statement_call(&body[0]);
+        prepare_call(&mut c, args);
+        // Even privileged inherited context cannot give a statement the exemption.
+        c.terminal_return = true;
+        let entry = c.clone();
+        assert!(c
+            .call_statement(callee, args, span)
+            .unwrap_err()
+            .message
+            .contains("pre-existing non-Copy"));
+        assert_atomic(&c, &entry);
+    }
+    #[test]
+    fn no_value_successful_call_has_exact_move_destination_and_balanced_holds() {
+        let p = no_value_typed(
+            "fn f(ticket: Ticket, flag: bool, second: Ticket) { receive(ticket, &flag, second); }",
+        );
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let (callee, args, span) = statement_call(&f.body[0]);
+        prepare_call(&mut c, args);
+        c.call_statement(callee, args, span).unwrap();
+        let callee = p.function(callee).as_ordinary().unwrap();
+        assert!(
+            matches!(c.states[&Place::Parameter(f.parameters[0])],State::Moved{transfer:Transfer::Argument(id),..} if id==callee.parameters[0])
+        );
+        assert!(
+            matches!(c.states[&Place::Parameter(f.parameters[2])],State::Moved{transfer:Transfer::Argument(id),..} if id==callee.parameters[2])
+        );
+        assert!(c.remaining.values().all(|n| *n == 0));
+        assert!(c.loans.is_empty());
+        assert_eq!(c.next_loan, 1);
+        assert!(!c.terminal_return);
+    }
+    #[test]
+    fn no_value_nested_calls_release_only_their_own_holds() {
+        let p = no_value_typed(
+            "fn f(value: bool) { let view = &value; shared_bool(view, read(view)); }",
+        );
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let (callee, args, span) = statement_call(&f.body[1]);
+        prepare_call(&mut c, args);
+        let id = c.handles[&Place::Local(p.locals()[0].id)];
+        // Inspect the receiving call's prefix independently of the shared helper.
+        let loan = c
+            .expression(
+                &args[0],
+                Transfer::Argument(p.function(callee).as_ordinary().unwrap().parameters[0]),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(loan, id);
+        c.loans.get_mut(&id).unwrap().held += 1;
+        c.expire();
+        c.expression(
+            &args[1],
+            Transfer::Argument(p.function(callee).as_ordinary().unwrap().parameters[1]),
+        )
+        .unwrap();
+        assert_eq!(c.loans[&id].held, 1); // Nested read must not release the receiving hold.
+        c.loans.get_mut(&id).unwrap().held -= 1;
+        c.expire();
+        assert!(c.loans.is_empty());
+        let mut full = Checker::new(&p, f);
+        full.statements(&f.body[..1], f.id).unwrap();
+        prepare_call(&mut full, args);
+        full.call_statement(callee, args, span).unwrap();
+        assert!(full.loans.is_empty());
+    }
+    #[test]
+    fn no_value_arguments_are_in_finite_and_recurrent_traversal_including_nested_calls() {
+        let p=no_value_typed("fn f(flag: bool) { let value = false; let view = &value; while flag { while flag { shared_bool(view, read(view)); } } }");
+        let f = return_function(&p);
+        let view = Place::Local(p.locals()[1].id);
+        let ValueStatement::While { body, .. } = &f.body[2] else {
+            panic!()
+        };
+        assert_eq!(future_uses(body)[&view], 2);
+        assert!(reference_uses(body).contains(&view));
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let original = c.handles[&view];
+        install_continue_target(&mut c, body, FutureUses::new());
+        assert_eq!(c.recurrent[0], BTreeSet::from([original]));
+    }
+    #[test]
+    fn no_value_bare_return_summary_excludes_every_finite_continuation() {
+        let p = no_value_typed("fn f(flag: bool) { return; }");
+        let f = return_function(&p);
+        let outside = BTreeMap::from([(Place::Parameter(f.parameters[0]), 10)]);
+        assert!(statement_future(&f.body[0], &outside, &outside).is_empty());
+        assert!(block_future(&f.body, &outside, &outside).is_empty());
+    }
+    #[test]
+    fn no_value_bare_return_failed_hold_validation_keeps_prepared_not_old_summary_state() {
+        let p = no_value_typed(
+            "fn f(flag: bool) { let view = &flag; while flag { return; } observe(view); }",
+        );
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body, .. } = &f.body[1] else {
+            panic!()
+        };
+        let ValueStatement::ReturnNoValue { span } = body[0] else {
+            panic!()
+        };
+        let held = c.add_loan(None, BorrowKind::Mutable, span);
+        c.loans.get_mut(&held).unwrap().held = 1;
+        let old = c.clone();
+        let mut entry = c.clone();
+        entry.remaining.clear();
+        entry.expire();
+        assert!(entry.loans.len() < old.loans.len());
+        assert!(c
+            .bare_return(span)
+            .unwrap_err()
+            .message
+            .contains("balanced operation holds"));
+        assert_atomic(&c, &entry);
+        let mut wrapper = old;
+        let after = wrapper.remaining.clone();
+        assert!(wrapper.statements_with(body, f.id, &after).is_err());
+        assert_atomic(&wrapper, &entry);
+        assert!(!c.terminal_return);
+        assert_eq!(c.loans[&held].held, 1);
+    }
+    #[test]
+    fn no_value_bare_return_preserves_original_provenance_all_frames_and_allocator() {
+        let p=no_value_typed("fn f(flag: bool) { let value = false; let view = &value; while flag { while flag { return; } observe(view); } }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body: outer, .. } = &f.body[2] else {
+            panic!()
+        };
+        install_continue_target(&mut c, outer, FutureUses::new());
+        let ValueStatement::While { body: inner, .. } = &outer[0] else {
+            panic!()
+        };
+        install_continue_target(&mut c, inner, FutureUses::new());
+        assert!(!c.recurrent[0].is_empty());
+        assert!(c.recurrent[1].is_empty());
+        let ValueStatement::ReturnNoValue { span } = inner[0] else {
+            panic!()
+        };
+        let mut entry = c.clone();
+        entry.remaining.clear();
+        entry.expire();
+        assert_eq!(c.bare_return(span).unwrap(), Flow::Return);
+        assert_atomic(&c, &entry);
+        assert!(!c.terminal_return);
+    }
+    #[test]
+    fn no_value_normal_completion_rejects_unbalanced_holds_without_normalization() {
+        let p = no_value_typed("fn f(ticket: Ticket) {}");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let held = c.add_loan(None, BorrowKind::Shared, f.span);
+        c.loans.get_mut(&held).unwrap().held = 1;
+        let entry = c.clone();
+        assert!(c
+            .complete_no_value(f.span)
+            .unwrap_err()
+            .message
+            .contains("balanced operation holds"));
+        assert_atomic(&c, &entry);
+        // The function-body path must invoke the fallible completion check too.
+        let mut expected = c.clone();
+        expected.remaining.clear();
+        expected.expire();
+        assert!(c.body(f).is_err());
+        assert_atomic(&c, &expected);
+    }
+    #[test]
+    fn no_value_normal_completion_does_not_consume_unused_owner_or_normalize_state() {
+        let p = no_value_typed("fn f(ticket: Ticket) {}");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let entry = c.clone();
+        c.complete_no_value(f.span).unwrap();
+        assert_atomic(&c, &entry);
+        assert_eq!(
+            c.states[&Place::Parameter(f.parameters[0])],
+            State::Available
+        );
+        c.body(f).unwrap();
+        assert_eq!(
+            c.states[&Place::Parameter(f.parameters[0])],
+            State::Available
+        );
+    }
+    #[test]
+    fn no_value_terminated_move_does_not_enter_fallthrough_sibling() {
+        let p=no_value_typed("fn f(flag: bool, ticket: Ticket) { if flag { consume(ticket); return; } consume(ticket); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let after = future_uses(&f.body[1..]);
+        assert_eq!(
+            c.statements_with(&f.body[..1], f.id, &after).unwrap(),
+            Flow::Fallthrough
+        );
+        assert_eq!(
+            c.states[&Place::Parameter(f.parameters[1])],
+            State::Available
+        );
+        assert!(!c.terminal_return);
+        c.statements_with(&f.body[1..], f.id, &FutureUses::new())
+            .unwrap();
+        assert!(matches!(
+            c.states[&Place::Parameter(f.parameters[1])],
+            State::Moved { .. }
+        ));
+    }
+    #[test]
+    fn no_value_top_level_completion_keeps_conditional_move_and_local_suffix_still_checks_it() {
+        let p = no_value_typed("fn f(flag: bool, ticket: Ticket) { if flag { consume(ticket); } }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.body(f).unwrap();
+        assert!(matches!(
+            c.states[&Place::Parameter(f.parameters[1])],
+            State::ConditionalMove { .. }
+        ));
+        let entry = c.clone();
+        c.complete_no_value(f.span).unwrap();
+        assert_atomic(&c, &entry);
+    }
+    #[test]
+    fn no_value_call_and_bare_return_outcomes_ignore_all_display_names() {
+        fn rename(p: &mut Program) {
+            for range in &mut p.ranges {
+                range.name = "display".into();
+            }
+            for record in &mut p.records {
+                record.name = "display".into();
+            }
+            for parameter in &mut p.parameters {
+                parameter.name = "display".into();
+            }
+            for local in &mut p.locals {
+                local.name = "display".into();
+            }
+            for f in &mut p.functions {
+                if let crate::hir::Function::Ordinary(f) = f {
+                    f.name = "display".into();
+                }
+            }
+        }
+        let mut p=no_value_typed("fn f(flag: bool) { let value = false; let view = &value; while flag { observe(view); if flag { return; } } }");
+        check(&p).unwrap();
+        let original = crate::mir::lower(&p);
+        rename(&mut p);
+        check(&p).unwrap();
+        assert_eq!(original, crate::mir::lower(&p));
+        let mut p =
+            no_value_typed("fn f(ticket: Ticket, flag: bool) { receive(ticket, &flag, ticket); }");
+        let original = check(&p).unwrap_err();
+        rename(&mut p);
+        let renamed = check(&p).unwrap_err();
+        assert_eq!(original[0].span, renamed[0].span);
+        assert_eq!(original[0].required, renamed[0].required);
+        assert!(renamed[0].message.contains("display"));
     }
 }

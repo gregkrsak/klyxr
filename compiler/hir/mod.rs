@@ -272,12 +272,21 @@ pub struct ValueFunction {
     pub id: FunctionId,
     pub name: String,
     pub parameters: Vec<ParameterId>,
-    pub return_type: ValueType,
+    /// None is explicitly NoValue; Some(T) is Value(T), never result inference.
+    pub return_type: Option<ValueType>,
     pub body: Vec<ValueStatement>,
     pub span: Span,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueStatement {
+    ReturnNoValue {
+        span: Span,
+    },
+    CallNoValue {
+        function: FunctionId,
+        arguments: Vec<TypedExpr>,
+        span: Span,
+    },
     Break {
         span: Span,
     },

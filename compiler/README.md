@@ -84,14 +84,17 @@ Ordinary functions accept zero or more named immutable parameters, each typed as
 built-in source `bool` (semantic `Bool`), a declared named range, or an existing
 record by value, or an exact shared/exclusive reference to one of those types. The explicit
 `-> Type` return declaration permits only owned Bool/range/record types; reference returns are rejected. `bool` is a reserved
-built-in type token, so user range/record declarations cannot redefine it. Ordinary
-unit, generics, and inferred return types are rejected.
+built-in type token, so user range/record declarations cannot redefine it. Omitting `-> Type` explicitly declares NoValue under KD-034; it never infers a
+result. Unit/void expression types, `()` values, generics, and inferred return
+types remain unsupported.
 
 The body contains `let name = expression;` locals, immutable by default, and
 explicit **`return expression;`** statements. KD-033 permits return in ordinary
 branches and while bodies and requires no structural closing-brace fallthrough.
-Its semicolon is mandatory. Klyxr deliberately
-rejects implicit block tails, with or without a semicolon (KD-019). Missing returns
+For value-returning functions, its semicolon is mandatory. NoValue functions
+instead permit `return;` or validated top-level closing-brace completion. Nested
+branch/body closing braces remain local fallthrough. Klyxr deliberately
+rejects implicit block tails, with or without a semicolon (KD-019). Missing value returns
 are type errors; bare tails and statements after return receive explicit parser
 diagnostics. No general expression statements or local annotations are implemented. KED-006 introduced `let mut`/`let mutable` for owned
 locals eligible for exclusive borrowing; KED-011 adds Copy-safe direct local
@@ -106,7 +109,10 @@ named range, record, or reference type. `let five = 5;` is a type error: the int
 category has no settled value-materialization rule. `let result = amount - 5;`
 is valid because the existing subtraction rule computes a concrete range type.
 
-Ordinary calls are expressions, including nested calls and operator operands.
+Value-producing ordinary calls are expressions, including nested calls and operator operands.
+NoValue ordinary calls are standalone named call statements; they cannot occur
+in any expression position. Value-producing calls cannot be silently discarded
+as statements. Both call forms use exact argument typing and canonical FunctionIds.
 Complete signatures are collected before bodies, so forward and direct/indirect
 recursive calls resolve. No termination or recursion policy is introduced. Calls
 require exact arity and exact concrete argument types; their result has the declared
@@ -121,7 +127,7 @@ proof, or runtime checks. For example, `return current - used;` can type as Perc
 that every result meets Percent's bounds. The verifier ignores ordinary functions
 as proof targets. Plain `fn` does not yet implement the full `safe` assurance model,
 with only core moves and whole-value, straight-line/acyclic, non-escaping borrowing
-implemented under KD-004, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, and KD-033. Ordinary calls may target only ordinary functions; verified
+implemented under KD-004, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, KD-033, and KD-034. Ordinary calls may target only ordinary functions; verified
 contracts/body expressions cannot call functions, and top-level harness calls may
 target only verified functions. These rejections leave OQ-019 unresolved.
 
@@ -682,7 +688,7 @@ replacement are ownership errors. Non-reference dereference, shared writes, and
 RHS mismatches are Type errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, and KD-033 only for the documented subset.
+This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, KD-033, and KD-034 only for the documented subset.
 General type inference, advanced borrowing/ownership, effects, MIR backend/verification lowering, VIR,
 and broader HIR features remain future work.
 
@@ -753,7 +759,7 @@ multiple fields, record invariants, SMT/VIR or MIR backend/verification lowering
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, and KD-033,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, KD-033, and KD-034,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
@@ -1208,3 +1214,72 @@ reference returns, reborrowing, destruction, execution, or verification of ordin
 logic. The specialized verified battery path and its 1,800-case affine cross-check
 are unchanged. See `examples/early_return.klx`, `examples/early_return_move.klx`,
 and the intentional failure `examples/early_return_recurrent_fail.klx`.
+
+
+## No-value ordinary functions and call statements (KED-019 / KD-034)
+
+```klyxr
+fn reset(flag: &mut bool) {
+    *flag = false;
+}
+
+fn reset_if_needed(flag: &mut bool, skip: bool) {
+    if skip {
+        return;
+    }
+    reset(flag);
+}
+
+fn prepare(flag: &mut bool) -> bool {
+    reset_if_needed(flag, false);
+    return true;
+}
+```
+
+See `examples/no_value_functions.klx`, `examples/no_value_call_fail.klx`, and
+`examples/no_value_recurrent_fail.klx`. NoValue is function-result metadata,
+never an expression type. AST/resolution/HIR use `Option<ValueType>`:
+`None` explicitly means NoValue and `Some(T)` means Value(T). No inference,
+unit, void, dummy expression, implicit value return, or general expression
+statement is introduced. Signatures are collected before bodies, including
+forward and recursive calls. A NoValue call structurally falls through even
+when recursive; this makes no claim about runtime termination.
+
+Typing rejects wrong return forms and wrong call positions before ownership,
+including manually constructed public ASTs. Bare return is legal only in
+NoValue functions; value return only in Value(T) functions, with exact T.
+Only the actual top-level NoValue boundary permits normal completion. Different
+terminal ownership states do not join at a synthetic function exit. Surviving
+branch suffixes retain the all-path Move rule. Loop false exits, break/continue
+targets, recurrence, and KD-033 value-return semantics remain unchanged.
+
+K19-01 gives each statement call a complete prepared-entry ownership transaction:
+all ordered arguments, receiving/nested call holds, hold release, expiry, and
+fallible completion validation. Failure restores availability, reference mappings,
+loans/provenance/holds, finite uses, allocator, recurrence, loop context, and
+terminal-permission context. Nested expression calls release only their own holds.
+Statement-call arguments participate in both finite-use and recurrent-reference
+traversal, including nested calls and loops. Statement calls never inherit
+KD-033 terminal-expression Move permission, even immediately before `return;`.
+
+Bare return installs an empty finite continuation and performs ordinary expiry
+before taking its transaction snapshot. All current/enclosing recurrent obligations
+and operation holds remain authoritative. Fallible completion validation is inside
+that transaction; failure restores that prepared snapshot, not a broader skipped
+suffix. Bare return has no operand or terminal-expression Move permission.
+Successful bare return and normal NoValue completion require balanced holds and
+perform no ownership repair, frame discharge, allocator reset, or cleanup.
+
+Typed HIR has distinct `CallNoValue` and `ReturnNoValue` statement forms. MIR
+retains canonical function IDs, typed arguments and spans in `CallNoValue`, and
+uses an honest `ReturnNoValue` terminator for bare return or a live top-level
+tail. Already-terminal branches create no unreachable completion block; nested
+braces create no function completion. MIR validation recursively inspects every
+statement-call argument for unlowered conditional values. No-value completion
+creates no result local or synthetic value. Ownership remains above MIR in the
+existing checker, with no second checker or generalized CFG/fixed-point engine.
+
+Ordinary functions remain checked and lowered, not executed, code-generated or
+proven. Consuming an argument establishes static transfer, not destruction, Drop,
+RAII, runtime cleanup or resource-release ordering. The specialized verified
+function and top-level battery harness paths are unchanged.

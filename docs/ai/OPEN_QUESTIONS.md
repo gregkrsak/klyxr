@@ -135,7 +135,7 @@ Still open:
 
 - whether unqualified `fn` is the final surface spelling of the base `safe` assurance level;
 - explicit `safe fn` syntax, if any;
-- unit/no-value function return semantics;
+- first-class unit/void values and types (KD-034 settles NoValue function results);
 - conditional values in returns, call arguments, and general expression positions;
 - statement-containing value blocks and broader owned branch-result semantics;
 - non-Copy replacement, reference-local reassignment, and broader mutable-local semantics;
@@ -485,5 +485,20 @@ pre-existing owned non-reference Move gate inside the return operand, never prio
 operations, borrowing, reference transfer or replacement/destruction rules.
 Reference returns, escaping lifetimes, reborrowing, general cyclic ownership/NLL,
 function-exit state joins, unreachable/constant-path analysis, bottom/divergence,
-unit functions, SSA/phi, and full MIR dataflow remain unresolved. No runtime
+first-class unit/void values, SSA/phi, and full MIR dataflow remain unresolved.
+KD-034 subsequently settles NoValue ordinary function results and call statements. No runtime
 cleanup/destruction is implied by return or loan expiry.
+
+
+### KD-034 refinement of OQ-022/OQ-023/OQ-024/OQ-026
+
+KED-019 settles explicit NoValue ordinary results, standalone NoValue calls,
+bare return and validated function-boundary completion. Omitted arrows never
+infer results; Value(T) retains KD-033 structural completeness. NoValue is not
+a unit/void expression type. Branch/body fallthrough, loop false exits, local
+break/continue, recurrence and all-path Move availability remain unchanged.
+Consumed values and loan expiry imply no destruction or runtime cleanup (OQ-023).
+Reference returns, escaping lifetimes, reborrowing, generalized cyclic ownership,
+function-exit convergence, unit/void values, divergence/termination analysis,
+SSA/phi, full MIR dataflow and execution remain unresolved. Historical accepted
+sections describe their original boundaries; KD-034 does not reopen them.

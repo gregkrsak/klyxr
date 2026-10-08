@@ -281,6 +281,7 @@ fn mir_all_paths_initialize_one_canonical_destination_once() {
                     paths(f, *then_target, destination, initialized)
                         + paths(f, *else_target, destination, initialized)
                 }
+                Terminator::ReturnNoValue => panic!("value-function paths return values"),
                 Terminator::Return { value } => {
                     assert_eq!(initialized, 1);
                     assert_eq!(value.kind, ExprKind::Local(destination));

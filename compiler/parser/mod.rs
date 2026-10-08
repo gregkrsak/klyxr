@@ -203,8 +203,12 @@ impl Parser<'_> {
             }
         }
         self.expect(&TokenKind::RParen)?;
-        self.expect(&TokenKind::Arrow)?;
-        let return_type = self.parse_value_type()?;
+        let return_type = if self.at(&TokenKind::Arrow) {
+            self.advance();
+            Some(self.parse_value_type()?)
+        } else {
+            None
+        };
         self.expect(&TokenKind::LBrace)?;
         let (body, end) = self.parse_value_block(0)?;
         Ok(ValueFunction {
@@ -317,18 +321,37 @@ impl Parser<'_> {
                 });
             } else if self.at(&TokenKind::Return) {
                 self.advance();
-                let value = self.parse_expression(0)?;
+                let value = if self.at(&TokenKind::Semicolon) {
+                    None
+                } else {
+                    Some(self.parse_expression(0)?)
+                };
                 if !self.at(&TokenKind::Semicolon) {
                     return Err(self.error("value-returning Klyxr functions require `return expression;` with a semicolon".into()));
                 }
                 let end = self.advance().span.end;
-                body.push(ValueStatement::Return {
-                    value,
-                    span: Span { end, ..span },
+                let span = Span { end, ..span };
+                body.push(match value {
+                    Some(value) => ValueStatement::Return { value, span },
+                    None => ValueStatement::ReturnNoValue { span },
                 });
                 if !self.at(&TokenKind::RBrace) {
                     return Err(self.error("return must terminate its lexical statement block; statements after return are not supported".into()));
                 }
+            } else if matches!(self.peek_kind(), TokenKind::Ident(_))
+                && self.lookahead_is(1, &TokenKind::LParen)
+            {
+                // Exactly a named call, never an arbitrary expression statement.
+                let call = self.parse_primary()?;
+                let ExprKind::Call { callee, arguments } = call.kind else {
+                    unreachable!("named call prefix")
+                };
+                let end = self.expect(&TokenKind::Semicolon)?.span.end;
+                body.push(ValueStatement::CallNoValue {
+                    callee,
+                    arguments,
+                    span: Span { end, ..span },
+                });
             } else {
                 return Err(self.error("value-returning Klyxr functions require `return expression;`; bare expression statements are not supported".into()));
             }

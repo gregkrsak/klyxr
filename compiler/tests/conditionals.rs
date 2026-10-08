@@ -351,7 +351,8 @@ fn nested_and_sequential_mir_is_deterministic_acyclic_and_has_only_one_return() 
             match s {
                 mir::Statement::Let { .. }
                 | mir::Statement::DerefAssign { .. }
-                | mir::Statement::Assign { .. } => {}
+                | mir::Statement::Assign { .. }
+                | mir::Statement::CallNoValue { .. } => {}
             }
         }
     }
@@ -383,6 +384,7 @@ fn mutable_reference_branches_are_independent_and_owner_recovers_without_survivi
 }
 #[test]
 fn branch_writes_retain_exact_nominal_typing_and_no_mutation_expansion() {
+    error("fn predicate(flag: bool) -> bool { return flag; } fn bad(flag: bool) -> bool { if flag { predicate(flag); } return flag; }", "Type", "cannot be called as a statement");
     error(
         "fn bad(flag: bool) -> bool { if flag { flag = true; } return flag; }",
         "Type",
@@ -390,11 +392,7 @@ fn branch_writes_retain_exact_nominal_typing_and_no_mutation_expansion() {
     );
     error("type Other = range 0..100; fn bad(flag: bool, access: &mut Percent, value: Other) -> bool { if flag { *access = value; } return true; }", "Type", "distinct named ranges");
     error("fn bad(flag: bool, view: &Percent, value: Percent) -> bool { if flag { *view = value; } return true; }", "Type", "exclusive mutable reference");
-    for statements in [
-        "if flag let local = flag;",
-        "if flag { let value; }",
-        "if flag { predicate(flag); }",
-    ] {
+    for statements in ["if flag let local = flag;", "if flag { let value; }"] {
         error(&format!("fn predicate(flag: bool) -> bool {{ return flag; }} fn bad(flag: bool) -> bool {{ {statements} return flag; }}"), "Parse", "");
     }
 }

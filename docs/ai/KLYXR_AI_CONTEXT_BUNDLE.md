@@ -517,6 +517,28 @@ return or MIR-validator semantic changes. No function-exit ownership join, secon
 checker, generalized CFG/fixed points, SSA/phi, reference returns, reborrowing or
 runtime behavior is added. The verified proof path remains unchanged.
 
+
+### KED-019 / KD-034 — No-value ordinary functions and call statements
+
+Implemented from frozen Issue #39 baseline aaca52a63a40b252287935b3c7416e26f4ea50d9.
+Omitting `-> Type` explicitly declares NoValue, not inference or a unit/void
+expression type. NoValue functions permit `return;` or validated top-level
+completion. Value functions preserve KD-033 exact returns/structural completeness.
+Only named NoValue calls may be standalone call statements; value discard and
+NoValue expressions are rejected. AST/resolution/HIR retain canonical IDs and
+separate statement forms; signature metadata uses an optional result payload.
+
+Statement calls have whole-operation prepared-entry rollback, including all
+arguments, holds, release/expiry and final validation (K19-01). Both finite and
+recurrent-reference traversal include arguments. Bare return has empty finite
+continuation, pre-snapshot expiry, no terminal Move permission, balanced holds
+and exact prepared-state rollback. Recurrence and loop rules remain authoritative;
+completion performs no repair, cleanup or synthetic function-exit join.
+MIR has honest CallNoValue/ReturnNoValue forms and exhaustive argument validation.
+The single ownership checker remains above MIR. Verified functions/harness/proofs
+remain unchanged; no destruction, execution, unit/void, generalized dataflow or
+new lifetime semantics are implemented.
+
 <!-- END KLYXR_CONTEXT.md -->
 
 ---
@@ -1487,6 +1509,51 @@ OQ-022/OQ-024/OQ-025/OQ-026 retain broader control-flow and lifetime design.
 KD-033 refines the earlier single-final-return boundaries of KD-019, KD-023,
 and KD-027; their other typing, scope, loan, and loop rules remain unchanged.
 
+
+## KD-034 — No-Value Ordinary Functions and Call Statements
+
+**Status:** Accepted (frozen KED-019, Issue #39, including K19-01 and accepted implementation-pressure constraints).
+
+> An ordinary function with no declared `-> Type` is explicitly NoValue: it
+> produces no expression value and may complete either by reaching its function
+> closing brace or by executing `return;`. A call to a NoValue ordinary function
+> may appear only as a standalone call statement; value-producing calls may not
+> be silently discarded, and NoValue calls may not enter expression typing.
+> No-value call statements preserve the complete existing ordinary-call ownership
+> transaction, while bare return is a terminal function edge with an empty finite
+> continuation, no operand, no terminal-expression Move permission, no local
+> successor, and no destruction/cleanup semantics.
+
+Function results carry explicit NoValue or Value(T) metadata across AST,
+resolution, signature lookup, typing and HIR, separate from expression types.
+Omitted arrows do not infer result types. Exact argument and return typing remains
+in typing; manually constructed ASTs must receive the same diagnostics. Forward
+and recursive statement calls are structurally fallthrough-capable, without
+termination or divergence inference. Nested closing braces remain local fallthrough.
+
+K19-01 requires a whole prepared-entry statement-call transaction covering all
+arguments, receiving holds (including nested-call preservation), release, expiry,
+and fallible final validation. Failure exactly restores availability, mappings,
+loans/holds/provenance, finite uses, allocator, recurrence, loop and terminal
+context. Arguments participate in both finite-use counting and recurrent-reference
+discovery. Neither preceding/final calls nor bare return receive KD-033 terminal
+Move permission. `finite_before(return;) = ∅`; ordinary expiry precedes the bare
+return snapshot, and completion validation/rollback stays within that boundary.
+Current/enclosing recurrence remains authoritative. NoValue top-level fallthrough
+requires balanced holds, without repair, frame normalization, synthetic exit
+joining, cleanup or destruction. Existing loop false exits and local transfers,
+real suffix joins, and KD-033 value-return behavior remain unchanged.
+
+MIR uses distinct no-value call statements and honest no-value completion,
+without dummy expressions, hidden result locals, or expression-type additions.
+Lowering is function-kind-sensitive; already-terminal flow emits no unreachable
+completion, and call argument trees receive exhaustive existing validator checks.
+Ownership remains in the single structured checker above MIR. Unit/void types,
+general expression statements, reference returns, destruction, generalized CFG
+ownership/fixed points, interprocedural termination, and execution remain outside
+this decision. Earlier KD sections retain their historical boundaries; KD-034
+refines ordinary result/call/completion behavior without reopening other decisions.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -1776,8 +1843,9 @@ canonical tables, including locals, and exposes read-only slices/ID lookups.
 Storage is crate-private; internal construction/transformations must preserve
 identity and reference invariants. IDs have no cross-compilation stability.
 
-Ordinary functions have explicit value return types and structurally complete
-explicit `return expression;` paths under KD-033. Immutable locals propagate concrete initializer types;
+Ordinary functions have explicit NoValue or Value(T) result metadata under KD-034.
+Value functions require structurally complete explicit `return expression;` paths
+under KD-033; NoValue functions permit `return;` and validated top-level completion. Immutable locals propagate concrete initializer types;
 call arguments and returns require exact concrete types. Bare integer locals,
 arguments to range parameters, and returns do not gain implicit range types.
 KED-004 through KED-011 do not execute, prove, or dynamically enforce ordinary functions.
@@ -2199,6 +2267,34 @@ MIR validation is semantically unchanged, including cycle support and no claim
 that execution reaches a Return. No second checker, generalized CFG/fixed-point
 ownership engine, SSA/phi nodes, reborrowing, destruction or backend is added.
 
+
+## No-value result and completion boundary (KED-019 / KD-034)
+
+AST/resolution/signatures/HIR represent `NoValue | Value(T)` using an optional
+result payload (`None` means NoValue, never inference). Expression and value
+types have no unit/void case. Distinct bare-return and named-call statement
+nodes preserve source structure and spans. Typing uses canonical FunctionId
+signature metadata to reject wrong return forms and call positions, including
+public-AST construction, before ownership. The compile_source result remains
+canonical typed HIR; MIR inspection remains downstream through mir::lower.
+
+The existing ownership checker handles statement calls with a complete
+prepared-entry transaction including all arguments, holds, release, expiry and
+final balanced-hold validation. Both finite-use and recurrent-reference traversals
+inspect arguments. Nested calls release only their own holds. Bare return installs
+empty finite liveness, expires, snapshots, validates, and terminates; failure
+restores that prepared snapshot. It has no operand or KD-033 terminal permission.
+Recurrence, loan provenance, reference availability and holds remain unchanged.
+Top-level NoValue fallthrough validates balanced holds without synthetic exit
+state, repair or cleanup. KD-033 value-return transactions are preserved.
+
+MIR adds CallNoValue statements with canonical typed arguments and ReturnNoValue
+terminators. Live top-level tails complete only for NoValue functions; nested
+braces remain local fallthrough and all-terminal branches create no extra block.
+Validator traversal checks every call argument for unlowered conditional values.
+No result expression/local, second checker, CFG ownership solver, fixed point,
+execution, destruction or verified-path expansion is implemented.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -2342,7 +2438,7 @@ Still open:
 
 - whether unqualified `fn` is the final surface spelling of the base `safe` assurance level;
 - explicit `safe fn` syntax, if any;
-- unit/no-value function return semantics;
+- first-class unit/void values and types (KD-034 settles NoValue function results);
 - conditional values in returns, call arguments, and general expression positions;
 - statement-containing value blocks and broader owned branch-result semantics;
 - non-Copy replacement, reference-local reassignment, and broader mutable-local semantics;
@@ -2692,7 +2788,22 @@ pre-existing owned non-reference Move gate inside the return operand, never prio
 operations, borrowing, reference transfer or replacement/destruction rules.
 Reference returns, escaping lifetimes, reborrowing, general cyclic ownership/NLL,
 function-exit state joins, unreachable/constant-path analysis, bottom/divergence,
-unit functions, SSA/phi, and full MIR dataflow remain unresolved. No runtime
+first-class unit/void values, SSA/phi, and full MIR dataflow remain unresolved.
+KD-034 subsequently settles NoValue ordinary function results and call statements. No runtime
 cleanup/destruction is implied by return or loan expiry.
+
+
+### KD-034 refinement of OQ-022/OQ-023/OQ-024/OQ-026
+
+KED-019 settles explicit NoValue ordinary results, standalone NoValue calls,
+bare return and validated function-boundary completion. Omitted arrows never
+infer results; Value(T) retains KD-033 structural completeness. NoValue is not
+a unit/void expression type. Branch/body fallthrough, loop false exits, local
+break/continue, recurrence and all-path Move availability remain unchanged.
+Consumed values and loan expiry imply no destruction or runtime cleanup (OQ-023).
+Reference returns, escaping lifetimes, reborrowing, generalized cyclic ownership,
+function-exit convergence, unit/void values, divergence/termination analysis,
+SSA/phi, full MIR dataflow and execution remain unresolved. Historical accepted
+sections describe their original boundaries; KD-034 does not reopen them.
 
 <!-- END OPEN_QUESTIONS.md -->

@@ -88,8 +88,18 @@ fn run() -> Result<(), i32> {
             .iter()
             .filter(|f| f.as_ordinary().is_some())
             .count();
+        let no_value = program
+            .functions()
+            .iter()
+            .filter_map(|f| f.as_ordinary())
+            .filter(|f| f.return_type.is_none())
+            .count();
         let status = if report.functions_proven == 0 && ordinary > 0 {
-            "checked ordinary value functions; no verified function contracts"
+            if no_value == 0 {
+                "checked ordinary value functions; no verified function contracts"
+            } else {
+                "checked ordinary functions; no verified function contracts"
+            }
         } else if report.functions_proven == 0 {
             "checked declarations; no function contracts to verify"
         } else if command == "verify" {
@@ -100,7 +110,11 @@ fn run() -> Result<(), i32> {
         println!("{status}: {path}");
         if ordinary > 0 {
             println!("  ordinary MIR control-flow lowering passed: {} functions (not executed or verified)", mir.functions().len());
-            println!("  ordinary value functions type-checked: {ordinary} (not executed or verified; constrained results are not proven)");
+            let value_functions = ordinary - no_value;
+            if no_value > 0 {
+                println!("  ordinary no-value functions type-checked: {no_value} (not executed or verified)");
+            }
+            println!("  ordinary value functions type-checked: {value_functions} (not executed or verified; constrained results are not proven)");
             println!("  ordinary ownership: core Copy/move checking passed; whole-value loans checked; Copy-safe borrowed access checked; destruction is not implemented");
         }
         println!(

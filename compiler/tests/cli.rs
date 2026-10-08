@@ -387,3 +387,32 @@ fn stable_carried_reference_cli_parity_and_recurrent_conflict() {
         assert!(text.contains("ownership checking stopped"));
     }
 }
+
+#[test]
+fn no_value_functions_report_honest_completion_without_proof() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("no_value_functions.klx")]);
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.starts_with("checked ordinary functions; no verified function contracts:"));
+        assert!(
+            text.contains("ordinary no-value functions type-checked: 3 (not executed or verified)")
+        );
+        assert!(text.contains("ordinary value functions type-checked: 1"));
+        assert!(text.contains("ordinary MIR control-flow lowering passed: 4 functions"));
+        assert!(text.contains("function bodies proven: 0"));
+        assert!(text.contains("calls checked: 0"));
+        for (name, message) in [
+            ("no_value_call_fail.klx", "moved"),
+            ("no_value_recurrent_fail.klx", "borrow"),
+        ] {
+            let output = run(&[command, &example(name)]);
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            let text = String::from_utf8(output.stderr).unwrap();
+            assert!(text.contains(message), "{text}");
+            assert!(text.contains(name));
+        }
+    }
+}

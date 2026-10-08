@@ -61,7 +61,8 @@ impl FunctionDecl {
 pub struct ValueFunction {
     pub name: String,
     pub parameters: Vec<ValueParameter>,
-    pub return_type: ValueType,
+    /// None is explicitly NoValue; Some(T) is Value(T), never result inference.
+    pub return_type: Option<ValueType>,
     pub body: Vec<ValueStatement>,
     pub span: Span,
 }
@@ -84,6 +85,14 @@ pub enum BorrowKind {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueStatement {
+    ReturnNoValue {
+        span: Span,
+    },
+    CallNoValue {
+        callee: String,
+        arguments: Vec<Expr>,
+        span: Span,
+    },
     Break {
         span: Span,
     },
@@ -127,7 +136,10 @@ impl ValueStatement {
     // Narrow structural fallthrough only: a while always retains its false exit.
     pub(crate) fn falls_through(&self) -> bool {
         match self {
-            Self::Continue { .. } | Self::Break { .. } | Self::Return { .. } => false,
+            Self::Continue { .. }
+            | Self::Break { .. }
+            | Self::Return { .. }
+            | Self::ReturnNoValue { .. } => false,
             Self::If {
                 then_body,
                 else_body,
