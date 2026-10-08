@@ -146,6 +146,11 @@ reject!(rhs_conditional_move_remains_unavailable, "fn consume(a: Ticket) -> bool
 reject!(potential_joined_loan_blocks_assignment, "fn sink(a: &mut Percent) -> bool { return true; } fn f(flag: bool, a: Percent, b: Percent) -> Percent { let mut current = a; let access = &mut current; if flag { let done = sink(access); } current = b; return *access; }", "Ownership", "cannot assign");
 #[test]
 fn grammar_remains_statement_only_and_direct_local() {
+    bad(
+        "fn id(a: bool) -> bool { return a; } fn f() -> bool { id(true); return true; }",
+        "Type",
+        "cannot be called as a statement",
+    );
     for body in [
         "let mut x = true; x = false return x;",
         "let mut x = true; x = x = false; return x;",
@@ -159,7 +164,6 @@ fn grammar_remains_statement_only_and_direct_local() {
         "id(true) = false; return true;",
         "let mut x = true; *(&mut x) = false; return x;",
         "let mut x = true; x = if true { true } else { false }; return x;",
-        "id(true); return true;",
         "let mut x = true; x; return x;",
     ] {
         bad(

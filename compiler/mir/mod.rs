@@ -8,6 +8,11 @@ pub struct BasicBlockId(usize);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
+    CallNoValue {
+        function: FunctionId,
+        arguments: Vec<TypedExpr>,
+        span: Span,
+    },
     Assign {
         local: LocalId,
         value: TypedExpr,
@@ -26,6 +31,7 @@ pub enum Statement {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Terminator {
+    ReturnNoValue,
     Goto {
         target: BasicBlockId,
     },
@@ -96,7 +102,7 @@ impl MirFunction {
                     visit(f, *then_target, marks)?;
                     visit(f, *else_target, marks)?;
                 }
-                Terminator::Return { .. } => {}
+                Terminator::Return { .. } | Terminator::ReturnNoValue => {}
             }
             marks[id.0] = 2;
             Ok(())
@@ -114,18 +120,23 @@ impl MirFunction {
         }
         for block in &self.blocks {
             for statement in &block.statements {
-                let expression = match statement {
-                    Statement::Let { initializer, .. } => initializer,
-                    Statement::DerefAssign { value, .. } | Statement::Assign { value, .. } => value,
+                let hidden = match statement {
+                    Statement::CallNoValue { arguments, .. } => {
+                        arguments.iter().any(contains_conditional)
+                    }
+                    Statement::Let { initializer, .. } => contains_conditional(initializer),
+                    Statement::DerefAssign { value, .. } | Statement::Assign { value, .. } => {
+                        contains_conditional(value)
+                    }
                 };
-                if contains_conditional(expression) {
+                if hidden {
                     return Err("conditional value must lower to control flow");
                 }
             }
             let expression = match &block.terminator {
                 Terminator::Branch { condition, .. } => Some(condition),
                 Terminator::Return { value } => Some(value),
-                Terminator::Goto { .. } => None,
+                Terminator::Goto { .. } | Terminator::ReturnNoValue => None,
             };
             if expression.is_some_and(contains_conditional) {
                 return Err("conditional value must lower to control flow");
@@ -165,10 +176,13 @@ pub fn lower(program: &hir::Program) -> MirProgram {
                 loop_targets: Vec::new(),
             };
             let entry = builder.reserve();
-            assert!(
-                builder.body(entry, &f.body).is_none(),
-                "checked ordinary functions have no closing-brace fallthrough"
-            );
+            if let Some((tail, statements)) = builder.body(entry, &f.body) {
+                assert!(
+                    f.return_type.is_none(),
+                    "value functions have no closing-brace fallthrough"
+                );
+                builder.finish(tail, statements, Terminator::ReturnNoValue);
+            }
             let function = MirFunction {
                 function: f.id,
                 entry,
@@ -248,6 +262,21 @@ impl Builder {
         let mut statements = Vec::new();
         for statement in body {
             match statement {
+                ValueStatement::ReturnNoValue { .. } => {
+                    self.finish(current, statements, Terminator::ReturnNoValue);
+                    return None;
+                }
+                ValueStatement::CallNoValue {
+                    function,
+                    arguments,
+                    span,
+                } => {
+                    statements.push(Statement::CallNoValue {
+                        function: *function,
+                        arguments: arguments.clone(),
+                        span: *span,
+                    });
+                }
                 ValueStatement::Break { .. } => {
                     let target = self.loop_targets.last().expect("checked innermost loop").1;
                     self.finish(current, statements, Terminator::Goto { target });
@@ -396,7 +425,8 @@ fn falls_through(body: &[ValueStatement]) -> bool {
         Some(
             ValueStatement::Continue { .. }
             | ValueStatement::Break { .. }
-            | ValueStatement::Return { .. },
+            | ValueStatement::Return { .. }
+            | ValueStatement::ReturnNoValue { .. },
         ) => false,
         Some(ValueStatement::If {
             then_body,
@@ -654,5 +684,60 @@ mod tests {
             .unwrap();
         branch.ty = hir::ExprType::IntegerLiteral;
         assert_eq!(f.validate(), Err("non-Bool branch condition"));
+    }
+
+    #[test]
+    fn validator_inspects_each_no_value_argument_tree_for_hidden_conditional_values() {
+        let p=compile_source("fn consume(first: bool, second: bool) {} fn f(flag: bool) { let chosen = if flag { true } else { false }; consume(flag, chosen); }").unwrap();
+        let hir::ValueStatement::Let { initializer, .. } =
+            &p.functions()[1].as_ordinary().unwrap().body[0]
+        else {
+            panic!()
+        };
+        for position in 0..2 {
+            let mut m = lower(&p);
+            let f = &mut m.functions[1];
+            let statement = f
+                .blocks
+                .iter_mut()
+                .flat_map(|b| &mut b.statements)
+                .find(|s| matches!(s, Statement::CallNoValue { .. }))
+                .unwrap();
+            let Statement::CallNoValue { arguments, .. } = statement else {
+                panic!()
+            };
+            arguments[position] = TypedExpr {
+                kind: hir::ExprKind::Call {
+                    function: p.functions()[0].id(),
+                    arguments: vec![initializer.clone()],
+                },
+                ty: hir::ExprType::Bool,
+                span: initializer.span,
+            };
+            assert_eq!(
+                f.validate(),
+                Err("conditional value must lower to control flow")
+            );
+        }
+    }
+    #[test]
+    fn validator_no_value_completions_keep_target_reachability_and_bool_checks() {
+        let p = compile_source("fn f(flag: bool) { if flag { return; } }").unwrap();
+        let original = lower(&p);
+        original.functions[0].validate().unwrap();
+        let mut m = original.clone();
+        m.functions[0].blocks[0].terminator = Terminator::Goto {
+            target: BasicBlockId(999),
+        };
+        assert_eq!(m.functions[0].validate(), Err("invalid block target"));
+        let mut m = original.clone();
+        m.functions[0].blocks[0].terminator = Terminator::ReturnNoValue;
+        assert_eq!(m.functions[0].validate(), Err("unreachable block"));
+        let mut m = original;
+        let Terminator::Branch { condition, .. } = &mut m.functions[0].blocks[0].terminator else {
+            panic!()
+        };
+        condition.ty = hir::ExprType::IntegerLiteral;
+        assert_eq!(m.functions[0].validate(), Err("non-Bool branch condition"));
     }
 }

@@ -890,3 +890,48 @@ OQ-022/OQ-024/OQ-025/OQ-026 retain broader control-flow and lifetime design.
 
 KD-033 refines the earlier single-final-return boundaries of KD-019, KD-023,
 and KD-027; their other typing, scope, loan, and loop rules remain unchanged.
+
+
+## KD-034 — No-Value Ordinary Functions and Call Statements
+
+**Status:** Accepted (frozen KED-019, Issue #39, including K19-01 and accepted implementation-pressure constraints).
+
+> An ordinary function with no declared `-> Type` is explicitly NoValue: it
+> produces no expression value and may complete either by reaching its function
+> closing brace or by executing `return;`. A call to a NoValue ordinary function
+> may appear only as a standalone call statement; value-producing calls may not
+> be silently discarded, and NoValue calls may not enter expression typing.
+> No-value call statements preserve the complete existing ordinary-call ownership
+> transaction, while bare return is a terminal function edge with an empty finite
+> continuation, no operand, no terminal-expression Move permission, no local
+> successor, and no destruction/cleanup semantics.
+
+Function results carry explicit NoValue or Value(T) metadata across AST,
+resolution, signature lookup, typing and HIR, separate from expression types.
+Omitted arrows do not infer result types. Exact argument and return typing remains
+in typing; manually constructed ASTs must receive the same diagnostics. Forward
+and recursive statement calls are structurally fallthrough-capable, without
+termination or divergence inference. Nested closing braces remain local fallthrough.
+
+K19-01 requires a whole prepared-entry statement-call transaction covering all
+arguments, receiving holds (including nested-call preservation), release, expiry,
+and fallible final validation. Failure exactly restores availability, mappings,
+loans/holds/provenance, finite uses, allocator, recurrence, loop and terminal
+context. Arguments participate in both finite-use counting and recurrent-reference
+discovery. Neither preceding/final calls nor bare return receive KD-033 terminal
+Move permission. `finite_before(return;) = ∅`; ordinary expiry precedes the bare
+return snapshot, and completion validation/rollback stays within that boundary.
+Current/enclosing recurrence remains authoritative. NoValue top-level fallthrough
+requires balanced holds, without repair, frame normalization, synthetic exit
+joining, cleanup or destruction. Existing loop false exits and local transfers,
+real suffix joins, and KD-033 value-return behavior remain unchanged.
+
+MIR uses distinct no-value call statements and honest no-value completion,
+without dummy expressions, hidden result locals, or expression-type additions.
+Lowering is function-kind-sensitive; already-terminal flow emits no unreachable
+completion, and call argument trees receive exhaustive existing validator checks.
+Ownership remains in the single structured checker above MIR. Unit/void types,
+general expression statements, reference returns, destruction, generalized CFG
+ownership/fixed points, interprocedural termination, and execution remain outside
+this decision. Earlier KD sections retain their historical boundaries; KD-034
+refines ordinary result/call/completion behavior without reopening other decisions.

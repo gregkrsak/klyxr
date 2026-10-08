@@ -281,8 +281,9 @@ canonical tables, including locals, and exposes read-only slices/ID lookups.
 Storage is crate-private; internal construction/transformations must preserve
 identity and reference invariants. IDs have no cross-compilation stability.
 
-Ordinary functions have explicit value return types and structurally complete
-explicit `return expression;` paths under KD-033. Immutable locals propagate concrete initializer types;
+Ordinary functions have explicit NoValue or Value(T) result metadata under KD-034.
+Value functions require structurally complete explicit `return expression;` paths
+under KD-033; NoValue functions permit `return;` and validated top-level completion. Immutable locals propagate concrete initializer types;
 call arguments and returns require exact concrete types. Bare integer locals,
 arguments to range parameters, and returns do not gain implicit range types.
 KED-004 through KED-011 do not execute, prove, or dynamically enforce ordinary functions.
@@ -703,3 +704,31 @@ All-terminal conditionals have no join and no synthetic final Return. Existing
 MIR validation is semantically unchanged, including cycle support and no claim
 that execution reaches a Return. No second checker, generalized CFG/fixed-point
 ownership engine, SSA/phi nodes, reborrowing, destruction or backend is added.
+
+
+## No-value result and completion boundary (KED-019 / KD-034)
+
+AST/resolution/signatures/HIR represent `NoValue | Value(T)` using an optional
+result payload (`None` means NoValue, never inference). Expression and value
+types have no unit/void case. Distinct bare-return and named-call statement
+nodes preserve source structure and spans. Typing uses canonical FunctionId
+signature metadata to reject wrong return forms and call positions, including
+public-AST construction, before ownership. The compile_source result remains
+canonical typed HIR; MIR inspection remains downstream through mir::lower.
+
+The existing ownership checker handles statement calls with a complete
+prepared-entry transaction including all arguments, holds, release, expiry and
+final balanced-hold validation. Both finite-use and recurrent-reference traversals
+inspect arguments. Nested calls release only their own holds. Bare return installs
+empty finite liveness, expires, snapshots, validates, and terminates; failure
+restores that prepared snapshot. It has no operand or KD-033 terminal permission.
+Recurrence, loan provenance, reference availability and holds remain unchanged.
+Top-level NoValue fallthrough validates balanced holds without synthetic exit
+state, repair or cleanup. KD-033 value-return transactions are preserved.
+
+MIR adds CallNoValue statements with canonical typed arguments and ReturnNoValue
+terminators. Live top-level tails complete only for NoValue functions; nested
+braces remain local fallthrough and all-terminal branches create no extra block.
+Validator traversal checks every call argument for unlowered conditional values.
+No result expression/local, second checker, CFG ownership solver, fixed point,
+execution, destruction or verified-path expansion is implemented.

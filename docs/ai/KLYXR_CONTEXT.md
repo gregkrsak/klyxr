@@ -503,3 +503,25 @@ MIR lowers whole bodies with existing Return terminators; no synthetic join/fina
 return or MIR-validator semantic changes. No function-exit ownership join, second
 checker, generalized CFG/fixed points, SSA/phi, reference returns, reborrowing or
 runtime behavior is added. The verified proof path remains unchanged.
+
+
+### KED-019 / KD-034 — No-value ordinary functions and call statements
+
+Implemented from frozen Issue #39 baseline aaca52a63a40b252287935b3c7416e26f4ea50d9.
+Omitting `-> Type` explicitly declares NoValue, not inference or a unit/void
+expression type. NoValue functions permit `return;` or validated top-level
+completion. Value functions preserve KD-033 exact returns/structural completeness.
+Only named NoValue calls may be standalone call statements; value discard and
+NoValue expressions are rejected. AST/resolution/HIR retain canonical IDs and
+separate statement forms; signature metadata uses an optional result payload.
+
+Statement calls have whole-operation prepared-entry rollback, including all
+arguments, holds, release/expiry and final validation (K19-01). Both finite and
+recurrent-reference traversal include arguments. Bare return has empty finite
+continuation, pre-snapshot expiry, no terminal Move permission, balanced holds
+and exact prepared-state rollback. Recurrence and loop rules remain authoritative;
+completion performs no repair, cleanup or synthetic function-exit join.
+MIR has honest CallNoValue/ReturnNoValue forms and exhaustive argument validation.
+The single ownership checker remains above MIR. Verified functions/harness/proofs
+remain unchanged; no destruction, execution, unit/void, generalized dataflow or
+new lifetime semantics are implemented.

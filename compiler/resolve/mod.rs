@@ -58,12 +58,21 @@ pub(crate) struct ResolvedValueFunction {
     pub id: FunctionId,
     pub name: String,
     pub parameters: Vec<ParameterId>,
-    pub return_type: ResolvedValueType,
+    /// None is explicitly NoValue; Some(T) is Value(T), never result inference.
+    pub return_type: Option<ResolvedValueType>,
     pub body: Vec<ResolvedValueStatement>,
     pub span: Span,
 }
 #[derive(Debug)]
 pub(crate) enum ResolvedValueStatement {
+    ReturnNoValue {
+        span: Span,
+    },
+    CallNoValue {
+        function: FunctionId,
+        arguments: Vec<ResolvedExpr>,
+        span: Span,
+    },
     Break {
         span: Span,
     },
@@ -165,7 +174,7 @@ pub(crate) enum ResolvedExprKind {
 enum Signature {
     Ordinary {
         parameters: Vec<ParameterId>,
-        return_type: ResolvedValueType,
+        return_type: Option<ResolvedValueType>,
     },
     Verified {
         state_param: ParameterId,
@@ -414,7 +423,11 @@ impl Resolver {
                         p.span,
                     ));
                 }
-                let return_type = self.value_type(&f.return_type, f.span)?;
+                let return_type = f
+                    .return_type
+                    .as_ref()
+                    .map(|ty| self.value_type(ty, f.span))
+                    .transpose()?;
                 Ok(Signature::Ordinary {
                     parameters,
                     return_type,
@@ -575,6 +588,15 @@ impl Resolver {
                     value: self.expression(value, scope, false)?,
                     span: *span,
                 },
+                ast::ValueStatement::ReturnNoValue { span } => ResolvedValueStatement::ReturnNoValue { span: *span },
+                ast::ValueStatement::CallNoValue { callee, arguments, span } => {
+                    let function = self.functions.get(callee).copied().ok_or_else(|| error(*span, format!("unknown function `{callee}`"), "declare an ordinary function"))?;
+                    if !self.ordinary[function.0] {
+                        return Err(error(*span, "ordinary call statements require an ordinary no-value function", "verified functions retain their specialized call harness; mixed-assurance calls are unsupported"));
+                    }
+                    let arguments = arguments.iter().map(|a| self.expression(a, scope, false)).collect::<ResolutionResult<Vec<_>>>()?;
+                    ResolvedValueStatement::CallNoValue { function, arguments, span: *span }
+                },
                 ast::ValueStatement::Return { value, span } => ResolvedValueStatement::Return {
                     value: self.expression(value, scope, false)?,
                     span: *span,
@@ -587,6 +609,7 @@ impl Resolver {
                     ast::ValueStatement::Continue { span }
                     | ast::ValueStatement::Break { span }
                     | ast::ValueStatement::Return { span, .. }
+                    | ast::ValueStatement::ReturnNoValue { span }
                     | ast::ValueStatement::If { span, .. } => *span,
                     _ => unreachable!("only return/break/continue/conditional can terminate here"),
                 };
