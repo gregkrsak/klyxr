@@ -77,6 +77,8 @@ fn count_expression(expression: &TypedExpr, uses: &mut FutureUses) {
             count_expression(then_value, uses);
             count_expression(else_value, uses);
         }
+        ExprKind::RecordConstruct { value, .. } => count_expression(value, uses),
+        ExprKind::CopyFieldRead { owner, .. } => *uses.entry(*owner).or_default() += 1,
         ExprKind::Deref { reference } => *uses.entry(*reference).or_default() += 1,
         ExprKind::Parameter(id) => *uses.entry(Place::Parameter(*id)).or_default() += 1,
         ExprKind::Local(id) => *uses.entry(Place::Local(*id)).or_default() += 1,
@@ -177,6 +179,8 @@ fn reference_uses(body: &[ValueStatement]) -> BTreeSet<Place> {
             ExprKind::Local(id) => {
                 uses.insert(Place::Local(*id));
             }
+            ExprKind::RecordConstruct { value, .. } => expression(value, uses),
+            ExprKind::CopyFieldRead { .. } => {} // Named owned root, never a reference handle.
             ExprKind::Deref { reference } => {
                 uses.insert(*reference);
             }
@@ -975,10 +979,23 @@ impl<'a> Checker<'a> {
         expression: &TypedExpr,
         transfer: Transfer,
     ) -> OwnershipResult<Option<LoanId>> {
+        if self.loop_scope.as_ref().is_some_and(|s| s.condition)
+            && matches!(expression.kind, ExprKind::RecordConstruct { .. })
+        {
+            return Err(self.diagnostic(expression.span, "record construction is unsupported in recurring while conditions".into(), "construction produces a non-Copy record; use construction only outside the recurring condition", None));
+        }
         if self.loop_scope.is_some() {
             self.loop_type(expression.ty, expression.span)?;
         }
         match &expression.kind {
+            ExprKind::RecordConstruct { value, .. } => {
+                self.expression(value, transfer)?;
+                Ok(None) // Fresh record; no loan, harness binding or anonymous local.
+            }
+            ExprKind::CopyFieldRead { owner, .. } => {
+                self.copy_field_read(*owner, expression.span)?;
+                Ok(None)
+            }
             ExprKind::IfValue {
                 condition,
                 then_value,
@@ -1036,6 +1053,17 @@ impl<'a> Checker<'a> {
             | ExprKind::FieldAccess(_)
             | ExprKind::OldField(_) => Ok(None),
         }
+    }
+    fn copy_field_read(&mut self, owner: Place, span: Span) -> OwnershipResult {
+        self.available(owner, span)?;
+        // Unlike whole-record consume, immutable Copy access permits shared loans.
+        if let Some(loan) = self.conflict(owner, Some(BorrowKind::Shared)) {
+            return Err(self.diagnostic(span, format!("cannot read field of `{}` while it is exclusively borrowed", self.metadata(owner).0), "a Copy-field read requires an available owned root with no active exclusive whole-record loan", Some(loan.span)));
+        }
+        if let Some(remaining) = self.remaining.get_mut(&owner) {
+            *remaining -= 1;
+        }
+        Ok(())
     }
     fn borrowed_access(
         &mut self,
@@ -4309,5 +4337,382 @@ mod tests {
         assert_eq!(original[0].span, renamed[0].span);
         assert_eq!(original[0].required, renamed[0].required);
         assert!(renamed[0].message.contains("display"));
+    }
+
+    const RECORD_HELPERS: &str = "fn consume(t: Ticket) -> Percent { return t.value; } fn duplicate(a: Ticket,b: Ticket) -> Percent { return a.value; } fn prefix(a: Ticket,view: &bool,b: Ticket) -> Percent { return a.value; } fn receive(b: Other,t: Ticket) {} fn read(view: &Percent) -> Percent { return *view; } fn inspect_mut(access: &mut Ticket) -> Percent { return inspect_mut(access); }";
+    fn record_typed(body: &str) -> Program {
+        typed(&format!("{RECORD_HELPERS} {body}"))
+    }
+    fn prepared_expression(c: &mut Checker<'_>, value: &TypedExpr) {
+        c.remaining.clear();
+        count_expression(value, &mut c.remaining);
+        c.expire();
+    }
+    fn add_test_target(c: &mut Checker<'_>) {
+        let header = Rc::new(c.clone());
+        c.targets.push(LoopTarget {
+            header: header.clone(),
+            exit: header,
+            outside: c.remaining.clone(),
+        });
+    }
+
+    #[test]
+    fn construction_success_is_fresh_and_has_only_written_initializer_effects() {
+        let p = record_typed("fn f(p: Percent) -> Ticket { return Ticket { value: p }; }");
+        let f = return_function(&p);
+        let (value, _) = operand(&f.body[0]);
+        let ExprKind::RecordConstruct { record, field, .. } = value.kind else {
+            panic!()
+        };
+        assert_eq!(p.record(record).field, field);
+        assert_eq!(p.field(field).record, record);
+        let mut c = Checker::new(&p, f);
+        prepared_expression(&mut c, value);
+        let mut expected = c.clone();
+        expected
+            .remaining
+            .insert(Place::Parameter(f.parameters[0]), 0);
+        assert!(c
+            .expression(value, Transfer::Return(f.id))
+            .unwrap()
+            .is_none());
+        assert_atomic(&c, &expected);
+        assert!(p.bindings().is_empty());
+        assert!(p.locals().is_empty());
+    }
+    #[test]
+    fn construction_direct_expression_rolls_back_successful_move_loan_hold_prefix() {
+        let p = record_typed(
+            "fn f(t: Ticket,flag: bool) -> Other { return Other { value: prefix(t,&flag,t) }; }",
+        );
+        let f = return_function(&p);
+        let (value, _) = operand(&f.body[0]);
+        let mut c = Checker::new(&p, f);
+        prepared_expression(&mut c, value);
+        let before = c.clone();
+        let ExprKind::RecordConstruct { value: child, .. } = &value.kind else {
+            panic!()
+        };
+        let ExprKind::Call { arguments, .. } = &child.kind else {
+            panic!()
+        };
+        let mut prefix = c.clone();
+        prefix
+            .expression(&arguments[0], Transfer::Return(f.id))
+            .unwrap();
+        let loan = prefix
+            .expression(&arguments[1], Transfer::Return(f.id))
+            .unwrap()
+            .unwrap();
+        prefix.loans.get_mut(&loan).unwrap().held += 1;
+        assert_ne!(prefix.states, before.states);
+        assert_ne!(prefix.next_loan, before.next_loan);
+        assert!(prefix.loans[&loan].held > 0);
+        assert!(c
+            .expression(value, Transfer::Return(f.id))
+            .unwrap_err()
+            .message
+            .contains("moved value"));
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn construction_failure_does_not_publish_destination_owner() {
+        let p =
+            record_typed("fn f(t: Ticket) { let destination = Other { value: duplicate(t,t) }; }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let ValueStatement::Let {
+            local, initializer, ..
+        } = &f.body[0]
+        else {
+            panic!()
+        };
+        prepared_expression(&mut c, initializer);
+        let before = c.clone();
+        assert!(c.statement(&f.body[0], f.id, &FutureUses::new()).is_err());
+        assert_atomic(&c, &before);
+        assert!(!c.states.contains_key(&Place::Local(*local)));
+    }
+    #[test]
+    fn construction_rollback_preserves_nested_context_and_recurrent_provenance() {
+        let p=record_typed("fn f(t: Ticket,flag: bool) -> Other { let view = &flag; return Other { value: prefix(t,view,t) }; }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let loan = *c.loans.keys().next().unwrap();
+        c.recurrent.push(BTreeSet::from([loan]));
+        add_test_target(&mut c);
+        c.recurrent.push(BTreeSet::new());
+        add_test_target(&mut c);
+        c.loop_scope = Some(LoopScope::new(&c, false));
+        let (value, _) = operand(&f.body[1]);
+        prepared_expression(&mut c, value);
+        c.terminal_return = true;
+        let before = c.clone();
+        assert!(c.expression(value, Transfer::Return(f.id)).is_err());
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn construction_inside_kd033_preserves_prepared_return_entry_on_failure() {
+        let p =
+            record_typed("fn f(t: Ticket) -> Other { return Other { value: duplicate(t,t) }; }");
+        let f = return_function(&p);
+        let (value, span) = operand(&f.body[0]);
+        let mut c = Checker::new(&p, f);
+        c.loop_scope = Some(LoopScope::new(&c, false));
+        prepared_expression(&mut c, value);
+        let before = c.clone();
+        assert!(c
+            .return_edge(value, f.id, span)
+            .unwrap_err()
+            .message
+            .contains("moved value"));
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn construction_successful_call_prefix_rolls_back_at_later_argument() {
+        let p = record_typed("fn f(t: Ticket) { receive(Other { value: consume(t) },t); }");
+        let f = return_function(&p);
+        let (function, args, span) = statement_call(&f.body[0]);
+        let mut c = Checker::new(&p, f);
+        prepare_call(&mut c, args);
+        let before = c.clone();
+        let mut prefix = c.clone();
+        assert!(prefix
+            .expression(
+                &args[0],
+                Transfer::Argument(p.function(function).as_ordinary().unwrap().parameters[0])
+            )
+            .unwrap()
+            .is_none());
+        assert_ne!(prefix.states, before.states);
+        assert!(c
+            .call_statement(function, args, span)
+            .unwrap_err()
+            .message
+            .contains("moved value"));
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn construction_statement_call_final_validation_rolls_back_successful_initializer() {
+        let p=record_typed("fn f(t: Ticket,flag: bool,p: Percent) { receive(Other { value: consume(t) },Ticket { value: p }); }");
+        // Use the successful construction only: injected outstanding hold causes final validation.
+        let f = return_function(&p);
+        let (function, args, span) = statement_call(&f.body[0]);
+        let mut c = Checker::new(&p, f);
+        let loan = c.add_loan(
+            Some(Place::Parameter(f.parameters[1])),
+            BorrowKind::Shared,
+            f.span,
+        );
+        c.loans.get_mut(&loan).unwrap().held = 1;
+        prepare_call(&mut c, args);
+        let before = c.clone();
+        let mut success = c.clone();
+        success.call_arguments(function, args).unwrap();
+        assert_ne!(success.states, before.states);
+        assert!(c
+            .call_statement(function, args, span)
+            .unwrap_err()
+            .message
+            .contains("balanced operation holds"));
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn copy_field_read_preserves_available_root_transfer_history_and_all_other_state() {
+        let p = record_typed("fn f(t: Ticket) -> Ticket { let seen = t.value; return t; }");
+        let f = return_function(&p);
+        let ValueStatement::Let { initializer, .. } = &f.body[0] else {
+            panic!()
+        };
+        let mut c = Checker::new(&p, f);
+        prepared_expression(&mut c, initializer);
+        let mut expected = c.clone();
+        expected
+            .remaining
+            .insert(Place::Parameter(f.parameters[0]), 0);
+        let entries = c.states.len();
+        assert!(c
+            .expression(initializer, Transfer::Return(f.id))
+            .unwrap()
+            .is_none());
+        assert_atomic(&c, &expected);
+        assert_eq!(c.states.len(), entries);
+        assert!(c.handles.is_empty());
+        assert!(c.loans.is_empty());
+    }
+    #[test]
+    fn field_reads_reject_moved_and_conditional_roots_without_partial_entries() {
+        let p = record_typed("fn f(t: Ticket) -> Percent { return t.value; }");
+        let f = return_function(&p);
+        let (value, _) = operand(&f.body[0]);
+        let owner = Place::Parameter(f.parameters[0]);
+        for state in [
+            State::Moved {
+                span: f.span,
+                transfer: Transfer::Return(f.id),
+            },
+            State::ConditionalMove { span: f.span },
+        ] {
+            let mut c = Checker::new(&p, f);
+            c.states.insert(owner, state);
+            prepared_expression(&mut c, value);
+            let before = c.clone();
+            assert!(c.expression(value, Transfer::Return(f.id)).is_err());
+            assert_atomic(&c, &before);
+            assert_eq!(c.states.len(), 1);
+        }
+    }
+    #[test]
+    fn shared_whole_record_loan_survives_field_read_with_later_handle_use() {
+        let p=record_typed("fn inspect(view: &Ticket) -> Percent { return inspect(view); } fn f(t: Ticket) -> Percent { let view = &t; let seen = t.value; let checked = inspect(view); return seen; }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::Let { initializer, .. } = &f.body[1] else {
+            panic!()
+        };
+        let owner = Place::Parameter(f.parameters[0]);
+        let before = c.clone();
+        let mut expected = before.clone();
+        *expected.remaining.get_mut(&owner).unwrap() -= 1;
+        c.expression(initializer, Transfer::Return(f.id)).unwrap();
+        assert_atomic(&c, &expected);
+        assert_eq!(c.loans.len(), 1);
+    }
+    #[test]
+    fn exclusive_read_failure_preserves_finite_required_whole_record_loan() {
+        let p=record_typed("fn f(t: Ticket) -> Percent { let mut owned = t; let access = &mut owned; let seen = owned.value; return inspect_mut(access); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::Let { initializer, .. } = &f.body[2] else {
+            panic!()
+        };
+        let before = c.clone();
+        assert!(c
+            .expression(initializer, Transfer::Return(f.id))
+            .unwrap_err()
+            .message
+            .contains("exclusively borrowed"));
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn exclusive_recurrence_blocks_field_read_with_no_finite_uses_or_holds() {
+        for empty_inner in [false, true] {
+            let p=record_typed("fn f(t: Ticket) -> Percent { let mut owned = t; let access = &mut owned; let seen = owned.value; return inspect_mut(access); }");
+            let f = return_function(&p);
+            let mut c = Checker::new(&p, f);
+            c.statements(&f.body[..2], f.id).unwrap();
+            let loan = *c.loans.keys().next().unwrap();
+            c.recurrent.push(BTreeSet::from([loan]));
+            add_test_target(&mut c);
+            if empty_inner {
+                c.recurrent.push(BTreeSet::new());
+                add_test_target(&mut c);
+            }
+            c.loop_scope = Some(LoopScope::new(&c, false));
+            c.remaining.clear();
+            c.expire();
+            let ValueStatement::Let { initializer, .. } = &f.body[2] else {
+                panic!()
+            };
+            let ExprKind::CopyFieldRead { owner, .. } = initializer.kind else {
+                panic!()
+            };
+            let before = c.clone();
+            assert_eq!(c.loans[&loan].held, 0);
+            assert!(c
+                .copy_field_read(owner, initializer.span)
+                .unwrap_err()
+                .message
+                .contains("exclusively borrowed"));
+            assert_atomic(&c, &before);
+            assert_eq!(c.states.len(), before.states.len());
+        }
+    }
+    #[test]
+    fn field_read_never_expires_or_changes_unrelated_protected_loans() {
+        let p=record_typed("fn f(t: Ticket,flag: bool) -> Percent { let view = &flag; let seen = t.value; let used = read_flag(view); return seen; } fn read_flag(view: &bool) -> bool { return *view; }");
+        let f = p
+            .functions()
+            .iter()
+            .filter_map(|f| f.as_ordinary())
+            .find(|f| f.name == "f")
+            .unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let loan = *c.loans.keys().next().unwrap();
+        c.recurrent.push(BTreeSet::from([loan]));
+        let ValueStatement::Let { initializer, .. } = &f.body[1] else {
+            panic!()
+        };
+        let mut expected = c.clone();
+        *expected
+            .remaining
+            .get_mut(&Place::Parameter(f.parameters[0]))
+            .unwrap() -= 1;
+        c.expression(initializer, Transfer::Return(f.id)).unwrap();
+        assert_atomic(&c, &expected);
+    }
+    #[test]
+    fn construction_both_visitors_descend_through_nested_children() {
+        let p=record_typed("fn f(flag: bool,p: Percent) -> Ticket { let view = &p; while flag { let b = Ticket { value: read(view) }; } return Ticket { value: p }; }");
+        let f = return_function(&p);
+        let ValueStatement::While { body, .. } = &f.body[1] else {
+            panic!()
+        };
+        let ValueStatement::Let { initializer, .. } = &body[0] else {
+            panic!()
+        };
+        let ValueStatement::Let { local: view, .. } = f.body[0] else {
+            panic!()
+        };
+        let mut uses = FutureUses::new();
+        count_expression(initializer, &mut uses);
+        assert_eq!(uses[&Place::Local(view)], 1);
+        assert!(reference_uses(body).contains(&Place::Local(view)));
+        check(&p).unwrap();
+    }
+    #[test]
+    fn construction_recurrence_preserves_original_shared_provenance_at_backedge() {
+        let p=record_typed("fn f(flag: bool,p: Percent) -> Ticket { let view = &p; while flag { let b = Ticket { value: read(view) }; } return Ticket { value: p }; }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body, .. } = &f.body[1] else {
+            panic!()
+        };
+        let loan = *c.loans.keys().next().unwrap();
+        let header = pin_body(&mut c, body);
+        c.loop_scope = Some(LoopScope::new(&header, false));
+        c.statements(body, f.id).unwrap();
+        assert_eq!(c.recurrent.last().unwrap(), &BTreeSet::from([loan]));
+        assert!(c.loans.contains_key(&loan));
+    }
+    #[test]
+    fn record_identity_and_ownership_ignore_diagnostic_names() {
+        let mut p=record_typed("fn f(flag: bool,p: Percent) -> Ticket { let b = if flag { Ticket { value: p } } else { Ticket { value: p } }; let seen = b.value; return b; }");
+        check(&p).unwrap();
+        let m = crate::mir::lower(&p);
+        for r in &mut p.records {
+            r.name = "same".into();
+        }
+        for r in &mut p.ranges {
+            r.name = "same".into();
+        }
+        for f in &mut p.fields {
+            f.name = "same".into();
+        }
+        for v in &mut p.locals {
+            v.name = "same".into();
+        }
+        for v in &mut p.parameters {
+            v.name = "same".into();
+        }
+        p.validate_record_expressions().unwrap();
+        check(&p).unwrap();
+        assert_eq!(m, crate::mir::lower(&p));
     }
 }

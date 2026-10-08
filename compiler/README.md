@@ -172,9 +172,9 @@ State is per function and keyed by typed place IDs, never names. Expression chil
 are checked in source order for deterministic diagnostics; this is not a runtime
 evaluation-order specification. Unused owned parameters/locals are accepted.
 
-This is whole-record ownership with straight-line and acyclic branch joins only. Ordinary records enter through
-by-value parameters or ordinary call results. Record construction, field reads,
-field mutation, destructuring, partial moves, Copy customization, Clone, destruction,
+This is whole-record ownership with acyclic branch joins and the documented stable-loop boundary. Ordinary records enter through
+by-value parameters, ordinary call results, or KD-035 construction. Direct named-owner
+Copy-field reads preserve whole-record ownership. Field mutation, destructuring, partial moves, Copy customization, Clone, destruction,
 and runtime resource release remain unsupported. KED-006 adds mutable owned locals
 and references within the restricted borrowing model below.
 In particular, ordinary record equality and arithmetic remain type errors.
@@ -909,7 +909,7 @@ while running {
 
 Calls remain expressions, so Copy results use existing let/assignment statements;
 no general expression-statement syntax is added. The example helpers have ordinary
-owned signatures. Because ordinary record construction is still absent, the full
+owned signatures. KED-013 originally had no ordinary record construction; its historical
 frontend fixture `examples/while_iteration_move.klx` uses a recursive record-returning
 factory. This demonstrates typing/ownership/MIR structure, not executable value
 creation or termination.
@@ -1283,3 +1283,73 @@ Ordinary functions remain checked and lowered, not executed, code-generated or
 proven. Consuming an argument establishes static transfer, not destruction, Drop,
 RAII, runtime cleanup or resource-release ordering. The specialized verified
 function and top-level battery harness paths are unchanged.
+
+
+## Ordinary record construction and Copy-field reads (KED-020 / KD-035)
+
+```klyxr
+type Percent = range 0..100;
+record Battery { charge: Percent }
+
+fn make_battery(charge: Percent) -> Battery {
+    return Battery { charge: charge };
+}
+
+fn inspect_and_forward(battery: Battery) -> Battery {
+    let observed = battery.charge;
+    return battery;
+}
+```
+
+See `examples/ordinary_records.klx`, `examples/ordinary_record_move_fail.klx`
+and `examples/ordinary_record_condition_fail.klx`. Ordinary records still declare
+exactly one field of a named range. An initializer must have that exact nominal
+type; equal numeric bounds confer no conversion. `Battery { charge: 80 }` parses
+but fails typing because IntegerLiteral does not implicitly materialize Percent.
+Already range-typed arithmetic may initialize the field, without proving bounds.
+Construction may be a local initializer, return operand, ordinary call argument
+or complete branch result of an existing conditional initializer; it does not
+make hidden nested conditional values legal. Syntax recognition preserves named
+identifier conditions and their blocks without parser type-name lookup.
+
+Construction retains canonical RecordId/FieldId plus its typed initializer. It
+produces a fresh Move record without a harness binding, anonymous public local,
+new type, reference provenance, hidden loan, allocation or runtime constructor.
+The existing complete-expression transaction handles initializer effects; KD-033
+return and KD-034 whole-call rollback boundaries remain authoritative. A later
+well-typed ownership failure commits none of a successful initializer prefix.
+Static nominal type failure precedes ownership and is not rollback evidence.
+Both finite-use and recurrent-reference traversal descend construction children.
+
+Copy-field reads use only canonical named owned ParameterId/LocalId roots, resolved
+through the owner's actual RecordId. They require availability and no active
+exclusive whole-record loan, but permit active shared loans. They account for the
+written owner use without consuming or partially moving it, changing transfer
+history, creating field availability/loans/provenance, or establishing a hold.
+A subsequent whole-record Move remains subject to ordinary availability and loans.
+Moved/conditionally moved owners reject; a returning sibling does not participate
+in a later suffix join. Existing lawful loan expiry is unchanged.
+
+Repeated reads preserve stable loop state. `while battery.charge <= threshold`
+is legal when its owner is available and loans permit the read. Construction is
+rejected anywhere within a recurring condition, even as an argument to a Bool
+call. Loop-local construction is an ordinary iteration-local Move value; it
+cannot sanitize a prohibited pre-existing Move initializer or grant KD-033
+terminal permission outside an actual return operand.
+
+Typed-HIR publication performs a table-aware record-expression invariant check,
+including owner eligibility, record/field membership and exact range results.
+MIR retains typed trees/IDs and recursively validates all construction children,
+hidden conditional values and residual unsupported projection representations.
+No new MIR terminator, second checker or generalized ownership solver is added.
+Private evidence distinguishes malformed HIR metadata from ownership-state proof
+that field reads create no partial availability. Public declaration-boundary
+rejections do not demonstrate partial-move checking.
+
+Reference roots (`&T`/`&mut T`), temporary/nested projection, field borrowing,
+field mutation, multiple/broader fields, partial moves, structural compatibility,
+implicit nominal/literal conversion, invariant enforcement and replacement remain
+unsupported. Ordinary functions remain checked/lowered, not executed or proven.
+Verified battery contracts, diagnostics, counts and literal harness behavior are
+unchanged. Construction implies no destruction, cleanup, allocation or runtime
+ordering guarantee for future multi-field records.

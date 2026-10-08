@@ -935,3 +935,58 @@ general expression statements, reference returns, destruction, generalized CFG
 ownership/fixed points, interprocedural termination, and execution remain outside
 this decision. Earlier KD sections retain their historical boundaries; KD-034
 refines ordinary result/call/completion behavior without reopening other decisions.
+
+
+## KD-035 — Ordinary Record Construction and Copy-Field Reads
+
+**Status:** Accepted (frozen KED-020 Draft 4, Issue #41; K20-S01–S03,
+K20-A01–A07 and K20-F01–F04 accepted).
+
+> An ordinary record value may be constructed from an exactly typed field
+> expression and may expose its Copy field through a direct named owned place.
+> Construction produces a fresh owned record and participates in the existing
+> complete-expression transaction. Copy-field access requires an available root
+> that is not protected by an active exclusive whole-record loan, copies the
+> field without moving or partially consuming the record, creates no field loan
+> or reference provenance, and preserves the record's ownership state. Shared
+> whole-record loans remain compatible with the read. Direct Copy-field reads
+> may participate in ordinary Copy-valued conditions, while construction and
+> other prohibited non-Copy activity remain excluded from recurring while conditions.
+
+The current declaration schema remains exactly one field of a declared named
+range. `RecordName { field: initializer }` is an ordinary expression wherever the
+existing position rules permit that record value; nested conditional values do
+not become legal beneath it. RecordId/FieldId and exact nominal initializer typing
+are established before ownership. Equal bounds or field spellings do not confer
+compatibility. Bare integer literals remain non-contextual (OQ-021); already
+range-typed arithmetic may initialize a field without proving its bounds.
+
+Construction is a fresh owned Move value, not an alias/reference, harness binding,
+anonymous public local, new record type, allocation, executable constructor or
+runtime hook. Initializer effects inherit complete-expression/KD-033/KD-034
+rollback, including successful well-typed prefixes before a later ownership failure.
+There is no parallel transaction engine. Recurrence and terminal permission rules
+are unchanged; wrapping a prohibited operation in construction does not authorize it.
+
+Copy-field roots are canonical ordinary owned ParameterIds/LocalIds only. Reads
+require available roots, including all-path conditional availability, and reject
+active exclusive loans required by finite uses, receiving holds or current/enclosing
+recurrence. Shared loans allow immutable Copy reads without being weakened.
+Reads create no field-level availability, transfer history, partial move, field
+loan, provenance or hold. Whole-record moves and lawful loan expiry retain their
+existing rules. Copy reads are legal in while conditions and stable body/backedge
+states; construction is prohibited at any depth in a recurring condition.
+
+The typed-HIR boundary validates canonical owner/record/field/result relationships
+before ownership. Recursive visitors traverse construction children; MIR validates
+structural trees, including hidden conditionals, without reconstructing HIR tables.
+Public exclusive-loan witnesses require independently valid controls; recurrent
+zero-finite/zero-hold protection and malformed Move-result metadata have separate
+private evidence. Public field-declaration rejection is not partial-move evidence.
+Verified battery behavior and harness literals remain isolated and unchanged.
+
+Multiple/default/positional fields, broader field types, structural compatibility,
+contextual literals, field borrowing/mutation, reference/temporary/nested projection,
+general places, partial moves, non-Copy replacement, destruction, allocation,
+execution, code generation and generalized cyclic analysis remain excluded. This
+settles no general runtime initializer ordering or invariant/mixed-assurance rule.

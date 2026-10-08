@@ -502,3 +502,18 @@ Reference returns, escaping lifetimes, reborrowing, generalized cyclic ownership
 function-exit convergence, unit/void values, divergence/termination analysis,
 SSA/phi, full MIR dataflow and execution remain unresolved. Historical accepted
 sections describe their original boundaries; KD-034 does not reopen them.
+
+
+### KD-035 refinement of OQ-020/OQ-021/OQ-022/OQ-023/OQ-024/OQ-025/OQ-026
+
+KED-020 settles ordinary construction of the existing single named-range-field
+record form and direct named-owner Copy-field reads. This does not settle
+multi-field completeness/ordering/layout, broader field types, contextual literals,
+constrained arithmetic proofs, invariant enforcement or mixed-assurance calls.
+OQ-021 remains authoritative. Canonical field reads use whole-owner availability
+and loans; they establish no partial move, field availability, field loan, reference
+projection, auto-deref, generalized place or non-Copy replacement rules. Reads may
+participate in Copy-valued while conditions, while construction remains forbidden
+throughout recurring conditions. No destruction, cleanup, allocation, execution,
+code generation or generalized cyclic inference is implied. Historical accepted
+sections retain their earlier boundaries; KD-035 does not reopen other decisions.

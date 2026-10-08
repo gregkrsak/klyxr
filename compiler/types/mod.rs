@@ -71,6 +71,9 @@ pub fn check(resolved: ResolvedProgram) -> Result<Program, Vec<Diagnostic>> {
         }
     }
     if diagnostics.is_empty() {
+        program
+            .validate_record_expressions()
+            .map_err(|e| vec![*e])?;
         Ok(program)
     } else {
         Err(diagnostics)
@@ -627,6 +630,62 @@ fn expression(
                     else_value: Box::new(else_value),
                 },
                 ty,
+            )
+        }
+        ResolvedExprKind::RecordConstruct {
+            record,
+            field,
+            value,
+        } => {
+            let value = expression(program, functions, value)?;
+            exact_value(
+                program,
+                &value,
+                ValueType::Range(program.field(*field).ty),
+                "record field initializer",
+            )?;
+            (
+                ExprKind::RecordConstruct {
+                    record: *record,
+                    field: *field,
+                    value: Box::new(value),
+                },
+                ExprType::Record(*record),
+            )
+        }
+        ResolvedExprKind::CopyFieldRead { owner, field_name } => {
+            let ty = match owner {
+                hir::Place::Parameter(id) => match program.parameter(*id).ty {
+                    ParameterType::Value(ty) => ty,
+                    _ => unreachable!("ordinary field owner"),
+                },
+                hir::Place::Local(id) => program.local(*id).ty,
+            };
+            let record = match ty {
+                ValueType::Record(id) => id,
+                ValueType::SharedRef(_) | ValueType::MutableRef(_) => return Err(Diagnostic::semantic(span, "field access through a reference is unsupported", "use a directly named owned record; no auto-dereference or reference projection").into()),
+                _ => return Err(Diagnostic::semantic(span, "field read requires an owned record parameter or local", format!("found {}", display_type(program, ty.into()))).into()),
+            };
+            let field = program.record(record).field;
+            let declaration = program.field(field);
+            if declaration.name != *field_name {
+                return Err(Diagnostic::semantic(
+                    span,
+                    format!(
+                        "unknown field `{field_name}` for record `{}`",
+                        program.record(record).name
+                    ),
+                    format!("the declared field is `{}`", declaration.name),
+                )
+                .into());
+            }
+            (
+                ExprKind::CopyFieldRead {
+                    owner: *owner,
+                    record,
+                    field,
+                },
+                ExprType::Range(declaration.ty),
             )
         }
         ResolvedExprKind::BoolLiteral(value) => (ExprKind::BoolLiteral(*value), ExprType::Bool),

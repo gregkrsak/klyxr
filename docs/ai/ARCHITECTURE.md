@@ -324,7 +324,8 @@ transfers attach destination provenance before expiry; final-use arguments attac
 call holds before expiry. Reference parameters have external provenance without
 interprocedural owner reconstruction. Loan state is not published in HIR.
 Exclusive borrowing requires a mutable owned local; `let mut` introduced exclusive borrowing under KED-006; KD-026 now adds Copy-safe local assignment.
-There is no ordinary field access/record construction, reborrowing, reference return,
+KD-035 adds ordinary single-range-field construction and named-owner Copy reads.
+There is no reference projection, reborrowing, reference return,
 implicit reference coercion, partial move/borrow, user-defined Copy/Clone, or destructor. Source names
 and nominal type errors must be resolved before ownership checking.
 
@@ -350,7 +351,7 @@ inside verified functions receive spanned verifier-support diagnostics. The
 private affine kernel and its independent 1,800-case cross-check retain their
 existing mathematical coverage, including independently varying numeric domains.
 
-Ordered record construction/call statements remain the prototype harness. The
+Ordered top-level record construction/call statements remain the prototype harness. The
 checker retains distinct-record checks, range checks, and immutable-binding
 rejection. Every verified body is proven independently of its call sites; its
 postcondition then updates caller state in source order. Ordinary functions do
@@ -732,3 +733,46 @@ braces remain local fallthrough and all-terminal branches create no extra block.
 Validator traversal checks every call argument for unlowered conditional values.
 No result expression/local, second checker, CFG ownership solver, fixed point,
 execution, destruction or verified-path expansion is implemented.
+
+
+## Ordinary record expression boundary (KED-020 / KD-035)
+
+Source AST has RecordConstruct with textual record/field names, initializer child,
+and a constructor-identifier span. Existing source FieldAccess remains source
+oriented. Contextual syntactic recognition distinguishes field-colon construction
+from an identifier condition followed by a statement block; final binary/unary
+operands and verified contract/body boundaries preserve block parsing. No parser
+type-name lookup is used. Malformed value-position constructions receive targeted
+messages. Reference, temporary and nested projections remain unsupported.
+
+Resolution selects canonical RecordId/FieldId for construction and resolves a
+field-read owner to ParameterId/LocalId. For inferred locals, existing typed
+lowering finalizes field membership through that owner's actual RecordId; no
+second inference engine or post-HIR spelling lookup is introduced. HIR represents
+RecordConstruct { record, field, value } and CopyFieldRead { owner, record, field }.
+The construction type is that exact record; the child/read result is the exact
+field range. No harness BindingId or anonymous LocalId models fresh results.
+
+`types::check` invokes `Program::validate_record_expressions` at typed-HIR
+publication before ownership. This crate-private, table-aware invariant boundary
+checks canonical owner eligibility/function membership, record/field membership,
+exact result/initializer metadata and ordinary-versus-verified representation,
+recursively enforcing existing conditional-value positions. It performs no
+inference, ownership evaluation or generalized validation framework.
+
+The single existing ownership checker evaluates construction children inside
+its complete-expression transaction. KD-033 and KD-034 enclosing transactions
+retain their original prepared-entry boundaries. A dedicated non-consuming
+Copy-field-read operation checks availability/exclusive whole-record loans and
+accounts for the written root use; it never records a transfer, field place,
+field loan or independent provenance. Shared loans remain protected by their
+existing finite/held/recurrent requirements. Construction participates in both
+finite-use and recurrent-reference traversal. Reads are Copy activity in recurring
+conditions; recursive construction evaluation rejects non-Copy construction there.
+
+MIR retains these typed trees and canonical IDs without new statements or
+terminators. Its structural validator descends every construction child through
+all expression containers, statements and terminators, rejecting hidden conditional
+values and residual verified projection representations. It does not re-prove
+canonical relationships without HIR tables. Ordinary operations are not executed
+or proven; the specialized verifier and literal harness path remain unchanged.
