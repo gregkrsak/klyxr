@@ -138,6 +138,16 @@ pub(crate) struct ResolvedExpr {
 }
 #[derive(Debug)]
 pub(crate) enum ResolvedExprKind {
+    RecordConstruct {
+        record: RecordId,
+        field: FieldId,
+        value: Box<ResolvedExpr>,
+    },
+    // The owner is resolved now; inferred-local field selection finishes in typing.
+    CopyFieldRead {
+        owner: hir::Place,
+        field_name: String,
+    },
     IfValue {
         condition: Box<ResolvedExpr>,
         then_value: Box<ResolvedExpr>,
@@ -752,7 +762,19 @@ impl Resolver {
                 };
                 ResolvedExprKind::Borrow { kind: *kind, place }
             }
-            ast::ExprKind::FieldAccess(a) => ResolvedExprKind::FieldAccess(self.access(a, scope)?),
+            ast::ExprKind::RecordConstruct { record, field, value, record_span } => {
+                if scope.state.is_some() { return Err(error(expression.span, "record construction is supported only in ordinary functions", "verified expressions retain their restricted proof grammar")); }
+                let record = self.records.get(record).copied().ok_or_else(|| error(*record_span, format!("unknown record construction `{record}`"), "construct a declared record"))?;
+                let field_id = self.program.record(record).field;
+                if self.program.field(field_id).name != *field {
+                    return Err(error(expression.span, format!("unknown field `{field}` for record `{}`", self.program.record(record).name), format!("the declared field is `{}`", self.program.field(field_id).name)));
+                }
+                ResolvedExprKind::RecordConstruct { record, field: field_id, value: Box::new(self.expression(value, scope, false)?) }
+            }
+            ast::ExprKind::FieldAccess(a) => {
+                if scope.state.is_some() { ResolvedExprKind::FieldAccess(self.access(a, scope)?) }
+                else { ResolvedExprKind::CopyFieldRead { owner: self.reference_place(&a.binding, scope, a.span)?, field_name: a.field.clone() } }
+            },
             ast::ExprKind::OldField(a) => {
                 if !allow_old { return Err(error(expression.span, "old(...) is permitted only in ensures", "this prototype snapshots only the mutable state field at function entry")); }
                 ResolvedExprKind::OldField(self.access(a, scope)?)

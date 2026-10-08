@@ -184,6 +184,12 @@ pub struct Expr {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprKind {
+    RecordConstruct {
+        record: String,
+        field: String,
+        value: Box<Expr>,
+        record_span: Span,
+    },
     IfValue {
         condition: Box<Expr>,
         then_value: Box<Expr>,

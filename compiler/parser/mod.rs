@@ -126,7 +126,7 @@ impl Parser<'_> {
         self.expect(&TokenKind::Requires)?;
         let requires = self.parse_expression(0)?;
         self.expect(&TokenKind::Ensures)?;
-        let ensures = self.parse_expression(0)?;
+        let ensures = self.parse_condition()?;
 
         self.expect(&TokenKind::LBrace)?;
         let mut body = Vec::new();
@@ -250,7 +250,7 @@ impl Parser<'_> {
                 });
             } else if self.at(&TokenKind::While) {
                 self.advance();
-                let condition = self.parse_expression(0)?;
+                let condition = self.parse_condition()?;
                 self.expect(&TokenKind::LBrace)?;
                 let (loop_body, end) = self.parse_value_block(loop_depth + 1)?;
                 body.push(ValueStatement::While {
@@ -260,7 +260,7 @@ impl Parser<'_> {
                 });
             } else if self.at(&TokenKind::If) {
                 self.advance();
-                let condition = self.parse_expression(0)?;
+                let condition = self.parse_condition()?;
                 self.expect(&TokenKind::LBrace)?;
                 let (then_body, mut end) = self.parse_value_block(loop_depth)?;
                 let else_body = if self.at(&TokenKind::Else) {
@@ -352,6 +352,10 @@ impl Parser<'_> {
                     arguments,
                     span: Span { end, ..span },
                 });
+            } else if matches!(self.peek_kind(), TokenKind::Ident(_))
+                && self.lookahead_is(1, &TokenKind::Dot)
+            {
+                return Err(self.error("field mutation and general field expression statements are unsupported; fields are read-only Copy values".into()));
             } else {
                 return Err(self.error("value-returning Klyxr functions require `return expression;`; bare expression statements are not supported".into()));
             }
@@ -379,7 +383,7 @@ impl Parser<'_> {
             return self.parse_expression(0);
         }
         let span = self.advance().span;
-        let condition = self.parse_expression(0)?;
+        let condition = self.parse_condition()?;
         self.expect(&TokenKind::LBrace)?;
         let then_value = self.parse_initializer()?;
         self.expect(&TokenKind::RBrace)?;
@@ -402,7 +406,17 @@ impl Parser<'_> {
 
     // Precedence climbing: only the explicitly authorized operators participate.
     fn parse_expression(&mut self, minimum: u8) -> Result<Expr, ParseError> {
-        let mut left = self.parse_primary()?;
+        self.parse_expression_at(minimum, false)
+    }
+    fn parse_condition(&mut self) -> Result<Expr, ParseError> {
+        self.parse_expression_at(0, true)
+    }
+    fn parse_expression_at(
+        &mut self,
+        minimum: u8,
+        block_boundary: bool,
+    ) -> Result<Expr, ParseError> {
+        let mut left = self.parse_primary_at(block_boundary)?;
         let mut comparison_seen = None;
         while let Some((op, precedence)) = self.binary_operator() {
             if precedence < minimum {
@@ -415,7 +429,7 @@ impl Parser<'_> {
                 );
             }
             self.advance();
-            let right = self.parse_expression(precedence + 1)?;
+            let right = self.parse_expression_at(precedence + 1, block_boundary)?;
             let span = Span {
                 end: right.span.end,
                 ..left.span
@@ -456,6 +470,9 @@ impl Parser<'_> {
         Ok(reference)
     }
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
+        self.parse_primary_at(false)
+    }
+    fn parse_primary_at(&mut self, block_boundary: bool) -> Result<Expr, ParseError> {
         let start = self.peek().span;
         let kind = match self.peek_kind() {
             TokenKind::True | TokenKind::False => {
@@ -487,11 +504,51 @@ impl Parser<'_> {
                 self.advance();
                 ExprKind::Unary {
                     op: UnaryOp::Not,
-                    operand: Box::new(self.parse_primary()?),
+                    operand: Box::new(self.parse_primary_at(block_boundary)?),
                 }
             }
             TokenKind::Ident(_) => {
-                if self.lookahead_is(1, &TokenKind::Dot) {
+                let construction = self.lookahead_is(1, &TokenKind::LBrace)
+                    && (!block_boundary
+                        || self.lookahead_is(3, &TokenKind::Colon)
+                        || self.lookahead_is(2, &TokenKind::Colon));
+                if construction {
+                    let record_span = self.peek().span;
+                    let record = self.expect_ident()?;
+                    self.advance(); // brace, recognized without type-name lookup
+                    if !matches!(self.peek_kind(), TokenKind::Ident(_)) {
+                        return Err(self.error(
+                            "record construction requires exactly one named field: initializer"
+                                .into(),
+                        ));
+                    }
+                    let field = self.expect_ident()?;
+                    if !self.at(&TokenKind::Colon) {
+                        return Err(self.error(
+                            "record construction requires ':' after the field name".into(),
+                        ));
+                    }
+                    self.advance();
+                    if self.at(&TokenKind::RBrace)
+                        || self.at(&TokenKind::Semicolon)
+                        || self.at(&TokenKind::Eof)
+                    {
+                        return Err(
+                            self.error("record construction requires a field initializer".into())
+                        );
+                    }
+                    let value = Box::new(self.parse_expression(0)?);
+                    if !self.at(&TokenKind::RBrace) {
+                        return Err(self.error("record construction supports exactly one field initializer and requires a closing brace".into()));
+                    }
+                    self.advance();
+                    ExprKind::RecordConstruct {
+                        record,
+                        field,
+                        value,
+                        record_span,
+                    }
+                } else if self.lookahead_is(1, &TokenKind::Dot) {
                     ExprKind::FieldAccess(self.parse_field_access()?)
                 } else {
                     let callee = self.expect_ident()?;
@@ -530,15 +587,17 @@ impl Parser<'_> {
             }
             TokenKind::LParen => {
                 self.advance();
-                let mut expression = self.parse_expression(0)?;
-                let end = self.expect(&TokenKind::RParen)?.span.end;
-                expression.span = Span { end, ..start };
-                return Ok(expression);
+                let expression = self.parse_expression(0)?;
+                self.expect(&TokenKind::RParen)?;
+                expression.kind
             }
             other => {
                 return Err(self.error(format!("unsupported or malformed expression: {other:?}")))
             }
         };
+        if self.at(&TokenKind::Dot) {
+            return Err(self.error("field access through a temporary or nested projection is unsupported; use a directly named owned record parameter or local".into()));
+        }
         Ok(Expr {
             kind,
             span: Span {

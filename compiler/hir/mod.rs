@@ -3,6 +3,7 @@
 //! Public inspection is read-only; compiler-internal mutation must preserve identity
 //! and reference invariants. Names and spans are diagnostic metadata.
 use crate::lexer::Span;
+mod validate;
 
 macro_rules! id {
     ($name:ident) => {
@@ -146,6 +147,16 @@ pub struct TypedExpr {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprKind {
+    RecordConstruct {
+        record: RecordId,
+        field: FieldId,
+        value: Box<TypedExpr>,
+    },
+    CopyFieldRead {
+        owner: Place,
+        record: RecordId,
+        field: FieldId,
+    },
     IfValue {
         condition: Box<TypedExpr>,
         then_value: Box<TypedExpr>,

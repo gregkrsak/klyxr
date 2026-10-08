@@ -107,39 +107,36 @@ impl MirFunction {
             marks[id.0] = 2;
             Ok(())
         }
-        fn contains_conditional(expression: &TypedExpr) -> bool {
+        fn expression_valid(expression: &TypedExpr) -> Result<(), &'static str> {
             match &expression.kind {
-                hir::ExprKind::IfValue { .. } => true,
-                hir::ExprKind::Call { arguments, .. } => arguments.iter().any(contains_conditional),
-                hir::ExprKind::Unary { operand, .. } => contains_conditional(operand),
-                hir::ExprKind::Binary { left, right, .. } => {
-                    contains_conditional(left) || contains_conditional(right)
-                }
-                _ => false,
+                hir::ExprKind::IfValue { .. } => return Err("conditional value must lower to control flow"),
+                hir::ExprKind::RecordConstruct { value, .. } => expression_valid(value)?,
+                hir::ExprKind::Call { arguments, .. } => for argument in arguments { expression_valid(argument)?; },
+                hir::ExprKind::Unary { operand, .. } => expression_valid(operand)?,
+                hir::ExprKind::Binary { left, right, .. } => { expression_valid(left)?; expression_valid(right)?; },
+                hir::ExprKind::FieldAccess(_) | hir::ExprKind::OldField(_) => return Err("verified-state or residual projection representation is ineligible in ordinary MIR"),
+                hir::ExprKind::CopyFieldRead { .. } | hir::ExprKind::Parameter(_) | hir::ExprKind::Local(_) | hir::ExprKind::Deref { .. } | hir::ExprKind::Borrow { .. } | hir::ExprKind::BoolLiteral(_) | hir::ExprKind::IntegerLiteral(_) => {}
             }
+            Ok(())
         }
         for block in &self.blocks {
             for statement in &block.statements {
-                let hidden = match statement {
+                match statement {
                     Statement::CallNoValue { arguments, .. } => {
-                        arguments.iter().any(contains_conditional)
+                        for argument in arguments {
+                            expression_valid(argument)?;
+                        }
                     }
-                    Statement::Let { initializer, .. } => contains_conditional(initializer),
+                    Statement::Let { initializer, .. } => expression_valid(initializer)?,
                     Statement::DerefAssign { value, .. } | Statement::Assign { value, .. } => {
-                        contains_conditional(value)
+                        expression_valid(value)?
                     }
-                };
-                if hidden {
-                    return Err("conditional value must lower to control flow");
                 }
             }
-            let expression = match &block.terminator {
-                Terminator::Branch { condition, .. } => Some(condition),
-                Terminator::Return { value } => Some(value),
-                Terminator::Goto { .. } | Terminator::ReturnNoValue => None,
-            };
-            if expression.is_some_and(contains_conditional) {
-                return Err("conditional value must lower to control flow");
+            match &block.terminator {
+                Terminator::Branch { condition, .. } => expression_valid(condition)?,
+                Terminator::Return { value } => expression_valid(value)?,
+                Terminator::Goto { .. } | Terminator::ReturnNoValue => {}
             }
         }
         let mut marks = vec![0; self.blocks.len()];
@@ -739,5 +736,145 @@ mod tests {
         };
         condition.ty = hir::ExprType::IntegerLiteral;
         assert_eq!(m.functions[0].validate(), Err("non-Bool branch condition"));
+    }
+
+    #[test]
+    fn validator_descends_construction_at_multiple_depths_in_every_mir_container() {
+        let p=compile_source("type Percent = range 0..100; record Battery { charge: Percent } fn f(flag: bool,p: Percent) -> Battery { let chosen = if flag { p } else { p }; return Battery { charge: chosen }; }").unwrap();
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let hir::ValueStatement::Let {
+            initializer: hidden,
+            local,
+            span,
+        } = &f.body[0]
+        else {
+            panic!()
+        };
+        let hir::ValueStatement::Return { value: record, .. } = &f.body[1] else {
+            panic!()
+        };
+        for depth in 0..4 {
+            let mut nested = hidden.clone();
+            for _ in 0..depth {
+                let mut construct = record.clone();
+                let hir::ExprKind::RecordConstruct { value, .. } = &mut construct.kind else {
+                    panic!()
+                };
+                *value = Box::new(nested);
+                nested = TypedExpr {
+                    kind: hir::ExprKind::Call {
+                        function: f.id,
+                        arguments: vec![construct],
+                    },
+                    ..hidden.clone()
+                };
+            }
+            let mut construct = record.clone();
+            let hir::ExprKind::RecordConstruct { value, .. } = &mut construct.kind else {
+                panic!()
+            };
+            *value = Box::new(nested);
+            for statement in [
+                Statement::Let {
+                    local: *local,
+                    initializer: construct.clone(),
+                    span: *span,
+                },
+                Statement::Assign {
+                    local: *local,
+                    value: construct.clone(),
+                    span: *span,
+                },
+                Statement::DerefAssign {
+                    reference: Place::Local(*local),
+                    value: construct.clone(),
+                    span: *span,
+                },
+                Statement::CallNoValue {
+                    function: f.id,
+                    arguments: vec![construct.clone()],
+                    span: *span,
+                },
+            ] {
+                let m = MirFunction {
+                    function: f.id,
+                    entry: BasicBlockId(0),
+                    blocks: vec![BasicBlock {
+                        statements: vec![statement],
+                        terminator: Terminator::ReturnNoValue,
+                    }],
+                };
+                assert_eq!(
+                    m.validate(),
+                    Err("conditional value must lower to control flow")
+                );
+            }
+            for terminator in [
+                Terminator::Return {
+                    value: construct.clone(),
+                },
+                Terminator::Branch {
+                    condition: TypedExpr {
+                        ty: hir::ExprType::Bool,
+                        ..construct.clone()
+                    },
+                    then_target: BasicBlockId(1),
+                    else_target: BasicBlockId(1),
+                },
+            ] {
+                let m = MirFunction {
+                    function: f.id,
+                    entry: BasicBlockId(0),
+                    blocks: vec![
+                        BasicBlock {
+                            statements: vec![],
+                            terminator,
+                        },
+                        BasicBlock {
+                            statements: vec![],
+                            terminator: Terminator::ReturnNoValue,
+                        },
+                    ],
+                };
+                assert_eq!(
+                    m.validate(),
+                    Err("conditional value must lower to control flow")
+                );
+            }
+        }
+    }
+    #[test]
+    fn validator_rejects_residual_verified_projection_under_nested_construction() {
+        let p=compile_source("type Percent = range 0..100; record Battery { charge: Percent } fn f(b: Battery) -> Battery { return Battery { charge: b.charge }; }").unwrap();
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let hir::ValueStatement::Return { value: record, .. } = &f.body[0] else {
+            panic!()
+        };
+        for old in [false, true] {
+            let mut construct = record.clone();
+            let hir::ExprKind::RecordConstruct { value, .. } = &mut construct.kind else {
+                panic!()
+            };
+            let access = hir::FieldAccess {
+                parameter: f.parameters[0],
+                field: p.fields()[0].id,
+                ty: p.ranges()[0].id,
+                span: value.span,
+            };
+            value.kind = if old {
+                hir::ExprKind::OldField(access)
+            } else {
+                hir::ExprKind::FieldAccess(access)
+            };
+            let m = MirFunction {
+                function: f.id,
+                entry: BasicBlockId(0),
+                blocks: vec![BasicBlock {
+                    statements: vec![],
+                    terminator: Terminator::Return { value: construct },
+                }],
+            };
+            assert!(m.validate().unwrap_err().contains("residual projection"));
+        }
     }
 }

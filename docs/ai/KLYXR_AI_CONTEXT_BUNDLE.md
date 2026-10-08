@@ -89,7 +89,7 @@ remain held until the receiving call completes, including nested arguments.
 Availability and loans are separate ID-based state within the same ownership phase.
 Borrowing/cloning/reborrowing/coercion are never implicit. Ordinary owned parameters
 remain immutable. Reference returns, nested references, explicit lifetimes,
-auto-dereference, ordinary record construction/field access, partial borrowing/moves,
+auto-dereference, reference projection, partial borrowing/moves,
 and destruction remain unsupported (KD-021 / OQ-024).
 
 KED-007 adds explicit `*reference` for directly named ordinary reference parameters
@@ -163,7 +163,7 @@ remaining header/backedge state. Pre-existing owners cannot transfer in the loop
 non-Copy conditions remain forbidden, KED-014 refines the body-reference boundary, and non-Copy
 replacement remains unresolved. Lexical cleanup is not runtime destruction.
 No syntax, HIR/MIR representation, second ownership engine, or fixed-point solver
-is added. Ordinary record construction and execution remain absent.
+is added by KED-013. KD-035 later adds ordinary record construction; execution remains absent.
 
 Ordinary functions are parsed, resolved, type-checked, and ownership-checked,
 including loan and borrowed-access legality, and lowered to ordinary MIR, but not executed or proven. A range result type does not establish that the
@@ -538,6 +538,35 @@ MIR has honest CallNoValue/ReturnNoValue forms and exhaustive argument validatio
 The single ownership checker remains above MIR. Verified functions/harness/proofs
 remain unchanged; no destruction, execution, unit/void, generalized dataflow or
 new lifetime semantics are implemented.
+
+
+### KED-020 / KD-035 — Ordinary record construction and Copy-field reads
+
+Frozen Issue #41 Draft 4 is implemented from baseline
+02eb5364927ee9d4325fc9d4fdbe05623e3ce0d3, including K20-S01–S03,
+K20-A01–A07 and K20-F01–F04. The existing one named-range-field record schema
+is unchanged. `Battery { charge: expression }` produces a fresh owned Move
+record from an exactly typed initializer. Bare integers do not implicitly become
+named ranges, and construction proves no bounds/invariants or runtime behavior.
+Canonical RecordId/FieldId selection and typing precede ownership. Construction
+is an expression child in all applicable visitors and inherits complete-expression,
+KD-033 return and KD-034 whole-call transactions; it creates no harness binding,
+anonymous public local, hidden loan/provenance or allocator effect.
+
+`owned.charge` reads an exact Copy range from a direct named owned parameter/local,
+identified by ParameterId/LocalId. Availability and exclusive whole-record loans
+are checked without consuming the owner. Shared loans remain compatible and
+protected; no field loan, projected place, provenance or partial availability is
+created. Reads may occur in while conditions and stable loop bodies; construction
+anywhere beneath a recurring condition is rejected. Reference/temporary/nested
+roots, field borrowing/mutation and broader field declaration types remain excluded.
+
+Typed-HIR publication explicitly validates table relationships and existing
+conditional positions before ownership. MIR recursively validates construction
+children and excludes hidden conditionals/residual verified projections without
+reconstructing canonical tables. Verified battery/harness/proof behavior is unchanged.
+No generalized ownership solver, execution, allocation, destruction or broader
+nominal/literal semantics is introduced.
 
 <!-- END KLYXR_CONTEXT.md -->
 
@@ -1554,6 +1583,61 @@ ownership/fixed points, interprocedural termination, and execution remain outsid
 this decision. Earlier KD sections retain their historical boundaries; KD-034
 refines ordinary result/call/completion behavior without reopening other decisions.
 
+
+## KD-035 — Ordinary Record Construction and Copy-Field Reads
+
+**Status:** Accepted (frozen KED-020 Draft 4, Issue #41; K20-S01–S03,
+K20-A01–A07 and K20-F01–F04 accepted).
+
+> An ordinary record value may be constructed from an exactly typed field
+> expression and may expose its Copy field through a direct named owned place.
+> Construction produces a fresh owned record and participates in the existing
+> complete-expression transaction. Copy-field access requires an available root
+> that is not protected by an active exclusive whole-record loan, copies the
+> field without moving or partially consuming the record, creates no field loan
+> or reference provenance, and preserves the record's ownership state. Shared
+> whole-record loans remain compatible with the read. Direct Copy-field reads
+> may participate in ordinary Copy-valued conditions, while construction and
+> other prohibited non-Copy activity remain excluded from recurring while conditions.
+
+The current declaration schema remains exactly one field of a declared named
+range. `RecordName { field: initializer }` is an ordinary expression wherever the
+existing position rules permit that record value; nested conditional values do
+not become legal beneath it. RecordId/FieldId and exact nominal initializer typing
+are established before ownership. Equal bounds or field spellings do not confer
+compatibility. Bare integer literals remain non-contextual (OQ-021); already
+range-typed arithmetic may initialize a field without proving its bounds.
+
+Construction is a fresh owned Move value, not an alias/reference, harness binding,
+anonymous public local, new record type, allocation, executable constructor or
+runtime hook. Initializer effects inherit complete-expression/KD-033/KD-034
+rollback, including successful well-typed prefixes before a later ownership failure.
+There is no parallel transaction engine. Recurrence and terminal permission rules
+are unchanged; wrapping a prohibited operation in construction does not authorize it.
+
+Copy-field roots are canonical ordinary owned ParameterIds/LocalIds only. Reads
+require available roots, including all-path conditional availability, and reject
+active exclusive loans required by finite uses, receiving holds or current/enclosing
+recurrence. Shared loans allow immutable Copy reads without being weakened.
+Reads create no field-level availability, transfer history, partial move, field
+loan, provenance or hold. Whole-record moves and lawful loan expiry retain their
+existing rules. Copy reads are legal in while conditions and stable body/backedge
+states; construction is prohibited at any depth in a recurring condition.
+
+The typed-HIR boundary validates canonical owner/record/field/result relationships
+before ownership. Recursive visitors traverse construction children; MIR validates
+structural trees, including hidden conditionals, without reconstructing HIR tables.
+Public exclusive-loan witnesses require independently valid controls; recurrent
+zero-finite/zero-hold protection and malformed Move-result metadata have separate
+private evidence. Public field-declaration rejection is not partial-move evidence.
+Verified battery behavior and harness literals remain isolated and unchanged.
+
+Multiple/default/positional fields, broader field types, structural compatibility,
+contextual literals, field borrowing/mutation, reference/temporary/nested projection,
+general places, partial moves, non-Copy replacement, destruction, allocation,
+execution, code generation and generalized cyclic analysis remain excluded. This
+settles no general runtime initializer ordering or invariant/mixed-assurance rule.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -1886,7 +1970,8 @@ transfers attach destination provenance before expiry; final-use arguments attac
 call holds before expiry. Reference parameters have external provenance without
 interprocedural owner reconstruction. Loan state is not published in HIR.
 Exclusive borrowing requires a mutable owned local; `let mut` introduced exclusive borrowing under KED-006; KD-026 now adds Copy-safe local assignment.
-There is no ordinary field access/record construction, reborrowing, reference return,
+KD-035 adds ordinary single-range-field construction and named-owner Copy reads.
+There is no reference projection, reborrowing, reference return,
 implicit reference coercion, partial move/borrow, user-defined Copy/Clone, or destructor. Source names
 and nominal type errors must be resolved before ownership checking.
 
@@ -1912,7 +1997,7 @@ inside verified functions receive spanned verifier-support diagnostics. The
 private affine kernel and its independent 1,800-case cross-check retain their
 existing mathematical coverage, including independently varying numeric domains.
 
-Ordered record construction/call statements remain the prototype harness. The
+Ordered top-level record construction/call statements remain the prototype harness. The
 checker retains distinct-record checks, range checks, and immutable-binding
 rejection. Every verified body is proven independently of its call sites; its
 postcondition then updates caller state in source order. Ordinary functions do
@@ -2294,6 +2379,49 @@ braces remain local fallthrough and all-terminal branches create no extra block.
 Validator traversal checks every call argument for unlowered conditional values.
 No result expression/local, second checker, CFG ownership solver, fixed point,
 execution, destruction or verified-path expansion is implemented.
+
+
+## Ordinary record expression boundary (KED-020 / KD-035)
+
+Source AST has RecordConstruct with textual record/field names, initializer child,
+and a constructor-identifier span. Existing source FieldAccess remains source
+oriented. Contextual syntactic recognition distinguishes field-colon construction
+from an identifier condition followed by a statement block; final binary/unary
+operands and verified contract/body boundaries preserve block parsing. No parser
+type-name lookup is used. Malformed value-position constructions receive targeted
+messages. Reference, temporary and nested projections remain unsupported.
+
+Resolution selects canonical RecordId/FieldId for construction and resolves a
+field-read owner to ParameterId/LocalId. For inferred locals, existing typed
+lowering finalizes field membership through that owner's actual RecordId; no
+second inference engine or post-HIR spelling lookup is introduced. HIR represents
+RecordConstruct { record, field, value } and CopyFieldRead { owner, record, field }.
+The construction type is that exact record; the child/read result is the exact
+field range. No harness BindingId or anonymous LocalId models fresh results.
+
+`types::check` invokes `Program::validate_record_expressions` at typed-HIR
+publication before ownership. This crate-private, table-aware invariant boundary
+checks canonical owner eligibility/function membership, record/field membership,
+exact result/initializer metadata and ordinary-versus-verified representation,
+recursively enforcing existing conditional-value positions. It performs no
+inference, ownership evaluation or generalized validation framework.
+
+The single existing ownership checker evaluates construction children inside
+its complete-expression transaction. KD-033 and KD-034 enclosing transactions
+retain their original prepared-entry boundaries. A dedicated non-consuming
+Copy-field-read operation checks availability/exclusive whole-record loans and
+accounts for the written root use; it never records a transfer, field place,
+field loan or independent provenance. Shared loans remain protected by their
+existing finite/held/recurrent requirements. Construction participates in both
+finite-use and recurrent-reference traversal. Reads are Copy activity in recurring
+conditions; recursive construction evaluation rejects non-Copy construction there.
+
+MIR retains these typed trees and canonical IDs without new statements or
+terminators. Its structural validator descends every construction child through
+all expression containers, statements and terminators, rejecting hidden conditional
+values and residual verified projection representations. It does not re-prove
+canonical relationships without HIR tables. Ordinary operations are not executed
+or proven; the specialized verifier and literal harness path remain unchanged.
 
 <!-- END ARCHITECTURE.md -->
 
@@ -2805,5 +2933,20 @@ Reference returns, escaping lifetimes, reborrowing, generalized cyclic ownership
 function-exit convergence, unit/void values, divergence/termination analysis,
 SSA/phi, full MIR dataflow and execution remain unresolved. Historical accepted
 sections describe their original boundaries; KD-034 does not reopen them.
+
+
+### KD-035 refinement of OQ-020/OQ-021/OQ-022/OQ-023/OQ-024/OQ-025/OQ-026
+
+KED-020 settles ordinary construction of the existing single named-range-field
+record form and direct named-owner Copy-field reads. This does not settle
+multi-field completeness/ordering/layout, broader field types, contextual literals,
+constrained arithmetic proofs, invariant enforcement or mixed-assurance calls.
+OQ-021 remains authoritative. Canonical field reads use whole-owner availability
+and loans; they establish no partial move, field availability, field loan, reference
+projection, auto-deref, generalized place or non-Copy replacement rules. Reads may
+participate in Copy-valued while conditions, while construction remains forbidden
+throughout recurring conditions. No destruction, cleanup, allocation, execution,
+code generation or generalized cyclic inference is implied. Historical accepted
+sections retain their earlier boundaries; KD-035 does not reopen other decisions.
 
 <!-- END OPEN_QUESTIONS.md -->

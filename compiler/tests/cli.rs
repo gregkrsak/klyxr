@@ -416,3 +416,34 @@ fn no_value_functions_report_honest_completion_without_proof() {
         }
     }
 }
+
+#[test]
+fn ordinary_record_cli_checks_preserve_the_proof_boundary() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("ordinary_records.klx")]);
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("ordinary MIR control-flow lowering passed: 6 functions"));
+        assert!(text.contains("function bodies proven: 0"));
+        assert!(text.contains("calls checked: 0"));
+        assert!(text.contains("not executed or verified"));
+        for (name, message) in [
+            (
+                "ordinary_record_move_fail.klx",
+                "use of moved value `battery`",
+            ),
+            (
+                "ordinary_record_condition_fail.klx",
+                "record construction is unsupported in recurring while conditions",
+            ),
+        ] {
+            let output = run(&[command, &example(name)]);
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            let text = String::from_utf8(output.stderr).unwrap();
+            assert!(text.contains(message), "{text}");
+            assert!(text.contains(name));
+        }
+    }
+}
