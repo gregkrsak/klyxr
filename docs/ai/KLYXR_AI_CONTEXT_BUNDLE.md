@@ -2363,7 +2363,8 @@ and literal-conversion rules. Copy customization and destruction remain under OQ
 
 
 KED-012 permits nested statement while for ownership-stable Copy state only.
-Loop-local returns, loop values, early/multiple returns and general loop control
+KED-012 originally left loop-local and early/multiple returns unresolved;
+KD-033 now settles structured early return. Loop values and broader loop control
 remain unresolved.
 
 KED-013 now permits iteration-local Move values in while bodies (KD-028),
