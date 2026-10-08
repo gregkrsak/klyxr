@@ -165,19 +165,9 @@ pub fn lower(program: &hir::Program) -> MirProgram {
                 loop_targets: Vec::new(),
             };
             let entry = builder.reserve();
-            let (last, statements) = builder
-                .body(entry, &f.body[..f.body.len() - 1])
-                .expect("function-level fallthrough");
-            let ValueStatement::Return { value, .. } = f.body.last().expect("checked final return")
-            else {
-                unreachable!("checked final return")
-            };
-            builder.finish(
-                last,
-                statements,
-                Terminator::Return {
-                    value: value.clone(),
-                },
+            assert!(
+                builder.body(entry, &f.body).is_none(),
+                "checked ordinary functions have no closing-brace fallthrough"
             );
             let function = MirFunction {
                 function: f.id,
@@ -384,8 +374,15 @@ impl Builder {
                     let join = join?;
                     current = join;
                 }
-                ValueStatement::Return { .. } => {
-                    unreachable!("no branch-local returns in checked HIR")
+                ValueStatement::Return { value, .. } => {
+                    self.finish(
+                        current,
+                        statements,
+                        Terminator::Return {
+                            value: value.clone(),
+                        },
+                    );
+                    return None;
                 }
             }
         }
@@ -396,7 +393,11 @@ impl Builder {
 // Structural source fallthrough only; while retains its real false exit.
 fn falls_through(body: &[ValueStatement]) -> bool {
     match body.last() {
-        Some(ValueStatement::Continue { .. } | ValueStatement::Break { .. }) => false,
+        Some(
+            ValueStatement::Continue { .. }
+            | ValueStatement::Break { .. }
+            | ValueStatement::Return { .. },
+        ) => false,
         Some(ValueStatement::If {
             then_body,
             else_body,

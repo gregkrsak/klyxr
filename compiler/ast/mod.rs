@@ -127,7 +127,7 @@ impl ValueStatement {
     // Narrow structural fallthrough only: a while always retains its false exit.
     pub(crate) fn falls_through(&self) -> bool {
         match self {
-            Self::Continue { .. } | Self::Break { .. } => false,
+            Self::Continue { .. } | Self::Break { .. } | Self::Return { .. } => false,
             Self::If {
                 then_body,
                 else_body,

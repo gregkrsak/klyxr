@@ -128,11 +128,9 @@ reject!(
     "Parse",
     ""
 );
-reject!(
+accept!(
     loop_return,
-    "fn f(flag: bool) -> bool { while flag { return flag; } return flag; }",
-    "Parse",
-    "branch-local"
+    "fn f(flag: bool) -> bool { while flag { return flag; } return flag; }"
 );
 reject!(branch_scope, "fn f(flag: bool) -> bool { while flag { if flag { let seen = flag; continue; } let copy = seen; } return flag; }", "Resolve", "unknown");
 reject!(recurrent_shared_skip, "fn f(flag: bool) -> bool { let mut value = false; let view = &value; while flag { if flag { value = true; continue; } let seen = *view; } return flag; }", "Ownership", "cannot assign");

@@ -108,7 +108,7 @@ LocalId; moved sources retain KD-023 conditional unavailability. KD-024 path-spe
 loan expiry and holds apply. MIR leaves initialize the canonical destination and
 Goto a common join; no IfValue remains hidden in MIR expressions. There is no
 phi, block parameter, SSA, general temporary/result slot, definite-assignment
-solver, early return, cleanup, or MIR-based ownership solver. KED-012 later adds narrow statement loops. Conditional
+solver, cleanup, or MIR-based ownership solver. KD-033 later adds structured early return. KED-012 later adds narrow statement loops. Conditional
 values in returns/call arguments/general expression positions remain open under
 OQ-022/OQ-024/OQ-026.
 
@@ -138,7 +138,7 @@ reads/writes, while dead pre-loop loans stay dead. There is no fixed-point solve
 MIR uses Goto → header Branch → body/exit, with body Goto back to header. Its
 validator now accepts cycles with visited tracking; structural validity does not
 prove termination. Both constant-condition edges remain. For and labeled loop transfers (KD-031/KD-032 settle unlabeled continue/break),
-loop values, early returns, verified loops, and general cyclic ownership/loans
+loop values, verified loops, and general cyclic ownership/loans
 remain unresolved. Ordinary loops are neither executed nor proven.
 
 KED-013 permits iteration-local Move ownership in ordinary while bodies (KD-028):
@@ -477,3 +477,29 @@ The validator is unchanged. Constant and all-breaking bodies retain false edges.
 Private tests inspect normalized candidates before loop consumption and inject
 pre-reduction and post-cleanup faults. The specialized verifier and its 1,800-case
 affine cross-check remain unchanged; ordinary code is not executed or proven.
+
+
+### KED-018 / KD-033 — Structured early return
+
+Explicit ordinary return may end any statement path, including branches and
+while bodies. Completeness means no structural closing-brace fallthrough after
+loop transfers are consumed; while always retains its condition-false edge,
+without constant pruning or termination claims. Returns terminate lexical blocks;
+parsed and public ASTs obey the same structural checks. Exact operand typing
+remains before ownership.
+
+The finite continuation before return is operand uses only, excluding every
+bypassed suffix. Current/enclosing recurrent obligations remain active throughout
+actual operand evaluation. A scoped private permission bypasses only pre-existing
+owned non-reference Move restrictions within the return-expression tree; it never
+relaxes preceding operations, availability, loans, provenance, references or holds.
+The return transaction snapshots after finite-summary installation/expiry and
+before permission; all operand/final-validation failures restore that exact entry.
+Permission restores on both outcomes. Successful return state has no local
+successor normalization or merge. Mixed return/break/continue retains actual
+surviving-path state and canonical loop false exits.
+
+MIR lowers whole bodies with existing Return terminators; no synthetic join/final
+return or MIR-validator semantic changes. No function-exit ownership join, second
+checker, generalized CFG/fixed points, SSA/phi, reference returns, reborrowing or
+runtime behavior is added. The verified proof path remains unchanged.

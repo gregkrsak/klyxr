@@ -281,8 +281,8 @@ canonical tables, including locals, and exposes read-only slices/ID lookups.
 Storage is crate-private; internal construction/transformations must preserve
 identity and reference invariants. IDs have no cross-compilation stability.
 
-Ordinary functions have explicit value return types and exactly one final
-`return expression;`. Immutable locals propagate concrete initializer types;
+Ordinary functions have explicit value return types and structurally complete
+explicit `return expression;` paths under KD-033. Immutable locals propagate concrete initializer types;
 call arguments and returns require exact concrete types. Bare integer locals,
 arguments to range parameters, and returns do not gain implicit range types.
 KED-004 through KED-011 do not execute, prove, or dynamically enforce ordinary functions.
@@ -386,7 +386,8 @@ inspection is read-only; BasicBlockId and canonical block storage are compilatio
 Each block owns Let/Assign/DerefAssign statements and exactly one Goto, typed Bool Branch,
 or value Return terminator. Expressions retain their typed HIR trees. Structured
 recursive lowering allocates blocks deterministically, gives every fallthrough
-an explicit Goto, and emits the final source return as a terminator. Empty else
+an explicit Goto, and emits each explicit source return as a terminator. KD-033 removes final-return
+peeling; only actual fallthrough paths join and no final return is synthesized. Empty else
 branches use a direct false edge to the join. A structural validator checks entry,
 targets, reachability, and Bool conditions; unique IDs and single
 terminators follow from indexed storage and the block type. KED-012 permits cycles;
@@ -670,3 +671,35 @@ The validator is unchanged. Constant and all-breaking bodies retain false edges.
 Private tests inspect normalized candidates before loop consumption and inject
 pre-reduction and post-cleanup faults. The specialized verifier and its 1,800-case
 affine cross-check remain unchanged; ordinary code is not executed or proven.
+
+
+## Structured early return ownership boundary (KED-018 / KD-033)
+
+The existing parser/AST → resolver → types → typed HIR → ownership → MIR pipeline
+is unchanged. The resolver validates lexical terminal suffixes, including for
+publicly constructed ASTs. Types establishes no structural closing-brace
+fallthrough after consuming loop-local transfers and exactly types every return
+before ownership. A while always contributes its condition-false path; constants
+do not prove completeness or termination.
+
+Backward finite summaries use `finite_before(return E) = finite_uses(E)`:
+all bypassed continuations are excluded before analyzing preceding operations.
+Separate current/enclosing recurrent LoanId obligations remain authoritative
+throughout operand evaluation. Private terminal-return context, independent of
+Transfer::Return, bypasses only the pre-existing owned non-reference Move gate
+inside the actual operand tree. Availability, loans/provenance, reference gates,
+call/write holds and all other checks remain authoritative.
+
+The return transaction snapshots only after operand-summary installation and
+ordinary expiry, before enabling terminal permission. Nested evaluation and final
+fallible hold validation roll back to that exact entry on failure. Permission is
+restored on both outcomes. Return flow has no local successor; its state is never
+joined or normalized to a loop header/false exit. Actual surviving branches keep
+their own effects. Mixed return/break/continue works in the existing bounded
+structured checker; there is no synthetic function-exit ownership state.
+
+Whole-body structural MIR lowering reuses existing Return, Branch and Goto.
+All-terminal conditionals have no join and no synthetic final Return. Existing
+MIR validation is semantically unchanged, including cycle support and no claim
+that execution reaches a Return. No second checker, generalized CFG/fixed-point
+ownership engine, SSA/phi nodes, reborrowing, destruction or backend is added.

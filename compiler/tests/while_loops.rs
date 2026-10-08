@@ -174,12 +174,11 @@ accept!(sibling_path_precision_outside_loop, "fn f(flag: bool, a: Percent, b: Pe
 accept!(new_reference_after_loop_remains_supported, "fn f(flag: bool, a: Percent) -> Percent { let mut current = a; while flag { current = current; } let view = &current; return *view; }");
 accept!(potentially_diverging_constant_loop, "fn f(flag: bool) -> bool { let mut running = flag; while true { running = true; } return running; }");
 #[test]
-fn grammar_boundaries_and_single_final_return() {
+fn unsupported_loop_grammar_boundaries() {
     for body in [
         "while flag true; return flag;",
         "while flag {}; return flag;",
         "while flag {} else {} return flag;",
-        "while flag { return true; } return flag;",
         "for flag {} return flag;",
         "loop {} return flag;",
         "label: while flag {} return flag;",

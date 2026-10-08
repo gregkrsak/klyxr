@@ -122,6 +122,11 @@ fn statement_future(
     continuing: &FutureUses,
 ) -> FutureUses {
     match statement {
+        ValueStatement::Return { value, .. } => {
+            let mut uses = FutureUses::new();
+            count_expression(value, &mut uses);
+            uses
+        }
         ValueStatement::Continue { .. } | ValueStatement::Break { .. } => continuing.clone(),
         ValueStatement::If {
             condition,
@@ -150,6 +155,7 @@ enum Flow {
     Continue,
     Break,
     NoFallthrough,
+    Return,
 }
 
 // Discover syntactic reference-place uses on all checked paths, including nested
@@ -310,6 +316,9 @@ struct Checker<'a> {
     // One frame per structured loop; branches inherit all enclosing obligations.
     recurrent: Vec<BTreeSet<LoanId>>,
     targets: Vec<LoopTarget<'a>>,
+    // Scoped ONLY to an actual return operand, not Transfer::Return (which also
+    // labels non-terminal conditions). Nested argument evaluation inherits it.
+    terminal_return: bool,
 }
 impl<'a> Checker<'a> {
     fn new(program: &'a Program, function: &ValueFunction) -> Self {
@@ -323,6 +332,7 @@ impl<'a> Checker<'a> {
             loop_scope: None,
             recurrent: Vec::new(),
             targets: Vec::new(),
+            terminal_return: false,
         };
         for id in &function.parameters {
             if let ParameterType::Value(ty) = program.parameter(*id).ty {
@@ -346,7 +356,7 @@ impl<'a> Checker<'a> {
     fn body(&mut self, function: &ValueFunction) -> OwnershipResult {
         assert_eq!(
             self.statements_with(&function.body, function.id, &FutureUses::new())?,
-            Flow::Fallthrough
+            Flow::Return
         );
         Ok(())
     }
@@ -393,7 +403,12 @@ impl<'a> Checker<'a> {
                 }
                 Ok(flow) => return Ok(flow),
                 Err(error) => {
-                    *self = call_before;
+                    // Return owns a narrower transaction: its static operand-only
+                    // continuation and pre-operation expiry must NOT be undone.
+                    // Enclosing compound operations still retain their own atomicity.
+                    if !matches!(statement, ValueStatement::Return { .. }) {
+                        *self = call_before;
+                    }
                     return Err(error);
                 }
             }
@@ -472,8 +487,8 @@ impl<'a> Checker<'a> {
                 self.available(*reference, *span)?;
                 self.loans.get_mut(&loan).expect("write-held loan").held -= 1;
             }
-            ValueStatement::Return { value, .. } => {
-                self.expression(value, Transfer::Return(function))?;
+            ValueStatement::Return { value, span } => {
+                return self.return_edge(value, function, *span);
             }
         }
         self.expire();
@@ -481,6 +496,42 @@ impl<'a> Checker<'a> {
     }
     fn loop_reference_error(&self, span: Span) -> Box<Diagnostic> {
         self.diagnostic(span, "reference activity is unsupported in while conditions".into(), "recurring condition reference activity requires future cyclic loan/lifetime analysis; reference access is permitted only in the body", None)
+    }
+    fn return_edge(
+        &mut self,
+        value: &TypedExpr,
+        function: FunctionId,
+        span: Span,
+    ) -> OwnershipResult<Flow> {
+        // Exact typing already happened. This finite context is static input,
+        // not an operand side effect: install/expire BEFORE taking the snapshot.
+        let mut uses = FutureUses::new();
+        count_expression(value, &mut uses);
+        self.remaining = uses;
+        self.expire();
+        let before = self.clone();
+        self.terminal_return = true;
+        let result = (|| {
+            self.expression(value, Transfer::Return(function))?;
+            // Fallible final validation belongs in the same transaction. Never
+            // discharge recurrence, reset provenance/allocator or clear holds.
+            if self.loans.values().any(|loan| loan.held != 0) {
+                return Err(self.diagnostic(span,
+                    "return cannot complete with active reference operation holds".into(),
+                    "receiving calls and borrowed writes must complete their holds before return; terminal permission does not bypass loan protection", None));
+            }
+            Ok(Flow::Return)
+        })();
+        match result {
+            Ok(flow) => {
+                self.terminal_return = before.terminal_return;
+                Ok(flow) // No local successor normalization or ownership-state join.
+            }
+            Err(error) => {
+                *self = before;
+                Err(error)
+            }
+        }
     }
     fn loop_handle(&self, _reference: Place, span: Span) -> OwnershipResult {
         if self
@@ -1071,8 +1122,9 @@ impl<'a> Checker<'a> {
             .as_ref()
             .is_some_and(|scope| scope.header_places.contains(&place))
             && matches!(self.metadata(place).1, ValueType::Record(_))
+            && !self.terminal_return
         {
-            return Err(self.diagnostic(span, format!("cannot move pre-existing non-Copy value `{}` in while loop", self.metadata(place).0), "the conservative pre-existing-state boundary applies to loop backedges and canonical exits alike; terminal break paths do not relax it; only iteration-local Move values may transfer in the loop body; future generalized cyclic ownership analysis remains unresolved", None));
+            return Err(self.diagnostic(span, format!("cannot move pre-existing non-Copy value `{}` in while loop", self.metadata(place).0), "the conservative pre-existing-state boundary applies to loop backedges and canonical exits alike; terminal break paths do not relax it; outside the actual return-expression tree, only iteration-local Move values may transfer in the loop body; future generalized cyclic ownership analysis remains unresolved", None));
         }
         self.available(place, span)?;
         if self.handles.contains_key(&place) {
@@ -2144,6 +2196,7 @@ mod tests {
         assert_eq!(actual.handles, before.handles);
         assert_eq!(actual.remaining, before.remaining);
         assert_eq!(actual.next_loan, before.next_loan);
+        assert_eq!(actual.terminal_return, before.terminal_return);
         assert_eq!(actual.recurrent, before.recurrent);
         assert_eq!(actual.targets.len(), before.targets.len());
         for (actual, before) in actual.targets.iter().zip(&before.targets) {
@@ -3346,5 +3399,454 @@ mod tests {
         assert_eq!(before[0].span, after[0].span);
         assert_eq!(before[0].required, after[0].required);
         assert!(after[0].message.contains("display"));
+    }
+
+    // Frozen KED-018 return-entry state: summaries/expiry are static inputs,
+    // and the terminal operand is the only transactional operation.
+    fn return_entry<'a>(c: &Checker<'a>, value: &TypedExpr) -> Checker<'a> {
+        let mut entry = c.clone();
+        entry.remaining.clear();
+        count_expression(value, &mut entry.remaining);
+        entry.expire();
+        entry
+    }
+    fn operand(statement: &ValueStatement) -> (&TypedExpr, Span) {
+        let ValueStatement::Return { value, span } = statement else {
+            panic!("return operand")
+        };
+        (value, *span)
+    }
+    const RETURN_HELPERS: &str = "fn take(ticket: Ticket) -> Ticket { return ticket; } fn inspect(view: &Ticket) -> bool { return true; } fn holding(view: &Ticket, ticket: Ticket) -> Ticket { return ticket; } fn after(seen: bool, ticket: Ticket) -> Ticket { return ticket; } fn combine(first: Ticket, view: &bool, second: Ticket) -> Ticket { return second; } fn sink(access: &mut bool) -> bool { return true; } fn fresh() -> Ticket { return fresh(); }";
+    fn return_typed(body: &str) -> Program {
+        typed(&format!("{RETURN_HELPERS} {body}"))
+    }
+    fn return_function(p: &Program) -> &ValueFunction {
+        p.functions().last().unwrap().as_ordinary().unwrap()
+    }
+
+    #[test]
+    fn return_finite_summary_is_operand_only_even_with_all_skipped_contexts() {
+        let p = typed("fn f(flag: bool, value: bool) -> bool { return value; }");
+        let f = return_function(&p);
+        let (value, _) = operand(&f.body[0]);
+        let outside = BTreeMap::from([(Place::Parameter(f.parameters[0]), 9)]);
+        let expected = BTreeMap::from([(Place::Parameter(f.parameters[1]), 1)]);
+        assert_eq!(statement_future(&f.body[0], &outside, &outside), expected);
+        assert_eq!(block_future(&f.body, &outside, &outside), expected);
+        let mut c = Checker::new(&p, f);
+        c.remaining = outside;
+        let entry = return_entry(&c, value);
+        assert_eq!(entry.remaining, expected);
+    }
+    #[test]
+    fn return_entry_expiry_is_not_rolled_back_to_old_outside_summary() {
+        let p = return_typed("fn f(flag: bool, ticket: Ticket) -> Ticket { let view = &ticket; while flag { return combine(ticket, &flag, ticket); } return after(inspect(view), ticket); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body, .. } = &f.body[1] else {
+            panic!()
+        };
+        let outside = future_uses(&f.body[2..]);
+        install_continue_target(&mut c, body, outside.clone());
+        assert_eq!(c.loans.len(), 1);
+        let (value, span) = operand(&body[0]);
+        let entry = return_entry(&c, value);
+        assert!(entry.loans.is_empty());
+        assert!(!entry
+            .remaining
+            .contains_key(&Place::Local(p.locals()[0].id)));
+        assert!(c
+            .return_edge(value, f.id, span)
+            .unwrap_err()
+            .message
+            .contains("moved value"));
+        assert_atomic(&c, &entry);
+        // The statement-list wrapper must preserve exactly that same boundary.
+        let mut direct = entry.clone();
+        direct.remaining = outside.clone();
+        assert!(direct.statements_with(body, f.id, &outside).is_err());
+        assert_atomic(&direct, &entry);
+        assert!(!c.terminal_return);
+    }
+    #[test]
+    fn terminal_permission_is_not_the_return_transfer_tag_or_while_condition_tag() {
+        let p = return_typed("fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { return take(take(ticket)); } return fresh(); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let ValueStatement::While { body, .. } = &f.body[0] else {
+            panic!()
+        };
+        install_continue_target(&mut c, body, FutureUses::new());
+        let (value, span) = operand(&body[0]);
+        c = return_entry(&c, value);
+        let entry = c.clone();
+        assert!(c
+            .expression(value, Transfer::Return(f.id))
+            .unwrap_err()
+            .message
+            .contains("pre-existing non-Copy"));
+        assert_atomic(&c, &entry);
+        assert_eq!(c.return_edge(value, f.id, span).unwrap(), Flow::Return);
+        assert!(matches!(
+            c.states[&Place::Parameter(f.parameters[1])],
+            State::Moved { .. }
+        ));
+        assert!(!c.terminal_return);
+        assert_eq!(c.targets.len(), 1);
+        assert_eq!(c.recurrent.len(), 1);
+    }
+    #[test]
+    fn return_hold_conflict_restores_created_provenance_and_permission() {
+        let p = return_typed("fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { return holding(&ticket, ticket); } return fresh(); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let ValueStatement::While { body, .. } = &f.body[0] else {
+            panic!()
+        };
+        install_continue_target(&mut c, body, FutureUses::new());
+        let (value, span) = operand(&body[0]);
+        let entry = return_entry(&c, value);
+        assert!(c
+            .return_edge(value, f.id, span)
+            .unwrap_err()
+            .message
+            .contains("shared-borrowed"));
+        assert_atomic(&c, &entry);
+        assert_eq!(c.next_loan, 0);
+        assert!(!c.terminal_return);
+        // A failed operand cannot grant a later ordinary expression permission.
+        let ticket = TypedExpr {
+            kind: ExprKind::Parameter(f.parameters[1]),
+            ty: value.ty,
+            span,
+        };
+        assert!(c
+            .expression(&ticket, Transfer::Return(f.id))
+            .unwrap_err()
+            .message
+            .contains("pre-existing non-Copy"));
+    }
+    #[test]
+    fn late_nested_return_argument_rolls_back_earlier_move_borrow_counts_and_holds() {
+        let p = return_typed("fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { return combine(take(ticket), &flag, ticket); } return fresh(); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let ValueStatement::While { body, .. } = &f.body[0] else {
+            panic!()
+        };
+        install_continue_target(&mut c, body, FutureUses::new());
+        let (value, span) = operand(&body[0]);
+        let entry = return_entry(&c, value);
+        assert!(c
+            .return_edge(value, f.id, span)
+            .unwrap_err()
+            .message
+            .contains("moved value"));
+        assert_atomic(&c, &entry);
+        assert_eq!(
+            c.states[&Place::Parameter(f.parameters[1])],
+            State::Available
+        );
+        assert!(c.loans.is_empty());
+    }
+    #[test]
+    fn fallible_final_return_validation_restores_successful_operand_effects() {
+        let p = return_typed("fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { return take(ticket); } return fresh(); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let ValueStatement::While { body, .. } = &f.body[0] else {
+            panic!()
+        };
+        install_continue_target(&mut c, body, FutureUses::new());
+        let (value, span) = operand(&body[0]);
+        let held = c.add_loan(None, BorrowKind::Shared, span);
+        c.loans.get_mut(&held).unwrap().held = 1; // Invalid escaped operation hold.
+        let entry = return_entry(&c, value);
+        let mut successful_operand = entry.clone();
+        successful_operand.terminal_return = true;
+        successful_operand
+            .expression(value, Transfer::Return(f.id))
+            .unwrap();
+        assert!(matches!(
+            successful_operand.states[&Place::Parameter(f.parameters[1])],
+            State::Moved { .. }
+        ));
+        assert!(c
+            .return_edge(value, f.id, span)
+            .unwrap_err()
+            .message
+            .contains("operation holds"));
+        assert_atomic(&c, &entry);
+        assert_eq!(c.loans[&held].held, 1); // Rollback, never hold clearing/repair.
+    }
+    #[test]
+    fn return_success_preserves_original_recurrence_and_never_normalizes_local_successor() {
+        let p = typed("fn f(flag: bool) -> bool { let mut owned = false; let view = &owned; while flag { let temporary = &flag; return *view; } return owned; }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, .. } = &f.body[2] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut c, body, future_uses(&f.body[3..]));
+        let carried = *header.loans.keys().next().unwrap();
+        let mut after = FutureUses::new();
+        count_expression(operand(&body[1]).0, &mut after);
+        c.statements_with(&body[..1], f.id, &after).unwrap();
+        let next = c.next_loan;
+        assert!(next > header.next_loan);
+        let frames = c.recurrent.clone();
+        let targets = c.targets.clone();
+        let handles = c.handles.clone();
+        let (value, span) = operand(&body[1]);
+        assert_eq!(c.return_edge(value, f.id, span).unwrap(), Flow::Return);
+        assert_eq!(c.next_loan, next); // No header allocator reset.
+        assert_eq!(c.handles, handles); // No lexical successor cleanup.
+        assert_eq!(c.recurrent, frames); // No frame discharge.
+        assert_eq!(c.loans[&carried].owner, header.loans[&carried].owner);
+        assert_eq!(c.loans[&carried].kind, header.loans[&carried].kind);
+        assert_eq!(c.remaining[&Place::Local(p.locals()[1].id)], 0);
+        assert!(Rc::ptr_eq(&c.targets[0].header, &targets[0].header));
+        assert!(Rc::ptr_eq(&c.targets[0].exit, &targets[0].exit));
+        assert!(c.loans.values().all(|l| l.held == 0));
+        assert!(!c.terminal_return);
+    }
+    #[test]
+    fn return_only_reference_use_discovers_original_recurrent_loan() {
+        let p = typed("fn f(flag: bool) -> bool { let owned = false; let view = &owned; while flag { return *view; } return owned; }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::While { body, .. } = &f.body[2] else {
+            panic!()
+        };
+        let carried = c.handles[&Place::Local(p.locals()[1].id)];
+        install_continue_target(&mut c, body, FutureUses::new());
+        assert_eq!(c.recurrent.last().unwrap(), &BTreeSet::from([carried]));
+        let (value, span) = operand(&body[0]);
+        c.return_edge(value, f.id, span).unwrap();
+        assert!(c.loans.contains_key(&carried));
+        assert!(!c.terminal_return);
+    }
+    #[test]
+    fn return_nested_call_does_not_expire_recurrence_after_last_finite_reference_use() {
+        let p = return_typed("fn f(flag: bool, ticket: Ticket) -> Ticket { let view = &ticket; while flag { return after(inspect(view), ticket); } return fresh(); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body, .. } = &f.body[1] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut c, body, FutureUses::new());
+        let id = *header.loans.keys().next().unwrap();
+        let (value, span) = operand(&body[0]);
+        let entry = return_entry(&c, value);
+        assert!(c
+            .return_edge(value, f.id, span)
+            .unwrap_err()
+            .message
+            .contains("shared-borrowed"));
+        assert_atomic(&c, &entry);
+        assert_eq!(c.recurrent[0], BTreeSet::from([id]));
+        assert_eq!(c.loans[&id].owner, header.loans[&id].owner);
+    }
+    #[test]
+    fn return_empty_inner_frame_cannot_discharge_enclosing_recurrence() {
+        let p = return_typed("fn f(flag: bool, ticket: Ticket) -> Ticket { let view = &ticket; while flag { while flag { return ticket; } let seen = inspect(view); } return fresh(); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body: outer, .. } = &f.body[1] else {
+            panic!()
+        };
+        install_continue_target(&mut c, outer, FutureUses::new());
+        let ValueStatement::While { body: inner, .. } = &outer[0] else {
+            panic!()
+        };
+        install_continue_target(&mut c, inner, FutureUses::new());
+        assert_eq!(c.recurrent.len(), 2);
+        assert!(!c.recurrent[0].is_empty());
+        assert!(c.recurrent[1].is_empty());
+        let (value, span) = operand(&inner[0]);
+        let entry = return_entry(&c, value);
+        assert!(c
+            .return_edge(value, f.id, span)
+            .unwrap_err()
+            .message
+            .contains("shared-borrowed"));
+        assert_atomic(&c, &entry);
+    }
+    #[test]
+    fn return_permission_never_authorizes_carried_mutable_handle_transfer() {
+        let p = return_typed("fn f(flag: bool, access: &mut bool) -> bool { while flag { return sink(access); } return false; }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let ValueStatement::While { body, .. } = &f.body[0] else {
+            panic!()
+        };
+        install_continue_target(&mut c, body, FutureUses::new());
+        let (value, span) = operand(&body[0]);
+        let entry = return_entry(&c, value);
+        assert!(c
+            .return_edge(value, f.id, span)
+            .unwrap_err()
+            .message
+            .contains("loop-carried mutable reference"));
+        assert_atomic(&c, &entry);
+    }
+    #[test]
+    fn return_success_balances_nested_direct_borrow_call_holds() {
+        let p = return_typed("fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { return after(inspect(&ticket), ticket); } return fresh(); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let ValueStatement::While { body, .. } = &f.body[0] else {
+            panic!()
+        };
+        install_continue_target(&mut c, body, FutureUses::new());
+        let (value, span) = operand(&body[0]);
+        assert_eq!(c.return_edge(value, f.id, span).unwrap(), Flow::Return);
+        assert!(c.loans.is_empty());
+        assert_eq!(c.next_loan, 1);
+        assert!(!c.terminal_return);
+    }
+    #[test]
+    fn return_branch_state_does_not_enter_survivor_or_canonical_false_exit() {
+        let p = return_typed("fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { if flag { let temporary = &flag; return ticket; } else { continue; } } return ticket; }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let ValueStatement::While { body, .. } = &f.body[0] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut c, body, future_uses(&f.body[1..]));
+        let before = c.clone();
+        assert_eq!(
+            c.statements_with(body, f.id, &FutureUses::new()).unwrap(),
+            Flow::NoFallthrough
+        );
+        // Both alternatives terminate locally; neither becomes a merged state.
+        assert_eq!(c.states, before.states);
+        assert_eq!(c.next_loan, before.next_loan);
+        assert!(!c.terminal_return);
+        let exit = &c.targets[0].exit;
+        assert_eq!(
+            exit.states[&Place::Parameter(f.parameters[1])],
+            State::Available
+        );
+        assert_eq!(exit.next_loan, header.next_loan);
+        assert!(!exit.terminal_return);
+    }
+    #[test]
+    fn return_survivor_keeps_actual_move_effect_without_repair() {
+        let p = return_typed("fn f(flag: bool, ticket: Ticket) -> Ticket { if flag { return fresh(); } else { let moved = ticket; } return ticket; }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let after = future_uses(&f.body[1..]);
+        assert_eq!(
+            c.statements_with(&f.body[..1], f.id, &after).unwrap(),
+            Flow::Fallthrough
+        );
+        assert!(matches!(
+            c.states[&Place::Parameter(f.parameters[1])],
+            State::Moved { .. }
+        ));
+        let (value, span) = operand(&f.body[1]);
+        let entry = return_entry(&c, value);
+        assert!(c
+            .return_edge(value, f.id, span)
+            .unwrap_err()
+            .message
+            .contains("moved value"));
+        assert_atomic(&c, &entry);
+    }
+    #[test]
+    fn return_callee_checker_never_inherits_callers_terminal_permission() {
+        let p = return_typed("fn caller(flag: bool, ticket: Ticket) -> Ticket { while flag { return invalid(flag, ticket); } return fresh(); } fn invalid(flag: bool, ticket: Ticket) -> Ticket { while flag { let moved = ticket; return moved; } return fresh(); }");
+        let errors = check(&p).unwrap_err();
+        assert!(errors[0].message.contains("pre-existing non-Copy"));
+    }
+    #[test]
+    fn return_metadata_renaming_preserves_ids_cfg_recurrence_and_errors() {
+        fn rename(p: &mut Program) {
+            for range in &mut p.ranges {
+                range.name = "display".into();
+            }
+            for record in &mut p.records {
+                record.name = "display".into();
+            }
+            for f in &mut p.functions {
+                if let crate::hir::Function::Ordinary(f) = f {
+                    f.name = "display".into();
+                }
+            }
+            for parameter in &mut p.parameters {
+                parameter.name = "display".into();
+            }
+            for local in &mut p.locals {
+                local.name = "display".into();
+            }
+        }
+        let mut p = return_typed("fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { if flag { return take(ticket); } else { continue; } } return ticket; }");
+        check(&p).unwrap();
+        let before = crate::mir::lower(&p);
+        rename(&mut p);
+        check(&p).unwrap();
+        assert_eq!(before, crate::mir::lower(&p));
+        let mut p = return_typed("fn f(flag: bool, ticket: Ticket) -> Ticket { let view = &ticket; while flag { return after(inspect(view), ticket); } return fresh(); }");
+        let before = check(&p).unwrap_err();
+        rename(&mut p);
+        let after = check(&p).unwrap_err();
+        assert_eq!(before[0].span, after[0].span);
+        assert_eq!(before[0].required, after[0].required);
+        assert!(after[0].message.contains("display"));
+    }
+
+    #[test]
+    fn return_tagged_while_condition_has_no_terminal_permission() {
+        let p = return_typed("fn predicate(ticket: Ticket) -> bool { return true; } fn f(ticket: Ticket) -> Ticket { while predicate(ticket) { return ticket; } return fresh(); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let ValueStatement::While {
+            condition, body, ..
+        } = &f.body[0]
+        else {
+            panic!()
+        };
+        install_continue_target(&mut c, body, FutureUses::new());
+        c.loop_scope.as_mut().unwrap().condition = true;
+        c.remaining.clear();
+        count_expression(condition, &mut c.remaining);
+        let before = c.clone();
+        assert!(c
+            .expression(condition, Transfer::Return(f.id))
+            .unwrap_err()
+            .message
+            .contains("while conditions"));
+        assert_atomic(&c, &before);
+        assert!(!c.terminal_return);
+    }
+    #[test]
+    fn returning_branch_move_allocator_and_permission_never_enter_real_fallthrough() {
+        let p = return_typed("fn f(flag: bool, ticket: Ticket) -> Ticket { if flag { let temporary = &flag; return take(ticket); } let moved = ticket; return moved; }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let after = future_uses(&f.body[1..]);
+        assert_eq!(
+            c.statements_with(&f.body[..1], f.id, &after).unwrap(),
+            Flow::Fallthrough
+        );
+        assert_eq!(
+            c.states[&Place::Parameter(f.parameters[1])],
+            State::Available
+        );
+        assert_eq!(c.next_loan, 0);
+        assert!(c.loans.is_empty());
+        assert!(c.handles.is_empty());
+        assert!(!c.terminal_return);
+        assert_eq!(
+            c.statements_with(&f.body[1..], f.id, &FutureUses::new())
+                .unwrap(),
+            Flow::Return
+        );
     }
 }

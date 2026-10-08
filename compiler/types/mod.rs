@@ -112,21 +112,38 @@ fn verified_function(
         body,
     })
 }
+// Targeted transfers terminate a lexical block but while always retains its
+// false exit. Resolver has already rejected block suffixes after terminal flow.
+fn falls_through(body: &[ResolvedValueStatement]) -> bool {
+    match body.last() {
+        Some(
+            ResolvedValueStatement::Return { .. }
+            | ResolvedValueStatement::Break { .. }
+            | ResolvedValueStatement::Continue { .. },
+        ) => false,
+        Some(ResolvedValueStatement::If {
+            then_body,
+            else_body,
+            ..
+        }) => falls_through(then_body) || falls_through(else_body),
+        _ => true,
+    }
+}
 fn value_function(
     program: &mut Program,
     functions: &[ResolvedFunction],
     f: &crate::resolve::ResolvedValueFunction,
 ) -> TypeResult<hir::ValueFunction> {
     let return_type = value_type(f.return_type, f.span)?;
-    if !matches!(f.body.last(), Some(ResolvedValueStatement::Return { .. })) {
+    if falls_through(&f.body) {
         return Err(Diagnostic::semantic(
             f.span,
-            "value-returning Klyxr functions require `return expression;`",
-            "add an explicit final return; implicit block-tail returns are not supported",
+            "function may reach its closing brace without returning; value-returning Klyxr functions require `return expression;`",
+            "every structural function-completing path requires an explicit correctly typed return; while retains its false exit even for constant conditions; implicit block-tail returns are not supported",
         )
         .into());
     }
-    let body = value_statements(program, functions, &f.body, return_type, true)?;
+    let body = value_statements(program, functions, &f.body, return_type)?;
     Ok(hir::ValueFunction {
         id: f.id,
         name: f.name.clone(),
@@ -141,10 +158,9 @@ fn value_statements(
     functions: &[ResolvedFunction],
     statements: &[ResolvedValueStatement],
     return_type: ValueType,
-    allow_return: bool,
 ) -> TypeResult<Vec<hir::ValueStatement>> {
     let mut body = Vec::new();
-    for (index, statement) in statements.iter().enumerate() {
+    for statement in statements {
         let statement = match statement {
             ResolvedValueStatement::Break { span } => hir::ValueStatement::Break { span: *span },
             ResolvedValueStatement::Continue { span } => {
@@ -167,7 +183,7 @@ fn value_statements(
                     )
                     .into());
                 }
-                let body = value_statements(program, functions, body, return_type, false)?;
+                let body = value_statements(program, functions, body, return_type)?;
                 hir::ValueStatement::While {
                     condition,
                     body,
@@ -192,10 +208,8 @@ fn value_statements(
                     )
                     .into());
                 }
-                let then_body =
-                    value_statements(program, functions, then_body, return_type, false)?;
-                let else_body =
-                    value_statements(program, functions, else_body, return_type, false)?;
+                let then_body = value_statements(program, functions, then_body, return_type)?;
+                let else_body = value_statements(program, functions, else_body, return_type)?;
                 hir::ValueStatement::If {
                     condition,
                     then_body,
@@ -295,14 +309,6 @@ fn value_statements(
                 }
             }
             ResolvedValueStatement::Return { value, span } => {
-                if !allow_return || index + 1 != statements.len() {
-                    return Err(Diagnostic::semantic(
-                        *span,
-                        "return must be the final statement",
-                        "early or multiple returns are not supported",
-                    )
-                    .into());
-                }
                 let value = expression(program, functions, value)?;
                 exact_value(program, &value, return_type, "return")?;
                 hir::ValueStatement::Return { value, span: *span }
