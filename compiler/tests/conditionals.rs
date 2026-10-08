@@ -154,11 +154,10 @@ fn conditional_value_syntax_is_rejected() {
     }
 }
 #[test]
-fn unsupported_control_flow_and_branch_returns_are_rejected() {
+fn unsupported_control_flow_and_terminal_suffixes_are_rejected() {
     for statements in [
         "for flag {}",
         "match flag {}",
-        "if flag { return true; }",
         "if flag { return true; } else { return false; }",
         "if flag {} else if flag {}",
         "if flag { break; }",

@@ -586,10 +586,11 @@ impl Resolver {
                 let span = match statement {
                     ast::ValueStatement::Continue { span }
                     | ast::ValueStatement::Break { span }
+                    | ast::ValueStatement::Return { span, .. }
                     | ast::ValueStatement::If { span, .. } => *span,
-                    _ => unreachable!("only break/continue/conditional can terminate here"),
+                    _ => unreachable!("only return/break/continue/conditional can terminate here"),
                 };
-                return Err(error(span, "statements after a terminal path with no fallthrough are unsupported", "break/continue must terminate its lexical block; only real fallthrough paths can have a suffix"));
+                return Err(error(span, "statements after a terminal path with no fallthrough are unsupported", "return/break/continue must terminate its lexical block; only real fallthrough paths can have a suffix"));
             }
         }
         Ok(body)

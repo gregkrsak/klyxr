@@ -179,7 +179,7 @@ fn mutable_copy_assignment_does_not_enable_annotations_or_expression_statements(
     for body in [
         "let x: Percent = value; return x;",
         "identity(value); return value;",
-        "if true { return value; }",
+        "return if true { value } else { value };",
     ] {
         assert!(
             parse_source(&format!("fn bad(value: Percent) -> Percent {{ {body} }}")).is_err(),

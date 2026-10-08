@@ -1,0 +1,9 @@
+// Both explicit paths complete; no implicit or synthetic final return.
+type Percent = range 0..100;
+fn choose(flag: bool, value: Percent) -> Percent {
+    if flag {
+        return value;
+    } else {
+        return value;
+    }
+}

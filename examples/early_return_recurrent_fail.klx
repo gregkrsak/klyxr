@@ -1,0 +1,13 @@
+// Return bypasses finite suffixes, but cannot discharge recurrence early.
+fn conflict(flag: bool, stop: bool) -> bool {
+    let mut owned = false;
+    let view = &owned;
+    while flag {
+        if stop {
+            owned = true;
+            return false;
+        }
+        let seen = *view;
+    }
+    return owned;
+}

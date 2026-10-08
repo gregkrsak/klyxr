@@ -206,7 +206,7 @@ impl Parser<'_> {
         self.expect(&TokenKind::Arrow)?;
         let return_type = self.parse_value_type()?;
         self.expect(&TokenKind::LBrace)?;
-        let (body, end) = self.parse_value_block(true, 0)?;
+        let (body, end) = self.parse_value_block(0)?;
         Ok(ValueFunction {
             name,
             parameters,
@@ -218,7 +218,6 @@ impl Parser<'_> {
 
     fn parse_value_block(
         &mut self,
-        allow_return: bool,
         loop_depth: usize,
     ) -> Result<(Vec<ValueStatement>, usize), ParseError> {
         let mut body = Vec::new();
@@ -249,7 +248,7 @@ impl Parser<'_> {
                 self.advance();
                 let condition = self.parse_expression(0)?;
                 self.expect(&TokenKind::LBrace)?;
-                let (loop_body, end) = self.parse_value_block(false, loop_depth + 1)?;
+                let (loop_body, end) = self.parse_value_block(loop_depth + 1)?;
                 body.push(ValueStatement::While {
                     condition,
                     body: loop_body,
@@ -259,11 +258,11 @@ impl Parser<'_> {
                 self.advance();
                 let condition = self.parse_expression(0)?;
                 self.expect(&TokenKind::LBrace)?;
-                let (then_body, mut end) = self.parse_value_block(false, loop_depth)?;
+                let (then_body, mut end) = self.parse_value_block(loop_depth)?;
                 let else_body = if self.at(&TokenKind::Else) {
                     self.advance();
                     self.expect(&TokenKind::LBrace)?;
-                    let (body, branch_end) = self.parse_value_block(false, loop_depth)?;
+                    let (body, branch_end) = self.parse_value_block(loop_depth)?;
                     end = branch_end;
                     Some(body)
                 } else {
@@ -317,12 +316,6 @@ impl Parser<'_> {
                     span: Span { end, ..span },
                 });
             } else if self.at(&TokenKind::Return) {
-                if !allow_return {
-                    return Err(self.error(
-                        "branch-local returns are unsupported (including loop bodies); use one final function-level return"
-                            .into(),
-                    ));
-                }
                 self.advance();
                 let value = self.parse_expression(0)?;
                 if !self.at(&TokenKind::Semicolon) {
@@ -334,7 +327,7 @@ impl Parser<'_> {
                     span: Span { end, ..span },
                 });
                 if !self.at(&TokenKind::RBrace) {
-                    return Err(self.error("return must be the final statement; statements after return are not supported".into()));
+                    return Err(self.error("return must terminate its lexical statement block; statements after return are not supported".into()));
                 }
             } else {
                 return Err(self.error("value-returning Klyxr functions require `return expression;`; bare expression statements are not supported".into()));

@@ -121,7 +121,7 @@ LocalId; moved sources retain KD-023 conditional unavailability. KD-024 path-spe
 loan expiry and holds apply. MIR leaves initialize the canonical destination and
 Goto a common join; no IfValue remains hidden in MIR expressions. There is no
 phi, block parameter, SSA, general temporary/result slot, definite-assignment
-solver, early return, cleanup, or MIR-based ownership solver. KED-012 later adds narrow statement loops. Conditional
+solver, cleanup, or MIR-based ownership solver. KD-033 later adds structured early return. KED-012 later adds narrow statement loops. Conditional
 values in returns/call arguments/general expression positions remain open under
 OQ-022/OQ-024/OQ-026.
 
@@ -151,7 +151,7 @@ reads/writes, while dead pre-loop loans stay dead. There is no fixed-point solve
 MIR uses Goto → header Branch → body/exit, with body Goto back to header. Its
 validator now accepts cycles with visited tracking; structural validity does not
 prove termination. Both constant-condition edges remain. For and labeled loop transfers (KD-031/KD-032 settle unlabeled continue/break),
-loop values, early returns, verified loops, and general cyclic ownership/loans
+loop values, verified loops, and general cyclic ownership/loans
 remain unresolved. Ordinary loops are neither executed nor proven.
 
 KED-013 permits iteration-local Move ownership in ordinary while bodies (KD-028):
@@ -490,6 +490,32 @@ The validator is unchanged. Constant and all-breaking bodies retain false edges.
 Private tests inspect normalized candidates before loop consumption and inject
 pre-reduction and post-cleanup faults. The specialized verifier and its 1,800-case
 affine cross-check remain unchanged; ordinary code is not executed or proven.
+
+
+### KED-018 / KD-033 — Structured early return
+
+Explicit ordinary return may end any statement path, including branches and
+while bodies. Completeness means no structural closing-brace fallthrough after
+loop transfers are consumed; while always retains its condition-false edge,
+without constant pruning or termination claims. Returns terminate lexical blocks;
+parsed and public ASTs obey the same structural checks. Exact operand typing
+remains before ownership.
+
+The finite continuation before return is operand uses only, excluding every
+bypassed suffix. Current/enclosing recurrent obligations remain active throughout
+actual operand evaluation. A scoped private permission bypasses only pre-existing
+owned non-reference Move restrictions within the return-expression tree; it never
+relaxes preceding operations, availability, loans, provenance, references or holds.
+The return transaction snapshots after finite-summary installation/expiry and
+before permission; all operand/final-validation failures restore that exact entry.
+Permission restores on both outcomes. Successful return state has no local
+successor normalization or merge. Mixed return/break/continue retains actual
+surviving-path state and canonical loop false exits.
+
+MIR lowers whole bodies with existing Return terminators; no synthetic join/final
+return or MIR-validator semantic changes. No function-exit ownership join, second
+checker, generalized CFG/fixed points, SSA/phi, reference returns, reborrowing or
+runtime behavior is added. The verified proof path remains unchanged.
 
 <!-- END KLYXR_CONTEXT.md -->
 
@@ -1426,6 +1452,41 @@ MIR uses existing Goto to the innermost loop exit, with no synthetic join for
 all-terminal arms. Ownership remains above MIR in the single structured checker.
 OQ-022/OQ-024/OQ-025/OQ-026 retain broader control-flow and lifetime design.
 
+## KD-033 — Structured Early Return in Ordinary Functions
+
+**Status:** Accepted (frozen KED-018, Issue #37).
+
+> An explicit `return expression;` may terminate any statement path in an ordinary
+> function. After lexically targeted loop transfers are consumed, an ordinary function
+> must have no structural fallthrough to its closing brace; every finite
+> function-completing path ends in an explicit correctly typed return, without asserting
+> that execution terminates. Structured `while` always retains its condition-false path
+> for this analysis regardless of constant conditions. A return terminates its lexical
+> block and contributes no ownership state to later branch, loop, or suffix joins. The
+> finite continuation immediately before `return E;` consists only of the finite uses
+> required to evaluate `E`; every bypassed lexical, loop-outside, enclosing-loop, and
+> function continuation is excluded on that path. All active current and enclosing
+> recurrent obligations remain authoritative throughout evaluation of the actual return
+> operand, including nested calls and arguments. Terminal-return permission suppresses
+> only the existing restriction on transferring pre-existing owned non-reference Move
+> places within the actual return-expression tree; it does not retroactively authorize
+> earlier loop-carried Move changes and does not bypass availability, borrowing,
+> reference-transfer, provenance, or operation-hold checks. Exact return typing remains
+> in the existing typing phase before ownership. On the ownership side, the return-entry
+> snapshot is taken after operand-only finite-summary installation and ordinary expiry
+> but before terminal-return permission is enabled; all fallible return-specific
+> ownership validation remains inside that transaction, and terminal permission is
+> restored on both success and failure. Only after successful operand and
+> return-specific ownership validation does the function path terminate, with no
+> canonical local successor normalization or ownership-state merge. KED-018 reuses the
+> existing MIR `Return` terminator and introduces no implicit returns, divergence/bottom
+> semantics, generalized unreachable analysis, arbitrary function-exit ownership
+> joining, generalized cyclic ownership/lifetime fixed point, reborrowing, destruction,
+> SSA/phi machinery, second type checker, or new MIR terminator.
+
+KD-033 refines the earlier single-final-return boundaries of KD-019, KD-023,
+and KD-027; their other typing, scope, loan, and loop rules remain unchanged.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -1715,8 +1776,8 @@ canonical tables, including locals, and exposes read-only slices/ID lookups.
 Storage is crate-private; internal construction/transformations must preserve
 identity and reference invariants. IDs have no cross-compilation stability.
 
-Ordinary functions have explicit value return types and exactly one final
-`return expression;`. Immutable locals propagate concrete initializer types;
+Ordinary functions have explicit value return types and structurally complete
+explicit `return expression;` paths under KD-033. Immutable locals propagate concrete initializer types;
 call arguments and returns require exact concrete types. Bare integer locals,
 arguments to range parameters, and returns do not gain implicit range types.
 KED-004 through KED-011 do not execute, prove, or dynamically enforce ordinary functions.
@@ -1820,7 +1881,8 @@ inspection is read-only; BasicBlockId and canonical block storage are compilatio
 Each block owns Let/Assign/DerefAssign statements and exactly one Goto, typed Bool Branch,
 or value Return terminator. Expressions retain their typed HIR trees. Structured
 recursive lowering allocates blocks deterministically, gives every fallthrough
-an explicit Goto, and emits the final source return as a terminator. Empty else
+an explicit Goto, and emits each explicit source return as a terminator. KD-033 removes final-return
+peeling; only actual fallthrough paths join and no final return is synthesized. Empty else
 branches use a direct false edge to the join. A structural validator checks entry,
 targets, reachability, and Bool conditions; unique IDs and single
 terminators follow from indexed storage and the block type. KED-012 permits cycles;
@@ -2105,6 +2167,38 @@ Private tests inspect normalized candidates before loop consumption and inject
 pre-reduction and post-cleanup faults. The specialized verifier and its 1,800-case
 affine cross-check remain unchanged; ordinary code is not executed or proven.
 
+
+## Structured early return ownership boundary (KED-018 / KD-033)
+
+The existing parser/AST → resolver → types → typed HIR → ownership → MIR pipeline
+is unchanged. The resolver validates lexical terminal suffixes, including for
+publicly constructed ASTs. Types establishes no structural closing-brace
+fallthrough after consuming loop-local transfers and exactly types every return
+before ownership. A while always contributes its condition-false path; constants
+do not prove completeness or termination.
+
+Backward finite summaries use `finite_before(return E) = finite_uses(E)`:
+all bypassed continuations are excluded before analyzing preceding operations.
+Separate current/enclosing recurrent LoanId obligations remain authoritative
+throughout operand evaluation. Private terminal-return context, independent of
+Transfer::Return, bypasses only the pre-existing owned non-reference Move gate
+inside the actual operand tree. Availability, loans/provenance, reference gates,
+call/write holds and all other checks remain authoritative.
+
+The return transaction snapshots only after operand-summary installation and
+ordinary expiry, before enabling terminal permission. Nested evaluation and final
+fallible hold validation roll back to that exact entry on failure. Permission is
+restored on both outcomes. Return flow has no local successor; its state is never
+joined or normalized to a loop header/false exit. Actual surviving branches keep
+their own effects. Mixed return/break/continue works in the existing bounded
+structured checker; there is no synthetic function-exit ownership state.
+
+Whole-body structural MIR lowering reuses existing Return, Branch and Goto.
+All-terminal conditionals have no join and no synthetic final Return. Existing
+MIR validation is semantically unchanged, including cycle support and no claim
+that execution reaches a Return. No second checker, generalized CFG/fixed-point
+ownership engine, SSA/phi nodes, reborrowing, destruction or backend is added.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -2238,8 +2332,8 @@ did not enable direct owned-local reassignment under KED-007. KED-011 now settle
 only direct reassignment of mutable Bool/named-range Copy locals (KD-026).
 
 KED-008 adds ordinary statement `if` / optional `else`, with nested lexical
-branch scopes. Ordinary functions still require one final function-level return;
-early/multiple return paths remain unresolved. KED-010 settles owned/Copy
+branch scopes. KED-018 / KD-033 now settles structured early returns and
+no structural closing-brace fallthrough; loop false exits remain possible. KED-010 settles owned/Copy
 conditional values only in complete local initializer position, with exact branch
 types and mandatory else (KD-025). Statement-containing value blocks and general
 conditional-expression positions remain unresolved.
@@ -2249,7 +2343,6 @@ Still open:
 - whether unqualified `fn` is the final surface spelling of the base `safe` assurance level;
 - explicit `safe fn` syntax, if any;
 - unit/no-value function return semantics;
-- early returns and multiple control-flow return paths;
 - conditional values in returns, call arguments, and general expression positions;
 - statement-containing value blocks and broader owned branch-result semantics;
 - non-Copy replacement, reference-local reassignment, and broader mutable-local semantics;
@@ -2270,12 +2363,13 @@ and literal-conversion rules. Copy customization and destruction remain under OQ
 
 
 KED-012 permits nested statement while for ownership-stable Copy state only.
-Loop-local returns, loop values, early/multiple returns and general loop control
+KED-012 originally left loop-local and early/multiple returns unresolved;
+KD-033 now settles structured early return. Loop values and broader loop control
 remain unresolved.
 
 KED-013 now permits iteration-local Move values in while bodies (KD-028),
 including fresh record results, transfers and existing branch joins. Conditions
-remain Copy-only; scopes and the single final return are unchanged. General
+remain Copy-only; scopes are unchanged; KD-033 later permits structurally complete early returns. General
 loop-carried ownership and cyclic reference use remain unresolved. KED-014 permits
 iteration-local body borrowing (KD-029), with reference-free while conditions and
 historically no use of handles present at the current header; KD-030 refines this
@@ -2297,7 +2391,7 @@ frames before cleanup validation completes. Continue removes only the skipped
 same-iteration finite suffix; post-loop finite uses remain required. The real
 false exit exists even when every body path continues and discharges only its own
 frame. Structured no-fallthrough suffix rejection is narrow, not a general
-unreachable-code policy. Labels/loop values, early returns, generalized
+unreachable-code policy. KD-033 settles structured early returns. Labels/loop values, generalized
 cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
 destruction and execution remain unresolved.
 
@@ -2408,7 +2502,7 @@ frames before cleanup validation completes. Continue removes only the skipped
 same-iteration finite suffix; post-loop finite uses remain required. The real
 false exit exists even when every body path continues and discharges only its own
 frame. Structured no-fallthrough suffix rejection is narrow, not a general
-unreachable-code policy. Labels/loop values, early returns, generalized
+unreachable-code policy. KD-033 settles structured early returns. Labels/loop values, generalized
 cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
 destruction and execution remain unresolved.
 
@@ -2478,7 +2572,7 @@ frames before cleanup validation completes. Continue removes only the skipped
 same-iteration finite suffix; post-loop finite uses remain required. The real
 false exit exists even when every body path continues and discharges only its own
 frame. Structured no-fallthrough suffix rejection is narrow, not a general
-unreachable-code policy. Labels/loop values, early returns, generalized
+unreachable-code policy. KD-033 settles structured early returns. Labels/loop values, generalized
 cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
 destruction and execution remain unresolved.
 
@@ -2501,8 +2595,9 @@ KED-008 establishes only acyclic statement conditionals and the first ordinary M
 KED-009 improves loan precision across acyclic statement branches. Ownership
 remains in the semantic typed-HIR → MIR stage, using one existing ownership
 checker. Full MIR-based ownership dataflow and loop/fixed-point analysis remain
-unresolved, as do general conditional expressions, phi/block parameters, early
-returns, definite initialization, and unreachable-path analysis.
+unresolved, as do general conditional expressions, phi/block parameters,
+definite initialization, and unreachable-path analysis. KD-033 settles structured
+early returns without generalizing ownership dataflow.
 
 KED-010 settles owned/Copy value production across acyclic joins only in local
 initializer position. Its first MIR strategy initializes the existing source
@@ -2516,7 +2611,7 @@ Still open:
 - join values without a source local destination, arbitrary temporaries, and SSA;
 - block parameters / phi-like representations;
 - generalized cyclic ownership/loans and fixed-point analysis, `for`, loop values and labels (KD-031/KD-032 settle unlabeled `continue`/`break`);
-- early returns, multiple return paths, divergence / bottom types, and `match` lowering;
+- divergence / bottom types and `match` lowering (KD-033 settles structured early returns);
 - definite initialization and uninitialized locals;
 - full MIR-based ownership dataflow and maximally precise path-sensitive loan analysis;
 - short-circuit Boolean lowering / evaluation guarantees and unreachable-code policy;
@@ -2570,7 +2665,7 @@ frames before cleanup validation completes. Continue removes only the skipped
 same-iteration finite suffix; post-loop finite uses remain required. The real
 false exit exists even when every body path continues and discharges only its own
 frame. Structured no-fallthrough suffix rejection is narrow, not a general
-unreachable-code policy. Labels/loop values, early returns, generalized
+unreachable-code policy. KD-033 settles structured early returns. Labels/loop values, generalized
 cyclic ownership and lifetime inference, fixed points, MIR ownership, reborrowing,
 destruction and execution remain unresolved.
 
@@ -2585,5 +2680,19 @@ exit merging or terminal-path relaxation of pre-existing Move restrictions.
 Labeled transfers, break/loop values, generalized cyclic ownership/lifetime fixed
 points, MIR ownership, unreachable-code policy, reborrowing, destruction, execution
 and termination proof remain unresolved.
+
+
+### KD-033 refinement of OQ-022/OQ-024/OQ-025/OQ-026
+
+KED-018 settles explicit structured early return and structural function
+completeness in the current ordinary subset. Operand-only finite liveness excludes
+bypassed continuations; current and enclosing recurrence remains authoritative
+through actual operand evaluation. Terminal permission only relaxes the
+pre-existing owned non-reference Move gate inside the return operand, never prior
+operations, borrowing, reference transfer or replacement/destruction rules.
+Reference returns, escaping lifetimes, reborrowing, general cyclic ownership/NLL,
+function-exit state joins, unreachable/constant-path analysis, bottom/divergence,
+unit functions, SSA/phi, and full MIR dataflow remain unresolved. No runtime
+cleanup/destruction is implied by return or loan expiry.
 
 <!-- END OPEN_QUESTIONS.md -->

@@ -855,3 +855,38 @@ AST, resolution, and typed HIR preserve Break/span and canonical source identiti
 MIR uses existing Goto to the innermost loop exit, with no synthetic join for
 all-terminal arms. Ownership remains above MIR in the single structured checker.
 OQ-022/OQ-024/OQ-025/OQ-026 retain broader control-flow and lifetime design.
+
+## KD-033 — Structured Early Return in Ordinary Functions
+
+**Status:** Accepted (frozen KED-018, Issue #37).
+
+> An explicit `return expression;` may terminate any statement path in an ordinary
+> function. After lexically targeted loop transfers are consumed, an ordinary function
+> must have no structural fallthrough to its closing brace; every finite
+> function-completing path ends in an explicit correctly typed return, without asserting
+> that execution terminates. Structured `while` always retains its condition-false path
+> for this analysis regardless of constant conditions. A return terminates its lexical
+> block and contributes no ownership state to later branch, loop, or suffix joins. The
+> finite continuation immediately before `return E;` consists only of the finite uses
+> required to evaluate `E`; every bypassed lexical, loop-outside, enclosing-loop, and
+> function continuation is excluded on that path. All active current and enclosing
+> recurrent obligations remain authoritative throughout evaluation of the actual return
+> operand, including nested calls and arguments. Terminal-return permission suppresses
+> only the existing restriction on transferring pre-existing owned non-reference Move
+> places within the actual return-expression tree; it does not retroactively authorize
+> earlier loop-carried Move changes and does not bypass availability, borrowing,
+> reference-transfer, provenance, or operation-hold checks. Exact return typing remains
+> in the existing typing phase before ownership. On the ownership side, the return-entry
+> snapshot is taken after operand-only finite-summary installation and ordinary expiry
+> but before terminal-return permission is enabled; all fallible return-specific
+> ownership validation remains inside that transaction, and terminal permission is
+> restored on both success and failure. Only after successful operand and
+> return-specific ownership validation does the function path terminate, with no
+> canonical local successor normalization or ownership-state merge. KED-018 reuses the
+> existing MIR `Return` terminator and introduces no implicit returns, divergence/bottom
+> semantics, generalized unreachable analysis, arbitrary function-exit ownership
+> joining, generalized cyclic ownership/lifetime fixed point, reborrowing, destruction,
+> SSA/phi machinery, second type checker, or new MIR terminator.
+
+KD-033 refines the earlier single-final-return boundaries of KD-019, KD-023,
+and KD-027; their other typing, scope, loan, and loop rules remain unchanged.
