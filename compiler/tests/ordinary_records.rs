@@ -602,3 +602,89 @@ fn verified_battery_path_and_literal_harness_remain_separate() {
     assert_eq!(p.bindings().len(), 1);
     assert!(mir::lower(&p).functions().is_empty());
 }
+
+fn parse_diagnostic_at(body: &str, message: &str, marker: &str, offset: usize) {
+    let source = format!("{DECL}\n{body}");
+    let FrontendError::Parse(error) = compile_source(&source).unwrap_err() else {
+        panic!("expected a Parse diagnostic");
+    };
+    assert_eq!(error.message, message);
+    let start = source.rfind(marker).unwrap() + offset;
+    assert_eq!(error.span.start, start);
+    assert_eq!(error.span.end, start + usize::from(start < source.len()));
+    assert_eq!(
+        error.span.line,
+        source[..start].bytes().filter(|b| *b == b'\n').count() + 1
+    );
+    assert_eq!(
+        error.span.column,
+        source[..start].rsplit('\n').next().unwrap().len() + 1
+    );
+}
+const TEMPORARY_PROJECTION: &str = "field access through a temporary or nested projection is unsupported; use a directly named owned record parameter or local";
+const MISSING_INITIALIZER: &str = "record construction requires a field initializer";
+
+#[test]
+fn parenthesized_call_result_projection_has_targeted_parse_diagnostic() {
+    parse_diagnostic_at(
+        "fn f(p: Percent) -> Percent {\n    return (make(p)).charge;\n}",
+        TEMPORARY_PROJECTION,
+        ".charge",
+        0,
+    );
+}
+#[test]
+fn parenthesized_construction_result_projection_has_targeted_parse_diagnostic() {
+    parse_diagnostic_at(
+        "fn f(p: Percent) -> Percent {\n    return (Battery { charge: p }).charge;\n}",
+        TEMPORARY_PROJECTION,
+        ".charge",
+        0,
+    );
+}
+#[test]
+fn parenthesized_projection_in_call_argument_has_targeted_parse_diagnostic() {
+    for operand in ["(make(p)).charge", "(Battery { charge: p }).charge"] {
+        parse_diagnostic_at(
+            &format!(
+                "fn f(p: Percent) -> Percent {{\n    return identity(identity({operand}));\n}}"
+            ),
+            TEMPORARY_PROJECTION,
+            ".charge",
+            0,
+        );
+    }
+}
+#[test]
+fn legal_parenthesized_record_expressions_remain_accepted() {
+    good("fn f(p: Percent) -> Battery { return (make((p))); }");
+    good("fn f(p: Percent) -> Battery { return (Battery { charge: (identity((p))) }); }");
+    good("fn f(b: Battery) -> Percent { return identity((b.charge)); }");
+}
+#[test]
+fn construction_missing_initializer_at_semicolon_has_targeted_parse_diagnostic() {
+    parse_diagnostic_at(
+        "fn f(p: Percent) -> Battery {\n    return Battery { charge: ; };\n}",
+        MISSING_INITIALIZER,
+        ": ;",
+        2,
+    );
+}
+#[test]
+fn construction_missing_initializer_at_eof_has_targeted_parse_diagnostic() {
+    parse_diagnostic_at(
+        "fn f(p: Percent) -> Battery {\n    return Battery { charge:",
+        MISSING_INITIALIZER,
+        "charge:",
+        "charge:".len(),
+    );
+}
+#[test]
+fn nonempty_malformed_constructor_initializer_keeps_its_expression_diagnostic() {
+    parse_diagnostic_at(
+        "fn f(p: Percent) -> Battery {\n    return Battery { charge: p - ; };\n}",
+        "unsupported or malformed expression: Semicolon",
+        "- ;",
+        2,
+    );
+}

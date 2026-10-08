@@ -4681,15 +4681,24 @@ mod tests {
         let f = return_function(&p);
         let mut c = Checker::new(&p, f);
         c.statements(&f.body[..1], f.id).unwrap();
-        let ValueStatement::While { body, .. } = &f.body[1] else {
+        let ValueStatement::While { body, span, .. } = &f.body[1] else {
             panic!()
         };
         let loan = *c.loans.keys().next().unwrap();
         let header = pin_body(&mut c, body);
-        c.loop_scope = Some(LoopScope::new(&header, false));
         c.statements(body, f.id).unwrap();
         assert_eq!(c.recurrent.last().unwrap(), &BTreeSet::from([loan]));
         assert!(c.loans.contains_key(&loan));
+        assert!(c.states.len() > header.states.len());
+        c.validate_loop_backedge(&header, *span).unwrap();
+        assert!(c.same_loop_state(&header));
+        assert_eq!(c.next_loan, header.next_loan);
+        assert_eq!(c.states.len(), header.states.len());
+        assert_eq!(c.handles, header.handles);
+        assert_eq!(c.loans[&loan].owner, header.loans[&loan].owner);
+        assert_eq!(c.loans[&loan].kind, header.loans[&loan].kind);
+        assert_eq!(c.recurrent, header.recurrent);
+        c.assert_no_holds();
     }
     #[test]
     fn record_identity_and_ownership_ignore_diagnostic_names() {

@@ -529,7 +529,10 @@ impl Parser<'_> {
                         ));
                     }
                     self.advance();
-                    if self.at(&TokenKind::RBrace) {
+                    if self.at(&TokenKind::RBrace)
+                        || self.at(&TokenKind::Semicolon)
+                        || self.at(&TokenKind::Eof)
+                    {
                         return Err(
                             self.error("record construction requires a field initializer".into())
                         );
@@ -584,10 +587,9 @@ impl Parser<'_> {
             }
             TokenKind::LParen => {
                 self.advance();
-                let mut expression = self.parse_expression(0)?;
-                let end = self.expect(&TokenKind::RParen)?.span.end;
-                expression.span = Span { end, ..start };
-                return Ok(expression);
+                let expression = self.parse_expression(0)?;
+                self.expect(&TokenKind::RParen)?;
+                expression.kind
             }
             other => {
                 return Err(self.error(format!("unsupported or malformed expression: {other:?}")))
