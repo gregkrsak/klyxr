@@ -84,6 +84,14 @@ pub(crate) enum ResolvedValueStatement {
         body: Vec<ResolvedValueStatement>,
         span: Span,
     },
+    FieldAssign {
+        owner: hir::Place,
+        field_name: String,
+        owner_span: Span,
+        field_span: Span,
+        value: ResolvedExpr,
+        span: Span,
+    },
     Assign {
         target: hir::Place,
         value: ResolvedExpr,
@@ -597,6 +605,13 @@ impl Resolver {
                         mutable: *mutable,
                         initializer,
                         span: *span,
+                    }
+                }
+                ast::ValueStatement::FieldAssign { owner, field, owner_span, field_span, value, span } => {
+                    let owner = self.reference_place(owner, scope, *owner_span)?;
+                    ResolvedValueStatement::FieldAssign {
+                        owner, field_name: field.clone(), owner_span: *owner_span,
+                        field_span: *field_span, value: self.expression(value, scope, false)?, span: *span,
                     }
                 }
                 ast::ValueStatement::Assign {

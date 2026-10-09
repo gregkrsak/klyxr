@@ -386,7 +386,41 @@ impl Parser<'_> {
             } else if matches!(self.peek_kind(), TokenKind::Ident(_))
                 && self.lookahead_is(1, &TokenKind::Dot)
             {
-                return Err(self.error("field mutation and general field expression statements are unsupported; fields are read-only Copy values".into()));
+                let owner_span = self.peek().span;
+                let owner = self.expect_ident()?;
+                self.expect(&TokenKind::Dot)?;
+                let field_span = self.peek().span;
+                if !matches!(self.peek_kind(), TokenKind::Ident(_)) {
+                    return Err(
+                        self.error("field assignment requires a field name after `.`".into())
+                    );
+                }
+                let field = self.expect_ident()?;
+                if self.at(&TokenKind::Dot) {
+                    return Err(
+                        self.error("temporary and nested field projection are unsupported".into())
+                    );
+                }
+                if !self.at(&TokenKind::Equal) {
+                    return Err(self.error("field assignment requires `=`; compound assignment and general field expression statements are unsupported".into()));
+                }
+                self.advance();
+                if self.at(&TokenKind::Semicolon)
+                    || self.at(&TokenKind::RBrace)
+                    || self.at(&TokenKind::Eof)
+                {
+                    return Err(self.error("field assignment requires an RHS expression".into()));
+                }
+                let value = self.parse_expression(0)?;
+                let end = self.expect(&TokenKind::Semicolon)?.span.end;
+                body.push(ValueStatement::FieldAssign {
+                    owner,
+                    field,
+                    owner_span,
+                    field_span,
+                    value,
+                    span: Span { end, ..span },
+                });
             } else {
                 return Err(self.error("value-returning Klyxr functions require `return expression;`; bare expression statements are not supported".into()));
             }

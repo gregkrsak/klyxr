@@ -117,6 +117,14 @@ pub enum ValueStatement {
         body: Vec<ValueStatement>,
         span: Span,
     },
+    FieldAssign {
+        owner: String,
+        field: String,
+        owner_span: Span,
+        field_span: Span,
+        value: Expr,
+        span: Span,
+    },
     Assign {
         target: String,
         value: Expr,

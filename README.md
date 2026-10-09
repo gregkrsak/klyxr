@@ -382,6 +382,11 @@ and record-field boundaries. Inclusive bounds are checked during typing; this is
 not general conversion, inference or arithmetic-result verification. See
 [the contextual literal boundary](compiler/README.md#contextual-named-range-literal-formation-ked-022--kd-037).
 
+KD-038 adds direct Copy-field assignment through a mutable named owned record
+local, such as `working.charge = 80;`. It evaluates the complete RHS first, then
+checks whole-record availability and loans; it adds no field ownership, reference
+projection, execution or proof. See [the field-assignment boundary](compiler/README.md#direct-copy-field-assignment-ked-023--kd-038).
+
 Try the current prototype from the repository root with Rust/rustup installed:
 
 ```bash

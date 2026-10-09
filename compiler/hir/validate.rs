@@ -37,6 +37,40 @@ impl Program {
     fn record_statements(&self, function: FunctionId, body: &[ValueStatement]) -> Result {
         for statement in body {
             match statement {
+                ValueStatement::CopyFieldAssign {
+                    owner,
+                    record,
+                    field,
+                    value,
+                    span,
+                    ..
+                } => {
+                    let invalid = |message| {
+                        Box::new(Diagnostic::semantic(*span, message, "canonical mutable local, record membership and exact Copy-field RHS type must be preserved"))
+                    };
+                    let local = self
+                        .locals
+                        .get(owner.0)
+                        .filter(|l| l.id == *owner && l.function == function)
+                        .ok_or_else(|| {
+                            invalid("Copy-field assignment has an invalid or foreign local owner")
+                        })?;
+                    if !local.mutable || local.ty != ValueType::Record(*record) {
+                        return Err(invalid("Copy-field assignment requires a mutable owned local of the stated record type"));
+                    }
+                    let range = self.record_field(*record, *field)
+                        .ok_or_else(|| invalid("Copy-field assignment field does not belong to the canonical owner record"))?;
+                    let declaration = self.range(range); // record_field checked canonical indexing.
+                    if declaration.min > declaration.max {
+                        return Err(invalid(
+                            "Copy-field assignment has invalid canonical range bounds",
+                        ));
+                    }
+                    if value.ty != ExprType::Range(range) {
+                        return Err(invalid("Copy-field assignment RHS must have the exact declared named-range Copy type"));
+                    }
+                    self.record_expression(function, value, true, false)?;
+                }
                 ValueStatement::Let { initializer, .. } => {
                     self.record_expression(function, initializer, true, true)?
                 }
@@ -1118,6 +1152,175 @@ mod multiple_fields {
                 .unwrap_err()
                 .message
                 .contains("inclusive range bounds"));
+        }
+    }
+    fn field_fixture() -> Program {
+        crate::compile_source("type Percent = range 0..100; type Other = range 0..100; record Battery { charge: Percent,health: Percent } record Capacitor { charge: Percent } fn id(p: Percent) -> Percent {return p;} fn f(b: Battery) {let mut owned = b; owned.charge = 80;} fn g(b: Battery) {let mut other = b;}").unwrap()
+    }
+    fn field_statement(p: &mut Program) -> &mut ValueStatement {
+        let Function::Ordinary(f) = &mut p.functions[1] else {
+            panic!()
+        };
+        &mut f.body[1]
+    }
+    #[test]
+    fn field_assignment_publication_rejects_foreign_same_spelled_same_typed_field() {
+        let mut p = field_fixture();
+        let foreign = p.records[1].fields[0];
+        let ValueStatement::CopyFieldAssign { field, .. } = field_statement(&mut p) else {
+            panic!()
+        };
+        *field = foreign;
+        assert!(p
+            .validate_record_expressions()
+            .unwrap_err()
+            .message
+            .contains("canonical owner record"));
+    }
+    #[test]
+    fn field_assignment_publication_rejects_invalid_ids_wrong_membership_and_root_metadata_without_panic(
+    ) {
+        for fault in 0..13 {
+            let mut p = field_fixture();
+            match fault {
+                0 => {
+                    let ValueStatement::CopyFieldAssign { owner, .. } = field_statement(&mut p)
+                    else {
+                        panic!()
+                    };
+                    *owner = LocalId(usize::MAX);
+                }
+                1 => {
+                    let ValueStatement::CopyFieldAssign { record, .. } = field_statement(&mut p)
+                    else {
+                        panic!()
+                    };
+                    *record = RecordId(usize::MAX);
+                }
+                2 => {
+                    let ValueStatement::CopyFieldAssign { field, .. } = field_statement(&mut p)
+                    else {
+                        panic!()
+                    };
+                    *field = FieldId(usize::MAX);
+                }
+                3 => p.locals[0].mutable = false,
+                4 => p.locals[0].function = FunctionId(2),
+                5 => p.locals[0].id = LocalId(usize::MAX),
+                6 => p.locals[0].ty = ValueType::SharedRef(ReferentType::Record(RecordId(0))),
+                7 => p.fields[0].ty = RangeTypeId(usize::MAX),
+                8 => p.ranges[0].id = RangeTypeId(usize::MAX),
+                9 => {
+                    let ValueStatement::CopyFieldAssign { record, .. } = field_statement(&mut p)
+                    else {
+                        panic!()
+                    };
+                    *record = RecordId(1);
+                }
+                10 => p.fields[0].record = RecordId(1),
+                11 => {
+                    let ValueStatement::CopyFieldAssign { owner, .. } = field_statement(&mut p)
+                    else {
+                        panic!()
+                    };
+                    *owner = LocalId(1);
+                }
+                12 => p.ranges[0].min = 101,
+                _ => unreachable!(),
+            }
+            assert!(p.validate_record_expressions().is_err(), "fault {fault}");
+        }
+    }
+    #[test]
+    fn field_assignment_publication_rejects_wrong_exact_rhs_and_formed_metadata() {
+        for fault in 0..4 {
+            let mut p = field_fixture();
+            let ValueStatement::CopyFieldAssign { value, .. } = field_statement(&mut p) else {
+                panic!()
+            };
+            match fault {
+                0 => value.ty = ExprType::Range(RangeTypeId(1)),
+                1 => value.ty = ExprType::Bool,
+                2 => value.kind = ExprKind::FormedRangeLiteral(101),
+                3 => value.ty = ExprType::Range(RangeTypeId(usize::MAX)),
+                _ => unreachable!(),
+            }
+            assert!(p.validate_record_expressions().is_err(), "fault {fault}");
+        }
+    }
+    #[test]
+    fn field_assignment_hir_walker_validates_deep_rhs_in_every_statement_container() {
+        for position in 0..3 {
+            for container in 0..3 {
+                let mut p = field_fixture();
+                let statement = field_statement(&mut p).clone();
+                let ValueStatement::CopyFieldAssign { mut value, .. } = statement.clone() else {
+                    panic!()
+                };
+                let mut children = vec![value.clone(); 3];
+                children[position].kind = ExprKind::FormedRangeLiteral(101);
+                value.kind = ExprKind::Call {
+                    function: FunctionId(0),
+                    arguments: vec![TypedExpr {
+                        kind: ExprKind::RecordConstruct {
+                            record: RecordId(0),
+                            fields: vec![
+                                RecordFieldInit {
+                                    field: FieldId(0),
+                                    value: TypedExpr {
+                                        kind: ExprKind::Call {
+                                            function: FunctionId(0),
+                                            arguments: children,
+                                        },
+                                        ..value.clone()
+                                    },
+                                    span: value.span,
+                                },
+                                RecordFieldInit {
+                                    field: FieldId(1),
+                                    value: value.clone(),
+                                    span: value.span,
+                                },
+                            ],
+                        },
+                        ty: ExprType::Record(RecordId(0)),
+                        span: value.span,
+                    }],
+                };
+                let mut statement = statement;
+                let ValueStatement::CopyFieldAssign { value: slot, .. } = &mut statement else {
+                    panic!()
+                };
+                *slot = value;
+                let condition = TypedExpr {
+                    kind: ExprKind::BoolLiteral(true),
+                    ty: ExprType::Bool,
+                    span: p.locals[0].span,
+                };
+                let Function::Ordinary(f) = &mut p.functions[1] else {
+                    panic!()
+                };
+                f.body[1] = match container {
+                    0 => statement,
+                    1 => ValueStatement::If {
+                        condition,
+                        then_body: vec![],
+                        else_body: vec![statement],
+                        span: f.span,
+                    },
+                    2 => ValueStatement::While {
+                        condition,
+                        body: vec![statement],
+                        span: f.span,
+                    },
+                    _ => unreachable!(),
+                };
+                assert!(p
+                    .validate_record_expressions()
+                    .unwrap_err()
+                    .message
+                    .contains("outside"));
+            }
         }
     }
 }

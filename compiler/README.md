@@ -176,7 +176,7 @@ evaluation-order specification. Unused owned parameters/locals are accepted.
 
 This is whole-record ownership with acyclic branch joins and the documented stable-loop boundary. Ordinary records enter through
 by-value parameters, ordinary call results, or KD-035 construction. Direct named-owner
-Copy-field reads preserve whole-record ownership. Field mutation, destructuring, partial moves, Copy customization, Clone, destruction,
+Copy-field reads and KD-038 direct Copy-field assignment preserve whole-record ownership. Broader field mutation, destructuring, partial moves, Copy customization, Clone, destruction,
 and runtime resource release remain unsupported. KED-006 adds mutable owned locals
 and references within the restricted borrowing model below.
 In particular, ordinary record equality and arithmetic remain type errors.
@@ -753,8 +753,8 @@ consume(&mut battery, 50); // rejected: 50 <= 30 is false
 
 The prototype does not implement ownership beyond core ordinary moves and
 whole-value acyclic loans, reference returns, explicit lifetimes, reborrowing,
-auto-dereference, non-Copy replacement, field/reference mutation beyond Copy-safe
-whole-value writes, partial borrowing, general replacement, destruction,
+auto-dereference, non-Copy replacement, field/reference mutation beyond KD-038 direct
+Copy-field assignment and Copy-safe whole-value writes, partial borrowing, general replacement, destruction,
 effects, runtime contracts, expressions beyond this subset, general cyclic ownership/loans, quantifiers,
 multi-field verified/harness state, record invariants, SMT/VIR or MIR backend/verification lowering, or machine-code generation. In particular,
 `examples/effects.klx` is illustrative and is rejected rather than analyzed.
@@ -764,7 +764,7 @@ unimplemented properties or unspecified program correctness.
 KD-036 implements ordinary records with one or more named-range fields and complete
 named construction; specialized verified and harness state still requires exactly one field.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, KD-033, and KD-034,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, KD-033, KD-034, KD-035, KD-036, KD-037, and KD-038,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
@@ -1352,7 +1352,7 @@ that field reads create no partial availability. Public declaration-boundary
 rejections do not demonstrate partial-move checking.
 
 Reference roots (`&T`/`&mut T`), temporary/nested projection, field borrowing,
-field mutation, broader field types, partial moves, structural compatibility,
+field mutation beyond KD-038, broader field types, partial moves, structural compatibility,
 implicit nominal/literal conversion, invariant enforcement and replacement remain
 unsupported. Ordinary functions remain checked/lowered, not executed or proven.
 Verified battery contracts, diagnostics, counts and literal harness behavior are
@@ -1416,7 +1416,7 @@ Construction and reads are transparent data primitives. No factory, builder,
 getter/setter or executable property is generated or required. Readability,
 constructibility and mutability are separate future authorities. Empty/default/
 positional/spread construction, broader field types, invariants, visibility,
-field borrowing/mutation, partial moves, reference/temporary/nested projection,
+field borrowing, mutation beyond KD-038, partial moves, reference/temporary/nested projection,
 general contextual propagation, layout, destruction, generalized cyclic inference, execution
 and code generation are not implemented. Ordinary records are checked and lowered,
 not executed or proven. This decision specifies record initializer ordering only;
@@ -1467,3 +1467,63 @@ uses the existing arithmetic rule. Raw `p <= 101` and `p - 101` retain their cur
 behavior; this feature does not prove range-typed arithmetic bounds or safety.
 Verified-body constants and top-level harness literals retain their separate
 representation, eligibility gates, diagnostics, proofs and call-state behavior.
+
+
+## Direct Copy-field assignment (KED-023 / KD-038)
+
+```klyxr
+type Percent = range 0..100;
+record Battery { charge: Percent, health: Percent }
+fn refresh(battery: Battery) -> Battery {
+    let mut working = battery;
+    working.health = 100;
+    working.charge = working.health;
+    return working;
+}
+```
+
+See `examples/copy_field_assignment.klx` and its intentional borrowed-root failure
+`examples/copy_field_assignment_fail.klx`. The root must be a directly named,
+previously declared mutable owned ordinary record local. Parameter, immutable,
+reference and non-record roots reject; so do temporary/nested projection, compound
+assignment, assignment expressions and reference-field mutation. Canonical field
+selection uses the actual record; exact nominal range typing applies even to equal
+bounds. KD-037 forms direct in-bounds literals at the selected field boundary,
+without propagating expectations into arbitrary RHS expressions.
+
+The complete RHS evaluates first, with no destination reservation, loan or hold.
+Normal last-use expiry follows, then non-consuming whole-record availability and
+mutable-access checks. Both live shared and exclusive whole-record loans block the
+write, including held and recurrent loans. Dead/finished handles do not block it
+merely by remaining in lexical scope. The RHS can read the old destination or
+another field, finish temporary borrows, or consume unrelated owners. If it consumes
+the target, the final availability check fails. No field-sensitive exception exists.
+
+A dedicated prepared field-operation snapshot covers the complete RHS, expiry,
+and final checks. On ownership failure it restores that exact entry, independently
+of enclosing statement-list/branch/loop/call/return transactions. Successful lawful
+RHS effects remain committed. The write itself preserves the same whole-record
+owner with no replacement transfer, field availability, provenance, partial move,
+loan, handle or terminal permission. Bounds/type failures occur before ownership;
+static checker rollback is not a runtime rollback or destruction claim.
+
+Field assignment is a fallthrough statement in branches and stable loop bodies;
+all existing move joins, recurrent frames, backedges, break/continue and KD-033
+return restrictions still apply. Only an actual return operand receives terminal
+Move permission, never a preceding assignment RHS. Finite/recurrent visitors traverse
+the RHS only, without a synthetic target use.
+
+Public AST `FieldAssign`, resolved targets and HIR/MIR `CopyFieldAssign` retain
+root/field/RHS/statement spans. HIR retains LocalId/RecordId/FieldId and validates
+containing-function membership, mutability, exact root type, reciprocal field
+membership, canonical range metadata, exact RHS type and recursive expression
+invariants without repair. MIR contains a genuine field-write statement and checks
+RHS range shape and every child; it cannot re-prove unavailable canonical table
+facts. This is an intentional public enum representation change.
+
+Ordinary transparent record mutation is checked/lowered, not executed or proven.
+It is not a setter/property, generalized place, whole-record replacement, invariant
+boundary or field loan. The specialized verified-state subtraction and single-field
+harness paths remain unchanged and ineligible. Broader fields/mutation, visibility,
+invariants, partial borrowing/moves, destruction and generalized cyclic analysis
+remain open under OQ-004/OQ-020/OQ-023/OQ-024/OQ-025/OQ-026.

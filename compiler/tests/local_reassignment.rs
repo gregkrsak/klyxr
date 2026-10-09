@@ -147,6 +147,11 @@ reject!(potential_joined_loan_blocks_assignment, "fn sink(a: &mut Percent) -> bo
 #[test]
 fn grammar_remains_statement_only_and_direct_local() {
     bad(
+        "fn f() -> bool { let mut x = true; x.field = false; return x; }",
+        "Type",
+        "owned record local",
+    );
+    bad(
         "fn id(a: bool) -> bool { return a; } fn f() -> bool { id(true); return true; }",
         "Type",
         "cannot be called as a statement",
@@ -160,7 +165,6 @@ fn grammar_remains_statement_only_and_direct_local() {
         "let mut x = true; let result = id(x = false); return x;",
         "let mut x = true; return x = false;",
         "let mut x = true; let result = x == (x = false); return x;",
-        "let mut x = true; x.field = false; return x;",
         "id(true) = false; return true;",
         "let mut x = true; *(&mut x) = false; return x;",
         "let mut x = true; x = if true { true } else { false }; return x;",
