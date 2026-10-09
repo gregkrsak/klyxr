@@ -13,6 +13,15 @@ pub enum Statement {
         arguments: Vec<TypedExpr>,
         span: Span,
     },
+    CopyFieldAssign {
+        owner: LocalId,
+        record: hir::RecordId,
+        field: hir::FieldId,
+        owner_span: Span,
+        field_span: Span,
+        value: TypedExpr,
+        span: Span,
+    },
     Assign {
         local: LocalId,
         value: TypedExpr,
@@ -132,6 +141,12 @@ impl MirFunction {
                         for argument in arguments {
                             expression_valid(argument)?;
                         }
+                    }
+                    Statement::CopyFieldAssign { value, .. } => {
+                        if !matches!(value.ty, hir::ExprType::Range(_)) {
+                            return Err("Copy-field assignment requires a named-range RHS");
+                        }
+                        expression_valid(value)?;
                     }
                     Statement::Let { initializer, .. } => expression_valid(initializer)?,
                     Statement::DerefAssign { value, .. } | Statement::Assign { value, .. } => {
@@ -313,6 +328,25 @@ impl Builder {
                             span: *span,
                         });
                     }
+                }
+                ValueStatement::CopyFieldAssign {
+                    owner,
+                    record,
+                    field,
+                    owner_span,
+                    field_span,
+                    value,
+                    span,
+                } => {
+                    statements.push(Statement::CopyFieldAssign {
+                        owner: *owner,
+                        record: *record,
+                        field: *field,
+                        owner_span: *owner_span,
+                        field_span: *field_span,
+                        value: value.clone(),
+                        span: *span,
+                    });
                 }
                 ValueStatement::Assign { local, value, span } => {
                     statements.push(Statement::Assign {
@@ -1235,5 +1269,83 @@ mod multiple_field_tests {
                 Err("formed range literal has non-range type")
             );
         }
+    }
+    #[test]
+    fn copy_field_write_mir_checks_rhs_shape_and_every_deep_child() {
+        let p=crate::compile_source("type Percent = range 0..100; record Battery {charge: Percent} fn id(p: Percent) -> Percent {return p;} fn f(b: Battery) {let mut owned = b; owned.charge = id(80);}").unwrap();
+        let original = lower(&p).functions.last().unwrap().clone();
+        original.validate().unwrap();
+        for fault in 0..5 {
+            for position in 0..3 {
+                let mut f = original.clone();
+                let Statement::CopyFieldAssign { value, .. } = &mut f.blocks[0].statements[1]
+                else {
+                    panic!()
+                };
+                let mut leaf = value.clone();
+                leaf.kind = match fault {
+                    0 => hir::ExprKind::IfValue {
+                        condition: Box::new(leaf.clone()),
+                        then_value: Box::new(leaf.clone()),
+                        else_value: Box::new(leaf.clone()),
+                    },
+                    1 => hir::ExprKind::FormedRangeLiteral(80),
+                    2 => hir::ExprKind::IntegerLiteral(80),
+                    3 => hir::ExprKind::OldField(hir::FieldAccess {
+                        parameter: hir::ParameterId(0),
+                        field: hir::FieldId(0),
+                        ty: hir::RangeTypeId(0),
+                        span: leaf.span,
+                    }),
+                    4 => hir::ExprKind::BoolLiteral(true),
+                    _ => unreachable!(),
+                };
+                if fault == 1 {
+                    leaf.ty = hir::ExprType::Bool;
+                }
+                if fault == 4 {
+                    value.ty = hir::ExprType::Bool;
+                }
+                let mut children = vec![
+                    TypedExpr {
+                        kind: hir::ExprKind::FormedRangeLiteral(80),
+                        ..value.clone()
+                    };
+                    3
+                ];
+                children[position] = leaf;
+                value.kind = hir::ExprKind::Call {
+                    function: hir::FunctionId(0),
+                    arguments: vec![TypedExpr {
+                        kind: hir::ExprKind::RecordConstruct {
+                            record: hir::RecordId(0),
+                            fields: children
+                                .into_iter()
+                                .enumerate()
+                                .map(|(i, value)| hir::RecordFieldInit {
+                                    field: hir::FieldId(i),
+                                    span: value.span,
+                                    value,
+                                })
+                                .collect(),
+                        },
+                        ty: hir::ExprType::Record(hir::RecordId(0)),
+                        span: value.span,
+                    }],
+                };
+                assert!(f.validate().is_err(), "fault {fault}, child {position}");
+            }
+        }
+        // MIR honestly knows leaf shape, not canonical bounds/table membership.
+        let mut f = original;
+        let Statement::CopyFieldAssign { value, .. } = &mut f.blocks[0].statements[1] else {
+            panic!()
+        };
+        *value = TypedExpr {
+            kind: hir::ExprKind::FormedRangeLiteral(101),
+            ty: hir::ExprType::Range(hir::RangeTypeId(usize::MAX)),
+            span: value.span,
+        };
+        f.validate().unwrap();
     }
 }

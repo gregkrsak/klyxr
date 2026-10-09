@@ -271,7 +271,7 @@ fn arbitrary_dereference_operands_and_field_projection_remain_unsupported() {
     }
 }
 #[test]
-fn assignment_expressions_compound_assignment_and_projected_writes_stay_absent() {
+fn assignment_expressions_compound_assignment_and_reference_projected_writes_stay_absent() {
     for body in [
         "let result = (*value = true); return result;",
         "return (*value = true);",

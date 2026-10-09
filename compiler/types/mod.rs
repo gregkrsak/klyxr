@@ -314,6 +314,65 @@ fn value_statements(
                     span: *span,
                 }
             }
+            ResolvedValueStatement::FieldAssign {
+                owner,
+                field_name,
+                owner_span,
+                field_span,
+                value,
+                span,
+            } => {
+                let local = match owner {
+                    hir::Place::Local(id) => *id,
+                    hir::Place::Parameter(id) => return Err(Diagnostic::semantic(*owner_span, format!("cannot assign field of parameter `{}`", program.parameter(*id).name), "field assignment requires a directly named mutable owned record local; mutable owned parameters are unsupported").into()),
+                };
+                let target = program.local(local);
+                let record = match target.ty {
+                    ValueType::Record(id) => id,
+                    ValueType::SharedRef(_) | ValueType::MutableRef(_) => return Err(Diagnostic::semantic(*owner_span, "field assignment through a reference is unsupported", "use a directly named mutable owned record local; no reference projection or auto-dereference").into()),
+                    _ => return Err(Diagnostic::semantic(*owner_span, "field assignment requires an owned record local", format!("found {}", display_type(program, target.ty.into()))).into()),
+                };
+                if !target.mutable {
+                    return Err(Diagnostic::semantic(
+                        *owner_span,
+                        format!("cannot assign field of immutable local `{}`", target.name),
+                        "field assignment requires a let mut / let mutable owned record local",
+                    )
+                    .into());
+                }
+                let field = program
+                    .record(record)
+                    .fields
+                    .iter()
+                    .copied()
+                    .find(|id| program.field(*id).name == *field_name)
+                    .ok_or_else(|| {
+                        Box::new(Diagnostic::semantic(
+                            *field_span,
+                            format!(
+                                "unknown field `{field_name}` for record `{}`",
+                                program.record(record).name
+                            ),
+                            "assign a declared Copy field of the actual root record",
+                        ))
+                    })?;
+                let value = check_value(
+                    program,
+                    functions,
+                    value,
+                    ValueType::Range(program.field(field).ty),
+                    "field assignment RHS",
+                )?;
+                hir::ValueStatement::CopyFieldAssign {
+                    owner: local,
+                    record,
+                    field,
+                    owner_span: *owner_span,
+                    field_span: *field_span,
+                    value,
+                    span: *span,
+                }
+            }
             ResolvedValueStatement::Assign {
                 target,
                 value,

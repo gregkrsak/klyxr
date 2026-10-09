@@ -246,8 +246,8 @@ fn source_field_boundaries_remain_restricted() {
     );
     bad(
         "fn f(b: Pair,p: Percent) { b.first = p; }",
-        "Parse",
-        "unsupported",
+        "Type",
+        "parameter",
     );
     bad(
         "fn f(b: Pair) { let view = &b.first; }",

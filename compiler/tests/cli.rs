@@ -465,3 +465,22 @@ fn multi_field_record_cli_preserves_whole_record_and_proof_boundaries() {
             .contains("use of moved value `ticket`"));
     }
 }
+
+#[test]
+fn copy_field_assignment_cli_checks_and_lowers_without_execution_or_proof() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("copy_field_assignment.klx")]);
+        assert!(output.status.success());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("ordinary MIR control-flow lowering passed: 1 functions"));
+        assert!(text.contains("function bodies proven: 0"));
+        assert!(text.contains("calls checked: 0"));
+        assert!(text.contains("not executed or verified"));
+        let output = run(&[command, &example("copy_field_assignment_fail.klx")]);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let text = String::from_utf8(output.stderr).unwrap();
+        assert!(text.contains("cannot assign `working.charge` while it is borrowed"));
+        assert!(text.contains("the conflicting borrow began at line 7"));
+    }
+}

@@ -101,7 +101,7 @@ exclusive mutable reference and an exact Copy referent/RHS type. Non-Copy move-o
 and replacement are Ownership errors; no destruction or displaced-value semantics
 are implied. Reads/writes count for last use; writes hold the loan throughout the
 RHS. Copied dereference arguments do not call-hold a reference, while reference
-arguments retain KED-006 holds. General owner replacement, field mutation, auto-deref,
+arguments retain KED-006 holds. General owner replacement, field mutation beyond KD-038, auto-deref,
 reborrowing, and broader mutation remain unsupported (KD-022 / OQ-025).
 
 KED-008 adds statement-only `if` / optional `else` with Bool conditions, nesting,
@@ -562,7 +562,7 @@ are checked without consuming the owner. Shared loans remain compatible and
 protected; no field loan, projected place, provenance or partial availability is
 created. Reads may occur in while conditions and stable loop bodies; construction
 anywhere beneath a recurring condition is rejected. Reference/temporary/nested
-roots, field borrowing/mutation and broader field declaration types remain excluded.
+roots, field borrowing, mutation beyond KD-038 and broader field declaration types remain excluded.
 
 Typed-HIR publication explicitly validates table relationships and existing
 conditional positions before ownership. MIR recursively validates construction
@@ -584,7 +584,7 @@ permissions; it introduces no separate balancing stage or ownership engine.
 
 Every declared field supports non-consuming direct named-owner Copy reads under
 whole-record availability and loans. Records remain Move; there are no field
-owners, partial availability, field borrowing/mutation or reference projections.
+owners, partial availability, field borrowing, mutation beyond KD-038 or reference projections.
 The typed-HIR boundary checks all declaration tables, including unused malformed
 records, before ordered construction children. MIR preserves and recursively
 checks all children. Explicit gates keep verified state/harness support single-field.
@@ -606,6 +606,23 @@ No expectation enters recursive synthesis or conditional sibling inference; raw
 operator constants, unannotated literal-local rejection, nominal identity and
 verified/harness behavior are unchanged. Arithmetic bounds proofs, general
 conversions/inference, annotations and broader numeric semantics remain open.
+
+
+### KED-023: direct Copy-field assignment
+
+KD-038 permits `local.field = expression;` only through a directly named mutable
+owned ordinary record local and the field's exact named-range type. Contextual
+literals use KD-037. The RHS completes without target reservation, then ordinary
+expiry and whole-record availability/shared-or-exclusive-loan checks precede the
+write. A dedicated prepared field-operation transaction restores all checker state
+on failure while committing lawful RHS effects on success. The write preserves
+one whole owner; no field owner/loan/provenance, partial move, replacement or
+terminal permission is added. Branch/loop/return/call boundaries remain unchanged.
+AST/HIR/MIR have genuine field-write representations and recursive validation.
+Verified/harness mutation remains specialized and single-field; ordinary field
+writes are checked/lowered, not executed or proven. Reference/temporary/nested
+projection, field borrowing, invariants, visibility, destruction and generalized
+mutation/cyclic analysis remain open.
 
 <!-- END KLYXR_CONTEXT.md -->
 
@@ -1782,6 +1799,48 @@ unchanged, including their eligibility, phases, proofs and diagnostics. This
 narrowly refines historical KD-025/KD-026/KD-035/KD-036 literal boundaries;
 OQ-021/OQ-022 retain all broader arithmetic/inference/conversion questions.
 
+
+## KD-038 — Direct Copy-field assignment on mutable owned record locals
+
+**Status:** Accepted (frozen KED-023 Draft 2, Issue #49, October 9, 2026).
+
+A directly named mutable owned ordinary record local may replace one declared
+Copy named-range field with an exactly typed expression. Canonical LocalId,
+RecordId and FieldId identify the operation. Parameters, immutable bindings,
+reference/non-record roots, temporary/nested projection and compound/expressional
+assignment remain unsupported. KD-037 contextual formation applies at the selected
+exact field boundary, not recursively through arbitrary expressions.
+
+Evaluate the complete RHS first, with no target reservation, hold or loan. Perform
+ordinary expiry, then check non-consuming root availability and whole-record
+mutable conflicts. Live shared/exclusive loans block the write; unused/completed
+handles may expire lawfully. Held and recurrent provenance remains authoritative.
+The RHS may read the old field, complete temporary borrows or consume unrelated
+owners; a Move of the target makes final availability fail.
+
+A dedicated snapshot at prepared field-operation entry covers RHS evaluation,
+post-RHS expiry and both final checks. Any ownership failure restores availability,
+transfer history, handles, loans/provenance/holds, finite uses, recurrence, allocator,
+loop/target context and terminal permission exactly. This boundary is independent
+of broader enclosing transactions. Successful lawful RHS effects remain committed.
+The write preserves the same whole owner and creates no replacement transfer,
+field owner/availability/provenance/loan, partial move, handle or terminal permission.
+
+This ordinary fallthrough statement composes with existing branches, stable loops,
+break/continue and returns without value joins, field-sensitive ownership or a
+second checker. RHS-only finite and recurrent traversal remains complete. Public
+AST/HIR/MIR have distinct field-assignment variants; table-aware HIR validates
+canonical identity/membership, root mutability/type and exact recursive RHS metadata
+without inference or repair. MIR honestly validates structural RHS facts without
+claiming canonical tables. Verified state/harness remain unchanged and single-field.
+
+This settles transparent direct data mutation only, not setters/properties,
+reference projection, field loans, generalized places, Move-field replacement,
+whole-record replacement, invariants, visibility, destruction, runtime execution,
+proof or generalized cyclic analysis. Existing KD sections retain their historical
+boundaries; this narrows OQ-025 only. K23-S01–S04, K23-I01–I05 and K23-A01–A05
+are preserved as frozen implementation/evidence obligations.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -2130,7 +2189,7 @@ loans. Both count for last use. Copy reads can expire the original loan immediat
 after access, and their result does not call-hold a reference. Write statements hold
 the original loan through RHS traversal, then expire normally after completion;
 RHS calls cannot invalidate the target handle and leave an accepted write.
-No destruction, field mutation, or auto-deref is implemented. KD-026 adds separate Copy-safe local assignment.
+No destruction or auto-deref is implemented. KD-038 adds narrow direct Copy-field mutation. KD-026 adds separate Copy-safe local assignment.
 
 The verifier takes only a verified-function view from the shared HIR table;
 ordinary functions are ignored as proof targets and never counted as proven.
@@ -2602,6 +2661,36 @@ without range-table or bounds claims. No extra statement, owner, temporary, CFG
 edge, pass, rollback engine or ownership mechanism is introduced. Specialized
 verified constants and harness scalar literals remain isolated.
 
+
+## Direct field-operation boundary (KED-023 / KD-038)
+
+AST FieldAssign keeps textual root/field names and their spans, the complete RHS
+and statement span. Resolution lexically resolves the root and complete RHS before
+typing; it retains a ParameterId long enough to give a targeted Type diagnostic.
+Typing classifies local category before mutability, selects the actual record's
+canonical field and applies existing exact/contextual value checking at that field.
+HIR CopyFieldAssign carries LocalId/RecordId/FieldId and all source spans. The
+existing table-aware publication pass checks canonical containing-function/local
+identity, mutability, owned record type, reciprocal field membership, valid range
+metadata, exact RHS type and all recursive expression invariants without repair.
+
+The existing ownership checker counts/discovers only RHS uses, never a synthetic
+target use. One bounded prepared field-operation snapshot wraps ordinary expression
+evaluation, expiry, non-consuming availability and whole-record mutable-conflict
+checks. It neither reserves the target nor creates a loan/hold. On failure the
+prepared entry is restored exactly; on success lawful RHS moves/expiry/allocation
+remain committed. Enclosing transactions keep their distinct entries. The write
+adds no ownership state, transfer, field availability/provenance/loan or terminal
+permission. Finite/held/recurrent liveness, nested frames, stable backedges and
+actual-return-only terminal permission remain unchanged.
+
+MIR CopyFieldAssign retains the canonical IDs and full typed RHS in source order.
+Its validator checks RHS named-range shape and every recursive child, not canonical
+HIR table facts. No setter, reconstruction, generalized place, new terminator,
+phi, second checker or fixed-point engine is introduced. Verified subtraction and
+harness paths remain isolated. Ordinary mutation is checked/lowered, not executed
+or proven; broader projection, mutation, invariants and destruction remain open.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -2935,7 +3024,7 @@ Still open:
 - non-Copy replacement and the fate/destruction of displaced values;
 - reference-local reassignment and provenance/lifetime replacement;
 - general place-expression architecture;
-- field/projected assignment, partial mutation, and aggregate mutation;
+- field/projected assignment beyond KD-038 direct Copy-field writes, partial mutation, and broader aggregate mutation;
 - compound assignment;
 - swap/take/replace primitives;
 - assignment-expression semantics, if any;
@@ -3156,5 +3245,17 @@ annotations, general expected-type propagation, nonliteral formation, constant
 folding, conversion or arithmetic-result bounds enforcement is settled. Raw
 operator constants and specialized verifier/harness semantics remain unchanged.
 Historical KD/KED sections retain their original no-contextual-formation boundaries.
+
+
+### KD-038 refinement of OQ-025
+
+KED-023 settles only direct Copy-field assignment through a mutable named owned
+ordinary record local: exact nominal type, RHS-first/no-reservation ordering,
+prepared-operation rollback, and post-RHS whole-record availability/loan checks.
+Successful writes preserve one whole owner, without field-sensitive state or
+terminal permission. Broader place/projection evaluation, reference-field mutation,
+field loans, compound assignment, Move replacement, invariants, visibility,
+destruction and generalized cyclic analysis remain unresolved. Verified/harness
+mutation remains unchanged. KD-038 adds no execution or ordinary proof claim.
 
 <!-- END OPEN_QUESTIONS.md -->

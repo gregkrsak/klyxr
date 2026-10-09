@@ -383,11 +383,11 @@ fn field_borrow_target() {
     );
 }
 #[test]
-fn field_mutation_target() {
+fn parameter_field_assignment_remains_ineligible() {
     bad(
         "fn f(b: Battery,p: Percent) { b.charge = p; }",
-        "Parse",
-        "field mutation",
+        "Type",
+        "parameter",
     );
 }
 #[test]
@@ -395,7 +395,7 @@ fn field_replacement_target() {
     bad(
         "fn f(b: Battery,p: Percent) { b.charge -= p; }",
         "Parse",
-        "field mutation",
+        "compound assignment",
     );
 }
 #[test]

@@ -325,7 +325,7 @@ Still open:
 - non-Copy replacement and the fate/destruction of displaced values;
 - reference-local reassignment and provenance/lifetime replacement;
 - general place-expression architecture;
-- field/projected assignment, partial mutation, and aggregate mutation;
+- field/projected assignment beyond KD-038 direct Copy-field writes, partial mutation, and broader aggregate mutation;
 - compound assignment;
 - swap/take/replace primitives;
 - assignment-expression semantics, if any;
@@ -546,3 +546,15 @@ annotations, general expected-type propagation, nonliteral formation, constant
 folding, conversion or arithmetic-result bounds enforcement is settled. Raw
 operator constants and specialized verifier/harness semantics remain unchanged.
 Historical KD/KED sections retain their original no-contextual-formation boundaries.
+
+
+### KD-038 refinement of OQ-025
+
+KED-023 settles only direct Copy-field assignment through a mutable named owned
+ordinary record local: exact nominal type, RHS-first/no-reservation ordering,
+prepared-operation rollback, and post-RHS whole-record availability/loan checks.
+Successful writes preserve one whole owner, without field-sensitive state or
+terminal permission. Broader place/projection evaluation, reference-field mutation,
+field loans, compound assignment, Move replacement, invariants, visibility,
+destruction and generalized cyclic analysis remain unresolved. Verified/harness
+mutation remains unchanged. KD-038 adds no execution or ordinary proof claim.

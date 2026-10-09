@@ -340,7 +340,7 @@ loans. Both count for last use. Copy reads can expire the original loan immediat
 after access, and their result does not call-hold a reference. Write statements hold
 the original loan through RHS traversal, then expire normally after completion;
 RHS calls cannot invalidate the target handle and leave an accepted write.
-No destruction, field mutation, or auto-deref is implemented. KD-026 adds separate Copy-safe local assignment.
+No destruction or auto-deref is implemented. KD-038 adds narrow direct Copy-field mutation. KD-026 adds separate Copy-safe local assignment.
 
 The verifier takes only a verified-function view from the shared HIR table;
 ordinary functions are ignored as proof targets and never counted as proven.
@@ -811,3 +811,33 @@ MIR clones these typed leaves and checks structural discriminator/type consisten
 without range-table or bounds claims. No extra statement, owner, temporary, CFG
 edge, pass, rollback engine or ownership mechanism is introduced. Specialized
 verified constants and harness scalar literals remain isolated.
+
+
+## Direct field-operation boundary (KED-023 / KD-038)
+
+AST FieldAssign keeps textual root/field names and their spans, the complete RHS
+and statement span. Resolution lexically resolves the root and complete RHS before
+typing; it retains a ParameterId long enough to give a targeted Type diagnostic.
+Typing classifies local category before mutability, selects the actual record's
+canonical field and applies existing exact/contextual value checking at that field.
+HIR CopyFieldAssign carries LocalId/RecordId/FieldId and all source spans. The
+existing table-aware publication pass checks canonical containing-function/local
+identity, mutability, owned record type, reciprocal field membership, valid range
+metadata, exact RHS type and all recursive expression invariants without repair.
+
+The existing ownership checker counts/discovers only RHS uses, never a synthetic
+target use. One bounded prepared field-operation snapshot wraps ordinary expression
+evaluation, expiry, non-consuming availability and whole-record mutable-conflict
+checks. It neither reserves the target nor creates a loan/hold. On failure the
+prepared entry is restored exactly; on success lawful RHS moves/expiry/allocation
+remain committed. Enclosing transactions keep their distinct entries. The write
+adds no ownership state, transfer, field availability/provenance/loan or terminal
+permission. Finite/held/recurrent liveness, nested frames, stable backedges and
+actual-return-only terminal permission remain unchanged.
+
+MIR CopyFieldAssign retains the canonical IDs and full typed RHS in source order.
+Its validator checks RHS named-range shape and every recursive child, not canonical
+HIR table facts. No setter, reconstruction, generalized place, new terminator,
+phi, second checker or fixed-point engine is introduced. Verified subtraction and
+harness paths remain isolated. Ordinary mutation is checked/lowered, not executed
+or proven; broader projection, mutation, invariants and destruction remain open.

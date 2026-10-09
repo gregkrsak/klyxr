@@ -8,8 +8,8 @@ use std::{
 use crate::{
     diagnostics::Diagnostic,
     hir::{
-        BorrowKind, ExprKind, ExprType, FunctionId, LocalId, ParameterId, ParameterType, Place,
-        Program, TypedExpr, ValueFunction, ValueStatement, ValueType,
+        BorrowKind, ExprKind, ExprType, FieldId, FunctionId, LocalId, ParameterId, ParameterType,
+        Place, Program, RecordId, TypedExpr, ValueFunction, ValueStatement, ValueType,
     },
     lexer::Span,
 };
@@ -54,9 +54,9 @@ fn count_statements(statements: &[ValueStatement], uses: &mut FutureUses) {
                 }
             }
             ValueStatement::Let { initializer, .. } => count_expression(initializer, uses),
-            ValueStatement::Return { value, .. } | ValueStatement::Assign { value, .. } => {
-                count_expression(value, uses)
-            }
+            ValueStatement::CopyFieldAssign { value, .. }
+            | ValueStatement::Return { value, .. }
+            | ValueStatement::Assign { value, .. } => count_expression(value, uses),
             ValueStatement::DerefAssign {
                 reference, value, ..
             } => {
@@ -252,9 +252,9 @@ fn reference_uses(body: &[ValueStatement]) -> BTreeSet<Place> {
                     }
                 }
                 ValueStatement::Let { initializer, .. } => expression(initializer, uses),
-                ValueStatement::Assign { value, .. } | ValueStatement::Return { value, .. } => {
-                    expression(value, uses)
-                }
+                ValueStatement::CopyFieldAssign { value, .. }
+                | ValueStatement::Assign { value, .. }
+                | ValueStatement::Return { value, .. } => expression(value, uses),
                 ValueStatement::DerefAssign {
                     reference, value, ..
                 } => {
@@ -504,6 +504,17 @@ impl<'a> Checker<'a> {
                     self.handles.insert(place, loan);
                 }
             }
+            ValueStatement::CopyFieldAssign {
+                owner,
+                record,
+                field,
+                value,
+                owner_span,
+                span,
+                ..
+            } => {
+                self.copy_field_assign(*owner, *record, *field, value, *owner_span, *span)?;
+            }
             ValueStatement::Assign { local, value, span } => {
                 let place = Place::Local(*local);
                 if ownership_kind(self.program.local(*local).ty) != OwnershipKind::Copy {
@@ -544,6 +555,48 @@ impl<'a> Checker<'a> {
         }
         self.expire();
         Ok(Flow::Fallthrough)
+    }
+    // Snapshot the prepared operation entry, not the broader statement-list entry.
+    // No target reservation: all lawful RHS effects commit only on success.
+    fn copy_field_assign(
+        &mut self,
+        owner: LocalId,
+        record: RecordId,
+        field: FieldId,
+        value: &TypedExpr,
+        owner_span: Span,
+        span: Span,
+    ) -> OwnershipResult {
+        let before = self.clone();
+        let result = (|| {
+            self.expression(value, Transfer::Local(owner))?;
+            self.expire();
+            let place = Place::Local(owner);
+            self.available(place, owner_span)?;
+            if let Some(loan) = self.conflict(place, Some(BorrowKind::Mutable)) {
+                // Destination IDs were validated at HIR publication; they are
+                // diagnostic metadata only. Conflict checking remains whole-root.
+                let root = self.metadata(place).0;
+                let record = self.program.record(record);
+                let field = self.program.field(field);
+                let range = self.program.range(field.ty);
+                let kind = match loan.kind {
+                    BorrowKind::Shared => "shared",
+                    BorrowKind::Mutable => "exclusive",
+                };
+                return Err(self.diagnostic(
+                    span,
+                    format!("cannot assign `{root}.{}` while it is borrowed", field.name),
+                    &format!("field `{}.{}` has declared named-range type `{}`; writing `{root}.{}` requires whole-record mutable access, but an active {kind} whole-record loan conflicts", record.name, field.name, range.name, field.name),
+                    Some(loan.span),
+                ));
+            }
+            Ok(())
+        })();
+        if result.is_err() {
+            *self = before;
+        }
+        result
     }
     fn loop_reference_error(&self, span: Span) -> Box<Diagnostic> {
         self.diagnostic(span, "reference activity is unsupported in while conditions".into(), "recurring condition reference activity requires future cyclic loan/lifetime analysis; reference access is permitted only in the body", None)
@@ -5162,5 +5215,329 @@ mod tests {
             assert_eq!(c.next_loan, before.next_loan);
             c.assert_no_holds();
         }
+    }
+    const FIELD_HELPERS: &str = "fn sample(v: &Ticket) -> Percent { return 80; } fn sample_mut(v: &mut Ticket) -> Percent { return 80; } fn hold(v: &Ticket,p: Percent) -> Percent { return p; } fn join(a: Percent,b: Percent,c: Percent) -> Percent { return a; } fn finish(v: &Ticket) {} fn finish_mut(v: &mut Ticket) {}";
+    fn field_typed(body: &str) -> Program {
+        record_typed(&format!("{FIELD_HELPERS} {body}"))
+    }
+    fn field_operation(c: &mut Checker<'_>, s: &ValueStatement) -> OwnershipResult {
+        let ValueStatement::CopyFieldAssign {
+            owner,
+            record,
+            field,
+            value,
+            owner_span,
+            span,
+            ..
+        } = s
+        else {
+            panic!("field assignment")
+        };
+        c.copy_field_assign(*owner, *record, *field, value, *owner_span, *span)
+    }
+    #[test]
+    fn field_operation_late_root_failure_restores_exact_prepared_entry() {
+        let p = field_typed(
+            "fn f(t: Ticket,p: Percent) { let mut owned = t; owned.value = consume(owned); }",
+        );
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let s = &f.body[1];
+        c.remaining = statement_future(s, &FutureUses::new(), &FutureUses::new());
+        c.expire();
+        // Preserve legitimate enclosing contexts without treating the target as
+        // pre-existing at this synthetic inner header.
+        c.loop_scope = Some(LoopScope::new(&c, false));
+        let ValueStatement::CopyFieldAssign { owner, .. } = s else {
+            panic!()
+        };
+        c.loop_scope
+            .as_mut()
+            .unwrap()
+            .header_places
+            .remove(&Place::Local(*owner));
+        c.recurrent.push(BTreeSet::new());
+        add_test_target(&mut c);
+        let before = c.clone();
+        assert!(field_operation(&mut c, s)
+            .unwrap_err()
+            .message
+            .contains("moved value"));
+        assert_atomic(&c, &before);
+        assert!(!c.terminal_return);
+        // Invoke without any statement-list wrapper; final availability, not
+        // RHS failure, must have caused the rollback of a successful consume.
+        let ValueStatement::CopyFieldAssign { value, .. } = s else {
+            panic!()
+        };
+        c.expression(value, Transfer::Local(*owner)).unwrap();
+        assert_ne!(c.states, before.states);
+    }
+    #[test]
+    fn field_operation_nested_rhs_failure_restores_prefix_and_allocator() {
+        let p=field_typed("fn f(t: Ticket,other: Ticket) { let mut owned = t; owned.value = hold(&owned,duplicate(other,other)); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let before = c.clone();
+        assert!(field_operation(&mut c, &f.body[1])
+            .unwrap_err()
+            .message
+            .contains("moved value"));
+        assert_atomic(&c, &before);
+        assert_eq!(c.next_loan, 0);
+    }
+    #[test]
+    fn field_operation_final_shared_and_exclusive_conflicts_restore_successful_rhs_effects() {
+        for (borrow, finish) in [("&owned", "finish"), ("&mut owned", "finish_mut")] {
+            let p=field_typed(&format!("fn f(t: Ticket,other: Ticket) {{ let mut owned = t; let view = {borrow}; owned.value = consume(other); {finish}(view); }}"));
+            let f = return_function(&p);
+            let mut c = Checker::new(&p, f);
+            c.statements(&f.body[..2], f.id).unwrap();
+            let before = c.clone();
+            let ValueStatement::CopyFieldAssign {
+                owner, value, span, ..
+            } = &f.body[2]
+            else {
+                panic!()
+            };
+            // Show that the well-typed RHS succeeds and consumes the unrelated
+            // owner before the real helper reaches its final conflict check.
+            let mut rhs_only = before.clone();
+            rhs_only.expression(value, Transfer::Local(*owner)).unwrap();
+            assert_ne!(
+                rhs_only.states[&Place::Parameter(f.parameters[1])],
+                State::Available
+            );
+            let error = field_operation(&mut c, &f.body[2]).unwrap_err();
+            assert_eq!(
+                error.message,
+                "cannot assign `owned.value` while it is borrowed"
+            );
+            assert_eq!(error.span, *span);
+            assert!(error.required.contains("field `Ticket.value`"));
+            assert!(error
+                .required
+                .contains("declared named-range type `Percent`"));
+            let kind = if borrow == "&owned" {
+                "shared"
+            } else {
+                "exclusive"
+            };
+            assert!(error
+                .required
+                .contains(&format!("active {kind} whole-record loan")));
+            let origin = before.loans.values().next().unwrap().span;
+            assert_eq!(
+                error.known,
+                vec![format!(
+                    "the conflicting borrow began at line {}, column {}",
+                    origin.line, origin.column
+                )]
+            );
+            assert_atomic(&c, &before);
+            assert_eq!(
+                c.states[&Place::Parameter(f.parameters[1])],
+                State::Available
+            );
+        }
+    }
+    #[test]
+    fn field_operation_rollback_is_distinct_from_enclosing_list_entry() {
+        let p=field_typed("fn f(t: Ticket,other: Ticket) { let mut owned = t; let unused = &owned; owned.value = consume(owned); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let broad = c.clone();
+        // An earlier statement in this list publishes a handle and advances the
+        // loan allocator. Prepared field entry must retain those lawful effects.
+        c.statement(&f.body[1], f.id, &FutureUses::new()).unwrap();
+        c.remaining = statement_future(&f.body[2], &FutureUses::new(), &FutureUses::new());
+        c.expire();
+        let prepared = c.clone();
+        assert_ne!(prepared.next_loan, broad.next_loan);
+        assert!(field_operation(&mut c, &f.body[2]).is_err());
+        assert_atomic(&c, &prepared);
+        let mut outer = broad.clone();
+        assert!(outer
+            .statements_with(&f.body[1..], f.id, &FutureUses::new())
+            .is_err());
+        assert_atomic(&outer, &broad);
+    }
+    #[test]
+    fn field_operation_success_commits_unrelated_move_without_target_transfer_or_field_state() {
+        let p = field_typed(
+            "fn f(t: Ticket,other: Ticket) { let mut owned = t; owned.value = consume(other); }",
+        );
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let before = c.clone();
+        field_operation(&mut c, &f.body[1]).unwrap();
+        let ValueStatement::CopyFieldAssign { owner, .. } = f.body[1] else {
+            panic!()
+        };
+        assert_eq!(c.states[&Place::Local(owner)], State::Available);
+        assert_ne!(
+            c.states[&Place::Parameter(f.parameters[1])],
+            State::Available
+        );
+        assert_eq!(c.states.len(), before.states.len());
+        assert_eq!(c.handles, before.handles);
+        assert_eq!(c.loans.len(), before.loans.len());
+        assert_eq!(c.next_loan, before.next_loan);
+        assert_eq!(
+            c.states[&Place::Parameter(f.parameters[0])],
+            before.states[&Place::Parameter(f.parameters[0])]
+        );
+    }
+    #[test]
+    fn field_operation_success_commits_temporary_loan_allocation_and_last_use_expiry() {
+        for rhs in ["sample(&owned)", "sample_mut(&mut owned)"] {
+            let p = field_typed(&format!(
+                "fn f(t: Ticket) {{ let mut owned = t; owned.value = {rhs}; }}"
+            ));
+            let f = return_function(&p);
+            let mut c = Checker::new(&p, f);
+            c.statements(&f.body[..1], f.id).unwrap();
+            let before = c.clone();
+            field_operation(&mut c, &f.body[1]).unwrap();
+            assert_eq!(c.states, before.states);
+            assert!(c.handles.is_empty());
+            assert!(c.loans.is_empty());
+            assert_eq!(c.next_loan, before.next_loan + 1);
+        }
+        let p = field_typed(
+            "fn f(t: Ticket) { let mut owned = t; let view = &owned; owned.value = sample(view); }",
+        );
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        assert_eq!(c.loans.len(), 1);
+        let states = c.states.clone();
+        let handles = c.handles.clone();
+        field_operation(&mut c, &f.body[2]).unwrap();
+        assert!(c.loans.is_empty());
+        assert_eq!(c.states, states);
+        assert_eq!(c.handles, handles);
+    }
+    #[test]
+    fn field_operation_preserves_inherited_holds_recurrence_targets_and_terminal_context() {
+        for kind in [BorrowKind::Shared, BorrowKind::Mutable] {
+            for protection in ["held", "recurrent"] {
+                let p = field_typed(
+                    "fn f(t: Ticket,p: Percent) { let mut owned = t; owned.value = p; }",
+                );
+                let f = return_function(&p);
+                let mut c = Checker::new(&p, f);
+                c.statements(&f.body[..1], f.id).unwrap();
+                let ValueStatement::CopyFieldAssign { owner, .. } = f.body[1] else {
+                    panic!()
+                };
+                let loan = c.add_loan(Some(Place::Local(owner)), kind, f.span);
+                if protection == "held" {
+                    c.loans.get_mut(&loan).unwrap().held = 2;
+                }
+                c.recurrent.push(if protection == "recurrent" {
+                    BTreeSet::from([loan])
+                } else {
+                    BTreeSet::new()
+                });
+                add_test_target(&mut c);
+                c.recurrent.push(BTreeSet::new());
+                add_test_target(&mut c);
+                c.loop_scope = Some(LoopScope::new(&c, false));
+                c.terminal_return = true;
+                let before = c.clone();
+                assert!(field_operation(&mut c, &f.body[1]).is_err());
+                assert_atomic(&c, &before);
+            }
+        }
+        // An unrelated inherited operation hold is lawful and not globally balanced away.
+        let p = field_typed(
+            "fn f(t: Ticket,other: Ticket,p: Percent) { let mut owned = t; owned.value = p; }",
+        );
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let loan = c.add_loan(
+            Some(Place::Parameter(f.parameters[1])),
+            BorrowKind::Shared,
+            f.span,
+        );
+        c.loans.get_mut(&loan).unwrap().held = 1;
+        let before = c.clone();
+        field_operation(&mut c, &f.body[1]).unwrap();
+        let mut expected = before;
+        *expected
+            .remaining
+            .get_mut(&Place::Parameter(f.parameters[2]))
+            .unwrap() -= 1;
+        assert_atomic(&c, &expected);
+    }
+    #[test]
+    fn field_rhs_finite_and_recurrent_visitors_reach_every_nested_child_but_not_target() {
+        for position in 0..3 {
+            let mut args = ["80", "80", "80"];
+            args[position] = "sample(view)";
+            let p=field_typed(&format!("fn f(t: Ticket) {{ let mut owned = t; let view = &owned; owned.value = join({}, {}, {}); }}",args[0],args[1],args[2]));
+            let f = return_function(&p);
+            let s = &f.body[2];
+            let view = p.locals[1].id;
+            let owner = p.locals[0].id;
+            let expected = BTreeMap::from([(Place::Local(view), 1)]);
+            assert_eq!(future_uses(std::slice::from_ref(s)), expected);
+            assert_eq!(
+                reference_uses(std::slice::from_ref(s)),
+                BTreeSet::from([Place::Local(view)])
+            );
+            assert!(!future_uses(std::slice::from_ref(s)).contains_key(&Place::Local(owner)));
+            for container in [
+                s.clone(),
+                ValueStatement::If {
+                    condition: TypedExpr {
+                        kind: ExprKind::BoolLiteral(true),
+                        ty: ExprType::Bool,
+                        span: f.span,
+                    },
+                    then_body: vec![s.clone()],
+                    else_body: vec![],
+                    span: f.span,
+                },
+                ValueStatement::While {
+                    condition: TypedExpr {
+                        kind: ExprKind::BoolLiteral(true),
+                        ty: ExprType::Bool,
+                        span: f.span,
+                    },
+                    body: vec![s.clone()],
+                    span: f.span,
+                },
+            ] {
+                assert_eq!(
+                    reference_uses(&[container.clone()]),
+                    BTreeSet::from([Place::Local(view)])
+                );
+                assert_eq!(future_uses(&[container]), expected);
+            }
+        }
+    }
+    #[test]
+    fn field_assignment_metadata_spelling_is_not_semantic_identity() {
+        let mut p=field_typed("fn f(t: Ticket) -> Ticket { let mut owned = t; owned.value = sample(&owned); return owned; }");
+        check(&p).unwrap();
+        let before = crate::mir::lower(&p);
+        for l in &mut p.locals {
+            l.name = "display".into();
+        }
+        for r in &mut p.records {
+            r.name = "display".into();
+        }
+        for f in &mut p.fields {
+            f.name = "display".into();
+        }
+        check(&p).unwrap();
+        assert_eq!(before, crate::mir::lower(&p));
     }
 }
