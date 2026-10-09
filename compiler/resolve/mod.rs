@@ -140,8 +140,7 @@ pub(crate) struct ResolvedExpr {
 pub(crate) enum ResolvedExprKind {
     RecordConstruct {
         record: RecordId,
-        field: FieldId,
-        value: Box<ResolvedExpr>,
+        fields: Vec<ResolvedRecordFieldInit>,
     },
     // The owner is resolved now; inferred-local field selection finishes in typing.
     CopyFieldRead {
@@ -179,6 +178,12 @@ pub(crate) enum ResolvedExprKind {
         left: Box<ResolvedExpr>,
         right: Box<ResolvedExpr>,
     },
+}
+#[derive(Debug)]
+pub(crate) struct ResolvedRecordFieldInit {
+    pub field: FieldId,
+    pub value: ResolvedExpr,
+    pub span: Span,
 }
 /// Transient resolved signatures share the same FunctionId indices as the final table.
 enum Signature {
@@ -256,22 +261,37 @@ pub fn resolve(ast: &ast::Program) -> Result<ResolvedProgram, Vec<Diagnostic>> {
         return Err(diagnostics);
     }
     for (index, record) in ast.records.iter().enumerate() {
-        let ty = resolver
-            .range(&record.field_type, record.span)
-            .map_err(|e| vec![*e])?;
         let id = RecordId(index);
-        let field = FieldId(resolver.program.fields.len());
-        resolver.program.fields.push(hir::Field {
-            id: field,
-            record: id,
-            name: record.field_name.clone(),
-            ty,
-            span: record.span,
-        });
+        let mut fields = Vec::new();
+        let mut names = HashSet::new();
+        if record.fields.is_empty() {
+            return Err(vec![*error(
+                record.span,
+                "record declaration requires at least one named-range field",
+                "empty records are unsupported",
+            )]);
+        }
+        for declaration in &record.fields {
+            if !names.insert(&declaration.name) {
+                return Err(vec![*duplicate(declaration.span, &declaration.name)]);
+            }
+            let ty = resolver
+                .range(&declaration.ty, declaration.span)
+                .map_err(|e| vec![*e])?;
+            let field = FieldId(resolver.program.fields.len());
+            resolver.program.fields.push(hir::Field {
+                id: field,
+                record: id,
+                name: declaration.name.clone(),
+                ty,
+                span: declaration.span,
+            });
+            fields.push(field);
+        }
         resolver.program.records.push(hir::Record {
             id,
             name: record.name.clone(),
-            field,
+            fields,
             span: record.span,
         });
     }
@@ -315,6 +335,17 @@ struct Resolver {
     bindings: HashMap<String, BindingId>,
 }
 impl Resolver {
+    fn prototype_field(&self, record: RecordId, span: Span) -> ResolutionResult<FieldId> {
+        let fields = &self.program.record(record).fields;
+        if fields.len() != 1 {
+            return Err(error(
+                span,
+                "unsupported multi-field state in verified prototype or harness",
+                "the specialized verified-state path requires exactly one named-range field",
+            ));
+        }
+        Ok(fields[0])
+    }
     fn range(&self, name: &str, span: Span) -> ResolutionResult<RangeTypeId> {
         self.ranges.get(name).copied().ok_or_else(|| {
             error(
@@ -396,6 +427,7 @@ impl Resolver {
                     return Err(duplicate(f.span, &f.state_param));
                 }
                 let state_type = self.record(&f.state_type, f.span)?;
+                self.prototype_field(state_type, f.span)?;
                 let amount_type = self.range(&f.amount_type, f.span)?;
                 let state_param = self.parameter(
                     id,
@@ -647,7 +679,7 @@ impl Resolver {
                     state: Some((
                         f.state_param.clone(),
                         state_param,
-                        self.program.record(state_type).field,
+                        self.prototype_field(state_type, f.span)?,
                     )),
                     ..Scope::default()
                 };
@@ -762,14 +794,22 @@ impl Resolver {
                 };
                 ResolvedExprKind::Borrow { kind: *kind, place }
             }
-            ast::ExprKind::RecordConstruct { record, field, value, record_span } => {
+            ast::ExprKind::RecordConstruct { record, fields, record_span } => {
                 if scope.state.is_some() { return Err(error(expression.span, "record construction is supported only in ordinary functions", "verified expressions retain their restricted proof grammar")); }
                 let record = self.records.get(record).copied().ok_or_else(|| error(*record_span, format!("unknown record construction `{record}`"), "construct a declared record"))?;
-                let field_id = self.program.record(record).field;
-                if self.program.field(field_id).name != *field {
-                    return Err(error(expression.span, format!("unknown field `{field}` for record `{}`", self.program.record(record).name), format!("the declared field is `{}`", self.program.field(field_id).name)));
+                let declaration = self.program.record(record);
+                let mut selected = Vec::new();
+                let mut seen = HashSet::new();
+                // Establish membership and uniqueness before resolving any initializer.
+                for entry in fields {
+                    let field = declaration.fields.iter().copied().find(|id| self.program.field(*id).name == entry.name).ok_or_else(|| error(entry.span, format!("unknown field `{}` for record `{}`", entry.name, declaration.name), "initialize a declared field"))?;
+                    if !seen.insert(field) { return Err(error(entry.span, format!("duplicate initializer field `{}`", entry.name), "initialize every declared field exactly once")); }
+                    selected.push(field);
                 }
-                ResolvedExprKind::RecordConstruct { record, field: field_id, value: Box::new(self.expression(value, scope, false)?) }
+                let missing = declaration.fields.iter().filter(|id| !seen.contains(id)).map(|id| self.program.field(*id).name.as_str()).collect::<Vec<_>>();
+                if !missing.is_empty() { return Err(error(expression.span, format!("missing initializer fields: {}", missing.join(", ")), "missing fields are listed in declaration order")); }
+                let fields = fields.iter().zip(selected).map(|(entry, field)| Ok(ResolvedRecordFieldInit { field, value: self.expression(&entry.value, scope, false)?, span: entry.span })).collect::<ResolutionResult<Vec<_>>>()?;
+                ResolvedExprKind::RecordConstruct { record, fields }
             }
             ast::ExprKind::FieldAccess(a) => {
                 if scope.state.is_some() { ResolvedExprKind::FieldAccess(self.access(a, scope)?) }
@@ -802,7 +842,7 @@ impl Resolver {
                     return Err(duplicate(binding.span, &binding.name));
                 }
                 let record_type = self.record(&binding.record_type, binding.span)?;
-                let field = self.program.record(record_type).field;
+                let field = self.prototype_field(record_type, binding.span)?;
                 if binding.field_name != self.program.field(field).name {
                     return Err(error(
                         binding.span,

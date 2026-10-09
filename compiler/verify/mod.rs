@@ -139,7 +139,15 @@ fn proof_body(
     program: &Program,
     function: &VerifiedFunction,
 ) -> VerificationResult<Vec<ProofSubtract>> {
-    let field = program.record(function.state_type).field;
+    let fields = &program.record(function.state_type).fields;
+    if fields.len() != 1 {
+        return Err(semantic_error(
+            function.span,
+            "unsupported multi-field state in prototype verifier",
+            "the specialized proof requires exactly one named-range state field",
+        ));
+    }
+    let field = fields[0];
     let supported_requires = match &function.requires.kind {
         ExprKind::Binary {
             op: BinaryOp::LessEqual,
@@ -197,7 +205,11 @@ fn proof_body(
 }
 fn prove_function(program: &Program, function: &VerifiedFunction) -> VerificationResult {
     let body = proof_body(program, function)?;
-    let state = program.range(program.field(program.record(function.state_type).field).ty);
+    let state = program.range(
+        program
+            .field(program.record(function.state_type).fields[0])
+            .ty,
+    );
     let amount = program.range(function.amount_param.ty);
     prove_affine_function(program, function, state, amount, &body)
 }
@@ -282,7 +294,7 @@ fn proof_failure(
         message: message.into(), span,
         required: format!("`{}` must preserve its field range and establish its postcondition for every input satisfying requires", function.name),
         known: vec![
-            format!("old({}.{}) == {state}", program.parameter(function.state_param).name, program.field(program.record(function.state_type).field).name),
+            format!("old({}.{}) == {state}", program.parameter(function.state_param).name, program.field(program.record(function.state_type).fields[0]).name),
             format!("{} == {amount}", program.parameter(function.amount_param.parameter).name),
             format!("{amount} <= {state} is true"),
             format!("computed field value == {actual}"),
@@ -292,6 +304,14 @@ fn proof_failure(
 }
 
 fn validate_binding(program: &Program, binding: &RecordBinding) -> VerificationResult {
+    let fields = &program.record(binding.record_type).fields;
+    if fields.len() != 1 || fields[0] != binding.field {
+        return Err(semantic_error(
+            binding.span,
+            "unsupported multi-field state in prototype harness",
+            "harness bindings require exactly one canonical named-range state field",
+        ));
+    }
     let field = &program.field(binding.field).name;
     let range = program.range(program.field(binding.field).ty);
     if binding.value < range.min || binding.value > range.max {
@@ -374,7 +394,7 @@ fn check_call(
                 program.parameter(function.amount_param.parameter).name,
                 binding.name,
                 program
-                    .field(program.record(function.state_type).field)
+                    .field(program.record(function.state_type).fields[0])
                     .name
             ),
             known: vec![
@@ -387,7 +407,7 @@ fn check_call(
                     "{}.{} == {initial}",
                     binding.name,
                     program
-                        .field(program.record(function.state_type).field)
+                        .field(program.record(function.state_type).fields[0])
                         .name
                 ),
             ],
@@ -453,7 +473,7 @@ mod tests {
                             }
                             let state = RangeType {
                                 id: prototype
-                                    .field(prototype.record(template.state_type).field)
+                                    .field(prototype.record(template.state_type).fields[0])
                                     .ty,
                                 name: "State".into(),
                                 min: low,
@@ -536,5 +556,33 @@ mod tests {
         let error =
             prove_affine_function(&program, function, &small, &too_much, &body).unwrap_err();
         assert_eq!(error.message, "precondition has no admissible inputs");
+    }
+    #[test]
+    fn unsupported_multi_field_verified_and_harness_state_is_gated_before_scalar_selection() {
+        let p = crate::compile_source(include_str!("../../examples/battery_ok.klx")).unwrap();
+        let original = verify_report(&p);
+        assert_eq!((original.functions_proven, original.calls_checked), (1, 1));
+        let mut multiple = p.clone();
+        let mut second = multiple.fields[0].clone();
+        second.id = crate::hir::FieldId(multiple.fields.len());
+        second.name = "second".into();
+        multiple.records[0].fields.push(second.id);
+        multiple.fields.push(second);
+        let report = verify_report(&multiple);
+        assert_eq!((report.functions_proven, report.calls_checked), (0, 0));
+        assert!(report.diagnostics[0]
+            .message
+            .contains("unsupported multi-field state"));
+        assert!(validate_binding(&multiple, &multiple.bindings[0])
+            .unwrap_err()
+            .message
+            .contains("unsupported multi-field state"));
+        assert_eq!(
+            (
+                verify_report(&p).functions_proven,
+                verify_report(&p).calls_checked
+            ),
+            (1, 1)
+        );
     }
 }

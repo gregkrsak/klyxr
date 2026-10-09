@@ -77,7 +77,11 @@ fn count_expression(expression: &TypedExpr, uses: &mut FutureUses) {
             count_expression(then_value, uses);
             count_expression(else_value, uses);
         }
-        ExprKind::RecordConstruct { value, .. } => count_expression(value, uses),
+        ExprKind::RecordConstruct { fields, .. } => {
+            for entry in fields {
+                count_expression(&entry.value, uses);
+            }
+        }
         ExprKind::CopyFieldRead { owner, .. } => *uses.entry(*owner).or_default() += 1,
         ExprKind::Deref { reference } => *uses.entry(*reference).or_default() += 1,
         ExprKind::Parameter(id) => *uses.entry(Place::Parameter(*id)).or_default() += 1,
@@ -179,7 +183,11 @@ fn reference_uses(body: &[ValueStatement]) -> BTreeSet<Place> {
             ExprKind::Local(id) => {
                 uses.insert(Place::Local(*id));
             }
-            ExprKind::RecordConstruct { value, .. } => expression(value, uses),
+            ExprKind::RecordConstruct { fields, .. } => {
+                for entry in fields {
+                    expression(&entry.value, uses);
+                }
+            }
             ExprKind::CopyFieldRead { .. } => {} // Named owned root, never a reference handle.
             ExprKind::Deref { reference } => {
                 uses.insert(*reference);
@@ -988,8 +996,10 @@ impl<'a> Checker<'a> {
             self.loop_type(expression.ty, expression.span)?;
         }
         match &expression.kind {
-            ExprKind::RecordConstruct { value, .. } => {
-                self.expression(value, transfer)?;
+            ExprKind::RecordConstruct { fields, .. } => {
+                for entry in fields {
+                    self.expression(&entry.value, transfer)?;
+                }
                 Ok(None) // Fresh record; no loan, harness binding or anonymous local.
             }
             ExprKind::CopyFieldRead { owner, .. } => {
@@ -4362,11 +4372,11 @@ mod tests {
         let p = record_typed("fn f(p: Percent) -> Ticket { return Ticket { value: p }; }");
         let f = return_function(&p);
         let (value, _) = operand(&f.body[0]);
-        let ExprKind::RecordConstruct { record, field, .. } = value.kind else {
+        let ExprKind::RecordConstruct { record, fields } = &value.kind else {
             panic!()
         };
-        assert_eq!(p.record(record).field, field);
-        assert_eq!(p.field(field).record, record);
+        assert_eq!(p.record(*record).fields[0], fields[0].field);
+        assert_eq!(p.field(fields[0].field).record, *record);
         let mut c = Checker::new(&p, f);
         prepared_expression(&mut c, value);
         let mut expected = c.clone();
@@ -4391,9 +4401,10 @@ mod tests {
         let mut c = Checker::new(&p, f);
         prepared_expression(&mut c, value);
         let before = c.clone();
-        let ExprKind::RecordConstruct { value: child, .. } = &value.kind else {
+        let ExprKind::RecordConstruct { fields, .. } = &value.kind else {
             panic!()
         };
+        let child = &fields[0].value;
         let ExprKind::Call { arguments, .. } = &child.kind else {
             panic!()
         };
@@ -4719,6 +4730,269 @@ mod tests {
         }
         for v in &mut p.parameters {
             v.name = "same".into();
+        }
+        p.validate_record_expressions().unwrap();
+        check(&p).unwrap();
+        assert_eq!(m, crate::mir::lower(&p));
+    }
+    fn multiple_typed(body: &str) -> Program {
+        record_typed(&format!("record Triple {{ first: Percent, middle: Percent, last: Percent }} fn inspect3(view: &Triple) -> Percent {{ return inspect3(view); }} fn observe(view: &bool,p: Percent) -> Percent {{ return p; }} fn receive3(b: Triple,t: Ticket) {{}} fn hold3(view: &bool,b: Triple) {{}} {body}"))
+    }
+    #[test]
+    fn multi_initializer_prefix_move_and_allocator_effects_roll_back_complete_prepared_state() {
+        let p=multiple_typed("fn f(t: Ticket,flag: bool,p: Percent,view: &Percent) -> Triple { return Triple { last: consume(t), first: observe(&flag,p), middle: consume(t) }; }");
+        let f = return_function(&p);
+        let (e, _) = operand(&f.body[0]);
+        let mut c = Checker::new(&p, f);
+        let carried = *c.loans.keys().next().unwrap();
+        c.recurrent.push(BTreeSet::from([carried]));
+        c.recurrent.push(BTreeSet::new());
+        add_test_target(&mut c);
+        c.loop_scope = Some(LoopScope::new(&c, false));
+        c.terminal_return = true; // Actual operand context, not retroactive permission.
+        c.loans.get_mut(&carried).unwrap().held = 1; // Prepared enclosing operation protection.
+        prepared_expression(&mut c, e);
+        let before = c.clone();
+        let ExprKind::RecordConstruct { fields, .. } = &e.kind else {
+            panic!()
+        };
+        let mut prefix = c.clone();
+        prefix
+            .expression(&fields[0].value, Transfer::Return(f.id))
+            .unwrap();
+        prefix
+            .expression(&fields[1].value, Transfer::Return(f.id))
+            .unwrap();
+        assert_ne!(prefix.states, before.states);
+        assert!(prefix.next_loan > before.next_loan);
+        assert_eq!(prefix.loans[&carried].held, 1);
+        assert!(c
+            .expression(e, Transfer::Return(f.id))
+            .unwrap_err()
+            .message
+            .contains("moved value"));
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn multi_initializers_visit_first_middle_final_and_reverse_written_order() {
+        for position in 0..3 {
+            let names = ["last", "middle", "first"];
+            let entries = names
+                .iter()
+                .enumerate()
+                .map(|(i, n)| format!("{n}: {}", if i == position { "consume(t)" } else { "p" }))
+                .collect::<Vec<_>>()
+                .join(",");
+            let p = multiple_typed(&format!(
+                "fn f(t: Ticket,p: Percent) -> Triple {{ return Triple {{ {entries} }}; }}"
+            ));
+            let f = return_function(&p);
+            let (e, _) = operand(&f.body[0]);
+            let mut c = Checker::new(&p, f);
+            prepared_expression(&mut c, e);
+            assert!(c.expression(e, Transfer::Return(f.id)).unwrap().is_none());
+            assert!(matches!(
+                c.states[&Place::Parameter(f.parameters[0])],
+                State::Moved { .. }
+            ));
+            assert_eq!(c.states.len(), 1); // Whole Ticket only; no field/destination owner.
+            assert!(c.handles.is_empty());
+            assert!(c.loans.is_empty());
+            assert!(p.bindings().is_empty());
+        }
+    }
+    #[test]
+    fn multi_construction_failure_never_publishes_destination_or_fields() {
+        let p=multiple_typed("fn f(t: Ticket,p: Percent) -> Triple { let result = Triple { middle: consume(t), first: p, last: consume(t) }; return result; }");
+        let f = return_function(&p);
+        let ValueStatement::Let {
+            local, initializer, ..
+        } = &f.body[0]
+        else {
+            panic!()
+        };
+        let mut c = Checker::new(&p, f);
+        prepared_expression(&mut c, initializer);
+        let before = c.clone();
+        assert!(c.statement(&f.body[0], f.id, &FutureUses::new()).is_err());
+        assert!(!c.states.contains_key(&Place::Local(*local)));
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn multi_construction_complete_call_prefix_is_rolled_back_by_later_argument() {
+        let p=multiple_typed("fn f(t: Ticket,p: Percent) { receive3(Triple { last: consume(t), first: p, middle: p },t); }");
+        let f = return_function(&p);
+        let (function, args, span) = statement_call(&f.body[0]);
+        let mut c = Checker::new(&p, f);
+        prepare_call(&mut c, args);
+        let before = c.clone();
+        let mut prefix = c.clone();
+        prefix
+            .expression(
+                &args[0],
+                Transfer::Argument(p.function(function).as_ordinary().unwrap().parameters[0]),
+            )
+            .unwrap();
+        assert_ne!(prefix.states, before.states);
+        assert!(c.call_statement(function, args, span).is_err());
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn multi_construction_preserves_legitimate_receiving_call_hold_until_enclosing_release() {
+        let p=multiple_typed("fn f(flag: bool,p: Percent) { hold3(&flag,Triple { last: p, first: observe(&flag,p), middle: p }); }");
+        let f = return_function(&p);
+        let (function, args, _) = statement_call(&f.body[0]);
+        let mut c = Checker::new(&p, f);
+        prepare_call(&mut c, args);
+        // Reproduce the existing call_arguments receiving hold at the exact boundary.
+        let params = &p.function(function).as_ordinary().unwrap().parameters;
+        let loan = c
+            .expression(&args[0], Transfer::Argument(params[0]))
+            .unwrap()
+            .unwrap();
+        c.loans.get_mut(&loan).unwrap().held += 1;
+        let entry = c.clone();
+        c.expression(&args[1], Transfer::Argument(params[1]))
+            .unwrap();
+        assert_eq!(c.loans[&loan].held, 1);
+        assert_eq!(c.recurrent, entry.recurrent);
+        assert_eq!(c.terminal_return, entry.terminal_return);
+        assert_eq!(c.next_loan, entry.next_loan + 1); // Nested observe borrow only.
+        c.loans.get_mut(&loan).unwrap().held -= 1;
+        c.expire();
+        assert!(c.loans.is_empty());
+        let mut whole = Checker::new(&p, f);
+        prepare_call(&mut whole, args);
+        whole.call_arguments(function, args).unwrap();
+        whole.assert_no_holds();
+        assert!(whole.loans.is_empty());
+    }
+    #[test]
+    fn multi_constructor_kd033_return_transaction_restores_real_entry_on_late_failure() {
+        let p=multiple_typed("fn f(t: Ticket,p: Percent,flag: bool) -> Triple { while flag { return Triple { middle: consume(t), first: p, last: consume(t) }; } return Triple { first: consume(t), middle: p, last: p }; }");
+        let f = return_function(&p);
+        let ValueStatement::While { body, .. } = &f.body[0] else {
+            panic!()
+        };
+        let (e, span) = operand(&body[0]);
+        let mut c = Checker::new(&p, f);
+        c.loop_scope = Some(LoopScope::new(&c, false));
+        c.recurrent.push(BTreeSet::new());
+        add_test_target(&mut c);
+        prepared_expression(&mut c, e);
+        let before = c.clone();
+        assert!(c.return_edge(e, f.id, span).is_err());
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn multi_finite_and_recurrent_visitors_reach_every_written_initializer() {
+        let p=multiple_typed("fn f(a: &Percent,b: &Percent,c: &Percent) -> Triple { return Triple { last: read(c), first: read(a), middle: read(b) }; }");
+        let f = return_function(&p);
+        let (e, _) = operand(&f.body[0]);
+        let mut uses = FutureUses::new();
+        count_expression(e, &mut uses);
+        for id in &f.parameters {
+            assert_eq!(uses[&Place::Parameter(*id)], 1);
+        }
+        assert_eq!(
+            reference_uses(&f.body),
+            f.parameters
+                .iter()
+                .map(|id| Place::Parameter(*id))
+                .collect()
+        );
+        let mut c = Checker::new(&p, f);
+        let frame = c.loans.keys().copied().collect();
+        c.recurrent.push(frame);
+        add_test_target(&mut c);
+        prepared_expression(&mut c, e);
+        let before = c.clone();
+        c.expression(e, Transfer::Return(f.id)).unwrap();
+        assert_eq!(c.recurrent, before.recurrent);
+        assert_eq!(c.handles, before.handles);
+        assert_eq!(c.loans.len(), 3);
+        c.assert_no_holds();
+    }
+    #[test]
+    fn multi_fields_preserve_recurrent_provenance_through_real_backedge_cleanup() {
+        let p=multiple_typed("fn f(flag: bool,p: Percent) -> Triple { let view = &p; while flag { let b = Triple { last: read(view), first: read(view), middle: read(view) }; } return Triple { first: p, middle: p, last: p }; }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[1] else {
+            panic!()
+        };
+        let header = pin_body(&mut c, body);
+        let loan = *header.loans.keys().next().unwrap();
+        c.statements(body, f.id).unwrap();
+        assert!(c.loans.contains_key(&loan));
+        c.validate_loop_backedge(&header, *span).unwrap();
+        assert!(c.same_loop_state(&header));
+        assert_eq!(c.recurrent, header.recurrent);
+    }
+    #[test]
+    fn multiple_field_reads_never_create_partial_state_loan_or_provenance() {
+        let p=multiple_typed("fn f(t: Triple) -> Triple { let a = t.first; let b = t.middle; let c = t.last; return t; }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let before = c.clone();
+        for statement in &f.body[..3] {
+            let ValueStatement::Let { initializer, .. } = statement else {
+                panic!()
+            };
+            c.expression(initializer, Transfer::Return(f.id)).unwrap();
+        }
+        let mut expected = before.clone();
+        *expected
+            .remaining
+            .get_mut(&Place::Parameter(f.parameters[0]))
+            .unwrap() -= 3;
+        assert_atomic(&c, &expected);
+        assert!(c.handles.is_empty());
+        assert!(c.loans.is_empty());
+        assert_eq!(c.states.len(), 1);
+    }
+    #[test]
+    fn multi_call_failure_restores_real_exclusive_argument_hold_and_allocator() {
+        let p=multiple_typed("fn protect(access: &mut Triple,b: Triple) {} fn f(b: Triple,p: Percent) { let mut owned = b; protect(&mut owned,Triple { last: p, first: p, middle: owned.middle }); }");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let (function, args, span) = statement_call(&f.body[1]);
+        prepare_call(&mut c, args);
+        let before = c.clone();
+        let mut prefix = c.clone();
+        let parameter = p.function(function).as_ordinary().unwrap().parameters[0];
+        let loan = prefix
+            .expression(&args[0], Transfer::Argument(parameter))
+            .unwrap()
+            .unwrap();
+        prefix.loans.get_mut(&loan).unwrap().held += 1;
+        assert!(prefix.next_loan > before.next_loan);
+        assert_eq!(prefix.loans[&loan].kind, BorrowKind::Mutable);
+        assert!(c
+            .call_statement(function, args, span)
+            .unwrap_err()
+            .message
+            .contains("exclusively borrowed"));
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn multi_record_identity_and_ownership_are_independent_of_display_spelling() {
+        let mut p=multiple_typed("fn f(t: Ticket,p: Percent) -> Triple { return Triple { last: consume(t), first: p, middle: p }; }");
+        check(&p).unwrap();
+        let m = crate::mir::lower(&p);
+        for r in &mut p.records {
+            r.name = "display".into();
+        }
+        for r in &mut p.ranges {
+            r.name = "display".into();
+        }
+        for field in &mut p.fields {
+            field.name = format!("display_{}", field.id.0);
+        }
+        for parameter in &mut p.parameters {
+            parameter.name = "display".into();
         }
         p.validate_record_expressions().unwrap();
         check(&p).unwrap();

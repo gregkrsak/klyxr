@@ -50,7 +50,9 @@ Once they are part of the program, the compiler and verifier should be able to r
 ## Current implementation status
 
 An executable compiler prototype, written in Rust, supports ordinary
-value functions with statement conditionals and ownership-stable while loops with iteration-local Move values alongside a narrow one-field record/signed-integer contract subset.
+value functions with statement conditionals, ownership-stable while loops,
+iteration-local Move values, and ordinary multiple-field named-range records.
+The specialized signed-integer verified-state/harness subset remains single-field.
 Explicit resolution assigns compilation-local function, parameter, local, type,
 field, and top-level binding IDs. Expression and value-flow type checking produce
 canonical typed HIR. Public HIR inspection remains read-only; names/spans are
@@ -554,3 +556,25 @@ children and excludes hidden conditionals/residual verified projections without
 reconstructing canonical tables. Verified battery/harness/proof behavior is unchanged.
 No generalized ownership solver, execution, allocation, destruction or broader
 nominal/literal semantics is introduced.
+
+
+### KED-021 / KD-036 — Complete named multiple-field construction
+
+Ordinary records now declare one or more unique named-range fields. Canonical
+FieldIds follow declaration order; complete named construction retains written
+initializer order independently, including reversed order. Initializers require
+exact nominal types and are evaluated in written order within the existing
+complete-expression transaction. Later failure restores the entire prepared entry
+and publishes no destination. Completion preserves inherited holds, recurrence and
+permissions; it introduces no separate balancing stage or ownership engine.
+
+Every declared field supports non-consuming direct named-owner Copy reads under
+whole-record availability and loans. Records remain Move; there are no field
+owners, partial availability, field borrowing/mutation or reference projections.
+The typed-HIR boundary checks all declaration tables, including unused malformed
+records, before ordered construction children. MIR preserves and recursively
+checks all children. Explicit gates keep verified state/harness support single-field.
+Ordinary construction and reads are transparent data primitives, not generated
+factory/accessor code. Visibility, constructibility, invariants, broader field
+categories, layout, destruction, execution and generalized cyclic analysis remain
+unresolved. See KD-036 and compiler/README.md for the implemented boundary.

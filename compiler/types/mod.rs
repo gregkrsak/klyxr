@@ -632,23 +632,26 @@ fn expression(
                 ty,
             )
         }
-        ResolvedExprKind::RecordConstruct {
-            record,
-            field,
-            value,
-        } => {
-            let value = expression(program, functions, value)?;
-            exact_value(
-                program,
-                &value,
-                ValueType::Range(program.field(*field).ty),
-                "record field initializer",
-            )?;
+        ResolvedExprKind::RecordConstruct { record, fields } => {
+            let mut typed = Vec::new();
+            for entry in fields {
+                let value = expression(program, functions, &entry.value)?;
+                exact_value(
+                    program,
+                    &value,
+                    ValueType::Range(program.field(entry.field).ty),
+                    "record field initializer",
+                )?;
+                typed.push(hir::RecordFieldInit {
+                    field: entry.field,
+                    value,
+                    span: entry.span,
+                });
+            }
             (
                 ExprKind::RecordConstruct {
                     record: *record,
-                    field: *field,
-                    value: Box::new(value),
+                    fields: typed,
                 },
                 ExprType::Record(*record),
             )
@@ -666,19 +669,23 @@ fn expression(
                 ValueType::SharedRef(_) | ValueType::MutableRef(_) => return Err(Diagnostic::semantic(span, "field access through a reference is unsupported", "use a directly named owned record; no auto-dereference or reference projection").into()),
                 _ => return Err(Diagnostic::semantic(span, "field read requires an owned record parameter or local", format!("found {}", display_type(program, ty.into()))).into()),
             };
-            let field = program.record(record).field;
+            let field = program
+                .record(record)
+                .fields
+                .iter()
+                .copied()
+                .find(|id| program.field(*id).name == *field_name)
+                .ok_or_else(|| {
+                    Box::new(Diagnostic::semantic(
+                        span,
+                        format!(
+                            "unknown field `{field_name}` for record `{}`",
+                            program.record(record).name
+                        ),
+                        "read a declared field of the named record",
+                    ))
+                })?;
             let declaration = program.field(field);
-            if declaration.name != *field_name {
-                return Err(Diagnostic::semantic(
-                    span,
-                    format!(
-                        "unknown field `{field_name}` for record `{}`",
-                        program.record(record).name
-                    ),
-                    format!("the declared field is `{}`", declaration.name),
-                )
-                .into());
-            }
             (
                 ExprKind::CopyFieldRead {
                     owner: *owner,

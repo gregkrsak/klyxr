@@ -26,8 +26,21 @@ pub struct RangeType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordDef {
     pub name: String,
-    pub field_name: String,
-    pub field_type: String,
+    pub fields: Vec<RecordFieldDecl>,
+    pub span: Span,
+}
+
+/// Source declarations remain ordered and individually spanned.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordFieldDecl {
+    pub name: String,
+    pub ty: String,
+    pub span: Span,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordFieldInit {
+    pub name: String,
+    pub value: Expr,
     pub span: Span,
 }
 
@@ -186,8 +199,7 @@ pub struct Expr {
 pub enum ExprKind {
     RecordConstruct {
         record: String,
-        field: String,
-        value: Box<Expr>,
+        fields: Vec<RecordFieldInit>,
         record_span: Span,
     },
     IfValue {

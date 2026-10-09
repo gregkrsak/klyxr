@@ -92,17 +92,48 @@ impl Parser<'_> {
         let span = self.expect(&TokenKind::Record)?.span;
         let name = self.expect_ident()?;
         self.expect(&TokenKind::LBrace)?;
-        let field_name = self.expect_ident()?;
-        self.expect(&TokenKind::Colon)?;
-        let field_type = self.expect_ident()?;
+        if self.at(&TokenKind::RBrace) {
+            return Err(
+                self.error("record declaration requires at least one named-range field".into())
+            );
+        }
+        let mut fields = Vec::new();
+        loop {
+            let start = self.tokens[self.current].span;
+            if !matches!(self.peek_kind(), TokenKind::Ident(_)) {
+                return Err(self.error("record declaration requires a field name".into()));
+            }
+            let name = self.expect_ident()?;
+            if !self.at(&TokenKind::Colon) {
+                return Err(
+                    self.error("record declaration requires ':' after the field name".into())
+                );
+            }
+            self.advance();
+            let ty = self.expect_ident()?;
+            fields.push(crate::ast::RecordFieldDecl {
+                name,
+                ty,
+                span: Span {
+                    end: self.tokens[self.current - 1].span.end,
+                    ..start
+                },
+            });
+            if self.at(&TokenKind::RBrace) {
+                break;
+            }
+            if !self.at(&TokenKind::Comma) {
+                return Err(self.error(
+                    "record declaration requires ',' between fields and a closing brace".into(),
+                ));
+            }
+            self.advance();
+            if self.at(&TokenKind::RBrace) {
+                break;
+            }
+        }
         self.expect(&TokenKind::RBrace)?;
-
-        Ok(RecordDef {
-            name,
-            field_name,
-            field_type,
-            span,
-        })
+        Ok(RecordDef { name, fields, span })
     }
 
     fn parse_verified_function(&mut self) -> Result<VerifiedFunction, ParseError> {
@@ -187,7 +218,7 @@ impl Parser<'_> {
         let mut parameters = Vec::new();
         if !self.at(&TokenKind::RParen) {
             loop {
-                let span = self.peek().span;
+                let span = self.tokens[self.current].span;
                 let name = self.expect_ident()?;
                 self.expect(&TokenKind::Colon)?;
                 let ty = self.parse_value_type()?;
@@ -226,7 +257,7 @@ impl Parser<'_> {
     ) -> Result<(Vec<ValueStatement>, usize), ParseError> {
         let mut body = Vec::new();
         while !self.at(&TokenKind::RBrace) {
-            let span = self.peek().span;
+            let span = self.tokens[self.current].span;
             if self.at(&TokenKind::Break) {
                 if loop_depth == 0 {
                     return Err(
@@ -473,7 +504,7 @@ impl Parser<'_> {
         self.parse_primary_at(false)
     }
     fn parse_primary_at(&mut self, block_boundary: bool) -> Result<Expr, ParseError> {
-        let start = self.peek().span;
+        let start = self.tokens[self.current].span;
         let kind = match self.peek_kind() {
             TokenKind::True | TokenKind::False => {
                 let value = self.at(&TokenKind::True);
@@ -513,39 +544,70 @@ impl Parser<'_> {
                         || self.lookahead_is(3, &TokenKind::Colon)
                         || self.lookahead_is(2, &TokenKind::Colon));
                 if construction {
-                    let record_span = self.peek().span;
+                    let record_span = self.tokens[self.current].span;
                     let record = self.expect_ident()?;
                     self.advance(); // brace, recognized without type-name lookup
                     if !matches!(self.peek_kind(), TokenKind::Ident(_)) {
                         return Err(self.error(
-                            "record construction requires exactly one named field: initializer"
+                            "record construction requires at least one named field: initializer"
                                 .into(),
                         ));
                     }
-                    let field = self.expect_ident()?;
-                    if !self.at(&TokenKind::Colon) {
-                        return Err(self.error(
-                            "record construction requires ':' after the field name".into(),
-                        ));
-                    }
-                    self.advance();
-                    if self.at(&TokenKind::RBrace)
-                        || self.at(&TokenKind::Semicolon)
-                        || self.at(&TokenKind::Eof)
-                    {
-                        return Err(
-                            self.error("record construction requires a field initializer".into())
-                        );
-                    }
-                    let value = Box::new(self.parse_expression(0)?);
-                    if !self.at(&TokenKind::RBrace) {
-                        return Err(self.error("record construction supports exactly one field initializer and requires a closing brace".into()));
+                    let mut fields = Vec::new();
+                    loop {
+                        let start = self.tokens[self.current].span;
+                        if !matches!(self.peek_kind(), TokenKind::Ident(_)) {
+                            return Err(self.error(
+                                "record construction requires a field name after ','".into(),
+                            ));
+                        }
+                        let name = self.expect_ident()?;
+                        if !self.at(&TokenKind::Colon) {
+                            return Err(self.error(
+                                "record construction requires ':' after the field name".into(),
+                            ));
+                        }
+                        self.advance();
+                        if self.at(&TokenKind::RBrace)
+                            || self.at(&TokenKind::Semicolon)
+                            || self.at(&TokenKind::Eof)
+                            || self.at(&TokenKind::Comma)
+                        {
+                            return Err(self
+                                .error("record construction requires a field initializer".into()));
+                        }
+                        let value = self.parse_expression(0)?;
+                        fields.push(crate::ast::RecordFieldInit {
+                            name,
+                            span: Span {
+                                end: value.span.end,
+                                ..start
+                            },
+                            value,
+                        });
+                        if self.at(&TokenKind::RBrace) {
+                            break;
+                        }
+                        if self.at(&TokenKind::Semicolon) {
+                            return Err(self.error("record construction requires ',' between entries; semicolon separators are unsupported".into()));
+                        }
+                        if self.at(&TokenKind::Eof) {
+                            return Err(
+                                self.error("record construction requires a closing brace".into())
+                            );
+                        }
+                        if !self.at(&TokenKind::Comma) {
+                            return Err(self.error("record construction requires ',' between entries and a closing brace".into()));
+                        }
+                        self.advance();
+                        if self.at(&TokenKind::RBrace) {
+                            break;
+                        }
                     }
                     self.advance();
                     ExprKind::RecordConstruct {
                         record,
-                        field,
-                        value,
+                        fields,
                         record_span,
                     }
                 } else if self.lookahead_is(1, &TokenKind::Dot) {
@@ -636,7 +698,7 @@ impl Parser<'_> {
     }
 
     fn parse_call(&mut self) -> Result<Call, ParseError> {
-        let span = self.peek().span;
+        let span = self.tokens[self.current].span;
         let function = self.expect_ident()?;
 
         self.expect(&TokenKind::LParen)?;
@@ -657,7 +719,7 @@ impl Parser<'_> {
     }
 
     fn parse_field_access(&mut self) -> Result<FieldAccess, ParseError> {
-        let span = self.peek().span;
+        let span = self.tokens[self.current].span;
         let binding = self.expect_ident()?;
         self.expect(&TokenKind::Dot)?;
         let field = self.expect_ident()?;
@@ -683,7 +745,7 @@ impl Parser<'_> {
     }
 
     fn expect_number(&mut self) -> Result<i64, ParseError> {
-        let span = self.peek().span;
+        let span = self.tokens[self.current].span;
         let negative = self.at(&TokenKind::Minus);
         if negative {
             self.advance();
@@ -746,7 +808,7 @@ impl Parser<'_> {
     fn error(&self, message: String) -> ParseError {
         ParseError {
             message,
-            span: self.peek().span,
+            span: self.tokens[self.current].span,
         }
     }
 }

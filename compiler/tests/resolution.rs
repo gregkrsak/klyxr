@@ -31,7 +31,7 @@ fn declarations_and_all_function_references_have_canonical_identities() {
         .iter()
         .zip(program.functions().iter().map(|f| f.as_verified().unwrap()))
     {
-        let field = program.field(record.field);
+        let field = program.field(record.fields[0]);
         assert_eq!(field.record, record.id);
         assert_eq!(field.ty, percent);
         assert_eq!(function.state_type, record.id);
@@ -94,7 +94,10 @@ fn declarations_and_all_function_references_have_canonical_identities() {
         assert_eq!(function.requires.ty, ExprType::Bool);
         assert_eq!(function.ensures.ty, ExprType::Bool);
     }
-    assert_ne!(program.records()[0].field, program.records()[1].field);
+    assert_ne!(
+        program.records()[0].fields[0],
+        program.records()[1].fields[0]
+    );
     assert_ne!(
         program.functions()[0].as_verified().unwrap().state_param,
         program.functions()[1].as_verified().unwrap().state_param
@@ -119,7 +122,7 @@ fn ordered_construction_and_calls_resolve_to_the_correct_entities() {
     for index in 0..2 {
         let binding = &program.bindings()[index];
         assert_eq!(binding.record_type, program.records()[index].id);
-        assert_eq!(binding.field, program.records()[index].field);
+        assert_eq!(binding.field, program.records()[index].fields[0]);
         assert_eq!(
             program.statements()[index * 2],
             Statement::Binding(binding.id)

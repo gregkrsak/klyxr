@@ -451,11 +451,11 @@ fn missing_construction_initializer() {
     );
 }
 #[test]
-fn extra_construction_field() {
+fn repeated_construction_field() {
     bad(
         "fn f(p: Percent) -> Battery { return Battery { charge: p, charge: p }; }",
-        "Parse",
-        "exactly one",
+        "Resolve",
+        "duplicate initializer field",
     );
 }
 #[test]
@@ -508,12 +508,12 @@ fn ordinary_records_have_canonical_ids_and_no_anonymous_locals_or_harness_bindin
         let hir::ValueStatement::CallNoValue { arguments, .. } = s else {
             panic!()
         };
-        let hir::ExprKind::RecordConstruct { record, field, .. } = arguments[0].kind else {
+        let hir::ExprKind::RecordConstruct { record, fields } = &arguments[0].kind else {
             panic!()
         };
-        assert_eq!(p.record(record).field, field);
-        assert_eq!(p.field(field).record, record);
-        ids.push(record);
+        assert_eq!(p.record(*record).fields[0], fields[0].field);
+        assert_eq!(p.field(fields[0].field).record, *record);
+        ids.push(*record);
     }
     assert_eq!(ids[0], ids[1]);
     let p = good("fn f(b: Battery) -> Percent { let owned = b; return owned.charge; }");
@@ -531,7 +531,7 @@ fn ordinary_records_have_canonical_ids_and_no_anonymous_locals_or_harness_bindin
     };
     assert_eq!(owner, hir::Place::Local(p.locals()[0].id));
     assert_eq!(value.ty, hir::ExprType::Range(p.field(field).ty));
-    assert_eq!(p.record(record).field, field);
+    assert_eq!(p.record(record).fields[0], field);
 }
 #[test]
 fn public_ast_cannot_hide_conditional_value_beneath_construction() {
@@ -550,11 +550,10 @@ fn public_ast_cannot_hide_conditional_value_beneath_construction() {
     let klyxr_compiler::ast::ValueStatement::Return { value, .. } = &mut f.body[1] else {
         panic!()
     };
-    let klyxr_compiler::ast::ExprKind::RecordConstruct { value: child, .. } = &mut value.kind
-    else {
+    let klyxr_compiler::ast::ExprKind::RecordConstruct { fields, .. } = &mut value.kind else {
         panic!()
     };
-    *child = Box::new(conditional);
+    fields[0].value = conditional;
     let r = klyxr_compiler::resolve::resolve(&a).unwrap();
     let e = klyxr_compiler::types::check(r).unwrap_err();
     assert!(e[0].message.contains("complete local initializers"));

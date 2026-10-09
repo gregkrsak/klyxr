@@ -447,3 +447,21 @@ fn ordinary_record_cli_checks_preserve_the_proof_boundary() {
         }
     }
 }
+
+#[test]
+fn multi_field_record_cli_preserves_whole_record_and_proof_boundaries() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("multiple_field_records.klx")]);
+        assert!(output.status.success());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("ordinary MIR control-flow lowering passed: 1 functions"));
+        assert!(text.contains("function bodies proven: 0"));
+        assert!(text.contains("calls checked: 0"));
+        assert!(text.contains("not executed or verified"));
+        let output = run(&[command, &example("multiple_field_record_move_fail.klx")]);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("use of moved value `ticket`"));
+    }
+}
