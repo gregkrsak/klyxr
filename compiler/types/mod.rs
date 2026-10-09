@@ -750,7 +750,11 @@ fn expression(
                 ExprType::Record(*record),
             )
         }
-        ResolvedExprKind::CopyFieldRead { owner, field_name } => {
+        ResolvedExprKind::CopyFieldRead {
+            owner,
+            field_name,
+            field_span,
+        } => {
             let ty = match owner {
                 hir::Place::Parameter(id) => match program.parameter(*id).ty {
                     ParameterType::Value(ty) => ty,
@@ -760,7 +764,8 @@ fn expression(
             };
             let record = match ty {
                 ValueType::Record(id) => id,
-                ValueType::SharedRef(_) | ValueType::MutableRef(_) => return Err(Diagnostic::semantic(span, "field access through a reference is unsupported", "use a directly named owned record; no auto-dereference or reference projection").into()),
+                ValueType::SharedRef(hir::ReferentType::Record(id)) | ValueType::MutableRef(hir::ReferentType::Record(id)) => id,
+                ValueType::SharedRef(_) | ValueType::MutableRef(_) => return Err(Diagnostic::semantic(*field_span, "reference field read requires a record referent", format!("the reference has type {}; its referent is not a record with field `{field_name}`", display_type(program, ty.into()))).into()),
                 _ => return Err(Diagnostic::semantic(span, "field read requires an owned record parameter or local", format!("found {}", display_type(program, ty.into()))).into()),
             };
             let field = program
@@ -771,7 +776,7 @@ fn expression(
                 .find(|id| program.field(*id).name == *field_name)
                 .ok_or_else(|| {
                     Box::new(Diagnostic::semantic(
-                        span,
+                        *field_span,
                         format!(
                             "unknown field `{field_name}` for record `{}`",
                             program.record(record).name
@@ -781,10 +786,18 @@ fn expression(
                 })?;
             let declaration = program.field(field);
             (
-                ExprKind::CopyFieldRead {
-                    owner: *owner,
-                    record,
-                    field,
+                if matches!(ty, ValueType::Record(_)) {
+                    ExprKind::CopyFieldRead {
+                        owner: *owner,
+                        record,
+                        field,
+                    }
+                } else {
+                    ExprKind::CopyReferenceFieldRead {
+                        reference: *owner,
+                        record,
+                        field,
+                    }
                 },
                 ExprType::Range(declaration.ty),
             )

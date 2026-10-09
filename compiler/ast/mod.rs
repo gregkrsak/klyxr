@@ -194,6 +194,7 @@ pub struct VerifiedFunction {
 pub struct FieldAccess {
     pub binding: String,
     pub field: String,
+    pub field_span: Span,
     pub span: Span,
 }
 

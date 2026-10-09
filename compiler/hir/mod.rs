@@ -164,6 +164,12 @@ pub enum ExprKind {
         record: RecordId,
         field: FieldId,
     },
+    /// Copy a field under an existing named reference handle, without reborrowing.
+    CopyReferenceFieldRead {
+        reference: Place,
+        record: RecordId,
+        field: FieldId,
+    },
     IfValue {
         condition: Box<TypedExpr>,
         then_value: Box<TypedExpr>,

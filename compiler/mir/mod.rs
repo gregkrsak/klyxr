@@ -124,6 +124,9 @@ impl MirFunction {
                 hir::ExprKind::FormedRangeLiteral(_) => {
                     if !matches!(expression.ty, hir::ExprType::Range(_)) { return Err("formed range literal has non-range type"); }
                 }
+                hir::ExprKind::CopyReferenceFieldRead { .. } => {
+                    if !matches!(expression.ty, hir::ExprType::Range(_)) { return Err("reference Copy-field read has non-range result"); }
+                }
                 hir::ExprKind::IfValue { .. } => return Err("conditional value must lower to control flow"),
                 hir::ExprKind::RecordConstruct { fields, .. } => { for entry in fields { expression_valid(&entry.value)?; } },
                 hir::ExprKind::Call { arguments, .. } => for argument in arguments { expression_valid(argument)?; },
@@ -1346,6 +1349,105 @@ mod multiple_field_tests {
             ty: hir::ExprType::Range(hir::RangeTypeId(usize::MAX)),
             span: value.span,
         };
+        f.validate().unwrap();
+    }
+    #[test]
+    fn reference_field_mir_retains_distinct_leaf_and_canonical_ids() {
+        let p=compile_source("type Percent = range 0..100; record Battery {charge: Percent} fn f(v: &Battery) -> Percent {return v.charge;}").unwrap();
+        let m = lower(&p);
+        let f = &m.functions[0];
+        f.validate().unwrap();
+        let Terminator::Return { value } = &f.blocks[0].terminator else {
+            panic!()
+        };
+        let hir::ExprKind::CopyReferenceFieldRead {
+            reference,
+            record,
+            field,
+        } = value.kind
+        else {
+            panic!()
+        };
+        assert_eq!(
+            reference,
+            hir::Place::Parameter(p.functions()[0].as_ordinary().unwrap().parameters[0])
+        );
+        assert_eq!(record, p.records()[0].id);
+        assert_eq!(field, p.records()[0].fields[0]);
+        assert_eq!(value.ty, hir::ExprType::Range(p.field(field).ty));
+        assert_eq!(m, lower(&p));
+    }
+    #[test]
+    fn reference_field_mir_validation_inspects_first_middle_final_nested_children_honestly() {
+        let p=compile_source("type Percent = range 0..100; record Battery {charge: Percent} record Triple {first: Percent,middle: Percent,last: Percent} fn three(a: Percent,b: Percent,c: Percent) -> Percent {return a;} fn f(v: &Battery) -> Percent {return three(v.charge,v.charge,v.charge);}").unwrap();
+        let original = lower(&p).functions[1].clone();
+        let Terminator::Return { value } = &original.blocks[0].terminator else {
+            panic!()
+        };
+        let hir::ExprKind::Call { arguments, .. } = &value.kind else {
+            panic!()
+        };
+        let leaf = arguments[0].clone();
+        for container in ["call", "construction", "unary", "binary"] {
+            for position in 0..3 {
+                let mut f = original.clone();
+                let Terminator::Return { value } = &mut f.blocks[0].terminator else {
+                    panic!()
+                };
+                let hir::ExprKind::Call { arguments, .. } = &mut value.kind else {
+                    panic!()
+                };
+                let mut bad = leaf.clone();
+                bad.ty = hir::ExprType::Bool;
+                let kind = match container {
+                    "call" => hir::ExprKind::Call {
+                        function: p.functions()[0].id(),
+                        arguments: vec![bad],
+                    },
+                    "construction" => hir::ExprKind::RecordConstruct {
+                        record: p.records()[1].id,
+                        fields: vec![hir::RecordFieldInit {
+                            field: p.records()[1].fields[0],
+                            value: bad,
+                            span: leaf.span,
+                        }],
+                    },
+                    "unary" => hir::ExprKind::Unary {
+                        op: crate::ast::UnaryOp::Not,
+                        operand: Box::new(bad),
+                    },
+                    "binary" => hir::ExprKind::Binary {
+                        op: crate::ast::BinaryOp::Equal,
+                        left: Box::new(leaf.clone()),
+                        right: Box::new(bad),
+                    },
+                    _ => unreachable!(),
+                };
+                arguments[position] = TypedExpr {
+                    kind,
+                    ty: leaf.ty,
+                    span: leaf.span,
+                };
+                assert_eq!(
+                    f.validate().unwrap_err(),
+                    "reference Copy-field read has non-range result"
+                );
+            }
+        }
+        // No HIR tables at MIR: structural validity makes no membership/bounds claim.
+        let mut f = original;
+        let Terminator::Return { value } = &mut f.blocks[0].terminator else {
+            panic!()
+        };
+        let hir::ExprKind::Call { arguments, .. } = &mut value.kind else {
+            panic!()
+        };
+        let hir::ExprKind::CopyReferenceFieldRead { record, field, .. } = &mut arguments[0].kind
+        else {
+            panic!()
+        };
+        *record = hir::RecordId(usize::MAX);
+        *field = hir::FieldId(usize::MAX);
         f.validate().unwrap();
     }
 }

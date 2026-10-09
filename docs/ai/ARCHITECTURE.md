@@ -325,7 +325,7 @@ call holds before expiry. Reference parameters have external provenance without
 interprocedural owner reconstruction. Loan state is not published in HIR.
 Exclusive borrowing requires a mutable owned local; `let mut` introduced exclusive borrowing under KED-006; KD-026 now adds Copy-safe local assignment.
 KD-035 adds ordinary single-range-field construction and named-owner Copy reads.
-There is no reference projection, reborrowing, reference return,
+There is no generalized reference projection beyond KD-039, reborrowing, reference return,
 implicit reference coercion, partial move/borrow, user-defined Copy/Clone, or destructor. Source names
 and nominal type errors must be resolved before ownership checking.
 
@@ -841,3 +841,44 @@ HIR table facts. No setter, reconstruction, generalized place, new terminator,
 phi, second checker or fixed-point engine is introduced. Verified subtraction and
 harness paths remain isolated. Ordinary mutation is checked/lowered, not executed
 or proven; broader projection, mutation, invariants and destruction remain open.
+
+
+## Referenced Copy-field access boundary (KED-024 / KD-039)
+
+AST FieldAccess now retains the complete expression and a distinct field-token
+span. Resolution preserves the canonical ParameterId/LocalId root plus written
+field spelling/span. Existing expression typing classifies owned/shared/exclusive
+roots from actual inferred types, selects the field in the canonical referent
+record, and publishes CopyReferenceFieldRead { reference, record, field } with
+exact Range result metadata. Owned CopyFieldRead remains a separate operation.
+
+The existing HIR publication walker uses checked canonical tables for containing
+function, exact reference-to-record root, reciprocal field membership and exact
+range result, and rejects ordinary referenced reads in verified expressions.
+MIR retains this typed leaf, checking Range result shape and every container;
+it cannot establish HIR-table facts or loan validity without those tables/state.
+No new pass, instruction, terminator, temporary or generalized place is introduced.
+
+The bounded ownership sibling checks loop-handle condition protection, checked
+reference type, availability and live lineage; it decrements finite use, invokes
+ordinary expiry and returns no LoanId result. Thus copied arguments create no
+receiving hold. The whole-record dereference helper still rejects Move referents.
+Both finite/recurrent visitors explicitly count the reference handle. Shared and
+exclusive permissions remain unchanged; holds and scoped recurrence retain loans
+continuously through calls/backedges and false-exit normalization as before.
+
+Loan.origin records only the canonical external ParameterId or first stored-borrow
+LocalId (direct ephemeral borrows are unbound). Active identity remains exclusively
+in Place → LoanId. Validation walks the current function's canonical initializer
+lineage, checking borrow origin/owner/type/permission and same-loan alias/transfer
+links. Exclusive source transfers are checked without requiring moved sources to
+remain available. No second expected-LoanId map or field provenance is added.
+Cloning, rollback assertions, semantic backedge comparisons and break integrity
+include origin metadata. Branches retain only incoming provenance, as before.
+
+Existing complete-expression rollback restores an earlier read's finite-use and
+loan expiry after a distinct later child failure. KD-033/KD-034 enclosing boundaries
+remain separate and unchanged; no leaf transaction or global hold-balancing rule
+is added. Owned reads/assignment and verified/harness eligibility/proofs remain
+unchanged. Broader projection, reference mutation, reborrowing and generalized
+cyclic analysis remain unresolved; ordinary code is checked/lowered only.

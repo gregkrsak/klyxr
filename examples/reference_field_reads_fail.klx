@@ -1,0 +1,10 @@
+// A later reference-field read keeps the shared whole-record loan active.
+type Percent = range 0..100;
+record Battery { charge: Percent, health: Percent }
+fn blocked(battery: Battery) -> Percent {
+    let mut working = battery;
+    let view = &working;
+    let observed = view.charge;
+    working.health = observed;
+    return view.health;
+}

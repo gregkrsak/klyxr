@@ -764,7 +764,7 @@ unimplemented properties or unspecified program correctness.
 KD-036 implements ordinary records with one or more named-range fields and complete
 named construction; specialized verified and harness state still requires exactly one field.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, KD-033, KD-034, KD-035, KD-036, KD-037, and KD-038,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, KD-033, KD-034, KD-035, KD-036, KD-037, KD-038, and KD-039,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
@@ -1527,3 +1527,56 @@ boundary or field loan. The specialized verified-state subtraction and single-fi
 harness paths remain unchanged and ineligible. Broader fields/mutation, visibility,
 invariants, partial borrowing/moves, destruction and generalized cyclic analysis
 remain open under OQ-004/OQ-020/OQ-023/OQ-024/OQ-025/OQ-026.
+
+
+## Copy-field reads through named record references (KED-024 / KD-039)
+
+```klyxr
+type Percent = range 0..100;
+record Battery { charge: Percent, health: Percent }
+fn inspect(view: &Battery) -> Percent {
+    return view.charge;
+}
+fn inspect_exclusive(access: &mut Battery) -> Percent {
+    let observed = access.health;
+    return observed;
+}
+```
+
+See `examples/reference_field_reads.klx` and the intentional live-loan conflict
+in `examples/reference_field_reads_fail.klx`. A directly named ordinary parameter
+or inferred local of exact `&Record` / `&mut Record` type can copy any declared
+named-range field. Field selection uses that referent's canonical record identity;
+result typing is exactly nominal. This extends the historical owned-only KD-035/
+KD-036 read boundary without changing owned reads or KD-038 owned-local writes.
+
+The read uses an available handle and its existing validated whole-record loan.
+It preserves the loan's shared/exclusive permission, moves neither handle nor
+record, and creates no reborrow, conversion, field place, provenance or hold.
+In particular, `&mut Record` remains Move even though a field read does not move
+it. Shared aliases and exclusive transfers retain their original loan identity;
+external reference parameters need no local owner. Private canonical origin and
+initializer-lineage checks reject internally forged compatible-loan remapping.
+
+Each read counts as a real reference-handle use. Final use may permit ordinary
+expiry before later owner access; future handle/alias uses, enclosing receiving
+holds and recurrent obligations retain protection. The copied result adds no
+receiving-call hold. Stable loop-body reads and nested `continue` use existing
+recurrence rules; recurring conditions remain reference-free, including nested
+reference-field reads. Whole-record dereference still forbids non-Copy extraction.
+Complete-expression/return/call rollback restores all prepared state, including
+loans expired by a successful earlier read before a later child fails.
+
+Public AST FieldAccess now carries a distinct field_span as well as the complete
+access span. Typed HIR/MIR add CopyReferenceFieldRead { reference, record, field };
+this is an intentional public representation change. HIR publication checks all
+canonical table relationships before ownership. MIR validates only the structural
+range-valued leaf and containing trees; canonical tables/loans are not its authority.
+Compilation and read-only Program inspection APIs are unchanged.
+
+`access.field = value`, `&view.field`, `(&owner).field`, call-result projection,
+`(*view).field`, nested projections, reference returns, reborrowing/coercions,
+field loans/partial moves, general places and record replacement remain unsupported.
+This introduces no execution, runtime accessor/property or proof rule. Ordinary
+functions are checked/lowered only; verified state and harness remain single-field,
+with unchanged battery proofs, diagnostics and independent affine coverage.

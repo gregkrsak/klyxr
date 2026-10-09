@@ -692,7 +692,7 @@ impl Parser<'_> {
             }
         };
         if self.at(&TokenKind::Dot) {
-            return Err(self.error("field access through a temporary or nested projection is unsupported; use a directly named owned record parameter or local".into()));
+            return Err(self.error("field access through a temporary or nested projection is unsupported; use a directly named ordinary record owner or reference".into()));
         }
         Ok(Expr {
             kind,
@@ -756,6 +756,7 @@ impl Parser<'_> {
         let span = self.tokens[self.current].span;
         let binding = self.expect_ident()?;
         self.expect(&TokenKind::Dot)?;
+        let field_span = self.tokens[self.current].span;
         let field = self.expect_ident()?;
         let span = Span {
             end: self.tokens[self.current - 1].span.end,
@@ -764,6 +765,7 @@ impl Parser<'_> {
         Ok(FieldAccess {
             binding,
             field,
+            field_span,
             span,
         })
     }

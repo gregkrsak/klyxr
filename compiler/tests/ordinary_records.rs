@@ -304,19 +304,11 @@ fn shared_read_does_not_end_loan() {
 }
 #[test]
 fn shared_reference_root() {
-    bad(
-        "fn f(view: &Battery) -> Percent { return view.charge; }",
-        "Type",
-        "through a reference",
-    );
+    good("fn f(view: &Battery) -> Percent { return view.charge; }");
 }
 #[test]
 fn mutable_reference_root() {
-    bad(
-        "fn f(view: &mut Battery) -> Percent { return view.charge; }",
-        "Type",
-        "through a reference",
-    );
+    good("fn f(view: &mut Battery) -> Percent { return view.charge; }");
 }
 #[test]
 fn nonrecord_root() {
@@ -618,7 +610,7 @@ fn parse_diagnostic_at(body: &str, message: &str, marker: &str, offset: usize) {
         source[..start].rsplit('\n').next().unwrap().len() + 1
     );
 }
-const TEMPORARY_PROJECTION: &str = "field access through a temporary or nested projection is unsupported; use a directly named owned record parameter or local";
+const TEMPORARY_PROJECTION: &str = "field access through a temporary or nested projection is unsupported; use a directly named ordinary record owner or reference";
 const MISSING_INITIALIZER: &str = "record construction requires a field initializer";
 
 #[test]

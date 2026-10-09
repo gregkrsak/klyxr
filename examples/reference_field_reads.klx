@@ -1,0 +1,18 @@
+// Copy values through existing shared/exclusive whole-record reference handles.
+type Percent = range 0..100;
+record Battery { charge: Percent, health: Percent }
+fn inspect(view: &Battery) -> Percent {
+    let first = view.charge;
+    return view.health;
+}
+fn inspect_exclusive(access: &mut Battery) -> Percent {
+    return access.charge;
+}
+fn refresh(battery: Battery) -> Battery {
+    let mut working = battery;
+    let view = &working;
+    let observed = view.charge;
+    // Final view use has completed: ordinary expiry permits the owned write.
+    working.health = observed;
+    return working;
+}
