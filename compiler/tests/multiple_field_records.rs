@@ -274,7 +274,7 @@ fn later_initializer_failure_and_written_order_are_observable() {
     bad("fn f(t: Ticket,p: Percent) { receive(Triple { last: measure(t), first: p, middle: p },t); }","Ownership","moved value");
 }
 #[test]
-fn recurring_conditions_reject_construction_in_first_middle_and_final_positions_at_depth() {
+fn recurring_conditions_reject_outer_construction_with_varied_initializer_contents() {
     for position in 0..3 {
         let names = ["first", "middle", "last"];
         let entries = names
