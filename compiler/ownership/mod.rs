@@ -748,8 +748,9 @@ impl<'a> Checker<'a> {
         Ok(())
     }
     fn same_loop_state(&self, header: &Self) -> bool {
-        // Compare availability, not diagnostic move sites/transfers. Loan spans,
-        // display names and syntactic FutureUses are likewise not semantic state.
+        // Compare availability here, not diagnostic move sites. Semantic origin
+        // spans and exclusive-transfer payloads are checked by live_handle before
+        // edge cleanup; display names and finite FutureUses are not loop state.
         let availability = |state: &State| std::mem::discriminant(state);
         self.function == header.function
             && self
@@ -905,6 +906,15 @@ impl<'a> Checker<'a> {
                 None,
             ));
         }
+        if self.next_loan < header.next_loan {
+            return Err(self.diagnostic(
+                span,
+                "while loop does not preserve loan allocation state".into(),
+                "loan allocation must remain monotonic before break discharge",
+                None,
+            ));
+        }
+        self.validate_incoming_lineage(header, span)?;
         Ok(())
     }
     fn project_break_exit(&mut self, target: &LoopTarget<'a>, span: Span) -> OwnershipResult {
@@ -936,6 +946,19 @@ impl<'a> Checker<'a> {
         }
     }
     fn validate_loop_backedge(&mut self, header: &Self, span: Span) -> OwnershipResult {
+        if header.handles.keys().any(|place| {
+            self.handles
+                .get(place)
+                .is_some_and(|id| id.0 >= header.next_loan)
+        }) {
+            return Err(self.diagnostic(
+                span,
+                "iteration-created reference state survives while backedge".into(),
+                "carried handles cannot be refreshed before allocator normalization",
+                None,
+            ));
+        }
+        self.validate_incoming_lineage(header, span)?;
         self.finish_loop_provenance(header, span)?;
         self.assert_no_holds();
         // This check precedes discharge of the current recurrent frame.
@@ -1032,6 +1055,8 @@ impl<'a> Checker<'a> {
         continuation: FutureUses,
         span: Span,
     ) -> OwnershipResult {
+        then_state.validate_incoming_lineage(self, span)?;
+        else_state.validate_incoming_lineage(self, span)?;
         then_state.assert_no_holds();
         else_state.assert_no_holds();
         // Branch-created loans are scoped away, never merged. An incoming
@@ -1276,6 +1301,35 @@ impl<'a> Checker<'a> {
     fn provenance_error(&self, span: Span) -> Box<Diagnostic> {
         self.diagnostic(span, "reference access has invalid loan provenance or lineage".into(),
             "the canonical handle must retain its original referent, shared/exclusive permission and borrow origin; compatible loans are not interchangeable", None)
+    }
+    /// Validate usable incoming references before convergence erases evidence.
+    /// The entry mapping selects relevant historical handles only; it never
+    /// supplies or replaces the candidate's authoritative active LoanId.
+    fn validate_incoming_lineage(&self, entry: &Self, span: Span) -> OwnershipResult {
+        let places: BTreeSet<_> = self
+            .handles
+            .keys()
+            .chain(entry.handles.keys())
+            .copied()
+            .collect();
+        for place in places {
+            // Copy handles have no availability entry. Moved/conditional handles
+            // remain historical lineage, not independently usable references.
+            if matches!(
+                self.states.get(&place),
+                Some(State::Moved { .. } | State::ConditionalMove { .. })
+            ) {
+                continue;
+            }
+            let active = |id: &LoanId| self.loans.contains_key(id);
+            if self.handles.get(&place).is_some_and(active)
+                || entry.handles.get(&place).is_some_and(active)
+                || self.remaining.get(&place).copied().unwrap_or(0) > 0
+            {
+                self.live_handle(place, span)?;
+            }
+        }
+        Ok(())
     }
     fn live_handle(&self, place: Place, span: Span) -> OwnershipResult<LoanId> {
         let id = self.handles.get(&place).copied().filter(|id| id.0 < self.next_loan && self.loans.contains_key(id))
@@ -6189,5 +6243,209 @@ mod tests {
             assert!(c.join(yes, no, before.remaining.clone(), f.span).is_err());
             assert_atomic(&c, &before);
         }
+    }
+    fn join_mapping_fault(side: usize, missing: bool) {
+        let p = reference_typed("fn f(a: &Ticket,b: &Ticket) -> Percent {return a.value;}");
+        let f = return_function(&p);
+        let mut entry = Checker::new(&p, f);
+        let before = entry.clone();
+        let mut yes = entry.clone();
+        let mut no = entry.clone();
+        let incoming = if side == 0 { &mut yes } else { &mut no };
+        let a = Place::Parameter(f.parameters[0]);
+        let b = Place::Parameter(f.parameters[1]);
+        if missing {
+            incoming.handles.remove(&a);
+        } else {
+            incoming.handles.insert(a, incoming.handles[&b]);
+        }
+        assert!(incoming.live_handle(a, f.span).is_err());
+        assert!(entry
+            .join(yes, no, before.remaining.clone(), f.span)
+            .is_err());
+        // Rejection precedes publishing entry mappings or discarding candidates.
+        assert_atomic(&entry, &before);
+    }
+    #[test]
+    fn join_rejects_then_compatible_live_mapping_substitution() {
+        join_mapping_fault(0, false);
+    }
+    #[test]
+    fn join_rejects_else_compatible_live_mapping_substitution() {
+        join_mapping_fault(1, false);
+    }
+    #[test]
+    fn join_rejects_missing_then_mapping_before_entry_can_conceal_it() {
+        join_mapping_fault(0, true);
+    }
+    #[test]
+    fn join_rejects_missing_else_mapping_before_entry_can_conceal_it() {
+        join_mapping_fault(1, true);
+    }
+
+    #[test]
+    fn join_accepts_one_sided_expiry_without_requiring_dead_historical_handles() {
+        let p = reference_typed("fn f(a: &Ticket) -> Percent {return a.value;}");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let a = Place::Parameter(f.parameters[0]);
+        let id = c.handles[&a];
+        let mut yes = c.clone();
+        yes.remaining.clear();
+        yes.expire();
+        assert!(!yes.loans.contains_key(&id));
+        let no = c.clone();
+        let suffix = c.remaining.clone();
+        c.join(yes, no, suffix, f.span).unwrap();
+        assert_eq!(c.live_handle(a, f.span).unwrap(), id);
+    }
+    fn join_legal_lineage(exclusive: bool) {
+        let capability = if exclusive { "&mut " } else { "&" };
+        let p = reference_typed(&format!(
+            "fn f(v: {capability}Ticket) -> Percent {{let alias = v; return alias.value;}}"
+        ));
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let alias = Place::Local(LocalId(0));
+        let id = c.live_handle(alias, f.span).unwrap();
+        if exclusive {
+            assert!(matches!(
+                c.states[&Place::Parameter(f.parameters[0])],
+                State::Moved { .. }
+            ));
+        }
+        let suffix = c.remaining.clone();
+        c.join(c.clone(), c.clone(), suffix, f.span).unwrap();
+        assert_eq!(c.live_handle(alias, f.span).unwrap(), id);
+    }
+    #[test]
+    fn join_preserves_legitimate_shared_alias() {
+        join_legal_lineage(false);
+    }
+    #[test]
+    fn join_preserves_legitimate_exclusive_transfer_from_moved_source() {
+        join_legal_lineage(true);
+    }
+    #[test]
+    fn join_preserves_conditional_move_and_branch_local_transfer_cleanup() {
+        let p = reference_typed(
+            "fn f(v: &mut Ticket) -> Percent {let alias = v; let next = alias; return next.value;}",
+        );
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let mut yes = c.clone();
+        yes.statements(&f.body[1..2], f.id).unwrap();
+        let no = c.clone();
+        let alias = Place::Local(LocalId(0));
+        c.join(yes, no, FutureUses::from([(alias, 1)]), f.span)
+            .unwrap();
+        assert!(matches!(c.states[&alias], State::ConditionalMove { .. }));
+        assert!(c.available(alias, f.span).is_err());
+        assert!(!c.handles.contains_key(&Place::Local(LocalId(1))));
+        assert_eq!(c.loans.len(), 1);
+    }
+
+    fn loop_lineage_fault(edge: usize, transfer: bool) {
+        // There is no outside reference use: discharge would erase the loan.
+        let capability = if transfer { "&mut " } else { "&" };
+        let p = reference_typed(&format!("fn f(flag: bool,v: {capability}Ticket) -> Percent {{let carried = v; while flag {{let seen = carried.value;}} return 80;}}"));
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[1] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut c, body, FutureUses::new());
+        let carried = Place::Local(LocalId(0));
+        let id = c.handles[&carried];
+        c.remaining.clear();
+        c.expire();
+        assert!(c.loans.contains_key(&id));
+        assert!(c.targets.last().unwrap().exit.loans.is_empty());
+        if transfer {
+            let State::Moved { transfer, .. } = c
+                .states
+                .get_mut(&Place::Parameter(f.parameters[1]))
+                .unwrap()
+            else {
+                panic!()
+            };
+            *transfer = Transfer::Local(LocalId(999));
+        } else {
+            c.loans.get_mut(&id).unwrap().span = *span;
+            assert_ne!(c.loans[&id].span, header.loans[&id].span);
+        }
+        assert!(c.live_handle(carried, *span).is_err());
+        let before = c.clone();
+        match edge {
+            0 => {
+                assert!(c.validate_loop_backedge(&header, *span).is_err());
+            }
+            1 => {
+                assert!(c.continue_edge(*span).is_err());
+            }
+            2 => {
+                assert!(c.break_edge(*span).is_err());
+            }
+            _ => unreachable!(),
+        }
+        assert_atomic(&c, &before); // No cleanup, normalization or discharge hid it.
+    }
+    #[test]
+    fn recurrent_backedge_rejects_changed_origin_span() {
+        loop_lineage_fault(0, false);
+    }
+    #[test]
+    fn continue_rejects_changed_origin_span() {
+        loop_lineage_fault(1, false);
+    }
+    #[test]
+    fn break_rejects_changed_origin_span_before_recurrence_only_discharge() {
+        loop_lineage_fault(2, false);
+    }
+    #[test]
+    fn recurrent_backedge_rejects_corrupted_exclusive_transfer_payload() {
+        loop_lineage_fault(0, true);
+    }
+    #[test]
+    fn continue_rejects_corrupted_exclusive_transfer_payload() {
+        loop_lineage_fault(1, true);
+    }
+    #[test]
+    fn break_rejects_corrupted_exclusive_transfer_before_recurrence_only_discharge() {
+        loop_lineage_fault(2, true);
+    }
+
+    fn lawful_carried_lineage(exclusive: bool) {
+        let capability = if exclusive { "&mut " } else { "&" };
+        let p = reference_typed(&format!("fn f(flag: bool,v: {capability}Ticket) -> Percent {{let carried = v; while flag {{let seen = carried.value;}} return 80;}}"));
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[1] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut c, body, FutureUses::new());
+        c.statements_with(body, f.id, &FutureUses::new()).unwrap();
+        let carried = Place::Local(LocalId(0));
+        let id = c.live_handle(carried, *span).unwrap();
+        assert_eq!(c.remaining.get(&carried).copied().unwrap_or(0), 0);
+        let mut back = c.clone();
+        back.validate_loop_backedge(&header, *span).unwrap();
+        let mut next = c.clone();
+        assert_eq!(next.continue_edge(*span).unwrap(), Flow::Continue);
+        assert_eq!(c.break_edge(*span).unwrap(), Flow::Break);
+        assert!(!c.loans.contains_key(&id));
+        assert!(c.recurrent.is_empty());
+    }
+    #[test]
+    fn shared_carried_lineage_accepts_backedge_continue_final_use_and_discharge() {
+        lawful_carried_lineage(false);
+    }
+    #[test]
+    fn transferred_exclusive_carried_lineage_accepts_backedge_continue_and_discharge() {
+        lawful_carried_lineage(true);
     }
 }
