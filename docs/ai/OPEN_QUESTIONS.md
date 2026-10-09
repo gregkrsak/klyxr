@@ -253,7 +253,7 @@ Still open:
 - reborrowing syntax and semantics;
 - whether and when `&mut T` may coerce to `&T`;
 - auto-deref and dereference coercions;
-- field access through references;
+- generalized field access through references beyond KD-039 direct named Copy-field reads;
 - field/partial borrowing and disjoint field loans;
 - reference mutation beyond Copy-safe whole-value write-through;
 - two-phase borrows;
@@ -558,3 +558,14 @@ terminal permission. Broader place/projection evaluation, reference-field mutati
 field loans, compound assignment, Move replacement, invariants, visibility,
 destruction and generalized cyclic analysis remain unresolved. Verified/harness
 mutation remains unchanged. KD-038 adds no execution or ordinary proof claim.
+
+
+### KD-039 refinement of OQ-024/OQ-025
+
+KED-024 settles direct Copy-field reads through named ordinary shared/exclusive
+record references using existing whole-record provenance. This is not general
+reference projection, auto-deref, conversion/reborrowing or field borrowing.
+Whole-record non-Copy dereference, reference-field assignment, temporary/nested/
+dereference projection, partial moves/loans, reference returns, lifetime syntax,
+properties, destruction, execution and generalized cyclic inference remain open.
+Owned-field assignment remains KD-038; the verified/harness path is unchanged.

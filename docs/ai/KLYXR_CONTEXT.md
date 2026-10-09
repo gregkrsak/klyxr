@@ -78,7 +78,7 @@ remain held until the receiving call completes, including nested arguments.
 Availability and loans are separate ID-based state within the same ownership phase.
 Borrowing/cloning/reborrowing/coercion are never implicit. Ordinary owned parameters
 remain immutable. Reference returns, nested references, explicit lifetimes,
-auto-dereference, reference projection, partial borrowing/moves,
+auto-dereference, generalized reference projection beyond KD-039, partial borrowing/moves,
 and destruction remain unsupported (KD-021 / OQ-024).
 
 KED-007 adds explicit `*reference` for directly named ordinary reference parameters
@@ -610,3 +610,23 @@ Verified/harness mutation remains specialized and single-field; ordinary field
 writes are checked/lowered, not executed or proven. Reference/temporary/nested
 projection, field borrowing, invariants, visibility, destruction and generalized
 mutation/cyclic analysis remain open.
+
+
+### KED-024: direct Copy-field reads through named references
+
+KD-039 implements `view.field` for directly named ordinary `&Record` / `&mut Record`
+parameters and inferred locals. It copies the exact declared named-range field
+through the existing whole-record loan without moving handle/record, reborrowing,
+converting exclusive permission, or creating field-level state. Typed HIR/MIR
+explicitly distinguish referenced reads from owned reads. Canonical table checks
+and distinct field-token spans precede ownership; MIR validates structural facts.
+
+Reads count for finite use and scoped recurrence. Final use may expire a loan;
+later alias/handle uses, receiving holds and recurrent obligations retain it.
+Existing expression/return/call transactions restore even prefix-expired loans
+on later failure. Canonical origin/initializer-lineage integrity validates external
+parameters, shared aliases and exclusive transfers using the single handle→loan
+mapping. Reference-backed while conditions, assignment through record references,
+field borrowing, temporary/nested/dereference projection and whole-record move-out
+remain unsupported. Ordinary functions remain unexecuted/unproven; verified battery
+and single-field harness eligibility/proofs are unchanged.

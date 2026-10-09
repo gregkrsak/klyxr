@@ -91,7 +91,7 @@ remain held until the receiving call completes, including nested arguments.
 Availability and loans are separate ID-based state within the same ownership phase.
 Borrowing/cloning/reborrowing/coercion are never implicit. Ordinary owned parameters
 remain immutable. Reference returns, nested references, explicit lifetimes,
-auto-dereference, reference projection, partial borrowing/moves,
+auto-dereference, generalized reference projection beyond KD-039, partial borrowing/moves,
 and destruction remain unsupported (KD-021 / OQ-024).
 
 KED-007 adds explicit `*reference` for directly named ordinary reference parameters
@@ -623,6 +623,26 @@ Verified/harness mutation remains specialized and single-field; ordinary field
 writes are checked/lowered, not executed or proven. Reference/temporary/nested
 projection, field borrowing, invariants, visibility, destruction and generalized
 mutation/cyclic analysis remain open.
+
+
+### KED-024: direct Copy-field reads through named references
+
+KD-039 implements `view.field` for directly named ordinary `&Record` / `&mut Record`
+parameters and inferred locals. It copies the exact declared named-range field
+through the existing whole-record loan without moving handle/record, reborrowing,
+converting exclusive permission, or creating field-level state. Typed HIR/MIR
+explicitly distinguish referenced reads from owned reads. Canonical table checks
+and distinct field-token spans precede ownership; MIR validates structural facts.
+
+Reads count for finite use and scoped recurrence. Final use may expire a loan;
+later alias/handle uses, receiving holds and recurrent obligations retain it.
+Existing expression/return/call transactions restore even prefix-expired loans
+on later failure. Canonical origin/initializer-lineage integrity validates external
+parameters, shared aliases and exclusive transfers using the single handle→loan
+mapping. Reference-backed while conditions, assignment through record references,
+field borrowing, temporary/nested/dereference projection and whole-record move-out
+remain unsupported. Ordinary functions remain unexecuted/unproven; verified battery
+and single-field harness eligibility/proofs are unchanged.
 
 <!-- END KLYXR_CONTEXT.md -->
 
@@ -1841,6 +1861,57 @@ proof or generalized cyclic analysis. Existing KD sections retain their historic
 boundaries; this narrows OQ-025 only. K23-S01–S04, K23-I01–I05 and K23-A01–A05
 are preserved as frozen implementation/evidence obligations.
 
+
+## KD-039 — Direct Copy-field reads through named record references
+
+**Status:** Accepted (frozen KED-024 Draft 1, Issue #51, October 9, 2026).
+
+A directly named ordinary parameter or local of exact `&Record` or `&mut Record`
+type may read a declared named-range Copy field. Selection uses the referent's
+canonical RecordId and its own FieldId; the result has the field's exact nominal
+range type. Identical spellings/bounds do not unify records, fields or ranges.
+Owned-root Copy reads and direct mutable owned-local field assignment retain
+KD-035–KD-038 semantics.
+
+The dedicated referenced read uses the available handle's existing continuously
+active whole-record loan and validated provenance. It moves neither handle nor
+record, preserves shared/exclusive permission, and creates no loan, reborrow,
+projected place, field provenance, hold, owner or terminal permission. Reading
+through `&mut Record` is access under its exclusive authority, not conversion to
+`&Record`. Whole-record non-Copy dereference extraction remains forbidden.
+
+Each read is a real handle use in finite-use and recurrent-reference traversal.
+Ordinary last-use expiry, alias/transfer lineage, receiving holds, current and
+enclosing recurrent obligations, branch isolation and joins remain authoritative.
+Stable body reads compose with existing loops/continue; reference-backed reads
+remain forbidden in recurring conditions even though their result is Copy.
+The existing complete-expression, KD-033 return and KD-034 call transactions
+restore all prepared state after later failure, including loans expired by a
+successful prefix. The leaf introduces no separate transaction or completion gate.
+
+AST/resolution retain complete-expression and distinct field-token spans. Typing
+classifies canonical named roots using existing inferred types and selects fields
+record-locally. HIR and MIR distinguish CopyReferenceFieldRead from CopyFieldRead.
+Table-aware HIR publication validates checked root/function/referent/record/field/
+range relationships and exact results without repair or panic; MIR checks only
+its structural leaf/result and recursively nested trees, not absent canonical
+or ownership tables. Public inspection remains read-only.
+
+Private canonical loan-origin metadata and initializer lineage validate external
+parameters, shared aliases and exclusive transfers without requiring the moved
+source to remain available. Place → LoanId remains the sole active-loan authority;
+compatible loans are not interchangeable. Origin integrity participates in cloned
+transactions, recurrent/break integrity and header/backedge comparison.
+
+Reference-field assignment, field borrowing, temporary/nested/dereference
+projection, auto-deref, coercion/reborrowing, partial moves/loans, broader field
+types, reference returns, record replacement, properties, destruction, execution,
+code generation and generalized cyclic inference remain excluded. The specialized
+verified-state/harness paths, eligibility, proof counts and affine kernel are
+unchanged. This refines OQ-024 only within the named Copy-field read boundary;
+historical accepted sections retain their earlier scope. Merge authorization
+remains separate from this accepted implementation decision.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -2174,7 +2245,7 @@ call holds before expiry. Reference parameters have external provenance without
 interprocedural owner reconstruction. Loan state is not published in HIR.
 Exclusive borrowing requires a mutable owned local; `let mut` introduced exclusive borrowing under KED-006; KD-026 now adds Copy-safe local assignment.
 KD-035 adds ordinary single-range-field construction and named-owner Copy reads.
-There is no reference projection, reborrowing, reference return,
+There is no generalized reference projection beyond KD-039, reborrowing, reference return,
 implicit reference coercion, partial move/borrow, user-defined Copy/Clone, or destructor. Source names
 and nominal type errors must be resolved before ownership checking.
 
@@ -2691,6 +2762,47 @@ phi, second checker or fixed-point engine is introduced. Verified subtraction an
 harness paths remain isolated. Ordinary mutation is checked/lowered, not executed
 or proven; broader projection, mutation, invariants and destruction remain open.
 
+
+## Referenced Copy-field access boundary (KED-024 / KD-039)
+
+AST FieldAccess now retains the complete expression and a distinct field-token
+span. Resolution preserves the canonical ParameterId/LocalId root plus written
+field spelling/span. Existing expression typing classifies owned/shared/exclusive
+roots from actual inferred types, selects the field in the canonical referent
+record, and publishes CopyReferenceFieldRead { reference, record, field } with
+exact Range result metadata. Owned CopyFieldRead remains a separate operation.
+
+The existing HIR publication walker uses checked canonical tables for containing
+function, exact reference-to-record root, reciprocal field membership and exact
+range result, and rejects ordinary referenced reads in verified expressions.
+MIR retains this typed leaf, checking Range result shape and every container;
+it cannot establish HIR-table facts or loan validity without those tables/state.
+No new pass, instruction, terminator, temporary or generalized place is introduced.
+
+The bounded ownership sibling checks loop-handle condition protection, checked
+reference type, availability and live lineage; it decrements finite use, invokes
+ordinary expiry and returns no LoanId result. Thus copied arguments create no
+receiving hold. The whole-record dereference helper still rejects Move referents.
+Both finite/recurrent visitors explicitly count the reference handle. Shared and
+exclusive permissions remain unchanged; holds and scoped recurrence retain loans
+continuously through calls/backedges and false-exit normalization as before.
+
+Loan.origin records only the canonical external ParameterId or first stored-borrow
+LocalId (direct ephemeral borrows are unbound). Active identity remains exclusively
+in Place → LoanId. Validation walks the current function's canonical initializer
+lineage, checking borrow origin/owner/type/permission and same-loan alias/transfer
+links. Exclusive source transfers are checked without requiring moved sources to
+remain available. No second expected-LoanId map or field provenance is added.
+Cloning, rollback assertions, semantic backedge comparisons and break integrity
+include origin metadata. Branches retain only incoming provenance, as before.
+
+Existing complete-expression rollback restores an earlier read's finite-use and
+loan expiry after a distinct later child failure. KD-033/KD-034 enclosing boundaries
+remain separate and unchanged; no leaf transaction or global hold-balancing rule
+is added. Owned reads/assignment and verified/harness eligibility/proofs remain
+unchanged. Broader projection, reference mutation, reborrowing and generalized
+cyclic analysis remain unresolved; ordinary code is checked/lowered only.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -2952,7 +3064,7 @@ Still open:
 - reborrowing syntax and semantics;
 - whether and when `&mut T` may coerce to `&T`;
 - auto-deref and dereference coercions;
-- field access through references;
+- generalized field access through references beyond KD-039 direct named Copy-field reads;
 - field/partial borrowing and disjoint field loans;
 - reference mutation beyond Copy-safe whole-value write-through;
 - two-phase borrows;
@@ -3257,5 +3369,16 @@ terminal permission. Broader place/projection evaluation, reference-field mutati
 field loans, compound assignment, Move replacement, invariants, visibility,
 destruction and generalized cyclic analysis remain unresolved. Verified/harness
 mutation remains unchanged. KD-038 adds no execution or ordinary proof claim.
+
+
+### KD-039 refinement of OQ-024/OQ-025
+
+KED-024 settles direct Copy-field reads through named ordinary shared/exclusive
+record references using existing whole-record provenance. This is not general
+reference projection, auto-deref, conversion/reborrowing or field borrowing.
+Whole-record non-Copy dereference, reference-field assignment, temporary/nested/
+dereference projection, partial moves/loans, reference returns, lifetime syntax,
+properties, destruction, execution and generalized cyclic inference remain open.
+Owned-field assignment remains KD-038; the verified/harness path is unchanged.
 
 <!-- END OPEN_QUESTIONS.md -->

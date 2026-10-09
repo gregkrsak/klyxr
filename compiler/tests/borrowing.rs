@@ -373,7 +373,6 @@ fn unsupported_borrow_targets_and_mutation_syntax_remain_rejected() {
     for body in [
         "fn bad(mut ticket: Ticket) -> bool { return true; }",
         "fn bad(ticket: Ticket) -> Ticket { let mut owned = ticket; owned = ticket; return owned; }",
-        "fn bad(value: &Ticket) -> Percent { return value.value; }",
         "fn bad(value: &mut Ticket) -> bool { value.value = 0; return true; }",
         "fn bad(ticket: Ticket) -> bool { inspect(&ticket); return true; }",
     ] { assert!(compile_source(&source(body)).is_err(), "{body}"); }

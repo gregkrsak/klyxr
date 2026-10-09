@@ -224,6 +224,40 @@ impl Program {
                     ));
                 }
             }
+            ExprKind::CopyReferenceFieldRead {
+                reference,
+                record,
+                field,
+            } => {
+                if !ordinary {
+                    return Err(invalid(
+                        "ordinary reference Copy-field read is ineligible in verified expressions",
+                    ));
+                }
+                let root_type = match reference {
+                    Place::Parameter(id) => self
+                        .parameters
+                        .get(id.0)
+                        .filter(|p| p.id == *id && p.function == function)
+                        .and_then(|p| match p.ty {
+                            ParameterType::Value(ty) => Some(ty),
+                            _ => None,
+                        }),
+                    Place::Local(id) => self
+                        .locals
+                        .get(id.0)
+                        .filter(|l| l.id == *id && l.function == function)
+                        .map(|l| l.ty),
+                };
+                if !matches!(root_type, Some(ValueType::SharedRef(ReferentType::Record(id)) | ValueType::MutableRef(ReferentType::Record(id))) if id == *record)
+                {
+                    return Err(invalid("reference Copy-field read requires a canonical named reference to the stated record in this function"));
+                }
+                let range = self.record_field(*record, *field).ok_or_else(|| invalid("reference Copy-field read field does not belong to the canonical referent record"))?;
+                if expression.ty != ExprType::Range(range) {
+                    return Err(invalid("reference Copy-field read result must be the exact declared named-range Copy type"));
+                }
+            }
             ExprKind::IfValue {
                 condition,
                 then_value,
@@ -1322,5 +1356,88 @@ mod multiple_fields {
                     .contains("outside"));
             }
         }
+    }
+    fn reference_fixture() -> Program {
+        crate::compile_source("type Percent = range 0..100; type Other = range 0..100; record Battery { charge: Percent, health: Percent } record Capacitor { charge: Percent } fn f(v: &Battery) -> Percent { return v.charge; } fn g(v: &Battery) -> Percent { let alias = v; return alias.health; }").unwrap()
+    }
+    fn reference_read_mut(p: &mut Program) -> &mut TypedExpr {
+        let Function::Ordinary(f) = &mut p.functions[0] else {
+            panic!()
+        };
+        let ValueStatement::Return { value, .. } = &mut f.body[0] else {
+            panic!()
+        };
+        value
+    }
+    #[test]
+    fn reference_read_publication_rejects_foreign_and_invalid_canonical_identities_without_panic() {
+        for defect in 0..13 {
+            let mut p = reference_fixture();
+            let other_field = p.records[1].fields[0];
+            let other_record = p.records[1].id;
+            let foreign_parameter = p.functions[1].as_ordinary().unwrap().parameters[0];
+            let local = p.locals[0].id;
+            let parameter = p.functions[0].as_ordinary().unwrap().parameters[0];
+            let read = reference_read_mut(&mut p);
+            let ExprKind::CopyReferenceFieldRead {
+                reference,
+                record,
+                field,
+            } = &mut read.kind
+            else {
+                panic!()
+            };
+            match defect {
+                0 => *record = RecordId(usize::MAX),
+                1 => *field = FieldId(usize::MAX),
+                2 => *field = other_field,
+                3 => *reference = Place::Parameter(foreign_parameter),
+                4 => *reference = Place::Parameter(ParameterId(usize::MAX)),
+                5 => *reference = Place::Local(LocalId(usize::MAX)),
+                6 => *reference = Place::Local(local), // Real local, wrong function.
+                7 => *record = other_record,
+                8 => read.ty = ExprType::Range(RangeTypeId(1)),
+                9 => read.ty = ExprType::SharedRef(ReferentType::Record(*record)),
+                10 => {
+                    p.parameters[parameter.0].ty =
+                        ParameterType::Value(ValueType::Record(RecordId(0)))
+                }
+                11 => {
+                    p.parameters[parameter.0].ty =
+                        ParameterType::Value(ValueType::SharedRef(ReferentType::Bool))
+                }
+                12 => p.parameters[parameter.0].id = ParameterId(999),
+                _ => unreachable!(),
+            }
+            assert!(p.validate_record_expressions().is_err(), "defect {defect}");
+        }
+    }
+    #[test]
+    fn reference_read_publication_rejects_malformed_declaration_tables_without_panic() {
+        for defect in 0..7 {
+            let mut p = reference_fixture();
+            match defect {
+                0 => p.records.clear(),
+                1 => p.fields.clear(),
+                2 => p.ranges.clear(),
+                3 => p.records[0].fields.clear(),
+                4 => p.fields[0].record = RecordId(1),
+                5 => p.fields[0].ty = RangeTypeId(usize::MAX),
+                6 => p.records[0].id = RecordId(usize::MAX),
+                _ => unreachable!(),
+            }
+            assert!(p.validate_record_expressions().is_err(), "defect {defect}");
+        }
+    }
+    #[test]
+    fn reference_read_is_ineligible_in_verified_expression_publication() {
+        let mut p = reference_fixture();
+        let id = p.functions[0].id();
+        let read = reference_read_mut(&mut p).clone();
+        assert!(p
+            .record_expression(id, &read, false, false)
+            .unwrap_err()
+            .message
+            .contains("ineligible"));
     }
 }

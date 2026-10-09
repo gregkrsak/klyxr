@@ -154,6 +154,7 @@ pub(crate) enum ResolvedExprKind {
     CopyFieldRead {
         owner: hir::Place,
         field_name: String,
+        field_span: Span,
     },
     IfValue {
         condition: Box<ResolvedExpr>,
@@ -828,7 +829,7 @@ impl Resolver {
             }
             ast::ExprKind::FieldAccess(a) => {
                 if scope.state.is_some() { ResolvedExprKind::FieldAccess(self.access(a, scope)?) }
-                else { ResolvedExprKind::CopyFieldRead { owner: self.reference_place(&a.binding, scope, a.span)?, field_name: a.field.clone() } }
+                else { ResolvedExprKind::CopyFieldRead { owner: self.reference_place(&a.binding, scope, a.span)?, field_name: a.field.clone(), field_span: a.field_span } }
             },
             ast::ExprKind::OldField(a) => {
                 if !allow_old { return Err(error(expression.span, "old(...) is permitted only in ensures", "this prototype snapshots only the mutable state field at function entry")); }

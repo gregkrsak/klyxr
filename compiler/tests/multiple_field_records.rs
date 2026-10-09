@@ -239,11 +239,7 @@ fn every_field_read_rejects_after_whole_move_and_exclusive_borrow() {
 }
 #[test]
 fn source_field_boundaries_remain_restricted() {
-    bad(
-        "fn f(b: Pair) -> Percent { let view = &b; return view.first; }",
-        "Type",
-        "reference",
-    );
+    good("fn f(b: Pair) -> Percent { let view = &b; return view.first; }");
     bad(
         "fn f(b: Pair,p: Percent) { b.first = p; }",
         "Type",
