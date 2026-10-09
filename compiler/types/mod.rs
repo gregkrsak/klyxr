@@ -157,7 +157,6 @@ fn call_arguments(
     }
     let mut typed = Vec::new();
     for (argument, parameter) in arguments.iter().zip(&callee.parameters) {
-        let argument = expression(program, functions, argument)?;
         let ParameterType::Value(expected) = program.parameter(*parameter).ty else {
             return Err(Diagnostic::semantic(
                 span,
@@ -166,7 +165,7 @@ fn call_arguments(
             )
             .into());
         };
-        exact_value(program, &argument, expected, "call argument")?;
+        let argument = check_value(program, functions, argument, expected, "call argument")?;
         typed.push(argument);
     }
     Ok(typed)
@@ -341,8 +340,7 @@ fn value_statements(
                     )
                     .into());
                 }
-                let value = expression(program, functions, value)?;
-                exact_value(program, &value, target.ty, "assignment RHS")?;
+                let value = check_value(program, functions, value, target.ty, "assignment RHS")?;
                 hir::ValueStatement::Assign {
                     local,
                     value,
@@ -358,8 +356,13 @@ fn value_statements(
                 if kind != hir::BorrowKind::Mutable {
                     return Err(Diagnostic::semantic(*span, "write-through requires an exclusive mutable reference", "shared references cannot write; no implicit capability conversion is supported").into());
                 }
-                let value = expression(program, functions, value)?;
-                exact_value(program, &value, referent.value_type(), "write-through RHS")?;
+                let value = check_value(
+                    program,
+                    functions,
+                    value,
+                    referent.value_type(),
+                    "write-through RHS",
+                )?;
                 hir::ValueStatement::DerefAssign {
                     reference: *reference,
                     value,
@@ -392,8 +395,7 @@ fn value_statements(
                 let Some(return_type) = return_type else {
                     return Err(Diagnostic::semantic(*span, "value return is not permitted in a no-value function", "an omitted result declaration means NoValue, not inference; use return; or normal function completion").into());
                 };
-                let value = expression(program, functions, value)?;
-                exact_value(program, &value, return_type, "return")?;
+                let value = check_value(program, functions, value, return_type, "return")?;
                 hir::ValueStatement::Return { value, span: *span }
             }
         };
@@ -410,6 +412,39 @@ fn value_type(ty: ResolvedValueType, span: crate::lexer::Span) -> TypeResult<Val
         ResolvedValueType::MutableRef(ty) => ValueType::MutableRef(ty),
         ResolvedValueType::NestedReference => return Err(Diagnostic::semantic(span, "nested reference types are not supported", "reference referents must be bool, a named range, or a record; reborrowing remains unsupported").into()),
     })
+}
+// A bounded value check, deliberately not recursive expected-type synthesis.
+fn check_value(
+    program: &Program,
+    functions: &[ResolvedFunction],
+    expression: &ResolvedExpr,
+    expected: ValueType,
+    boundary: &str,
+) -> TypeResult<TypedExpr> {
+    if let (ValueType::Range(id), ResolvedExprKind::IntegerLiteral(value)) =
+        (expected, &expression.kind)
+    {
+        let range = program.range(id);
+        if *value < range.min || *value > range.max {
+            return Err(Diagnostic::semantic(
+                expression.span,
+                format!("{boundary} literal outside named range `{}`", range.name),
+                format!(
+                    "value {value} is outside inclusive bounds {}..{} of range `{}`",
+                    range.min, range.max, range.name
+                ),
+            )
+            .into());
+        }
+        return Ok(TypedExpr {
+            kind: ExprKind::FormedRangeLiteral(*value),
+            ty: ExprType::Range(id),
+            span: expression.span,
+        });
+    }
+    let expression = self::expression(program, functions, expression)?;
+    exact_value(program, &expression, expected, boundary)?;
+    Ok(expression)
 }
 fn exact_value(
     program: &Program,
@@ -436,7 +471,7 @@ fn exact_value(
         message,
         format!(
             "expected {}, found {}; value boundaries require exact concrete types; \
-             integer literals do not implicitly convert to named ranges",
+             only direct literals at independently established named-range boundaries may form range values",
             display_type(program, expected),
             display_type(program, expression.ty),
         ),
@@ -635,10 +670,10 @@ fn expression(
         ResolvedExprKind::RecordConstruct { record, fields } => {
             let mut typed = Vec::new();
             for entry in fields {
-                let value = expression(program, functions, &entry.value)?;
-                exact_value(
+                let value = check_value(
                     program,
-                    &value,
+                    functions,
+                    &entry.value,
                     ValueType::Range(program.field(entry.field).ty),
                     "record field initializer",
                 )?;
@@ -1011,5 +1046,24 @@ mod tests {
         let errors = check(resolved).unwrap_err();
         assert!(errors[0].message.contains("distinct named ranges"));
         assert!(errors[0].required.contains("display"));
+    }
+    #[test]
+    fn literal_formation_selects_canonical_ids_despite_colliding_display_names() {
+        let source="type P = range 0..100; type Q = range 0..100; fn p() -> P {return 80;} fn q() -> Q {return 80;}";
+        let mut resolved = resolve::resolve(&parse_source(source).unwrap()).unwrap();
+        for range in &mut resolved.declarations.ranges {
+            range.name = "display".into();
+        }
+        let p = check(resolved).unwrap();
+        for (index, function) in p.functions().iter().enumerate() {
+            let hir::ValueStatement::Return { value, .. } =
+                &function.as_ordinary().unwrap().body[0]
+            else {
+                panic!()
+            };
+            assert_eq!(value.kind, ExprKind::FormedRangeLiteral(80));
+            assert_eq!(value.ty, ExprType::Range(p.ranges()[index].id));
+        }
+        assert_ne!(p.ranges()[0].id, p.ranges()[1].id);
     }
 }

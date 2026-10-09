@@ -1,0 +1,3 @@
+// Type error before ownership: 101 is outside Percent, not rollback evidence.
+type Percent = range 0..100;
+fn invalid() -> Percent { return 101; }

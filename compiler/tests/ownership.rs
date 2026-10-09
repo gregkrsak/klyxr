@@ -248,7 +248,7 @@ fn name_and_type_errors_precede_ownership_errors() {
 fn unsupported_record_features_and_existing_restrictions_are_not_broadened() {
     for body in [
         "return ticket.value;",
-        "return Ticket { value: 1 };",
+        "return Ticket { value: 101 };",
         "let mut next = ticket; next = ticket; return next;",
         "let mutable next = ticket; next = ticket; return next;",
         "let next = ticket; next = ticket; return next;",

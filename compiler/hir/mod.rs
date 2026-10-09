@@ -171,6 +171,8 @@ pub enum ExprKind {
     },
     BoolLiteral(bool),
     IntegerLiteral(i64),
+    /// Contextually formed Copy value; canonical identity occurs only in `ty`.
+    FormedRangeLiteral(i64),
     Parameter(ParameterId),
     Local(LocalId),
     Deref {

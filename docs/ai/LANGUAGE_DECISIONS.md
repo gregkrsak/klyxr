@@ -1053,3 +1053,45 @@ generalized places, contextual literals, invariants, visibility, layout,
 destruction, execution, code generation and generalized cyclic ownership remain
 outside this decision. KD-006 and OQ-004/OQ-012/OQ-016/OQ-019–OQ-026 retain their
 unresolved scope. Ordinary records are checked/lowered, not executed or proven.
+
+
+## KD-037 — Contextual named-range literal formation at canonical value boundaries
+
+**Status:** Accepted (frozen KED-022 Draft 1, Issue #45; K22-A01–A09 accepted).
+
+At an existing ordinary value boundary independently requiring exactly one
+canonical named range R, a direct representable signed integer literal n forms
+R iff R.minimum <= n <= R.maximum (inclusive). Eligible boundaries are ordinary
+value returns, value/NoValue ordinary call arguments, assignment to an established
+mutable range local, write-through to an established range referent, and named
+record-field initializers. Surrounding eligibility/capability rules apply first.
+Parentheses preserving the literal leaf do not defeat formation.
+
+This is formation of a literal occurrence, not conversion of an existing value.
+Nominal identity remains exact even for equal bounds. A single bounded value check
+forms direct literals; its fallback synthesizes normally and checks exact types.
+Expectations never propagate through operators, conditionals, names, dereferences,
+field reads or call results. Nested calls/constructions may select their own
+independent parameter/field expectations. Unannotated literal locals, later-use
+inference, sibling inference, annotations, constant evaluation, general numeric
+negation, casts/coercions and nonliteral formation remain unsupported.
+
+Typed HIR distinguishes raw IntegerLiteral from FormedRangeLiteral, with canonical
+RangeTypeId stored once in the latter's Range expression type. Table-aware HIR
+validation rejects forged tags, invalid/noncanonical IDs, out-of-bounds values and
+formed verified descendants without panic or repair. MIR preserves that distinction
+and validates leaf/type shape recursively, without claiming unavailable table facts.
+A formed literal is inert Copy: no owner, transfer, loan, provenance, hold,
+allocator, finite-use, recurrence or terminal-permission effect. Bounds failure
+is Type before ownership, never an ownership-rollback witness. Existing complete
+transactions, written initializer order, call/write holds, target checks and
+recurrent/terminal authorities remain unchanged.
+
+Raw operator constants retain existing behavior: p <= 101 and p - 101 do not
+form 101 as p's range. Formation proves only its selected literal is in range;
+it proves no arithmetic result, overflow safety, runtime check or execution.
+Signed i64 representation and earlier lexer/parser failures are unchanged.
+Verified-body raw constants and the scalar literal harness remain separate and
+unchanged, including their eligibility, phases, proofs and diagnostics. This
+narrowly refines historical KD-025/KD-026/KD-035/KD-036 literal boundaries;
+OQ-021/OQ-022 retain all broader arithmetic/inference/conversion questions.

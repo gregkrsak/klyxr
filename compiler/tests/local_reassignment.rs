@@ -106,10 +106,10 @@ reject!(
     "expected range `Percent`, found range `Other`"
 );
 reject!(
-    literal_no_contextual_materialization,
-    "fn f(a: Percent) -> Percent { let mut current = a; current = 1; return current; }",
+    literal_outside_established_range,
+    "fn f(a: Percent) -> Percent { let mut current = a; current = 101; return current; }",
     "Type",
-    "integer literals do not implicitly convert"
+    "literal outside named range"
 );
 reject!(
     bool_range_mismatch,

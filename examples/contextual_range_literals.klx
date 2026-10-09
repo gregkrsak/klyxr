@@ -1,0 +1,12 @@
+type Percent = range 0..100;
+record Battery { charge: Percent, health: Percent }
+fn identity(p: Percent) -> Percent { return p; }
+fn accept(p: Percent) {}
+fn full() -> Battery { return Battery { health: 100, charge: 80 }; }
+fn revise(access: &mut Percent) -> Percent {
+    let mut current = identity(0);
+    current = 80;
+    *access = 75;
+    accept(100);
+    return current;
+}

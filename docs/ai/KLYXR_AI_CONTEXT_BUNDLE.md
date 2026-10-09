@@ -74,8 +74,8 @@ diagnostic metadata.
 KED-004 introduced ordinary Bool/range value functions, immutable locals, calls,
 and explicit `return expression;` (KD-019). KED-005 now permits existing records
 by value in ordinary signatures, call results, locals, and returns. Ordinary and
-verified functions retain one function namespace and ID table. Bare integer
-literals do not materialize as locals, arguments, or returns.
+verified functions retain one function namespace and ID table. Bare integer locals remain unsupported; KD-037 now permits direct literal
+formation at independently established named-range value boundaries.
 
 The dedicated ownership phase runs after type checking. Bool and named ranges
 are `Copy`; records are non-`Copy` and move through bindings, by-value arguments,
@@ -130,7 +130,8 @@ OQ-022/OQ-024/OQ-026.
 KED-011 adds direct `local = expression;` statements for mutable owned Copy Bool
 and named-range locals (KD-026). Parameters, immutable locals, and reference locals
 are Type errors; exact-typed non-Copy record replacement is an Ownership error.
-RHS typing is exact and nominal without literal materialization. The RHS evaluates
+RHS typing is exact and nominal; KD-037 forms direct literals at established
+named-range targets only. The RHS evaluates
 before mutation, completes operation holds and last-use expiry, then the write
 checks that no shared/exclusive loan of the target remains active. Self/repeated
 assignment is valid; KD-024 sibling-path and post-join liveness remain unchanged.
@@ -591,6 +592,20 @@ Ordinary construction and reads are transparent data primitives, not generated
 factory/accessor code. Visibility, constructibility, invariants, broader field
 categories, layout, destruction, execution and generalized cyclic analysis remain
 unresolved. See KD-036 and compiler/README.md for the implemented boundary.
+
+
+### KED-022 / KD-037 — Bounded contextual literal formation
+
+Direct signed integer literal leaves can form exactly the canonical range required
+independently by ordinary returns, either ordinary call form, established-local
+assignment, established-referent write-through and record fields. Inclusive bounds
+are checked during typing. Typed HIR distinguishes FormedRangeLiteral from raw
+IntegerLiteral; checked table-aware validation precedes ownership. MIR preserves
+and checks leaf/type structure only. The formed Copy leaf has no ownership effects.
+No expectation enters recursive synthesis or conditional sibling inference; raw
+operator constants, unannotated literal-local rejection, nominal identity and
+verified/harness behavior are unchanged. Arithmetic bounds proofs, general
+conversions/inference, annotations and broader numeric semantics remain open.
 
 <!-- END KLYXR_CONTEXT.md -->
 
@@ -1725,6 +1740,48 @@ destruction, execution, code generation and generalized cyclic ownership remain
 outside this decision. KD-006 and OQ-004/OQ-012/OQ-016/OQ-019–OQ-026 retain their
 unresolved scope. Ordinary records are checked/lowered, not executed or proven.
 
+
+## KD-037 — Contextual named-range literal formation at canonical value boundaries
+
+**Status:** Accepted (frozen KED-022 Draft 1, Issue #45; K22-A01–A09 accepted).
+
+At an existing ordinary value boundary independently requiring exactly one
+canonical named range R, a direct representable signed integer literal n forms
+R iff R.minimum <= n <= R.maximum (inclusive). Eligible boundaries are ordinary
+value returns, value/NoValue ordinary call arguments, assignment to an established
+mutable range local, write-through to an established range referent, and named
+record-field initializers. Surrounding eligibility/capability rules apply first.
+Parentheses preserving the literal leaf do not defeat formation.
+
+This is formation of a literal occurrence, not conversion of an existing value.
+Nominal identity remains exact even for equal bounds. A single bounded value check
+forms direct literals; its fallback synthesizes normally and checks exact types.
+Expectations never propagate through operators, conditionals, names, dereferences,
+field reads or call results. Nested calls/constructions may select their own
+independent parameter/field expectations. Unannotated literal locals, later-use
+inference, sibling inference, annotations, constant evaluation, general numeric
+negation, casts/coercions and nonliteral formation remain unsupported.
+
+Typed HIR distinguishes raw IntegerLiteral from FormedRangeLiteral, with canonical
+RangeTypeId stored once in the latter's Range expression type. Table-aware HIR
+validation rejects forged tags, invalid/noncanonical IDs, out-of-bounds values and
+formed verified descendants without panic or repair. MIR preserves that distinction
+and validates leaf/type shape recursively, without claiming unavailable table facts.
+A formed literal is inert Copy: no owner, transfer, loan, provenance, hold,
+allocator, finite-use, recurrence or terminal-permission effect. Bounds failure
+is Type before ownership, never an ownership-rollback witness. Existing complete
+transactions, written initializer order, call/write holds, target checks and
+recurrent/terminal authorities remain unchanged.
+
+Raw operator constants retain existing behavior: p <= 101 and p - 101 do not
+form 101 as p's range. Formation proves only its selected literal is in range;
+it proves no arithmetic result, overflow safety, runtime check or execution.
+Signed i64 representation and earlier lexer/parser failures are unchanged.
+Verified-body raw constants and the scalar literal harness remain separate and
+unchanged, including their eligibility, phases, proofs and diagnostics. This
+narrowly refines historical KD-025/KD-026/KD-035/KD-036 literal boundaries;
+OQ-021/OQ-022 retain all broader arithmetic/inference/conversion questions.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -2017,8 +2074,8 @@ identity and reference invariants. IDs have no cross-compilation stability.
 Ordinary functions have explicit NoValue or Value(T) result metadata under KD-034.
 Value functions require structurally complete explicit `return expression;` paths
 under KD-033; NoValue functions permit `return;` and validated top-level completion. Immutable locals propagate concrete initializer types;
-call arguments and returns require exact concrete types. Bare integer locals,
-arguments to range parameters, and returns do not gain implicit range types.
+call arguments and returns require exact concrete types. Bare integer locals remain unsupported. KD-037 forms direct literal leaves at
+independently established named-range return/argument/assignment/field boundaries.
 KED-004 through KED-011 do not execute, prove, or dynamically enforce ordinary functions.
 `Range(T)` typing does not prove bounds or overflow safety. Plain `fn` is not a
 claim to implement the full future `safe` model. All mixed-kind calls are rejected.
@@ -2523,6 +2580,28 @@ hold and never releases inherited operation holds. All entries evaluate inside
 the existing expression transaction in written order, preserving KD-033/KD-034
 rollback and exact loop recurrence protections.
 
+
+## Contextual literal publication boundary (KED-022 / KD-037)
+
+`types::check_value` is one bounded literal-aware check shared by ordinary value
+returns, both call forms, direct assignment, write-through and record initializers.
+Its exact canonical expectation comes only from existing signature/target/field
+metadata. It directly compares represented i64 literals with inclusive bounds;
+otherwise it invokes unchanged expression synthesis and strict exact-value checking.
+It never passes an expected type into general recursive synthesis or retries it.
+AST, resolution, numeric parsing and canonical tables remain unchanged.
+
+HIR adds FormedRangeLiteral(i64), with identity stored once as ExprType::Range(id).
+Raw IntegerLiteral retains its expression-only tag. The existing publication walker
+validates both tags, checked canonical range lookup and inclusive formed bounds,
+recursively across all containers and statements; formed verified nodes reject.
+Ownership explicitly treats formed leaves as zero finite/reference uses and no
+state/provenance effects. Existing transactions and operation completion still run.
+MIR clones these typed leaves and checks structural discriminator/type consistency,
+without range-table or bounds claims. No extra statement, owner, temporary, CFG
+edge, pass, rollback engine or ownership mechanism is introduced. Specialized
+verified constants and harness scalar literals remain isolated.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -2674,7 +2753,7 @@ Still open:
 - mutable owned parameters;
 - reference returns and escaping-reference interfaces;
 - expression-bodied function shorthand;
-- contextual integer-literal typing at bindings, arguments, and returns;
+- literal typing at unannotated bindings and broader contextual propagation (KD-037 settles direct literals at canonical value boundaries);
 - broader value categories and record/reference interfaces beyond core owned records and non-escaping references;
 - function values, closures, and higher-order calls;
 - function overloading;
@@ -3066,5 +3145,16 @@ boundaries, mixed assurance, layout/ABI, destruction and execution remain open.
 KD-006's invariant direction is preserved. OQ-026 remains authoritative for general
 control flow, conditional values, MIR dataflow and generalized cyclic analysis;
 no new ownership convergence or competing checker is introduced.
+
+
+### KD-037 refinement of OQ-021/OQ-022
+
+KED-022 settles only direct represented signed literal formation at independently
+established canonical named-range ordinary returns, call arguments, assignment,
+write-through and named-field initializers. No sibling/backward inference, local
+annotations, general expected-type propagation, nonliteral formation, constant
+folding, conversion or arithmetic-result bounds enforcement is settled. Raw
+operator constants and specialized verifier/harness semantics remain unchanged.
+Historical KD/KED sections retain their original no-contextual-formation boundaries.
 
 <!-- END OPEN_QUESTIONS.md -->

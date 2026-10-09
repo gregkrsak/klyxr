@@ -210,10 +210,15 @@ fn writing_through_shared_and_non_reference_values_is_a_type_error() {
 }
 #[test]
 fn write_rhs_requires_exact_concrete_referent_identity() {
+    valid("fn formed(value: &mut Percent) -> bool { *value = 0; return true; }");
+    assert!(
+        type_error("fn bad(value: &mut Percent) -> bool { *value = 101; return true; }")
+            .message
+            .contains("literal outside named range")
+    );
     for body in [
         "fn bad(value: &mut bool, replacement: Percent) -> bool { *value = replacement; return true; }",
         "fn bad(value: &mut Percent, replacement: OtherPercent) -> bool { *value = replacement; return true; }",
-        "fn bad(value: &mut Percent) -> bool { *value = 0; return true; }",
         "fn bad(value: &mut Percent, replacement: &Percent) -> bool { *value = replacement; return true; }",
         "fn bad(value: &mut Ticket, replacement: Voucher) -> bool { *value = replacement; return true; }",
     ] { assert!(type_error(body).message.contains("write-through RHS type mismatch")); }

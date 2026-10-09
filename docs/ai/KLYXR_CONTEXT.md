@@ -61,8 +61,8 @@ diagnostic metadata.
 KED-004 introduced ordinary Bool/range value functions, immutable locals, calls,
 and explicit `return expression;` (KD-019). KED-005 now permits existing records
 by value in ordinary signatures, call results, locals, and returns. Ordinary and
-verified functions retain one function namespace and ID table. Bare integer
-literals do not materialize as locals, arguments, or returns.
+verified functions retain one function namespace and ID table. Bare integer locals remain unsupported; KD-037 now permits direct literal
+formation at independently established named-range value boundaries.
 
 The dedicated ownership phase runs after type checking. Bool and named ranges
 are `Copy`; records are non-`Copy` and move through bindings, by-value arguments,
@@ -117,7 +117,8 @@ OQ-022/OQ-024/OQ-026.
 KED-011 adds direct `local = expression;` statements for mutable owned Copy Bool
 and named-range locals (KD-026). Parameters, immutable locals, and reference locals
 are Type errors; exact-typed non-Copy record replacement is an Ownership error.
-RHS typing is exact and nominal without literal materialization. The RHS evaluates
+RHS typing is exact and nominal; KD-037 forms direct literals at established
+named-range targets only. The RHS evaluates
 before mutation, completes operation holds and last-use expiry, then the write
 checks that no shared/exclusive loan of the target remains active. Self/repeated
 assignment is valid; KD-024 sibling-path and post-join liveness remain unchanged.
@@ -578,3 +579,17 @@ Ordinary construction and reads are transparent data primitives, not generated
 factory/accessor code. Visibility, constructibility, invariants, broader field
 categories, layout, destruction, execution and generalized cyclic analysis remain
 unresolved. See KD-036 and compiler/README.md for the implemented boundary.
+
+
+### KED-022 / KD-037 — Bounded contextual literal formation
+
+Direct signed integer literal leaves can form exactly the canonical range required
+independently by ordinary returns, either ordinary call form, established-local
+assignment, established-referent write-through and record fields. Inclusive bounds
+are checked during typing. Typed HIR distinguishes FormedRangeLiteral from raw
+IntegerLiteral; checked table-aware validation precedes ownership. MIR preserves
+and checks leaf/type structure only. The formed Copy leaf has no ownership effects.
+No expectation enters recursive synthesis or conditional sibling inference; raw
+operator constants, unannotated literal-local rejection, nominal identity and
+verified/harness behavior are unchanged. Arithmetic bounds proofs, general
+conversions/inference, annotations and broader numeric semantics remain open.

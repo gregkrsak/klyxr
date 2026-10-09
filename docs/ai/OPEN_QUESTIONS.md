@@ -143,7 +143,7 @@ Still open:
 - mutable owned parameters;
 - reference returns and escaping-reference interfaces;
 - expression-bodied function shorthand;
-- contextual integer-literal typing at bindings, arguments, and returns;
+- literal typing at unannotated bindings and broader contextual propagation (KD-037 settles direct literals at canonical value boundaries);
 - broader value categories and record/reference interfaces beyond core owned records and non-escaping references;
 - function values, closures, and higher-order calls;
 - function overloading;
@@ -535,3 +535,14 @@ boundaries, mixed assurance, layout/ABI, destruction and execution remain open.
 KD-006's invariant direction is preserved. OQ-026 remains authoritative for general
 control flow, conditional values, MIR dataflow and generalized cyclic analysis;
 no new ownership convergence or competing checker is introduced.
+
+
+### KD-037 refinement of OQ-021/OQ-022
+
+KED-022 settles only direct represented signed literal formation at independently
+established canonical named-range ordinary returns, call arguments, assignment,
+write-through and named-field initializers. No sibling/backward inference, local
+annotations, general expected-type propagation, nonliteral formation, constant
+folding, conversion or arithmetic-result bounds enforcement is settled. Raw
+operator constants and specialized verifier/harness semantics remain unchanged.
+Historical KD/KED sections retain their original no-contextual-formation boundaries.
