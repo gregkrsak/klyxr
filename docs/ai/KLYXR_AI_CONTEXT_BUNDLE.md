@@ -63,7 +63,9 @@ Once they are part of the program, the compiler and verifier should be able to r
 ## Current implementation status
 
 An executable compiler prototype, written in Rust, supports ordinary
-value functions with statement conditionals and ownership-stable while loops with iteration-local Move values alongside a narrow one-field record/signed-integer contract subset.
+value functions with statement conditionals, ownership-stable while loops,
+iteration-local Move values, and ordinary multiple-field named-range records.
+The specialized signed-integer verified-state/harness subset remains single-field.
 Explicit resolution assigns compilation-local function, parameter, local, type,
 field, and top-level binding IDs. Expression and value-flow type checking produce
 canonical typed HIR. Public HIR inspection remains read-only; names/spans are
@@ -567,6 +569,28 @@ children and excludes hidden conditionals/residual verified projections without
 reconstructing canonical tables. Verified battery/harness/proof behavior is unchanged.
 No generalized ownership solver, execution, allocation, destruction or broader
 nominal/literal semantics is introduced.
+
+
+### KED-021 / KD-036 — Complete named multiple-field construction
+
+Ordinary records now declare one or more unique named-range fields. Canonical
+FieldIds follow declaration order; complete named construction retains written
+initializer order independently, including reversed order. Initializers require
+exact nominal types and are evaluated in written order within the existing
+complete-expression transaction. Later failure restores the entire prepared entry
+and publishes no destination. Completion preserves inherited holds, recurrence and
+permissions; it introduces no separate balancing stage or ownership engine.
+
+Every declared field supports non-consuming direct named-owner Copy reads under
+whole-record availability and loans. Records remain Move; there are no field
+owners, partial availability, field borrowing/mutation or reference projections.
+The typed-HIR boundary checks all declaration tables, including unused malformed
+records, before ordered construction children. MIR preserves and recursively
+checks all children. Explicit gates keep verified state/harness support single-field.
+Ordinary construction and reads are transparent data primitives, not generated
+factory/accessor code. Visibility, constructibility, invariants, broader field
+categories, layout, destruction, execution and generalized cyclic analysis remain
+unresolved. See KD-036 and compiler/README.md for the implemented boundary.
 
 <!-- END KLYXR_CONTEXT.md -->
 
@@ -1638,6 +1662,69 @@ general places, partial moves, non-Copy replacement, destruction, allocation,
 execution, code generation and generalized cyclic analysis remain excluded. This
 settles no general runtime initializer ordering or invariant/mixed-assurance rule.
 
+
+## KD-036 — Multiple-field records and complete named construction
+
+**Status:** Accepted
+
+KED-021 Draft 3 (Issue #43) is frozen at baseline
+`d83f0067eadd784cda2037340c9ff03276eeb0c5`, including K21-S01–S02,
+K21-A01–A09 and K21-F01–F05. It extends KD-035's historical single-field
+ordinary schema to one or more fields, each of a declared named-range type.
+Field spellings are unique within a record. Commas separate declarations and
+construction entries; a trailing comma is optional. Empty records are unsupported.
+
+Declaration order is canonical metadata, determining FieldId allocation,
+enumeration and missing-field diagnostic order. It establishes no layout, ABI,
+serialization, reflection or destruction order. Named construction supplies every
+field exactly once. Entries may appear in any order and retain written source
+order through AST, resolution, typed HIR, ownership and MIR. Membership and
+duplicates are checked in written order, completeness in declaration order, then
+initializer types in written order, before ownership begins. Each initializer
+must already have its selected field's exact nominal range type. Equal bounds,
+structural record similarity and bare literals establish no implicit compatibility.
+Copying an exact-typed value from another record's field is permitted; it does
+not reuse the source FieldId as the destination's identity.
+
+Initializers are evaluated left to right in written order inside the existing
+complete-expression transaction. If a later initializer fails, all successful
+prefix effects restore to the prepared entry: availability, loans, provenance,
+holds, recurrence, allocator, target context and terminal permission. No destination
+is published before all entries succeed. Completion adds no fallible balancing
+stage, independent hold, transaction engine or permission, and preserves legitimate
+enclosing call holds and recurrent obligations. KD-033 return and KD-034 whole-call
+transactions remain authoritative. This orders record initializers only, not
+arbitrary argument/operator evaluation, destruction or runtime unwinding.
+
+A successful construction produces one fresh whole-record Move value, without
+field owners, partial availability, field loans/provenance, harness bindings or
+anonymous public locals. Any declared field supports direct named-owned
+ParameterId/LocalId Copy access with its exact range result. Availability and
+exclusive whole-record loans are checked; shared loans are compatible. The root
+remains available until an ordinary whole-record Move. Copy reads may participate
+in recurring while conditions; construction remains prohibited there at every
+depth. Loop-body construction preserves existing recurrence and backedge rules.
+
+Typed-HIR publication first validates every record/field declaration table,
+including unused declarations: canonical table IDs, nonempty unique member vectors,
+unique field spellings, valid range types, reciprocal ownership and exactly-once
+field coverage. Checked lookup rejects malformed tables without panic or repair.
+Construction validation checks nonempty complete unique field sets, canonical
+membership, exact metadata, eligibility and recursive expression placement.
+MIR preserves ordered typed trees and recursively validates every child without
+reconstructing unavailable HIR tables. Verified state and the literal harness
+remain explicitly restricted to their supported single-field shape.
+
+Direct construction and field reads are transparent data primitives, not an
+accessor/factory doctrine. Field syntax invokes no user code, property, allocation,
+I/O, locking or invariant hook. Readability, constructibility and mutability remain
+separate future authorities. Broader field types, defaults/positional/spread forms,
+partial moves, field borrowing/mutation, reference/temporary/nested projection,
+generalized places, contextual literals, invariants, visibility, layout,
+destruction, execution, code generation and generalized cyclic ownership remain
+outside this decision. KD-006 and OQ-004/OQ-012/OQ-016/OQ-019–OQ-026 retain their
+unresolved scope. Ordinary records are checked/lowered, not executed or proven.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -2381,10 +2468,11 @@ No result expression/local, second checker, CFG ownership solver, fixed point,
 execution, destruction or verified-path expansion is implemented.
 
 
-## Ordinary record expression boundary (KED-020 / KD-035)
+## Ordinary record expression boundary (KED-020–021 / KD-035–036)
 
-Source AST has RecordConstruct with textual record/field names, initializer child,
-and a constructor-identifier span. Existing source FieldAccess remains source
+Source AST records contain ordered, individually spanned field declarations.
+RecordConstruct retains a vector of individually spanned textual field entries
+and their expression children, plus a constructor-identifier span. Existing source FieldAccess remains source
 oriented. Contextual syntactic recognition distinguishes field-colon construction
 from an identifier condition followed by a statement block; final binary/unary
 operands and verified contract/body boundaries preserve block parsing. No parser
@@ -2395,13 +2483,20 @@ Resolution selects canonical RecordId/FieldId for construction and resolves a
 field-read owner to ParameterId/LocalId. For inferred locals, existing typed
 lowering finalizes field membership through that owner's actual RecordId; no
 second inference engine or post-HIR spelling lookup is introduced. HIR represents
-RecordConstruct { record, field, value } and CopyFieldRead { owner, record, field }.
-The construction type is that exact record; the child/read result is the exact
-field range. No harness BindingId or anonymous LocalId models fresh results.
+RecordConstruct { record, fields: Vec<RecordFieldInit> } and
+CopyFieldRead { owner, record, field }. Canonical record.fields follows declaration
+order; each construction.fields follows written initializer order. FieldId allocation
+is in declaration order. Membership/duplicate checks precede completeness, then
+exact typing of every initializer in written order. The construction type is that
+exact record; each initializer/read result is its exact selected field range. No harness BindingId or anonymous LocalId models fresh results.
 
 `types::check` invokes `Program::validate_record_expressions` at typed-HIR
 publication before ownership. This crate-private, table-aware invariant boundary
-checks canonical owner eligibility/function membership, record/field membership,
+first validates every declaration table, including unused records and fields,
+with nonempty field vectors, unique IDs and spellings, reciprocal exactly-once
+membership and valid named-range types. Checked indexing rejects malformed tables
+without panic or repair. Expression validation then checks complete unique
+construction sets, canonical owner eligibility/function membership, record/field membership,
 exact result/initializer metadata and ordinary-versus-verified representation,
 recursively enforcing existing conditional-value positions. It performs no
 inference, ownership evaluation or generalized validation framework.
@@ -2421,7 +2516,12 @@ terminators. Its structural validator descends every construction child through
 all expression containers, statements and terminators, rejecting hidden conditional
 values and residual verified projection representations. It does not re-prove
 canonical relationships without HIR tables. Ordinary operations are not executed
-or proven; the specialized verifier and literal harness path remain unchanged.
+or proven; the specialized verifier and literal harness path remain single-field,
+with explicit eligibility gates before scalar selection. No ordinary construction
+becomes a harness binding. Construction completion adds no balancing stage or
+hold and never releases inherited operation holds. All entries evaluate inside
+the existing expression transaction in written order, preserving KD-033/KD-034
+rollback and exact loop recurrence protections.
 
 <!-- END ARCHITECTURE.md -->
 
@@ -2948,5 +3048,23 @@ participate in Copy-valued while conditions, while construction remains forbidde
 throughout recurring conditions. No destruction, cleanup, allocation, execution,
 code generation or generalized cyclic inference is implied. Historical accepted
 sections retain their earlier boundaries; KD-035 does not reopen other decisions.
+
+
+### KD-036 refinement of OQ-004/OQ-012/OQ-016/OQ-019–OQ-026
+
+KED-021 settles one-or-more named-range fields, complete named construction,
+canonical declaration order and written initializer order. It refines KD-035's
+historical single-field ordinary boundary, while verified state/harness support
+remains single-field. Each initializer is exactly typed; full-expression rollback
+and whole-record ownership apply. Copy reads do not introduce field places or
+loans. This establishes record-initializer evaluation order only.
+
+Visibility/readability/constructibility/mutability remain separate unresolved
+module/interface authorities. Broader field types, defaults, partial moves,
+field borrowing/mutation, reference projection, contextual literals, invariant
+boundaries, mixed assurance, layout/ABI, destruction and execution remain open.
+KD-006's invariant direction is preserved. OQ-026 remains authoritative for general
+control flow, conditional values, MIR dataflow and generalized cyclic analysis;
+no new ownership convergence or competing checker is introduced.
 
 <!-- END OPEN_QUESTIONS.md -->

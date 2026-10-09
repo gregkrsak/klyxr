@@ -168,7 +168,7 @@ fn expression_references_resolve_before_type_checking() {
     let hir::ExprKind::OldField(access) = &left.kind else {
         panic!("expected old field")
     };
-    assert_eq!(access.field, program.records()[0].field);
+    assert_eq!(access.field, program.records()[0].fields[0]);
     assert_eq!(access.parameter, function.state_param);
     assert_eq!(left.ty, hir::ExprType::Range(access.ty));
     assert_eq!(

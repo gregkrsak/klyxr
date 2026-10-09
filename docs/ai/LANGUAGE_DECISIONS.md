@@ -990,3 +990,66 @@ contextual literals, field borrowing/mutation, reference/temporary/nested projec
 general places, partial moves, non-Copy replacement, destruction, allocation,
 execution, code generation and generalized cyclic analysis remain excluded. This
 settles no general runtime initializer ordering or invariant/mixed-assurance rule.
+
+
+## KD-036 — Multiple-field records and complete named construction
+
+**Status:** Accepted
+
+KED-021 Draft 3 (Issue #43) is frozen at baseline
+`d83f0067eadd784cda2037340c9ff03276eeb0c5`, including K21-S01–S02,
+K21-A01–A09 and K21-F01–F05. It extends KD-035's historical single-field
+ordinary schema to one or more fields, each of a declared named-range type.
+Field spellings are unique within a record. Commas separate declarations and
+construction entries; a trailing comma is optional. Empty records are unsupported.
+
+Declaration order is canonical metadata, determining FieldId allocation,
+enumeration and missing-field diagnostic order. It establishes no layout, ABI,
+serialization, reflection or destruction order. Named construction supplies every
+field exactly once. Entries may appear in any order and retain written source
+order through AST, resolution, typed HIR, ownership and MIR. Membership and
+duplicates are checked in written order, completeness in declaration order, then
+initializer types in written order, before ownership begins. Each initializer
+must already have its selected field's exact nominal range type. Equal bounds,
+structural record similarity and bare literals establish no implicit compatibility.
+Copying an exact-typed value from another record's field is permitted; it does
+not reuse the source FieldId as the destination's identity.
+
+Initializers are evaluated left to right in written order inside the existing
+complete-expression transaction. If a later initializer fails, all successful
+prefix effects restore to the prepared entry: availability, loans, provenance,
+holds, recurrence, allocator, target context and terminal permission. No destination
+is published before all entries succeed. Completion adds no fallible balancing
+stage, independent hold, transaction engine or permission, and preserves legitimate
+enclosing call holds and recurrent obligations. KD-033 return and KD-034 whole-call
+transactions remain authoritative. This orders record initializers only, not
+arbitrary argument/operator evaluation, destruction or runtime unwinding.
+
+A successful construction produces one fresh whole-record Move value, without
+field owners, partial availability, field loans/provenance, harness bindings or
+anonymous public locals. Any declared field supports direct named-owned
+ParameterId/LocalId Copy access with its exact range result. Availability and
+exclusive whole-record loans are checked; shared loans are compatible. The root
+remains available until an ordinary whole-record Move. Copy reads may participate
+in recurring while conditions; construction remains prohibited there at every
+depth. Loop-body construction preserves existing recurrence and backedge rules.
+
+Typed-HIR publication first validates every record/field declaration table,
+including unused declarations: canonical table IDs, nonempty unique member vectors,
+unique field spellings, valid range types, reciprocal ownership and exactly-once
+field coverage. Checked lookup rejects malformed tables without panic or repair.
+Construction validation checks nonempty complete unique field sets, canonical
+membership, exact metadata, eligibility and recursive expression placement.
+MIR preserves ordered typed trees and recursively validates every child without
+reconstructing unavailable HIR tables. Verified state and the literal harness
+remain explicitly restricted to their supported single-field shape.
+
+Direct construction and field reads are transparent data primitives, not an
+accessor/factory doctrine. Field syntax invokes no user code, property, allocation,
+I/O, locking or invariant hook. Readability, constructibility and mutability remain
+separate future authorities. Broader field types, defaults/positional/spread forms,
+partial moves, field borrowing/mutation, reference/temporary/nested projection,
+generalized places, contextual literals, invariants, visibility, layout,
+destruction, execution, code generation and generalized cyclic ownership remain
+outside this decision. KD-006 and OQ-004/OQ-012/OQ-016/OQ-019–OQ-026 retain their
+unresolved scope. Ordinary records are checked/lowered, not executed or proven.

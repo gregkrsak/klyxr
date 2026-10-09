@@ -1,0 +1,19 @@
+// Ordinary transparent data: complete construction in written order, Copy reads.
+type Percent = range 0..100;
+type Millivolts = range 0..5000;
+record Battery {
+    charge: Percent,
+    voltage: Millivolts,
+    reserve: Percent,
+}
+fn forward(charge: Percent, voltage: Millivolts) -> Battery {
+    let battery = Battery {
+        voltage: voltage,
+        reserve: charge,
+        charge: charge,
+    };
+    let observed_voltage = battery.voltage;
+    let observed_charge = battery.charge;
+    let observed_reserve = battery.reserve;
+    return battery;
+}

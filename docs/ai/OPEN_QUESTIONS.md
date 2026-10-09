@@ -517,3 +517,21 @@ participate in Copy-valued while conditions, while construction remains forbidde
 throughout recurring conditions. No destruction, cleanup, allocation, execution,
 code generation or generalized cyclic inference is implied. Historical accepted
 sections retain their earlier boundaries; KD-035 does not reopen other decisions.
+
+
+### KD-036 refinement of OQ-004/OQ-012/OQ-016/OQ-019–OQ-026
+
+KED-021 settles one-or-more named-range fields, complete named construction,
+canonical declaration order and written initializer order. It refines KD-035's
+historical single-field ordinary boundary, while verified state/harness support
+remains single-field. Each initializer is exactly typed; full-expression rollback
+and whole-record ownership apply. Copy reads do not introduce field places or
+loans. This establishes record-initializer evaluation order only.
+
+Visibility/readability/constructibility/mutability remain separate unresolved
+module/interface authorities. Broader field types, defaults, partial moves,
+field borrowing/mutation, reference projection, contextual literals, invariant
+boundaries, mixed assurance, layout/ABI, destruction and execution remain open.
+KD-006's invariant direction is preserved. OQ-026 remains authoritative for general
+control flow, conditional values, MIR dataflow and generalized cyclic analysis;
+no new ownership convergence or competing checker is introduced.

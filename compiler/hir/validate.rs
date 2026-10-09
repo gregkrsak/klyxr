@@ -6,10 +6,23 @@ type Result = std::result::Result<(), Box<Diagnostic>>;
 
 impl Program {
     pub(crate) fn validate_record_expressions(&self) -> Result {
+        self.validate_record_tables()?;
         for function in &self.functions {
             match function {
                 Function::Ordinary(f) => self.record_statements(f.id, &f.body)?,
                 Function::Verified(f) => {
+                    if self
+                        .records
+                        .get(f.state_type.0)
+                        .filter(|r| r.id == f.state_type)
+                        .map_or(true, |r| r.fields.len() != 1)
+                    {
+                        return Err(Box::new(Diagnostic::semantic(
+                            f.span,
+                            "unsupported state in verified prototype",
+                            "verified state requires exactly one named-range field",
+                        )));
+                    }
                     for expression in [&f.requires, &f.ensures]
                         .into_iter()
                         .chain(f.body.iter().map(|s| &s.operand))
@@ -71,24 +84,43 @@ impl Program {
             Box::new(Diagnostic::semantic(expression.span, message, "canonical ordinary record relationships and existing expression positions must be preserved at the typed HIR boundary"))
         };
         match &expression.kind {
-            ExprKind::RecordConstruct {
-                record,
-                field,
-                value,
-            } => {
+            ExprKind::RecordConstruct { record, fields } => {
                 if !ordinary {
                     return Err(invalid(
                         "ordinary record construction is ineligible in verified expressions",
                     ));
                 }
-                let range = self.record_field(*record, *field).ok_or_else(|| {
-                    invalid("construction field does not belong to the canonical record")
-                })?;
-                if expression.ty != ExprType::Record(*record) || value.ty != ExprType::Range(range)
-                {
+                let declaration = self
+                    .records
+                    .get(record.0)
+                    .filter(|r| r.id == *record)
+                    .ok_or_else(|| invalid("construction has an invalid canonical record"))?;
+                if fields.is_empty() {
+                    return Err(invalid(
+                        "construction initializer sequence must be nonempty",
+                    ));
+                }
+                let mut seen = std::collections::BTreeSet::new();
+                for entry in fields {
+                    let range = self.record_field(*record, entry.field).ok_or_else(|| {
+                        invalid("construction field does not belong to the canonical record")
+                    })?;
+                    if !seen.insert(entry.field) {
+                        return Err(invalid("construction has a duplicate canonical field"));
+                    }
+                    if entry.value.ty != ExprType::Range(range) {
+                        return Err(invalid("construction result or initializer type is inconsistent with its canonical record field"));
+                    }
+                    self.record_expression(function, &entry.value, ordinary, false)?;
+                }
+                if seen != declaration.fields.iter().copied().collect() {
+                    return Err(invalid(
+                        "construction field set does not equal its complete declaration",
+                    ));
+                }
+                if expression.ty != ExprType::Record(*record) {
                     return Err(invalid("construction result or initializer type is inconsistent with its canonical record field"));
                 }
-                self.record_expression(function, value, ordinary, false)?;
             }
             ExprKind::CopyFieldRead {
                 owner,
@@ -167,11 +199,93 @@ impl Program {
         }
         Ok(())
     }
+    /// Validate all declarations, including unused ones, before inspecting expressions.
+    /// Checked indexing rejects malformed internal tables without repairing them.
+    fn validate_record_tables(&self) -> Result {
+        let invalid = |span, message| {
+            Box::new(Diagnostic::semantic(
+                span,
+                message,
+                "canonical record and field tables must have complete reciprocal membership",
+            ))
+        };
+        let mut listed = std::collections::BTreeSet::new();
+        for (index, record) in self.records.iter().enumerate() {
+            if record.id != RecordId(index) {
+                return Err(invalid(record.span, "record table identity is invalid"));
+            }
+            if record.fields.is_empty() {
+                return Err(invalid(
+                    record.span,
+                    "record declaration field sequence must be nonempty",
+                ));
+            }
+            let mut names = std::collections::BTreeSet::new();
+            for id in &record.fields {
+                let field = self
+                    .fields
+                    .get(id.0)
+                    .filter(|f| f.id == *id)
+                    .ok_or_else(|| {
+                        invalid(
+                            record.span,
+                            "record declaration has an invalid canonical field",
+                        )
+                    })?;
+                if !listed.insert(*id) {
+                    return Err(invalid(
+                        field.span,
+                        "canonical field is listed more than once",
+                    ));
+                }
+                if !names.insert(&field.name) {
+                    return Err(invalid(
+                        field.span,
+                        "record declaration has duplicate field names",
+                    ));
+                }
+                if field.record != record.id {
+                    return Err(invalid(
+                        field.span,
+                        "record and field membership is reciprocally inconsistent",
+                    ));
+                }
+                if self
+                    .ranges
+                    .get(field.ty.0)
+                    .filter(|r| r.id == field.ty)
+                    .is_none()
+                {
+                    return Err(invalid(
+                        field.span,
+                        "record field has an invalid named-range type",
+                    ));
+                }
+            }
+        }
+        for (index, field) in self.fields.iter().enumerate() {
+            if field.id != FieldId(index) {
+                return Err(invalid(field.span, "field table identity is invalid"));
+            }
+            let record = self
+                .records
+                .get(field.record.0)
+                .filter(|r| r.id == field.record)
+                .ok_or_else(|| invalid(field.span, "field has an invalid owning record"))?;
+            if !listed.contains(&field.id) || !record.fields.contains(&field.id) {
+                return Err(invalid(
+                    field.span,
+                    "orphan field is absent from its owning record",
+                ));
+            }
+        }
+        Ok(())
+    }
     fn record_field(&self, record: RecordId, field: FieldId) -> Option<RangeTypeId> {
         let r = self
             .records
             .get(record.0)
-            .filter(|r| r.id == record && r.field == field)?;
+            .filter(|r| r.id == record && r.fields.contains(&field))?;
         let f = self
             .fields
             .get(field.0)
@@ -213,7 +327,7 @@ mod tests {
         let ExprKind::CopyFieldRead { field, .. } = &mut e.kind else {
             panic!()
         };
-        *field = p.records[1].field;
+        *field = p.records[1].fields[0];
         assert!(check_read(&p, &e)
             .unwrap_err()
             .message
@@ -227,7 +341,7 @@ mod tests {
             panic!()
         };
         *record = p.records[1].id;
-        *field = p.records[1].field;
+        *field = p.records[1].fields[0];
         assert!(check_read(&p, &e)
             .unwrap_err()
             .message
@@ -355,19 +469,14 @@ mod tests {
         };
         for variant in 0..4 {
             let mut e = value.clone();
-            let ExprKind::RecordConstruct {
-                record,
-                field,
-                value,
-            } = &mut e.kind
-            else {
+            let ExprKind::RecordConstruct { record, fields } = &mut e.kind else {
                 panic!()
             };
             match variant {
-                0 => *field = p.records[1].field,
+                0 => fields[0].field = p.records[1].fields[0],
                 1 => *record = RecordId(999),
                 2 => e.ty = ExprType::Bool,
-                3 => value.ty = ExprType::Range(p.ranges[1].id),
+                3 => fields[0].value.ty = ExprType::Range(p.ranges[1].id),
                 _ => unreachable!(),
             };
             assert!(check_read(&p, &e).is_err());
@@ -379,8 +488,11 @@ mod tests {
             span: child.span,
             kind: ExprKind::RecordConstruct {
                 record: p.records[0].id,
-                field: p.records[0].field,
-                value: Box::new(child),
+                fields: vec![RecordFieldInit {
+                    field: p.records[0].fields[0],
+                    span: child.span,
+                    value: child,
+                }],
             },
         }
     }
@@ -515,5 +627,219 @@ mod tests {
         };
         f.body[1] = ValueStatement::Return { value: bad, span };
         assert!(p.validate_record_expressions().is_err());
+    }
+}
+
+#[cfg(test)]
+mod multiple_fields {
+    use super::*;
+    fn fixture() -> Program {
+        crate::compile_source("type P = range 0..100; type Q = range 0..100; record Triple { a: P, b: P, c: P } record Other { a: P, b: P, c: P } fn f(p: P) -> Triple { return Triple { c: p, a: p, b: p }; }").unwrap()
+    }
+    fn construct(p: &Program) -> TypedExpr {
+        let ValueStatement::Return { value, .. } = &p.functions[0].as_ordinary().unwrap().body[0]
+        else {
+            panic!()
+        };
+        value.clone()
+    }
+    fn check(p: &Program, e: &TypedExpr) -> Result {
+        p.record_expression(p.functions[0].id(), e, true, false)
+    }
+    #[test]
+    fn declaration_tables_validate_unused_records_and_reciprocal_membership_without_panics() {
+        for variant in 0..12 {
+            let mut p = fixture();
+            // Record 1 is deliberately unused by all expressions.
+            match variant {
+                0 => p.records[1].fields.clear(),
+                1 => p.records[1].id = RecordId(999),
+                2 => p.records[1].fields[1] = FieldId(999),
+                3 => p.records[1].fields[1] = p.records[1].fields[0],
+                4 => p.fields[4].name = p.fields[3].name.clone(),
+                5 => p.fields[4].record = p.records[0].id,
+                6 => {
+                    p.records[1].fields.pop();
+                }
+                7 => p.fields[4].ty = RangeTypeId(999),
+                8 => p.fields[4].id = p.fields[3].id,
+                9 => {
+                    let mut field = p.fields[4].clone();
+                    field.id = FieldId(p.fields.len());
+                    p.fields.push(field);
+                }
+                10 => p.fields[4].record = RecordId(999),
+                11 => p.records[1].fields[1] = p.records[0].fields[0],
+                _ => unreachable!(),
+            }
+            let result = std::panic::catch_unwind(|| p.validate_record_expressions());
+            assert!(result.is_ok(), "variant {variant} panicked");
+            assert!(result.unwrap().is_err(), "variant {variant} was accepted");
+        }
+    }
+    #[test]
+    fn malformed_unused_declaration_is_rejected_at_typed_publication() {
+        let a = crate::parse_source("type P = range 0..100; record Unused { a: P, b: P }").unwrap();
+        let mut r = crate::resolve::resolve(&a).unwrap();
+        r.declarations.fields[1].name = r.declarations.fields[0].name.clone();
+        let e = crate::types::check(r).unwrap_err();
+        assert!(e[0].message.contains("duplicate field names"));
+    }
+    #[test]
+    fn empty_declaration_and_construction_pair_never_pass_vacuously() {
+        let mut p = fixture();
+        p.records[0].fields.clear();
+        let Function::Ordinary(f) = &mut p.functions[0] else {
+            panic!()
+        };
+        let ValueStatement::Return { value, .. } = &mut f.body[0] else {
+            panic!()
+        };
+        let ExprKind::RecordConstruct { fields, .. } = &mut value.kind else {
+            panic!()
+        };
+        fields.clear();
+        assert!(p
+            .validate_record_expressions()
+            .unwrap_err()
+            .message
+            .contains("declaration field sequence must be nonempty"));
+    }
+    #[test]
+    fn construction_vectors_reject_empty_duplicate_missing_foreign_and_invalid_ids() {
+        let p = fixture();
+        for variant in 0..7 {
+            let mut e = construct(&p);
+            let ExprKind::RecordConstruct { record, fields } = &mut e.kind else {
+                panic!()
+            };
+            match variant {
+                0 => fields.clear(),
+                1 => fields[1].field = fields[0].field,
+                2 => {
+                    fields.pop();
+                }
+                3 => fields[1].field = p.records[1].fields[1],
+                4 => fields[1].field = FieldId(999),
+                5 => *record = RecordId(999),
+                6 => e.ty = ExprType::Record(p.records[1].id),
+                _ => unreachable!(),
+            }
+            assert!(std::panic::catch_unwind(|| check(&p, &e)).unwrap().is_err());
+        }
+    }
+    #[test]
+    fn initializer_exact_types_are_checked_in_all_three_positions() {
+        let p = fixture();
+        for position in 0..3 {
+            let mut e = construct(&p);
+            let ExprKind::RecordConstruct { fields, .. } = &mut e.kind else {
+                panic!()
+            };
+            fields[position].value.ty = ExprType::Range(p.ranges[1].id);
+            assert!(check(&p, &e)
+                .unwrap_err()
+                .message
+                .contains("initializer type"));
+        }
+    }
+    #[test]
+    fn every_initializer_is_traversed_at_depth_and_in_every_statement_container() {
+        let p = fixture();
+        let f = p.functions[0].as_ordinary().unwrap();
+        for position in 0..3 {
+            for depth in 0..3 {
+                let mut e = construct(&p);
+                let ExprKind::RecordConstruct { fields, .. } = &mut e.kind else {
+                    panic!()
+                };
+                let leaf = fields[position].value.clone();
+                let condition = TypedExpr {
+                    kind: ExprKind::BoolLiteral(true),
+                    ty: ExprType::Bool,
+                    span: leaf.span,
+                };
+                let mut hidden = TypedExpr {
+                    kind: ExprKind::IfValue {
+                        condition: Box::new(condition),
+                        then_value: Box::new(leaf.clone()),
+                        else_value: Box::new(leaf.clone()),
+                    },
+                    ..leaf.clone()
+                };
+                for _ in 0..depth {
+                    hidden = TypedExpr {
+                        kind: ExprKind::Call {
+                            function: f.id,
+                            arguments: vec![hidden],
+                        },
+                        ..leaf.clone()
+                    };
+                }
+                fields[position].value = hidden;
+                let span = e.span;
+                let statements = vec![
+                    ValueStatement::Let {
+                        local: LocalId(999),
+                        initializer: e.clone(),
+                        span,
+                    },
+                    ValueStatement::Assign {
+                        local: LocalId(999),
+                        value: e.clone(),
+                        span,
+                    },
+                    ValueStatement::DerefAssign {
+                        reference: Place::Local(LocalId(999)),
+                        value: e.clone(),
+                        span,
+                    },
+                    ValueStatement::Return {
+                        value: e.clone(),
+                        span,
+                    },
+                    ValueStatement::CallNoValue {
+                        function: f.id,
+                        arguments: vec![e.clone()],
+                        span,
+                    },
+                    ValueStatement::If {
+                        condition: e.clone(),
+                        then_body: vec![],
+                        else_body: vec![],
+                        span,
+                    },
+                    ValueStatement::While {
+                        condition: e,
+                        body: vec![],
+                        span,
+                    },
+                ];
+                for s in statements {
+                    assert!(p
+                        .record_statements(f.id, &[s])
+                        .unwrap_err()
+                        .message
+                        .contains("complete local initializers"));
+                }
+            }
+        }
+    }
+    #[test]
+    fn source_orders_are_independent_canonical_vectors() {
+        let p = fixture();
+        let e = construct(&p);
+        let ExprKind::RecordConstruct { record, fields } = &e.kind else {
+            panic!()
+        };
+        assert_eq!(
+            p.record(*record).fields,
+            [FieldId(0), FieldId(1), FieldId(2)]
+        );
+        assert_eq!(
+            fields.iter().map(|e| e.field).collect::<Vec<_>>(),
+            [FieldId(2), FieldId(0), FieldId(1)]
+        );
+        p.validate_record_expressions().unwrap();
     }
 }

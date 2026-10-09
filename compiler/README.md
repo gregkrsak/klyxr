@@ -37,7 +37,9 @@ proof failure, `2` for command usage or file-reading errors.
 - Distinct named ranges: `type Percent = range 0..100;`. Both endpoints are
   inclusive. The prototype uses signed i64 values, including negative literals
   and the full i64 bounds. This does not settle future range representation.
-- One-field records whose field type is a declared range.
+- Records with one or more named-range fields and complete named ordinary
+  construction (KD-036). The specialized verified-state/harness path requires
+  exactly one field.
 - Verified functions with exactly one mutable record reference and one named
   range-valued amount parameter.
 - Exactly one `requires expression` and one `ensures expression`; both must type
@@ -1302,8 +1304,8 @@ fn inspect_and_forward(battery: Battery) -> Battery {
 ```
 
 See `examples/ordinary_records.klx`, `examples/ordinary_record_move_fail.klx`
-and `examples/ordinary_record_condition_fail.klx`. Ordinary records still declare
-exactly one field of a named range. An initializer must have that exact nominal
+and `examples/ordinary_record_condition_fail.klx`. KED-020 originally permitted exactly one named-range field; KD-036 now permits
+one or more fields as described below. An initializer must have that exact nominal
 type; equal numeric bounds confer no conversion. `Battery { charge: 80 }` parses
 but fails typing because IntegerLiteral does not implicitly materialize Percent.
 Already range-typed arithmetic may initialize the field, without proving bounds.
@@ -1347,9 +1349,72 @@ that field reads create no partial availability. Public declaration-boundary
 rejections do not demonstrate partial-move checking.
 
 Reference roots (`&T`/`&mut T`), temporary/nested projection, field borrowing,
-field mutation, multiple/broader fields, partial moves, structural compatibility,
+field mutation, broader field types, partial moves, structural compatibility,
 implicit nominal/literal conversion, invariant enforcement and replacement remain
 unsupported. Ordinary functions remain checked/lowered, not executed or proven.
 Verified battery contracts, diagnostics, counts and literal harness behavior are
 unchanged. Construction implies no destruction, cleanup, allocation or runtime
-ordering guarantee for future multi-field records.
+general ordering guarantee outside record initializers; KD-036 specifies written
+initializer order for multi-field construction.
+
+
+## Multiple-field records and complete named construction (KED-021 / KD-036)
+
+```klyxr
+type Percent = range 0..100;
+type Millivolts = range 0..5000;
+record Battery { charge: Percent, voltage: Millivolts, reserve: Percent }
+fn forward(charge: Percent, voltage: Millivolts) -> Battery {
+    let battery = Battery { voltage: voltage, reserve: charge, charge: charge };
+    let observed_voltage = battery.voltage;
+    let observed_charge = battery.charge;
+    return battery;
+}
+```
+
+See `examples/multiple_field_records.klx` and
+`examples/multiple_field_record_move_fail.klx`. A record has at least one unique
+named-range field. Commas are required between entries; trailing commas are
+optional. Complete construction supplies each declared field exactly once.
+Unknown/duplicate entries diagnose their written occurrence before completeness;
+missing fields are listed in declaration order; exact type errors follow written
+initializer order. Equal range bounds confer no nominal conversion, and integer
+literals remain non-contextual. Values copied from another record may initialize
+a field of the exact same named-range type; record identities remain distinct.
+
+Declarations preserve canonical FieldIds in declaration order. AST/resolved/HIR
+construction vectors preserve written order separately, including per-entry spans.
+Ownership evaluates every initializer in that written order in the existing
+expression transaction. A late failure restores the complete prepared entry,
+including successful prefix effects, and publishes no destination. Completion
+creates no balancing check, hold or permission and preserves inherited call/write
+holds and recurrence. KD-033 return and KD-034 whole-call transactions still apply.
+Successful construction is one fresh whole-record Move result with no field
+owners, partial state, field provenance/loans or anonymous public locals.
+
+Every field is readable through a direct named owned parameter/local. The exact
+range value is Copy; the whole record remains available. Whole-record shared
+loans are compatible and exclusive loans block reads. Whole-record Move blocks
+all later field reads. Reads can repeat through stable loop backedges and appear
+in permitted Copy-valued while conditions. Construction remains forbidden at any
+depth of a recurring condition; loop-body construction remains iteration-local.
+
+Typed-HIR publication validates every declaration, including unused records,
+canonical table IDs, nonempty unique fields, unique spellings, valid range types,
+reciprocal membership and orphan/multiple coverage, without panic on malformed
+IDs. It then checks complete construction vectors and every initializer's exact
+metadata and position. MIR retains ordered typed trees and recursively validates
+all children in every container; it does not reconstruct HIR tables. The verified
+battery state and specialized literal harness are explicitly gated to one field.
+Unrelated ordinary multi-field declarations coexist with supported verified code
+without broadening proof claims or changing proof counts.
+
+Construction and reads are transparent data primitives. No factory, builder,
+getter/setter or executable property is generated or required. Readability,
+constructibility and mutability are separate future authorities. Empty/default/
+positional/spread construction, broader field types, invariants, visibility,
+field borrowing/mutation, partial moves, reference/temporary/nested projection,
+contextual literals, layout, destruction, generalized cyclic inference, execution
+and code generation are not implemented. Ordinary records are checked and lowered,
+not executed or proven. This decision specifies record initializer ordering only;
+it does not settle general argument/operator sequencing or runtime cleanup.

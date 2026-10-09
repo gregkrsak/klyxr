@@ -735,10 +735,11 @@ No result expression/local, second checker, CFG ownership solver, fixed point,
 execution, destruction or verified-path expansion is implemented.
 
 
-## Ordinary record expression boundary (KED-020 / KD-035)
+## Ordinary record expression boundary (KED-020–021 / KD-035–036)
 
-Source AST has RecordConstruct with textual record/field names, initializer child,
-and a constructor-identifier span. Existing source FieldAccess remains source
+Source AST records contain ordered, individually spanned field declarations.
+RecordConstruct retains a vector of individually spanned textual field entries
+and their expression children, plus a constructor-identifier span. Existing source FieldAccess remains source
 oriented. Contextual syntactic recognition distinguishes field-colon construction
 from an identifier condition followed by a statement block; final binary/unary
 operands and verified contract/body boundaries preserve block parsing. No parser
@@ -749,13 +750,20 @@ Resolution selects canonical RecordId/FieldId for construction and resolves a
 field-read owner to ParameterId/LocalId. For inferred locals, existing typed
 lowering finalizes field membership through that owner's actual RecordId; no
 second inference engine or post-HIR spelling lookup is introduced. HIR represents
-RecordConstruct { record, field, value } and CopyFieldRead { owner, record, field }.
-The construction type is that exact record; the child/read result is the exact
-field range. No harness BindingId or anonymous LocalId models fresh results.
+RecordConstruct { record, fields: Vec<RecordFieldInit> } and
+CopyFieldRead { owner, record, field }. Canonical record.fields follows declaration
+order; each construction.fields follows written initializer order. FieldId allocation
+is in declaration order. Membership/duplicate checks precede completeness, then
+exact typing of every initializer in written order. The construction type is that
+exact record; each initializer/read result is its exact selected field range. No harness BindingId or anonymous LocalId models fresh results.
 
 `types::check` invokes `Program::validate_record_expressions` at typed-HIR
 publication before ownership. This crate-private, table-aware invariant boundary
-checks canonical owner eligibility/function membership, record/field membership,
+first validates every declaration table, including unused records and fields,
+with nonempty field vectors, unique IDs and spellings, reciprocal exactly-once
+membership and valid named-range types. Checked indexing rejects malformed tables
+without panic or repair. Expression validation then checks complete unique
+construction sets, canonical owner eligibility/function membership, record/field membership,
 exact result/initializer metadata and ordinary-versus-verified representation,
 recursively enforcing existing conditional-value positions. It performs no
 inference, ownership evaluation or generalized validation framework.
@@ -775,4 +783,9 @@ terminators. Its structural validator descends every construction child through
 all expression containers, statements and terminators, rejecting hidden conditional
 values and residual verified projection representations. It does not re-prove
 canonical relationships without HIR tables. Ordinary operations are not executed
-or proven; the specialized verifier and literal harness path remain unchanged.
+or proven; the specialized verifier and literal harness path remain single-field,
+with explicit eligibility gates before scalar selection. No ordinary construction
+becomes a harness binding. Construction completion adds no balancing stage or
+hold and never releases inherited operation holds. All entries evaluate inside
+the existing expression transaction in written order, preserving KD-033/KD-034
+rollback and exact loop recurrence protections.

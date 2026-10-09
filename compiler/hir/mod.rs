@@ -92,7 +92,8 @@ pub struct RangeType {
 pub struct Record {
     pub id: RecordId,
     pub name: String,
-    pub field: FieldId,
+    /// Nonempty canonical declaration order; this specifies no physical layout.
+    pub fields: Vec<FieldId>,
     pub span: Span,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -145,12 +146,18 @@ pub struct TypedExpr {
     pub ty: ExprType,
     pub span: Span,
 }
+/// Canonical entries in written initializer order, independent of declaration order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordFieldInit {
+    pub field: FieldId,
+    pub value: TypedExpr,
+    pub span: Span,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprKind {
     RecordConstruct {
         record: RecordId,
-        field: FieldId,
-        value: Box<TypedExpr>,
+        fields: Vec<RecordFieldInit>,
     },
     CopyFieldRead {
         owner: Place,
