@@ -284,8 +284,8 @@ identity and reference invariants. IDs have no cross-compilation stability.
 Ordinary functions have explicit NoValue or Value(T) result metadata under KD-034.
 Value functions require structurally complete explicit `return expression;` paths
 under KD-033; NoValue functions permit `return;` and validated top-level completion. Immutable locals propagate concrete initializer types;
-call arguments and returns require exact concrete types. Bare integer locals,
-arguments to range parameters, and returns do not gain implicit range types.
+call arguments and returns require exact concrete types. Bare integer locals remain unsupported. KD-037 forms direct literal leaves at
+independently established named-range return/argument/assignment/field boundaries.
 KED-004 through KED-011 do not execute, prove, or dynamically enforce ordinary functions.
 `Range(T)` typing does not prove bounds or overflow safety. Plain `fn` is not a
 claim to implement the full future `safe` model. All mixed-kind calls are rejected.
@@ -789,3 +789,25 @@ becomes a harness binding. Construction completion adds no balancing stage or
 hold and never releases inherited operation holds. All entries evaluate inside
 the existing expression transaction in written order, preserving KD-033/KD-034
 rollback and exact loop recurrence protections.
+
+
+## Contextual literal publication boundary (KED-022 / KD-037)
+
+`types::check_value` is one bounded literal-aware check shared by ordinary value
+returns, both call forms, direct assignment, write-through and record initializers.
+Its exact canonical expectation comes only from existing signature/target/field
+metadata. It directly compares represented i64 literals with inclusive bounds;
+otherwise it invokes unchanged expression synthesis and strict exact-value checking.
+It never passes an expected type into general recursive synthesis or retries it.
+AST, resolution, numeric parsing and canonical tables remain unchanged.
+
+HIR adds FormedRangeLiteral(i64), with identity stored once as ExprType::Range(id).
+Raw IntegerLiteral retains its expression-only tag. The existing publication walker
+validates both tags, checked canonical range lookup and inclusive formed bounds,
+recursively across all containers and statements; formed verified nodes reject.
+Ownership explicitly treats formed leaves as zero finite/reference uses and no
+state/provenance effects. Existing transactions and operation completion still run.
+MIR clones these typed leaves and checks structural discriminator/type consistency,
+without range-table or bounds claims. No extra statement, owner, temporary, CFG
+edge, pass, rollback engine or ownership mechanism is introduced. Specialized
+verified constants and harness scalar literals remain isolated.

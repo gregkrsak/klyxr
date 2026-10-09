@@ -120,8 +120,8 @@ recursive calls resolve. No termination or recursion policy is introduced. Calls
 require exact arity and exact concrete argument types; their result has the declared
 return type. Returns likewise require exact concrete types. Distinct ranges or
 records cannot be passed or returned implicitly even with identical bounds or
-field definitions. Bare integer literals cannot satisfy a range parameter or return type, while Bool literals already type
-as Bool. Generalized contextual literal conversion remains open under OQ-021.
+field definitions. Direct integer literal leaves may form a signature-required range under KD-037;
+Bool literals already type as Bool. General conversions remain open under OQ-021.
 
 Ordinary functions are **frontend semantic work only**: parsed, resolved,
 type-checked, ownership/loan-checked, and lowered to ordinary MIR, with no execution, code generation, range
@@ -298,7 +298,7 @@ move out of borrowed non-Copy storage occurs.
 `*reference = expression;` is a dedicated ordinary statement with no value.
 Typing requires an exclusive mutable reference and an exactly matching RHS
 referent type. Shared writes, nominal mismatches, owned/reference mismatches,
-and bare integer-literal writes to ranges are Type errors. Bool literals already
+are Type errors. KD-037 permits in-bounds direct literals for range writes. Bool literals already
 materialize as Bool. Ownership rejects non-Copy replacement even with the correct
 reference capability and RHS type, because displacement/destruction semantics
 are unresolved. No old value is implicitly dropped, leaked, or relocated.
@@ -409,7 +409,7 @@ fn update(start: Percent) -> Percent {
 must be a previously declared in-scope mutable local; it retains the same canonical
 LocalId. Parameters and immutable locals are Type errors. The RHS requires exact
 concrete nominal identity; equal range bounds do not permit assignment between
-distinct declarations. Integer literals gain no contextual range type.
+distinct declarations. KD-037 permits direct literals at established range targets.
 
 The RHS evaluates first against the old value. Complete RHS calls retain their
 reference holds, then existing last-use expiry runs before the write. The actual
@@ -1306,8 +1306,8 @@ fn inspect_and_forward(battery: Battery) -> Battery {
 See `examples/ordinary_records.klx`, `examples/ordinary_record_move_fail.klx`
 and `examples/ordinary_record_condition_fail.klx`. KED-020 originally permitted exactly one named-range field; KD-036 now permits
 one or more fields as described below. An initializer must have that exact nominal
-type; equal numeric bounds confer no conversion. `Battery { charge: 80 }` parses
-but fails typing because IntegerLiteral does not implicitly materialize Percent.
+type; equal numeric bounds confer no conversion. KD-037 now permits
+`Battery { charge: 80 }` when 80 is inside Percent's inclusive bounds.
 Already range-typed arithmetic may initialize the field, without proving bounds.
 Construction may be a local initializer, return operand, ordinary call argument
 or complete branch result of an existing conditional initializer; it does not
@@ -1379,7 +1379,7 @@ optional. Complete construction supplies each declared field exactly once.
 Unknown/duplicate entries diagnose their written occurrence before completeness;
 missing fields are listed in declaration order; exact type errors follow written
 initializer order. Equal range bounds confer no nominal conversion, and integer
-literals remain non-contextual. Values copied from another record may initialize
+literals may now form at exact field boundaries under KD-037. Values copied from another record may initialize
 a field of the exact same named-range type; record identities remain distinct.
 
 Declarations preserve canonical FieldIds in declaration order. AST/resolved/HIR
@@ -1414,7 +1414,53 @@ getter/setter or executable property is generated or required. Readability,
 constructibility and mutability are separate future authorities. Empty/default/
 positional/spread construction, broader field types, invariants, visibility,
 field borrowing/mutation, partial moves, reference/temporary/nested projection,
-contextual literals, layout, destruction, generalized cyclic inference, execution
+general contextual propagation, layout, destruction, generalized cyclic inference, execution
 and code generation are not implemented. Ordinary records are checked and lowered,
 not executed or proven. This decision specifies record initializer ordering only;
 it does not settle general argument/operator sequencing or runtime cleanup.
+
+
+## Contextual named-range literal formation (KED-022 / KD-037)
+
+A direct signed integer literal may form a Copy value at an existing ordinary
+boundary independently requiring one exact canonical named range: ordinary return,
+value/NoValue call argument, assignment to an established mutable range local,
+write-through to an established range referent, or named record-field initializer.
+Both declared endpoints are inclusive. Out-of-range values are Type errors at the
+literal (including preserved grouped span), identifying the range, bounds and value.
+Malformed/unrepresentable numbers retain earlier lexer/parser errors.
+
+```klyxr
+type Percent = range 0..100;
+record Battery { charge: Percent, health: Percent }
+fn identity(p: Percent) -> Percent { return p; }
+fn full() -> Battery { return Battery { health: 100, charge: 80 }; }
+fn revise(access: &mut Percent) -> Percent {
+    let mut current = identity(0);
+    current = 80;
+    *access = 75;
+    return 100;
+}
+```
+
+See `examples/contextual_range_literals.klx` and
+`examples/contextual_range_literal_fail.klx`. Typed HIR publishes a distinct
+FormedRangeLiteral leaf with its sole canonical identity in ExprType::Range;
+raw IntegerLiteral remains an expression-only operator constant. HIR validation
+checks canonical tables and bounds; MIR retains and validates structural type tags.
+The formed leaf creates no owner, loan, provenance, hold, allocation, finite use,
+recurrent obligation or terminal permission. Existing call/write completion,
+target protection, recurrence, written construction order and rollback are unchanged.
+A bounds failure precedes ownership and is not rollback evidence.
+
+`let x = 80;` still lacks an independently established range type and rejects;
+later uses cannot infer it. `return 81 - 1;` cannot use the return expectation
+through arithmetic. Conditional branches do not infer from siblings. Names,
+field reads, dereferences and call results never change nominal identity, even
+for equal bounds. Parentheses preserving a literal leaf permit formation; general
+numeric negation, casts/conversions, annotations and constant folding are absent.
+Inner `identity(100)` forms its argument independently, so `identity(100) - 1`
+uses the existing arithmetic rule. Raw `p <= 101` and `p - 101` retain their current
+behavior; this feature does not prove range-typed arithmetic bounds or safety.
+Verified-body constants and top-level harness literals retain their separate
+representation, eligibility gates, diagnostics, proofs and call-state behavior.

@@ -84,6 +84,37 @@ impl Program {
             Box::new(Diagnostic::semantic(expression.span, message, "canonical ordinary record relationships and existing expression positions must be preserved at the typed HIR boundary"))
         };
         match &expression.kind {
+            ExprKind::IntegerLiteral(_) => {
+                if expression.ty != ExprType::IntegerLiteral {
+                    return Err(invalid(
+                        "raw integer literal must retain its expression-only type",
+                    ));
+                }
+            }
+            ExprKind::FormedRangeLiteral(value) => {
+                if !ordinary {
+                    return Err(invalid(
+                        "formed range literals are ineligible in verified expressions",
+                    ));
+                }
+                let ExprType::Range(id) = expression.ty else {
+                    return Err(invalid(
+                        "formed literal requires an exact canonical range type",
+                    ));
+                };
+                let range = self
+                    .ranges
+                    .get(id.0)
+                    .filter(|range| range.id == id)
+                    .ok_or_else(|| {
+                        invalid("formed literal has an invalid canonical range identity")
+                    })?;
+                if *value < range.min || *value > range.max {
+                    return Err(invalid(
+                        "formed literal is outside canonical inclusive range bounds",
+                    ));
+                }
+            }
             ExprKind::RecordConstruct { record, fields } => {
                 if !ordinary {
                     return Err(invalid(
@@ -194,8 +225,7 @@ impl Program {
             | ExprKind::Local(_)
             | ExprKind::Deref { .. }
             | ExprKind::Borrow { .. }
-            | ExprKind::BoolLiteral(_)
-            | ExprKind::IntegerLiteral(_) => {}
+            | ExprKind::BoolLiteral(_) => {}
         }
         Ok(())
     }
@@ -841,5 +871,253 @@ mod multiple_fields {
             [FieldId(2), FieldId(0), FieldId(1)]
         );
         p.validate_record_expressions().unwrap();
+    }
+    #[test]
+    fn formed_literal_integrity_rejects_forged_leaves_without_panicking() {
+        let mut p = fixture();
+        let span = p.ranges[0].span;
+        let range = p.ranges[0].id;
+        let formed = TypedExpr {
+            kind: ExprKind::FormedRangeLiteral(80),
+            ty: ExprType::Range(range),
+            span,
+        };
+        p.record_expression(p.functions[0].id(), &formed, true, false)
+            .unwrap();
+        for ty in [
+            ExprType::Bool,
+            ExprType::IntegerLiteral,
+            ExprType::Record(p.records[0].id),
+            ExprType::SharedRef(ReferentType::Range(range)),
+            ExprType::MutableRef(ReferentType::Range(range)),
+            ExprType::Range(RangeTypeId(usize::MAX)),
+        ] {
+            let mut e = formed.clone();
+            e.ty = ty;
+            assert!(p
+                .record_expression(p.functions[0].id(), &e, true, false)
+                .is_err());
+        }
+        for value in [-1, 101] {
+            let mut e = formed.clone();
+            e.kind = ExprKind::FormedRangeLiteral(value);
+            assert!(p
+                .record_expression(p.functions[0].id(), &e, true, false)
+                .is_err());
+        }
+        let mut raw = formed.clone();
+        raw.kind = ExprKind::IntegerLiteral(80);
+        assert!(p
+            .record_expression(p.functions[0].id(), &raw, true, false)
+            .is_err());
+        raw.ty = ExprType::IntegerLiteral;
+        p.record_expression(p.functions[0].id(), &raw, true, false)
+            .unwrap();
+        assert!(p
+            .record_expression(p.functions[0].id(), &formed, false, false)
+            .is_err());
+        p.ranges[0].id = RangeTypeId(999);
+        assert!(p
+            .record_expression(p.functions[0].id(), &formed, true, false)
+            .is_err());
+    }
+    #[test]
+    fn formed_bounds_validation_reaches_deep_first_middle_final_children() {
+        let p=crate::compile_source("type P = range 0..100; record R {a: P,b: P,c: P} fn id(p: P) -> P {return p;} fn f() -> R {return R {c: id(id(80)),a: id(id(80)),b: id(id(80))};}").unwrap();
+        let f = p.functions.last().unwrap().as_ordinary().unwrap();
+        let ValueStatement::Return { value, .. } = &f.body[0] else {
+            panic!()
+        };
+        for position in 0..3 {
+            let mut e = value.clone();
+            let ExprKind::RecordConstruct { fields, .. } = &mut e.kind else {
+                panic!()
+            };
+            let ExprKind::Call { arguments, .. } = &mut fields[position].value.kind else {
+                panic!()
+            };
+            let ExprKind::Call { arguments, .. } = &mut arguments[0].kind else {
+                panic!()
+            };
+            arguments[0].kind = ExprKind::FormedRangeLiteral(101);
+            let error = p.record_expression(f.id, &e, true, false).unwrap_err();
+            assert!(error.message.contains("inclusive range bounds"));
+        }
+    }
+
+    #[test]
+    fn formed_leaf_validation_visits_every_container_statement_and_verified_operand() {
+        let p=crate::compile_source("type P = range 0..100; record R {a: P} fn id(p: P) -> P {return p;} fn f(p: P,r: &mut P) -> P {let mut x=p;return x;}").unwrap();
+        let f = p.functions[1].as_ordinary().unwrap();
+        let span = f.span;
+        let leaf = TypedExpr {
+            kind: ExprKind::FormedRangeLiteral(101),
+            ty: ExprType::Range(p.ranges[0].id),
+            span,
+        };
+        let raw = TypedExpr {
+            kind: ExprKind::IntegerLiteral(0),
+            ty: ExprType::IntegerLiteral,
+            span,
+        };
+        let boolean = TypedExpr {
+            kind: ExprKind::BoolLiteral(true),
+            ty: ExprType::Bool,
+            span,
+        };
+        let comparison = TypedExpr {
+            kind: ExprKind::Binary {
+                op: BinaryOp::LessEqual,
+                left: Box::new(leaf.clone()),
+                right: Box::new(raw),
+            },
+            ty: ExprType::Bool,
+            span,
+        };
+        let call = TypedExpr {
+            kind: ExprKind::Call {
+                function: p.functions[0].id(),
+                arguments: vec![leaf.clone()],
+            },
+            ty: leaf.ty,
+            span,
+        };
+        let unary = TypedExpr {
+            kind: ExprKind::Unary {
+                op: UnaryOp::Not,
+                operand: Box::new(comparison.clone()),
+            },
+            ty: ExprType::Bool,
+            span,
+        };
+        let conditional = TypedExpr {
+            kind: ExprKind::IfValue {
+                condition: Box::new(boolean.clone()),
+                then_value: Box::new(call.clone()),
+                else_value: Box::new(leaf.clone()),
+            },
+            ty: leaf.ty,
+            span,
+        };
+        let record = TypedExpr {
+            kind: ExprKind::RecordConstruct {
+                record: p.records[0].id,
+                fields: vec![RecordFieldInit {
+                    field: p.fields[0].id,
+                    value: call.clone(),
+                    span,
+                }],
+            },
+            ty: ExprType::Record(p.records[0].id),
+            span,
+        };
+        for e in [
+            leaf.clone(),
+            call,
+            comparison.clone(),
+            unary,
+            conditional,
+            record,
+        ] {
+            assert!(p
+                .record_expression(f.id, &e, true, true)
+                .unwrap_err()
+                .message
+                .contains("inclusive range bounds"));
+        }
+        let statements = vec![
+            ValueStatement::Let {
+                local: p.locals[0].id,
+                initializer: leaf.clone(),
+                span,
+            },
+            ValueStatement::Assign {
+                local: p.locals[0].id,
+                value: leaf.clone(),
+                span,
+            },
+            ValueStatement::DerefAssign {
+                reference: Place::Parameter(f.parameters[1]),
+                value: leaf.clone(),
+                span,
+            },
+            ValueStatement::Return {
+                value: leaf.clone(),
+                span,
+            },
+            ValueStatement::CallNoValue {
+                function: f.id,
+                arguments: vec![leaf.clone()],
+                span,
+            },
+            ValueStatement::If {
+                condition: comparison.clone(),
+                then_body: vec![],
+                else_body: vec![],
+                span,
+            },
+            ValueStatement::While {
+                condition: comparison,
+                body: vec![],
+                span,
+            },
+            ValueStatement::If {
+                condition: boolean.clone(),
+                then_body: vec![ValueStatement::Return {
+                    value: leaf.clone(),
+                    span,
+                }],
+                else_body: vec![],
+                span,
+            },
+            ValueStatement::While {
+                condition: boolean,
+                body: vec![ValueStatement::Return { value: leaf, span }],
+                span,
+            },
+        ];
+        for statement in statements {
+            assert!(p
+                .record_statements(f.id, &[statement])
+                .unwrap_err()
+                .message
+                .contains("inclusive range bounds"));
+        }
+        let mut verified =
+            crate::compile_source(include_str!("../../examples/battery_ok.klx")).unwrap();
+        let Function::Verified(v) = &mut verified.functions[0] else {
+            panic!()
+        };
+        let formed = TypedExpr {
+            kind: ExprKind::FormedRangeLiteral(80),
+            ty: ExprType::Range(verified.ranges[0].id),
+            span: v.span,
+        };
+        v.body[0].operand = formed;
+        assert!(verified
+            .validate_record_expressions()
+            .unwrap_err()
+            .message
+            .contains("ineligible in verified"));
+    }
+    #[test]
+    fn formed_bounds_validation_reaches_first_middle_final_call_arguments() {
+        let p=crate::compile_source("type P = range 0..100; fn tri(a: P,b: P,c: P) -> P {return a;} fn f() -> P {return tri(80,80,80);}").unwrap();
+        let f = p.functions[1].as_ordinary().unwrap();
+        let ValueStatement::Return { value, .. } = &f.body[0] else {
+            panic!()
+        };
+        for position in 0..3 {
+            let mut e = value.clone();
+            let ExprKind::Call { arguments, .. } = &mut e.kind else {
+                panic!()
+            };
+            arguments[position].kind = ExprKind::FormedRangeLiteral(101);
+            assert!(p
+                .record_expression(f.id, &e, true, false)
+                .unwrap_err()
+                .message
+                .contains("inclusive range bounds"));
+        }
     }
 }

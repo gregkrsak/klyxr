@@ -96,7 +96,12 @@ fn count_expression(expression: &TypedExpr, uses: &mut FutureUses) {
             count_expression(left, uses);
             count_expression(right, uses);
         }
-        _ => {}
+        ExprKind::IntegerLiteral(_)
+        | ExprKind::FormedRangeLiteral(_)
+        | ExprKind::BoolLiteral(_)
+        | ExprKind::Borrow { .. }
+        | ExprKind::FieldAccess(_)
+        | ExprKind::OldField(_) => {}
     }
 }
 fn subtract_uses(future: &mut FutureUses, uses: &FutureUses) {
@@ -211,7 +216,12 @@ fn reference_uses(body: &[ValueStatement]) -> BTreeSet<Place> {
                 expression(left, uses);
                 expression(right, uses);
             }
-            _ => {}
+            ExprKind::IntegerLiteral(_)
+            | ExprKind::FormedRangeLiteral(_)
+            | ExprKind::BoolLiteral(_)
+            | ExprKind::Borrow { .. }
+            | ExprKind::FieldAccess(_)
+            | ExprKind::OldField(_) => {}
         }
     }
     fn statements(body: &[ValueStatement], uses: &mut BTreeSet<Place>) {
@@ -1060,6 +1070,7 @@ impl<'a> Checker<'a> {
             }
             ExprKind::BoolLiteral(_)
             | ExprKind::IntegerLiteral(_)
+            | ExprKind::FormedRangeLiteral(_)
             | ExprKind::FieldAccess(_)
             | ExprKind::OldField(_) => Ok(None),
         }
@@ -4997,5 +5008,159 @@ mod tests {
         p.validate_record_expressions().unwrap();
         check(&p).unwrap();
         assert_eq!(m, crate::mir::lower(&p));
+    }
+    #[test]
+    fn formed_leaf_preserves_complete_state_holds_targets_and_recurrence() {
+        let p = multiple_typed("fn f(p: Percent,view: &Percent) -> Percent {return 80;}");
+        let f = return_function(&p);
+        let (e, _) = operand(&f.body[0]);
+        let mut c = Checker::new(&p, f);
+        let loan = *c.loans.keys().next().unwrap();
+        c.loans.get_mut(&loan).unwrap().held = 2; // Legitimate inherited operation holds.
+        c.recurrent.push(BTreeSet::from([loan]));
+        c.recurrent.push(BTreeSet::new());
+        c.loop_scope = Some(LoopScope::new(&c, false));
+        add_test_target(&mut c);
+        for terminal in [false, true] {
+            c.terminal_return = terminal;
+            let entry = c.clone();
+            assert_eq!(c.expression(e, Transfer::Return(f.id)).unwrap(), None);
+            assert_atomic(&c, &entry);
+        }
+        let mut finite = FutureUses::new();
+        count_expression(e, &mut finite);
+        assert!(finite.is_empty());
+        assert!(reference_uses(&f.body).is_empty());
+    }
+    #[test]
+    fn formed_initializer_between_real_effects_retains_complete_expression_rollback() {
+        let p=multiple_typed("fn f(t: Ticket,flag: bool,view: &Percent) -> Triple {return Triple {last: consume(t),first: observe(&flag,80),middle: consume(t)};}");
+        let f = return_function(&p);
+        let (e, span) = operand(&f.body[0]);
+        let mut c = Checker::new(&p, f);
+        let loan = *c.loans.keys().next().unwrap();
+        c.recurrent.push(BTreeSet::from([loan]));
+        c.recurrent.push(BTreeSet::new());
+        c.loans.get_mut(&loan).unwrap().held = 1;
+        c.loop_scope = Some(LoopScope::new(&c, false));
+        add_test_target(&mut c);
+        prepared_expression(&mut c, e);
+        let before = c.clone();
+        let ExprKind::RecordConstruct { fields, .. } = &e.kind else {
+            panic!()
+        };
+        let mut prefix = c.clone();
+        prefix.terminal_return = true;
+        prefix
+            .expression(&fields[0].value, Transfer::Return(f.id))
+            .unwrap();
+        prefix
+            .expression(&fields[1].value, Transfer::Return(f.id))
+            .unwrap();
+        assert_ne!(prefix.states, before.states);
+        assert!(prefix.next_loan > before.next_loan);
+        let mut complete = c.clone();
+        complete.terminal_return = true;
+        let expression_entry = complete.clone();
+        assert!(complete.expression(e, Transfer::Return(f.id)).is_err());
+        assert_atomic(&complete, &expression_entry);
+        assert!(c.return_edge(e, f.id, span).is_err());
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn formed_middle_call_argument_does_not_release_receiving_hold() {
+        let p=multiple_typed("fn hold(view: &mut bool,p: Percent,flag: bool) {} fn f(flag: bool) {let mut owned=flag; hold(&mut owned,80,owned);}");
+        let f = return_function(&p);
+        let (function, args, span) = statement_call(&f.body[1]);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        prepare_call(&mut c, args);
+        let before = c.clone();
+        assert!(c
+            .call_statement(function, args, span)
+            .unwrap_err()
+            .message
+            .contains("exclusively borrowed"));
+        assert_atomic(&c, &before);
+    }
+
+    #[test]
+    fn formed_first_middle_final_leaves_add_no_finite_or_recurrent_uses() {
+        for position in 0..3 {
+            let entries = ["last", "first", "middle"]
+                .iter()
+                .enumerate()
+                .map(|(i, n)| format!("{n}: {}", if i == position { "80" } else { "read(view)" }))
+                .collect::<Vec<_>>()
+                .join(",");
+            let p = multiple_typed(&format!(
+                "fn f(view: &Percent) -> Triple {{return Triple {{{entries}}};}}"
+            ));
+            let f = return_function(&p);
+            let (e, _) = operand(&f.body[0]);
+            let mut uses = FutureUses::new();
+            count_expression(e, &mut uses);
+            let place = Place::Parameter(f.parameters[0]);
+            assert_eq!(uses, FutureUses::from([(place, 2)]));
+            assert_eq!(reference_uses(&f.body), BTreeSet::from([place]));
+            let mut c = Checker::new(&p, f);
+            let loan = c.handles[&place];
+            c.recurrent.push(BTreeSet::from([loan]));
+            prepared_expression(&mut c, e);
+            let before = c.clone();
+            c.expression(e, Transfer::Return(f.id)).unwrap();
+            assert_eq!(c.loans[&loan].owner, before.loans[&loan].owner);
+            assert_eq!(c.handles, before.handles);
+            assert_eq!(c.recurrent, before.recurrent);
+            assert_eq!(c.next_loan, before.next_loan);
+            c.assert_no_holds();
+        }
+    }
+    #[test]
+    fn formed_field_complete_expression_and_enclosing_call_restore_prepared_state() {
+        let p=multiple_typed("fn f(t: Ticket,flag: bool) {receive3(Triple {last: consume(t),first: observe(&flag,80),middle: 100},t);}");
+        let f = return_function(&p);
+        let (function, args, span) = statement_call(&f.body[0]);
+        let mut c = Checker::new(&p, f);
+        prepare_call(&mut c, args);
+        let before = c.clone();
+        let mut prefix = c.clone();
+        prefix
+            .expression(
+                &args[0],
+                Transfer::Argument(p.function(function).as_ordinary().unwrap().parameters[0]),
+            )
+            .unwrap();
+        assert_ne!(prefix.states, before.states);
+        assert!(prefix.next_loan > before.next_loan);
+        assert!(c.call_statement(function, args, span).is_err());
+        assert_atomic(&c, &before);
+    }
+    #[test]
+    fn formed_call_arguments_preserve_neighbor_finite_and_recurrent_reference_uses() {
+        for position in 0..3 {
+            let args = (0..3)
+                .map(|i| if i == position { "80" } else { "read(view)" })
+                .collect::<Vec<_>>()
+                .join(",");
+            let p=multiple_typed(&format!("fn tri(a: Percent,b: Percent,c: Percent) -> Percent {{return a;}} fn f(view: &Percent) -> Percent {{return tri({args});}}"));
+            let f = return_function(&p);
+            let (e, _) = operand(&f.body[0]);
+            let place = Place::Parameter(f.parameters[0]);
+            let mut finite = FutureUses::new();
+            count_expression(e, &mut finite);
+            assert_eq!(finite, FutureUses::from([(place, 2)]));
+            assert_eq!(reference_uses(&f.body), BTreeSet::from([place]));
+            let mut c = Checker::new(&p, f);
+            let loan = c.handles[&place];
+            c.recurrent.push(BTreeSet::from([loan]));
+            prepared_expression(&mut c, e);
+            let before = c.clone();
+            c.expression(e, Transfer::Return(f.id)).unwrap();
+            assert_eq!(c.handles, before.handles);
+            assert_eq!(c.recurrent, before.recurrent);
+            assert_eq!(c.next_loan, before.next_loan);
+            c.assert_no_holds();
+        }
     }
 }

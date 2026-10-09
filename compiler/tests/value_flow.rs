@@ -311,7 +311,7 @@ fn calls_require_exact_arity_and_boolean_or_nominal_argument_types() {
         .message
         .contains("wrong argument count"));
     }
-    for (signature, argument) in [("bool", "value"), ("Percent", "true"), ("Percent", "5")] {
+    for (signature, argument) in [("bool", "value"), ("Percent", "true")] {
         let error = type_error(&format!("fn take(arg: {signature}) -> {signature} {{ return arg; }} fn bad(value: Percent) -> {signature} {{ return take({argument}); }}"));
         assert!(error.message.contains("call argument type mismatch"));
         assert!(error.span.end > error.span.start);
@@ -319,6 +319,14 @@ fn calls_require_exact_arity_and_boolean_or_nominal_argument_types() {
     compile(&format!(
         "{IDENTITY} fn ok(value: Percent) -> Percent {{ return identity(value - 5); }}"
     ));
+    compile(&format!(
+        "{IDENTITY} fn formed() -> Percent {{ return identity(5); }}"
+    ));
+    assert!(type_error(&format!(
+        "{IDENTITY} fn bad() -> Percent {{ return identity(101); }}"
+    ))
+    .message
+    .contains("literal outside named range"));
 }
 
 #[test]
@@ -335,20 +343,20 @@ fn nominal_call_and_return_mismatches_identify_both_types() {
 }
 
 #[test]
-fn literal_locals_and_returns_have_no_implicit_materialization() {
+fn literal_locals_remain_untyped_while_range_return_forms() {
     assert!(
         type_error("fn bad(value: Percent) -> Percent { let five = 5; return value; }")
             .message
             .contains("cannot materialize as a local value")
     );
     for text in [
-        "fn bad() -> Percent { return 0; }",
         "fn bad() -> bool { return 1; }",
         "fn bad(value: Percent) -> bool { return value; }",
         "fn bad() -> Percent { return true; }",
     ] {
         assert!(type_error(text).message.contains("return type mismatch"));
     }
+    compile("fn ok() -> Percent { return 0; }");
     compile("fn ok(value: Percent) -> Percent { let result = value - 5; return result; }");
 }
 

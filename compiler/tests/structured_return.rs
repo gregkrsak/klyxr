@@ -199,8 +199,8 @@ reject!(
 reject!(early_return_nominal_range, "fn f(flag: bool, value: Percent, other: OtherRange) -> Percent { if flag { return other; } return value; }", "Type", "distinct named ranges");
 reject!(early_return_nominal_record, "fn f(flag: bool, value: Ticket, other: Different) -> Ticket { if flag { return other; } return value; }", "Type", "return");
 reject!(
-    bare_literal_return_still_rejected,
-    "fn f(flag: bool, value: Percent) -> Percent { if flag { return 1; } return value; }",
+    out_of_range_literal_early_return_rejected,
+    "fn f(flag: bool, value: Percent) -> Percent { if flag { return 101; } return value; }",
     "Type",
     "return"
 );

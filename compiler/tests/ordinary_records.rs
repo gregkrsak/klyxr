@@ -191,11 +191,11 @@ fn distinct_nominal_range() {
     );
 }
 #[test]
-fn bare_integer_not_contextual() {
+fn out_of_range_integer_initializer_rejected() {
     bad(
-        "fn f() -> Battery { return Battery { charge: 80 }; }",
+        "fn f() -> Battery { return Battery { charge: 101 }; }",
         "Type",
-        "record field initializer type mismatch",
+        "literal outside named range",
     );
 }
 #[test]
@@ -576,15 +576,13 @@ fn declaration_boundary_does_not_authorize_record_or_bool_fields() {
     ));
 }
 #[test]
-fn bare_integer_initializer_parses_and_is_rejected_in_typing() {
+fn bare_integer_initializer_parses_and_forms_in_typing() {
     let a = parse_source(&format!(
         "{DECL} fn f() -> Battery {{ return Battery {{ charge: 80 }}; }}"
     ))
     .unwrap();
     let r = klyxr_compiler::resolve::resolve(&a).unwrap();
-    assert!(klyxr_compiler::types::check(r).unwrap_err()[0]
-        .message
-        .contains("initializer type mismatch"));
+    klyxr_compiler::types::check(r).unwrap();
 }
 #[test]
 fn identifier_binary_unary_and_nested_condition_blocks_are_preserved() {

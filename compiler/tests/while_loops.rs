@@ -85,7 +85,7 @@ reject!(
     "while condition must have type Bool"
 );
 reject!(nominal_assignment_mismatch, "fn f(flag: bool, a: Percent, b: Other) -> Percent { let mut current = a; while flag { current = b; } return current; }", "Type", "distinct named ranges");
-reject!(literal_assignment_no_inference, "fn f(flag: bool, a: Percent) -> Percent { let mut current = a; while flag { current = 1; } return current; }", "Type", "integer literals do not implicitly convert");
+reject!(literal_assignment_bounds_checked, "fn f(flag: bool, a: Percent) -> Percent { let mut current = a; while flag { current = 101; } return current; }", "Type", "literal outside named range");
 reject!(immutable_assignment_unchanged, "fn f(flag: bool, a: Percent) -> Percent { let current = a; while flag { current = a; } return current; }", "Type", "immutable local");
 reject!(
     condition_unknown_name,

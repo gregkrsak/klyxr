@@ -444,11 +444,11 @@ fn no_value_nominal_args() {
     );
 }
 #[test]
-fn integer_not_materialized() {
+fn statement_call_literal_outside_parameter_range() {
     bad(
-        "fn f() { take_range(1); }",
+        "fn f() { take_range(101); }",
         "Type",
-        "call argument type mismatch",
+        "literal outside named range",
     );
 }
 #[test]

@@ -161,13 +161,11 @@ fn exact_type_errors_follow_written_order_in_every_position() {
     assert_eq!(&s[span.start..span.end], "p");
 }
 #[test]
-fn bare_literal_is_parsed_then_rejected_in_typing() {
+fn bare_literal_is_parsed_then_formed_in_typing() {
     let s = source("fn f(v: Voltage) -> Pair { return Pair { first: 80, second: v }; }");
     let a = parse_source(&s).unwrap();
     let r = klyxr_compiler::resolve::resolve(&a).unwrap();
-    assert!(klyxr_compiler::types::check(r).unwrap_err()[0]
-        .message
-        .contains("record field initializer"));
+    klyxr_compiler::types::check(r).unwrap();
 }
 #[test]
 fn declarations_reject_unsupported_types_and_empty_shapes() {

@@ -109,13 +109,19 @@ impl MirFunction {
         }
         fn expression_valid(expression: &TypedExpr) -> Result<(), &'static str> {
             match &expression.kind {
+                hir::ExprKind::IntegerLiteral(_) => {
+                    if expression.ty != hir::ExprType::IntegerLiteral { return Err("raw integer literal has invalid type"); }
+                }
+                hir::ExprKind::FormedRangeLiteral(_) => {
+                    if !matches!(expression.ty, hir::ExprType::Range(_)) { return Err("formed range literal has non-range type"); }
+                }
                 hir::ExprKind::IfValue { .. } => return Err("conditional value must lower to control flow"),
                 hir::ExprKind::RecordConstruct { fields, .. } => { for entry in fields { expression_valid(&entry.value)?; } },
                 hir::ExprKind::Call { arguments, .. } => for argument in arguments { expression_valid(argument)?; },
                 hir::ExprKind::Unary { operand, .. } => expression_valid(operand)?,
                 hir::ExprKind::Binary { left, right, .. } => { expression_valid(left)?; expression_valid(right)?; },
                 hir::ExprKind::FieldAccess(_) | hir::ExprKind::OldField(_) => return Err("verified-state or residual projection representation is ineligible in ordinary MIR"),
-                hir::ExprKind::CopyFieldRead { .. } | hir::ExprKind::Parameter(_) | hir::ExprKind::Local(_) | hir::ExprKind::Deref { .. } | hir::ExprKind::Borrow { .. } | hir::ExprKind::BoolLiteral(_) | hir::ExprKind::IntegerLiteral(_) => {}
+                hir::ExprKind::CopyFieldRead { .. } | hir::ExprKind::Parameter(_) | hir::ExprKind::Local(_) | hir::ExprKind::Deref { .. } | hir::ExprKind::Borrow { .. } | hir::ExprKind::BoolLiteral(_) => {}
             }
             Ok(())
         }
@@ -1023,6 +1029,211 @@ mod multiple_field_tests {
                 };
                 assert_eq!(m.validate(),Err("verified-state or residual projection representation is ineligible in ordinary MIR"));
             }
+        }
+    }
+    #[test]
+    fn literal_discriminator_is_preserved_and_validator_traverses_each_child() {
+        let p=compile_source("type P = range 0..100; record R {a: P,b: P,c: P} fn id(p: P) -> P {return p;} fn f() -> R {return R {c: id(80),a: id(80),b: id(80)};}").unwrap();
+        let f = p.functions().last().unwrap().as_ordinary().unwrap();
+        let hir::ValueStatement::Return { value, .. } = &f.body[0] else {
+            panic!()
+        };
+        let m = lower(&p);
+        let lowered = m.functions().last().unwrap();
+        assert_eq!(
+            &lowered.blocks[0].terminator,
+            &Terminator::Return {
+                value: value.clone()
+            }
+        );
+        lowered.validate().unwrap();
+        for position in 0..3 {
+            for raw in [false, true] {
+                let mut e = value.clone();
+                let hir::ExprKind::RecordConstruct { fields, .. } = &mut e.kind else {
+                    panic!()
+                };
+                let hir::ExprKind::Call { arguments, .. } = &mut fields[position].value.kind else {
+                    panic!()
+                };
+                if raw {
+                    arguments[0].kind = hir::ExprKind::IntegerLiteral(80);
+                } else {
+                    arguments[0].ty = hir::ExprType::Bool;
+                }
+                let m = MirFunction {
+                    function: f.id,
+                    entry: BasicBlockId(0),
+                    blocks: vec![BasicBlock {
+                        statements: vec![],
+                        terminator: Terminator::Return { value: e },
+                    }],
+                };
+                assert_eq!(
+                    m.validate(),
+                    Err(if raw {
+                        "raw integer literal has invalid type"
+                    } else {
+                        "formed range literal has non-range type"
+                    })
+                );
+            }
+        }
+        // MIR has no canonical tables: shape-valid range tags are not bounds proofs.
+        let e = hir::TypedExpr {
+            kind: hir::ExprKind::FormedRangeLiteral(101),
+            ty: hir::ExprType::Range(hir::RangeTypeId(usize::MAX)),
+            span: value.span,
+        };
+        let m = MirFunction {
+            function: f.id,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock {
+                statements: vec![],
+                terminator: Terminator::Return { value: e },
+            }],
+        };
+        m.validate().unwrap();
+    }
+
+    #[test]
+    fn raw_and_formed_validation_covers_expression_containers_and_all_mir_positions() {
+        let p=compile_source("type P = range 0..100; fn id(p: P) -> P {return p;} fn f(p: P,r: &mut P) -> P {let mut x=p;return x;}").unwrap();
+        let f = p.functions()[1].as_ordinary().unwrap();
+        let span = f.span;
+        for raw in [false, true] {
+            let leaf = hir::TypedExpr {
+                kind: if raw {
+                    hir::ExprKind::IntegerLiteral(80)
+                } else {
+                    hir::ExprKind::FormedRangeLiteral(80)
+                },
+                ty: if raw {
+                    hir::ExprType::Range(p.ranges()[0].id)
+                } else {
+                    hir::ExprType::IntegerLiteral
+                },
+                span,
+            };
+            let zero = hir::TypedExpr {
+                kind: hir::ExprKind::IntegerLiteral(0),
+                ty: hir::ExprType::IntegerLiteral,
+                span,
+            };
+            let compare = hir::TypedExpr {
+                kind: hir::ExprKind::Binary {
+                    op: hir::BinaryOp::LessEqual,
+                    left: Box::new(leaf.clone()),
+                    right: Box::new(zero),
+                },
+                ty: hir::ExprType::Bool,
+                span,
+            };
+            let unary = hir::TypedExpr {
+                kind: hir::ExprKind::Unary {
+                    op: hir::UnaryOp::Not,
+                    operand: Box::new(compare.clone()),
+                },
+                ty: hir::ExprType::Bool,
+                span,
+            };
+            let call = hir::TypedExpr {
+                kind: hir::ExprKind::Call {
+                    function: p.functions()[0].id(),
+                    arguments: vec![leaf.clone()],
+                },
+                ty: hir::ExprType::Range(p.ranges()[0].id),
+                span,
+            };
+            let error = if raw {
+                "raw integer literal has invalid type"
+            } else {
+                "formed range literal has non-range type"
+            };
+            for e in [leaf, compare, unary, call] {
+                for statement in [
+                    Statement::Let {
+                        local: p.locals()[0].id,
+                        initializer: e.clone(),
+                        span,
+                    },
+                    Statement::Assign {
+                        local: p.locals()[0].id,
+                        value: e.clone(),
+                        span,
+                    },
+                    Statement::DerefAssign {
+                        reference: hir::Place::Parameter(f.parameters[1]),
+                        value: e.clone(),
+                        span,
+                    },
+                    Statement::CallNoValue {
+                        function: f.id,
+                        arguments: vec![e.clone()],
+                        span,
+                    },
+                ] {
+                    let m = MirFunction {
+                        function: f.id,
+                        entry: BasicBlockId(0),
+                        blocks: vec![BasicBlock {
+                            statements: vec![statement],
+                            terminator: Terminator::ReturnNoValue,
+                        }],
+                    };
+                    assert_eq!(m.validate(), Err(error));
+                }
+                let m = MirFunction {
+                    function: f.id,
+                    entry: BasicBlockId(0),
+                    blocks: vec![BasicBlock {
+                        statements: vec![],
+                        terminator: Terminator::Return { value: e.clone() },
+                    }],
+                };
+                assert_eq!(m.validate(), Err(error));
+                if e.ty == hir::ExprType::Bool {
+                    let m = MirFunction {
+                        function: f.id,
+                        entry: BasicBlockId(0),
+                        blocks: vec![
+                            BasicBlock {
+                                statements: vec![],
+                                terminator: Terminator::Branch {
+                                    condition: e,
+                                    then_target: BasicBlockId(1),
+                                    else_target: BasicBlockId(1),
+                                },
+                            },
+                            BasicBlock {
+                                statements: vec![],
+                                terminator: Terminator::ReturnNoValue,
+                            },
+                        ],
+                    };
+                    assert_eq!(m.validate(), Err(error));
+                }
+            }
+        }
+    }
+    #[test]
+    fn formed_type_validation_reaches_first_middle_final_call_arguments() {
+        let p=compile_source("type P = range 0..100; fn tri(a: P,b: P,c: P) -> P {return a;} fn f() -> P {return tri(80,80,80);}").unwrap();
+        let mut m = lower(&p);
+        let f = m.functions.last_mut().unwrap();
+        for position in 0..3 {
+            let mut candidate = f.clone();
+            let Terminator::Return { value } = &mut candidate.blocks[0].terminator else {
+                panic!()
+            };
+            let hir::ExprKind::Call { arguments, .. } = &mut value.kind else {
+                panic!()
+            };
+            arguments[position].ty = hir::ExprType::Bool;
+            assert_eq!(
+                candidate.validate(),
+                Err("formed range literal has non-range type")
+            );
         }
     }
 }
