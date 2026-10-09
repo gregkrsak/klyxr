@@ -480,7 +480,7 @@ fn copy_field_assignment_cli_checks_and_lowers_without_execution_or_proof() {
         assert_eq!(output.status.code(), Some(1));
         assert!(output.stdout.is_empty());
         let text = String::from_utf8(output.stderr).unwrap();
-        assert!(text.contains("cannot assign field of `working` while it is borrowed"));
+        assert!(text.contains("cannot assign `working.charge` while it is borrowed"));
         assert!(text.contains("the conflicting borrow began at line 7"));
     }
 }

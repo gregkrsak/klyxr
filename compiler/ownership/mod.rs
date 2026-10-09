@@ -8,8 +8,8 @@ use std::{
 use crate::{
     diagnostics::Diagnostic,
     hir::{
-        BorrowKind, ExprKind, ExprType, FunctionId, LocalId, ParameterId, ParameterType, Place,
-        Program, TypedExpr, ValueFunction, ValueStatement, ValueType,
+        BorrowKind, ExprKind, ExprType, FieldId, FunctionId, LocalId, ParameterId, ParameterType,
+        Place, Program, RecordId, TypedExpr, ValueFunction, ValueStatement, ValueType,
     },
     lexer::Span,
 };
@@ -506,12 +506,14 @@ impl<'a> Checker<'a> {
             }
             ValueStatement::CopyFieldAssign {
                 owner,
+                record,
+                field,
                 value,
                 owner_span,
                 span,
                 ..
             } => {
-                self.copy_field_assign(*owner, value, *owner_span, *span)?;
+                self.copy_field_assign(*owner, *record, *field, value, *owner_span, *span)?;
             }
             ValueStatement::Assign { local, value, span } => {
                 let place = Place::Local(*local);
@@ -559,6 +561,8 @@ impl<'a> Checker<'a> {
     fn copy_field_assign(
         &mut self,
         owner: LocalId,
+        record: RecordId,
+        field: FieldId,
         value: &TypedExpr,
         owner_span: Span,
         span: Span,
@@ -570,7 +574,22 @@ impl<'a> Checker<'a> {
             let place = Place::Local(owner);
             self.available(place, owner_span)?;
             if let Some(loan) = self.conflict(place, Some(BorrowKind::Mutable)) {
-                return Err(self.diagnostic(span, format!("cannot assign field of `{}` while it is borrowed", self.metadata(place).0), "field assignment requires whole-record mutable access; any active shared or exclusive borrow conflicts", Some(loan.span)));
+                // Destination IDs were validated at HIR publication; they are
+                // diagnostic metadata only. Conflict checking remains whole-root.
+                let root = self.metadata(place).0;
+                let record = self.program.record(record);
+                let field = self.program.field(field);
+                let range = self.program.range(field.ty);
+                let kind = match loan.kind {
+                    BorrowKind::Shared => "shared",
+                    BorrowKind::Mutable => "exclusive",
+                };
+                return Err(self.diagnostic(
+                    span,
+                    format!("cannot assign `{root}.{}` while it is borrowed", field.name),
+                    &format!("field `{}.{}` has declared named-range type `{}`; writing `{root}.{}` requires whole-record mutable access, but an active {kind} whole-record loan conflicts", record.name, field.name, range.name, field.name),
+                    Some(loan.span),
+                ));
             }
             Ok(())
         })();
@@ -5204,6 +5223,8 @@ mod tests {
     fn field_operation(c: &mut Checker<'_>, s: &ValueStatement) -> OwnershipResult {
         let ValueStatement::CopyFieldAssign {
             owner,
+            record,
+            field,
             value,
             owner_span,
             span,
@@ -5212,7 +5233,7 @@ mod tests {
         else {
             panic!("field assignment")
         };
-        c.copy_field_assign(*owner, value, *owner_span, *span)
+        c.copy_field_assign(*owner, *record, *field, value, *owner_span, *span)
     }
     #[test]
     fn field_operation_late_root_failure_restores_exact_prepared_entry() {
@@ -5275,10 +5296,46 @@ mod tests {
             let mut c = Checker::new(&p, f);
             c.statements(&f.body[..2], f.id).unwrap();
             let before = c.clone();
-            assert!(field_operation(&mut c, &f.body[2])
-                .unwrap_err()
-                .message
-                .contains("while it is borrowed"));
+            let ValueStatement::CopyFieldAssign {
+                owner, value, span, ..
+            } = &f.body[2]
+            else {
+                panic!()
+            };
+            // Show that the well-typed RHS succeeds and consumes the unrelated
+            // owner before the real helper reaches its final conflict check.
+            let mut rhs_only = before.clone();
+            rhs_only.expression(value, Transfer::Local(*owner)).unwrap();
+            assert_ne!(
+                rhs_only.states[&Place::Parameter(f.parameters[1])],
+                State::Available
+            );
+            let error = field_operation(&mut c, &f.body[2]).unwrap_err();
+            assert_eq!(
+                error.message,
+                "cannot assign `owned.value` while it is borrowed"
+            );
+            assert_eq!(error.span, *span);
+            assert!(error.required.contains("field `Ticket.value`"));
+            assert!(error
+                .required
+                .contains("declared named-range type `Percent`"));
+            let kind = if borrow == "&owned" {
+                "shared"
+            } else {
+                "exclusive"
+            };
+            assert!(error
+                .required
+                .contains(&format!("active {kind} whole-record loan")));
+            let origin = before.loans.values().next().unwrap().span;
+            assert_eq!(
+                error.known,
+                vec![format!(
+                    "the conflicting borrow began at line {}, column {}",
+                    origin.line, origin.column
+                )]
+            );
             assert_atomic(&c, &before);
             assert_eq!(
                 c.states[&Place::Parameter(f.parameters[1])],

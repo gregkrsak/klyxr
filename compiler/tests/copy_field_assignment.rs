@@ -127,7 +127,7 @@ reject!(
 );
 reject!(no_terminal_permission_in_assignment_rhs,"fn f(flag: bool,b: Battery) -> Battery { let mut working = b; while flag { working.charge = measure(working); return working; } return working; }","Ownership","pre-existing non-Copy");
 reject!(recurrent_shared_rhs_use_blocks_write,"fn f(flag: bool,b: Battery) { let mut working = b; let view = &working; while flag { working.charge = shared(view); } }","Ownership","while it is borrowed");
-reject!(recurrent_exclusive_rhs_use_blocks_write,"fn f(flag: bool,b: Battery) { let mut working = b; let access = &mut working; while flag { working.charge = exclusive(access); } }","Ownership","loop-carried mutable reference");
+reject!(field_rhs_preserves_carried_mutable_handle_transfer_restriction,"fn f(flag: bool,b: Battery) { let mut working = b; let access = &mut working; while flag { working.charge = exclusive(access); } }","Ownership","loop-carried mutable reference");
 accept!(loop_local_final_reference_use_is_finite,"fn f(flag: bool,b: Battery) -> Battery { let mut working = b; while flag { let view = &working; working.charge = shared(view); } return working; }");
 accept!(branches_loops_continue_break_and_returns,"fn f(flag: bool,b: Battery) -> Battery { let mut working = b; while flag { if flag { working.charge = 80; continue; } else { working.health = 100; break; } } if flag { working.voltage = 0; return working; } else { working.charge = 90; } return working; }");
 accept!(conditional_initializer_rhs_value_used_normally,"fn f(flag: bool,b: Battery,p: Percent) -> Battery { let mut working = b; let replacement = if flag { p } else { id(p) }; working.charge = replacement; return working; }");
@@ -306,4 +306,78 @@ fn verified_and_harness_path_isolation_with_ordinary_field_write() {
     assert_eq!(before.functions_proven, after.functions_proven);
     assert_eq!(before.calls_checked, after.calls_checked);
     assert_eq!(before.final_values, after.final_values);
+}
+
+fn final_conflict_diagnostic(borrow: &str, finish: &str, field: &str, kind: &str) {
+    let body = format!("fn f(b: Battery) {{\n    let mut working = b;\n    let handle = {borrow};\n    working.{field} = id(80);\n    {finish}(handle);\n}}");
+    let s = source(&body);
+    // Resolution and typing succeed before the ownership-only final conflict.
+    let p = types::check(resolve::resolve(&parse_source(&s).unwrap()).unwrap()).unwrap();
+    let f = p.functions().last().unwrap().as_ordinary().unwrap();
+    let hir::ValueStatement::CopyFieldAssign {
+        owner,
+        record,
+        field: selected,
+        value,
+        span,
+        ..
+    } = &f.body[2]
+    else {
+        panic!()
+    };
+    assert_eq!(p.local(*owner).name, "working");
+    assert_eq!(p.record(*record).name, "Battery");
+    assert_eq!(p.field(*selected).name, field);
+    assert_eq!(value.ty, hir::ExprType::Range(p.field(*selected).ty));
+    assert_eq!(p.range(p.field(*selected).ty).name, "Percent");
+    let FrontendError::Ownership(errors) = compile_source(&s).unwrap_err() else {
+        panic!()
+    };
+    let e = &errors[0];
+    assert_eq!(
+        e.message,
+        format!("cannot assign `working.{field}` while it is borrowed")
+    );
+    assert!(e.required.contains(&format!("field `Battery.{field}`")));
+    assert!(e.required.contains("declared named-range type `Percent`"));
+    assert!(e
+        .required
+        .contains(&format!("active {kind} whole-record loan")));
+    assert!(!e.required.contains(if kind == "shared" {
+        "exclusive"
+    } else {
+        "shared"
+    }));
+    assert_eq!(e.span, *span);
+    assert_eq!(
+        &s[e.span.start..e.span.end],
+        format!("working.{field} = id(80);")
+    );
+    // Borrow expressions retain their exact origin, and the existing location
+    // machinery reports it independently of the destination statement span.
+    let hir::ValueStatement::Let { initializer, .. } = &f.body[1] else {
+        panic!()
+    };
+    let origin = initializer.span;
+    assert_eq!(&s[origin.start..origin.end], borrow);
+    assert_eq!(
+        e.known,
+        vec![format!(
+            "the conflicting borrow began at line {}, column {}",
+            origin.line, origin.column
+        )]
+    );
+    let rendered = e.render("final_conflict.klx", &s);
+    assert!(rendered.contains(&format!(
+        "--> final_conflict.klx:{}:{}",
+        span.line, span.column
+    )));
+}
+#[test]
+fn final_shared_conflict_reports_canonical_destination_type_and_loan_origin() {
+    final_conflict_diagnostic("&working", "finish_shared", "health", "shared");
+}
+#[test]
+fn final_exclusive_conflict_reports_canonical_destination_type_and_loan_origin() {
+    final_conflict_diagnostic("&mut working", "finish_exclusive", "charge", "exclusive");
 }
