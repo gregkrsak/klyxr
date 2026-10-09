@@ -756,10 +756,13 @@ whole-value acyclic loans, reference returns, explicit lifetimes, reborrowing,
 auto-dereference, non-Copy replacement, field/reference mutation beyond Copy-safe
 whole-value writes, partial borrowing, general replacement, destruction,
 effects, runtime contracts, expressions beyond this subset, general cyclic ownership/loans, quantifiers,
-multiple fields, record invariants, SMT/VIR or MIR backend/verification lowering, or machine-code generation. In particular,
+multi-field verified/harness state, record invariants, SMT/VIR or MIR backend/verification lowering, or machine-code generation. In particular,
 `examples/effects.klx` is illustrative and is rejected rather than analyzed.
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
+
+KD-036 implements ordinary records with one or more named-range fields and complete
+named construction; specialized verified and harness state still requires exactly one field.
 
 This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, KD-033, and KD-034,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
