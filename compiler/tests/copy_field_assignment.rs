@@ -83,11 +83,9 @@ reject!(
     "Type",
     "through a reference"
 );
-reject!(
+accept!(
     mutable_reference_root_category_before_mutability,
-    "fn f(b: Battery) { let mut working = b; let access = &mut working; access.charge = 80; }",
-    "Type",
-    "through a reference"
+    "fn f(b: Battery) { let mut working = b; let access = &mut working; access.charge = 80; }"
 );
 reject!(
     non_record_root_category_before_mutability,

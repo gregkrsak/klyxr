@@ -78,7 +78,7 @@ remain held until the receiving call completes, including nested arguments.
 Availability and loans are separate ID-based state within the same ownership phase.
 Borrowing/cloning/reborrowing/coercion are never implicit. Ordinary owned parameters
 remain immutable. Reference returns, nested references, explicit lifetimes,
-auto-dereference, generalized reference projection beyond KD-039, partial borrowing/moves,
+auto-dereference, generalized reference projection beyond KD-039/KD-040, partial borrowing/moves,
 and destruction remain unsupported (KD-021 / OQ-024).
 
 KED-007 adds explicit `*reference` for directly named ordinary reference parameters
@@ -88,7 +88,7 @@ exclusive mutable reference and an exact Copy referent/RHS type. Non-Copy move-o
 and replacement are Ownership errors; no destruction or displaced-value semantics
 are implied. Reads/writes count for last use; writes hold the loan throughout the
 RHS. Copied dereference arguments do not call-hold a reference, while reference
-arguments retain KED-006 holds. General owner replacement, field mutation beyond KD-038, auto-deref,
+arguments retain KED-006 holds. General owner replacement, field mutation beyond KD-038/KD-040, auto-deref,
 reborrowing, and broader mutation remain unsupported (KD-022 / OQ-025).
 
 KED-008 adds statement-only `if` / optional `else` with Bool conditions, nesting,
@@ -626,7 +626,25 @@ later alias/handle uses, receiving holds and recurrent obligations retain it.
 Existing expression/return/call transactions restore even prefix-expired loans
 on later failure. Canonical origin/initializer-lineage integrity validates external
 parameters, shared aliases and exclusive transfers using the single handle→loan
-mapping. Reference-backed while conditions, assignment through record references,
-field borrowing, temporary/nested/dereference projection and whole-record move-out
+mapping. KD-040 subsequently permits writes through named exclusive record
+references. Reference-backed while conditions, shared-reference writes, field borrowing, temporary/nested/dereference projection and whole-record move-out
 remain unsupported. Ordinary functions remain unexecuted/unproven; verified battery
 and single-field harness eligibility/proofs are unchanged.
+
+### KED-025: direct Copy-field assignment through exclusive named references
+
+KD-040 implements `access.field = value;` for a directly named ordinary exact
+`&mut Record` parameter or local, including an immutable handle binding. The
+actual record selects its canonical field and exact nominal range; direct
+contextual literals form at that boundary. Shared and non-record references reject.
+Unlike KD-038 owned-local RHS-first writes, this operation retains the existing
+exclusive loan before the complete RHS, then revalidates the available handle,
+live lineage and original LoanId before authorizing the write. Same-handle reads
+are legal; original-owner conflicts and RHS target transfers reject. Last use
+expires only after completion. Lawful unrelated RHS effects commit on success;
+failure restores the exact prepared operation entry with the initializer index
+shared. Finite/recurrent summaries include target and RHS. Stable loops, continue,
+break and existing convergence integrity remain authoritative. HIR/MIR preserve
+CopyReferenceFieldAssign distinctly. General projection, reborrow/coercion, field
+loans, partial ownership and whole-record replacement remain excluded. Ordinary
+functions are checked/lowered only; verified/harness behavior and proofs are unchanged.

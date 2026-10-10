@@ -157,13 +157,11 @@ rejected!(
     "loop-carried mutable reference",
     "fn f(flag: bool,v: &mut Battery) { while flag { let seen = v.charge; finish_mut(v); } }"
 );
-rejected!(
+accepted!(
     reference_assignment_parameter,
-    "Type",
-    "parameter",
     "fn f(v: &mut Battery,p: Percent) { v.charge = p; }"
 );
-rejected!(reference_assignment_local,"Type","through a reference","fn f(b: Battery,p: Percent) { let mut owned = b; let access = &mut owned; access.charge = p; }");
+accepted!(reference_assignment_local,"fn f(b: Battery,p: Percent) { let mut owned = b; let access = &mut owned; access.charge = p; }");
 rejected!(
     shared_field_borrow,
     "Parse",

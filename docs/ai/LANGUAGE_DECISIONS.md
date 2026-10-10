@@ -1180,11 +1180,56 @@ source to remain available. Place → LoanId remains the sole active-loan author
 compatible loans are not interchangeable. Origin integrity participates in cloned
 transactions, recurrent/break integrity and header/backedge comparison.
 
-Reference-field assignment, field borrowing, temporary/nested/dereference
-projection, auto-deref, coercion/reborrowing, partial moves/loans, broader field
+KD-040 subsequently permits direct named exclusive-reference writes. Shared-
+reference field assignment, field borrowing, temporary/nested/dereference projection, auto-deref, coercion/reborrowing, partial moves/loans, broader field
 types, reference returns, record replacement, properties, destruction, execution,
 code generation and generalized cyclic inference remain excluded. The specialized
 verified-state/harness paths, eligibility, proof counts and affine kernel are
 unchanged. This refines OQ-024 only within the named Copy-field read boundary;
 historical accepted sections retain their earlier scope. Merge authorization
 remains separate from this accepted implementation decision.
+
+## KD-040 — Direct Copy-field assignment through named exclusive record references
+
+**Status:** Accepted (frozen KED-025 Draft 2, Issue #56, October 10, 2026).
+
+A directly named ordinary parameter or local of exact `&mut Record` type may
+assign one declared named-range Copy field. Binding mutability is unnecessary:
+mutation authority belongs to the reference. The actual referent's canonical
+RecordId selects the FieldId and exact nominal RangeTypeId. Direct contextual
+literals form only at that independently established boundary (KD-037).
+Shared and non-record references reject. KD-038 owned-local writes and KD-039
+reference reads retain their distinct behavior.
+
+A dedicated prepared-operation transaction validates the available target and
+live canonical lineage, captures its existing exclusive LoanId, counts one target
+use, and retains that loan before any expiry. It evaluates the complete RHS and
+then independently revalidates target availability, live lineage and the exact
+original LoanId before authorizing the write. A held loan cannot substitute for
+an available handle. Success releases only the operation's hold and applies
+ordinary expiry. Failure restores the complete prepared entry, including finite
+uses, holds, allocator, transfers, provenance, recurrence and control context.
+The immutable initializer index remains shared structural metadata.
+
+Target preparation, retention, validation and the write allocate no loan or
+ownership transfer. Lawful temporary borrowing and unrelated moves in a successful
+RHS remain committed. Same-handle field reads use the existing exclusive authority;
+original-owner conflicts remain forbidden across the complete operation. Exclusive
+recipients validate the correct transfer edge without requiring moved sources to
+remain available. Place → LoanId remains the sole active-loan identity authority.
+
+Finite and recurrent traversal include the target and every RHS use. Stable loops,
+nested frames, continue and break preserve existing lineage and discharge gates;
+recurring conditions remain reference-free. HIR/MIR distinguish
+CopyReferenceFieldAssign from owned CopyFieldAssign and whole-value DerefAssign.
+HIR validates canonical relationships and complete RHS metadata with checked IDs;
+MIR validates structural facts without canonical-table or provenance claims.
+
+This settles only direct named Copy-field writes through existing exclusive
+whole-record authority. Reborrowing, coercion, field loans/provenance, projected
+places, partial ownership, compound or expression assignment, whole-record
+replacement, properties/invariants, general lifetime inference, execution and
+code generation remain unsupported. Verified-state and harness representations,
+eligibility, proof counts and the affine kernel are unchanged. This narrowly
+refines OQ-024/OQ-025; historical KD boundaries remain historical. Independent
+implementation review and Greg's merge authorization remain separate stages.

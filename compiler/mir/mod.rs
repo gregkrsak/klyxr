@@ -13,6 +13,15 @@ pub enum Statement {
         arguments: Vec<TypedExpr>,
         span: Span,
     },
+    CopyReferenceFieldAssign {
+        reference: Place,
+        record: hir::RecordId,
+        field: hir::FieldId,
+        value: TypedExpr,
+        reference_span: Span,
+        field_span: Span,
+        span: Span,
+    },
     CopyFieldAssign {
         owner: LocalId,
         record: hir::RecordId,
@@ -145,7 +154,8 @@ impl MirFunction {
                             expression_valid(argument)?;
                         }
                     }
-                    Statement::CopyFieldAssign { value, .. } => {
+                    Statement::CopyReferenceFieldAssign { value, .. }
+                    | Statement::CopyFieldAssign { value, .. } => {
                         if !matches!(value.ty, hir::ExprType::Range(_)) {
                             return Err("Copy-field assignment requires a named-range RHS");
                         }
@@ -331,6 +341,25 @@ impl Builder {
                             span: *span,
                         });
                     }
+                }
+                ValueStatement::CopyReferenceFieldAssign {
+                    reference,
+                    record,
+                    field,
+                    value,
+                    reference_span,
+                    field_span,
+                    span,
+                } => {
+                    statements.push(Statement::CopyReferenceFieldAssign {
+                        reference: *reference,
+                        record: *record,
+                        field: *field,
+                        value: value.clone(),
+                        reference_span: *reference_span,
+                        field_span: *field_span,
+                        span: *span,
+                    });
                 }
                 ValueStatement::CopyFieldAssign {
                     owner,
@@ -1449,5 +1478,108 @@ mod multiple_field_tests {
         *record = hir::RecordId(usize::MAX);
         *field = hir::FieldId(usize::MAX);
         f.validate().unwrap();
+    }
+    #[test]
+    fn reference_write_mir_checks_every_rhs_child_and_only_structural_authority() {
+        for construction in [false, true] {
+            for pos in 0..3 {
+                let mut args = ["80", "80", "80"];
+                args[pos] = "v.charge";
+                let rhs = if construction {
+                    format!(
+                        "triple(Triple {{last:{},first:{},middle:{}}})",
+                        args[0], args[1], args[2]
+                    )
+                } else {
+                    format!("three({})", args.join(","))
+                };
+                let p=crate::compile_source(&format!("type Percent=range 0..100; record Battery {{charge:Percent}} record Triple {{first:Percent,middle:Percent,last:Percent}} fn three(a:Percent,b:Percent,c:Percent)->Percent {{return a;}} fn triple(t:Triple)->Percent {{return t.first;}} fn f(v:&mut Battery) {{v.charge={rhs};}}")).unwrap();
+                let mut m = lower(&p);
+                let f = m.functions.last_mut().unwrap();
+                f.validate().unwrap();
+                let Statement::CopyReferenceFieldAssign { value, .. } =
+                    &mut f.blocks[0].statements[0]
+                else {
+                    panic!()
+                };
+                fn damage(e: &mut hir::TypedExpr) {
+                    match &mut e.kind {
+                        hir::ExprKind::CopyReferenceFieldRead { .. } => e.ty = hir::ExprType::Bool,
+                        hir::ExprKind::Call { arguments, .. } => {
+                            for a in arguments {
+                                damage(a)
+                            }
+                        }
+                        hir::ExprKind::RecordConstruct { fields, .. } => {
+                            for a in fields {
+                                damage(&mut a.value)
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                damage(value);
+                assert!(f.validate().is_err(), "position {pos}");
+            }
+        }
+        let p=crate::compile_source("type Percent=range 0..100; record Battery {charge:Percent} fn f(v:&mut Battery) {v.charge=80;}").unwrap();
+        let mut m = lower(&p);
+        let f = &mut m.functions[0];
+        let Statement::CopyReferenceFieldAssign {
+            reference,
+            record,
+            field,
+            ..
+        } = &mut f.blocks[0].statements[0]
+        else {
+            panic!()
+        };
+        *reference = hir::Place::Local(hir::LocalId(usize::MAX));
+        *record = hir::RecordId(usize::MAX);
+        *field = hir::FieldId(usize::MAX);
+        f.validate().unwrap(); // MIR has no canonical tables or live provenance authority.
+        let Statement::CopyReferenceFieldAssign { value, .. } = &mut f.blocks[0].statements[0]
+        else {
+            panic!()
+        };
+        value.ty = hir::ExprType::Bool;
+        assert!(f.validate().is_err());
+    }
+    #[test]
+    fn reference_write_mir_recurses_unary_binary_and_rejects_hidden_conditionals() {
+        let p=crate::compile_source("type Percent=range 0..100; record Battery {charge:Percent} fn f(v:&mut Battery) {v.charge=80;}").unwrap();
+        for defect in 0..4 {
+            let mut m = lower(&p);
+            let f = &mut m.functions[0];
+            let Statement::CopyReferenceFieldAssign { value, .. } = &mut f.blocks[0].statements[0]
+            else {
+                panic!()
+            };
+            let mut bad = value.clone();
+            bad.ty = hir::ExprType::Bool;
+            value.kind = match defect {
+                0 => hir::ExprKind::Unary {
+                    op: crate::ast::UnaryOp::Not,
+                    operand: Box::new(bad),
+                },
+                1 => hir::ExprKind::Binary {
+                    op: crate::ast::BinaryOp::Subtract,
+                    left: Box::new(bad),
+                    right: Box::new(value.clone()),
+                },
+                2 => hir::ExprKind::Binary {
+                    op: crate::ast::BinaryOp::Subtract,
+                    left: Box::new(value.clone()),
+                    right: Box::new(bad),
+                },
+                3 => hir::ExprKind::IfValue {
+                    condition: Box::new(bad.clone()),
+                    then_value: Box::new(value.clone()),
+                    else_value: Box::new(value.clone()),
+                },
+                _ => unreachable!(),
+            };
+            assert!(f.validate().is_err());
+        }
     }
 }

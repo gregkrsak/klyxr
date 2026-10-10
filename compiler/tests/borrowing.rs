@@ -350,6 +350,8 @@ fn borrow_targets_resolve_in_source_order_without_shadowing() {
 }
 #[test]
 fn unsupported_borrow_targets_and_mutation_syntax_remain_rejected() {
+    // Preserve the former blanket rejection witness as the newly accepted case.
+    valid("fn bad(value: &mut Ticket) -> bool { value.value = 0; return true; }");
     assert!(
         type_error("fn bad(ticket: Ticket) -> bool { let view = *ticket; return true; }")
             .message
@@ -373,7 +375,7 @@ fn unsupported_borrow_targets_and_mutation_syntax_remain_rejected() {
     for body in [
         "fn bad(mut ticket: Ticket) -> bool { return true; }",
         "fn bad(ticket: Ticket) -> Ticket { let mut owned = ticket; owned = ticket; return owned; }",
-        "fn bad(value: &mut Ticket) -> bool { value.value = 0; return true; }",
+        "fn bad(value: &Ticket) -> bool { value.value = 0; return true; }",
         "fn bad(ticket: Ticket) -> bool { inspect(&ticket); return true; }",
     ] { assert!(compile_source(&source(body)).is_err(), "{body}"); }
 }

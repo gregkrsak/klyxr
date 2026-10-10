@@ -753,7 +753,7 @@ consume(&mut battery, 50); // rejected: 50 <= 30 is false
 
 The prototype does not implement ownership beyond core ordinary moves and
 whole-value acyclic loans, reference returns, explicit lifetimes, reborrowing,
-auto-dereference, non-Copy replacement, field/reference mutation beyond KD-038 direct
+auto-dereference, non-Copy replacement, field/reference mutation beyond KD-038/KD-040 direct
 Copy-field assignment and Copy-safe whole-value writes, partial borrowing, general replacement, destruction,
 effects, runtime contracts, expressions beyond this subset, general cyclic ownership/loans, quantifiers,
 multi-field verified/harness state, record invariants, SMT/VIR or MIR backend/verification lowering, or machine-code generation. In particular,
@@ -764,7 +764,7 @@ unimplemented properties or unspecified program correctness.
 KD-036 implements ordinary records with one or more named-range fields and complete
 named construction; specialized verified and harness state still requires exactly one field.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, KD-033, KD-034, KD-035, KD-036, KD-037, KD-038, and KD-039,
+This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, KD-033, KD-034, KD-035, KD-036, KD-037, KD-038, KD-039, and KD-040,
 subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
@@ -1574,9 +1574,47 @@ canonical table relationships before ownership. MIR validates only the structura
 range-valued leaf and containing trees; canonical tables/loans are not its authority.
 Compilation and read-only Program inspection APIs are unchanged.
 
-`access.field = value`, `&view.field`, `(&owner).field`, call-result projection,
+KD-040 now permits `access.field = value` through named exclusive references.
+`&view.field`, `(&owner).field`, call-result projection,
 `(*view).field`, nested projections, reference returns, reborrowing/coercions,
 field loans/partial moves, general places and record replacement remain unsupported.
 This introduces no execution, runtime accessor/property or proof rule. Ordinary
 functions are checked/lowered only; verified state and harness remain single-field,
 with unchanged battery proofs, diagnostics and independent affine coverage.
+
+## Copy-field assignment through exclusive named record references (KED-025 / KD-040)
+
+```klyxr
+fn set_charge(access: &mut Battery, charge: Percent) {
+    access.charge = charge;
+}
+```
+
+See `examples/reference_field_assignment.klx` and the intentional moved-target
+failure in `examples/reference_field_assignment_fail.klx`. A directly named
+ordinary exact `&mut Record` parameter or local can write any declared Copy
+named-range field. Its binding need not be mutable. Field selection uses the
+actual referent's canonical record; RHS typing is exact and nominal, with direct
+contextual literals at the selected field boundary.
+
+KD-038 owned-local writes remain RHS-first; KD-039 named-reference reads remain
+non-consuming. This new write retains the existing exclusive whole-record loan
+before the entire RHS, then checks the same handle's availability and live lineage
+resolving to the original LoanId before authorizing the write. Same-handle reads
+are accepted. Original-owner access and conflicting borrowing remain blocked;
+transferring the target in the RHS rejects even if the held loan survives. Final
+use can expire after completion, permitting owner reuse. Transferred recipients,
+stable loops, nested continue and lawful break retain existing lineage rules.
+
+The prepared-operation transaction restores all compiler bookkeeping on failure.
+Lawful unrelated moves and temporary borrowing in successful RHS expressions stay
+committed. Target handling creates no loan or transfer. Place → LoanId remains
+sole active-loan authority; the initializer index remains shared structural data.
+HIR/MIR preserve a distinct CopyReferenceFieldAssign and visit every RHS child.
+MIR structural validation does not establish canonical membership or provenance.
+
+Shared-reference writes, temporary/nested/dereference projection, reborrow/coercion,
+field loans/provenance, partial ownership, compound/expression assignment and
+whole-record replacement remain unsupported. Ordinary functions are checked and
+lowered only, without execution or proof. Specialized verified-state/harness
+eligibility, battery proofs and the affine kernel are unchanged.

@@ -37,6 +37,55 @@ impl Program {
     fn record_statements(&self, function: FunctionId, body: &[ValueStatement]) -> Result {
         for statement in body {
             match statement {
+                ValueStatement::CopyReferenceFieldAssign {
+                    reference,
+                    record,
+                    field,
+                    value,
+                    span,
+                    ..
+                } => {
+                    let invalid = |message| {
+                        Box::new(Diagnostic::semantic(*span, message,
+                        "canonical exclusive reference, referent record membership and exact Copy-field RHS type must be preserved"))
+                    };
+                    let ty = match reference {
+                        Place::Parameter(id) => self
+                            .parameters
+                            .get(id.0)
+                            .filter(|p| {
+                                p.id == *id
+                                    && p.function == function
+                                    && self
+                                        .functions
+                                        .get(function.0)
+                                        .and_then(Function::as_ordinary)
+                                        .is_some_and(|f| {
+                                            f.id == function && f.parameters.contains(id)
+                                        })
+                            })
+                            .and_then(|p| match p.ty {
+                                ParameterType::Value(ty) => Some(ty),
+                                _ => None,
+                            }),
+                        Place::Local(id) => self
+                            .locals
+                            .get(id.0)
+                            .filter(|l| l.id == *id && l.function == function)
+                            .map(|l| l.ty),
+                    };
+                    if ty != Some(ValueType::MutableRef(ReferentType::Record(*record))) {
+                        return Err(invalid("reference Copy-field assignment requires a canonical exclusive reference to the stated record in this function"));
+                    }
+                    let range = self.record_field(*record, *field).ok_or_else(||
+                        invalid("reference Copy-field assignment field does not belong to the canonical referent record"))?;
+                    if self.range(range).min > self.range(range).max
+                        || value.ty != ExprType::Range(range)
+                    {
+                        return Err(invalid("reference Copy-field assignment requires valid range bounds and the exact declared named-range RHS type"));
+                    }
+                    self.record_expression(function, value, true, false)?;
+                }
                 ValueStatement::CopyFieldAssign {
                     owner,
                     record,
@@ -1439,5 +1488,185 @@ mod multiple_fields {
             .unwrap_err()
             .message
             .contains("ineligible"));
+    }
+    fn write_fixture() -> Program {
+        crate::compile_source("type Percent=range 0..100; type Other=range 0..100; record Battery {charge: Percent,health: Percent} record Capacitor {charge: Percent} fn f(v: &mut Battery) {v.charge=80;} fn g(v: &mut Battery) {let next=v; next.health=80;}").unwrap()
+    }
+    fn write_mut(p: &mut Program) -> &mut ValueStatement {
+        let Function::Ordinary(f) = &mut p.functions[0] else {
+            panic!()
+        };
+        &mut f.body[0]
+    }
+    #[test]
+    fn reference_write_hir_rejects_malformed_roots_fields_types_and_canonical_tables() {
+        for defect in 0..24 {
+            let mut p = write_fixture();
+            let foreign = p.functions[1].as_ordinary().unwrap().parameters[0];
+            let local = p.locals[0].id;
+            let ValueStatement::CopyReferenceFieldAssign {
+                reference,
+                record,
+                field,
+                value,
+                ..
+            } = write_mut(&mut p)
+            else {
+                panic!()
+            };
+            match defect {
+                0 => *reference = Place::Parameter(ParameterId(usize::MAX)),
+                1 => *reference = Place::Local(LocalId(usize::MAX)),
+                2 => *reference = Place::Parameter(foreign),
+                3 => *reference = Place::Local(local),
+                4 => *record = RecordId(usize::MAX),
+                5 => *field = FieldId(usize::MAX),
+                6 => *field = FieldId(2),
+                7 => *record = RecordId(1),
+                8 => value.ty = ExprType::Range(RangeTypeId(1)),
+                9 => value.ty = ExprType::Range(RangeTypeId(usize::MAX)),
+                10 => value.ty = ExprType::Bool,
+                11 => value.kind = ExprKind::FormedRangeLiteral(101),
+                12 => {
+                    p.parameters[0].ty = ParameterType::Value(ValueType::SharedRef(
+                        ReferentType::Record(RecordId(0)),
+                    ))
+                }
+                13 => {
+                    p.parameters[0].ty =
+                        ParameterType::Value(ValueType::MutableRef(ReferentType::Bool))
+                }
+                14 => p.parameters[0].id = ParameterId(999),
+                15 => p.records.clear(),
+                16 => p.fields.clear(),
+                17 => p.ranges.clear(),
+                18 => p.records[0].fields.push(FieldId(0)),
+                19 => p.records[0].fields.pop().map(|_| ()).unwrap(),
+                20 => p.fields[0].record = RecordId(1),
+                21 => p.fields[0].ty = RangeTypeId(usize::MAX),
+                22 => p.ranges[0].min = 101,
+                23 => {
+                    let Function::Ordinary(f) = &mut p.functions[0] else {
+                        panic!()
+                    };
+                    f.parameters.clear();
+                }
+                _ => unreachable!(),
+            }
+            assert!(p.validate_record_expressions().is_err(), "defect {defect}");
+        }
+    }
+    #[test]
+    fn reference_write_hir_traverses_every_nested_rhs_child_and_statement_container() {
+        for construction in [false, true] {
+            for pos in 0..3 {
+                for container in 0..3 {
+                    let source="type Percent=range 0..100; record Battery {charge: Percent} record Triple {first: Percent,middle: Percent,last: Percent} fn three(a: Percent,b: Percent,c: Percent) -> Percent {return a;} fn triple(t: Triple) -> Percent {return t.first;} fn f(v: &mut Battery) {v.charge=three(80,80,80);}";
+                    let mut p = crate::compile_source(source).unwrap();
+                    let s = write_mut_at_last(&mut p);
+                    let ValueStatement::CopyReferenceFieldAssign { value, .. } = s else {
+                        panic!()
+                    };
+                    let mut children = vec![value.clone(); 3]; // Replace each child with a valid formed leaf.
+                    for child in &mut children {
+                        child.kind = ExprKind::FormedRangeLiteral(80);
+                    }
+                    children[pos].kind = ExprKind::FormedRangeLiteral(101);
+                    if construction {
+                        value.kind = ExprKind::Call {
+                            function: FunctionId(1),
+                            arguments: vec![TypedExpr {
+                                kind: ExprKind::RecordConstruct {
+                                    record: RecordId(1),
+                                    fields: children
+                                        .into_iter()
+                                        .enumerate()
+                                        .map(|(i, value)| RecordFieldInit {
+                                            field: FieldId(i + 1),
+                                            span: value.span,
+                                            value,
+                                        })
+                                        .collect(),
+                                },
+                                ty: ExprType::Record(RecordId(1)),
+                                span: value.span,
+                            }],
+                        };
+                    } else {
+                        value.kind = ExprKind::Call {
+                            function: FunctionId(0),
+                            arguments: children,
+                        };
+                    }
+                    let Function::Ordinary(f) = p.functions.last_mut().unwrap() else {
+                        panic!()
+                    };
+                    let s = f.body.pop().unwrap();
+                    let condition = TypedExpr {
+                        kind: ExprKind::BoolLiteral(true),
+                        ty: ExprType::Bool,
+                        span: f.span,
+                    };
+                    f.body.push(match container {
+                        0 => s,
+                        1 => ValueStatement::If {
+                            condition,
+                            then_body: vec![],
+                            else_body: vec![s],
+                            span: f.span,
+                        },
+                        2 => ValueStatement::While {
+                            condition,
+                            body: vec![s],
+                            span: f.span,
+                        },
+                        _ => unreachable!(),
+                    });
+                    assert!(p.validate_record_expressions().is_err());
+                }
+            }
+        }
+    }
+    fn write_mut_at_last(p: &mut Program) -> &mut ValueStatement {
+        let Function::Ordinary(f) = p.functions.last_mut().unwrap() else {
+            panic!()
+        };
+        &mut f.body[0]
+    }
+    #[test]
+    fn reference_write_hir_recurses_binary_and_unary_rhs_descendants() {
+        let mut p = write_fixture();
+        let ValueStatement::CopyReferenceFieldAssign { value, .. } = write_mut(&mut p) else {
+            panic!()
+        };
+        let mut child = value.clone();
+        child.kind = ExprKind::FormedRangeLiteral(101);
+        for side in 0..3 {
+            let mut broken = p.clone();
+            let ValueStatement::CopyReferenceFieldAssign { value, .. } = write_mut(&mut broken)
+            else {
+                panic!()
+            };
+            value.kind = if side == 0 {
+                ExprKind::Unary {
+                    op: crate::ast::UnaryOp::Not,
+                    operand: Box::new(child.clone()),
+                }
+            } else {
+                let mut valid = child.clone();
+                valid.kind = ExprKind::FormedRangeLiteral(80);
+                let (left, right) = if side == 1 {
+                    (child.clone(), valid)
+                } else {
+                    (valid, child.clone())
+                };
+                ExprKind::Binary {
+                    op: crate::ast::BinaryOp::Subtract,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                }
+            };
+            assert!(broken.validate_record_expressions().is_err());
+        }
     }
 }

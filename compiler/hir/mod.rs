@@ -324,6 +324,15 @@ pub enum ValueStatement {
         body: Vec<ValueStatement>,
         span: Span,
     },
+    CopyReferenceFieldAssign {
+        reference: Place,
+        record: RecordId,
+        field: FieldId,
+        value: TypedExpr,
+        reference_span: Span,
+        field_span: Span,
+        span: Span,
+    },
     CopyFieldAssign {
         owner: LocalId,
         record: RecordId,
