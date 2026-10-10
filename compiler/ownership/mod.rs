@@ -325,6 +325,156 @@ pub fn check(program: &Program) -> Result<(), Vec<Diagnostic>> {
     }
     Ok(())
 }
+fn checked_place_type(program: &Program, function: FunctionId, place: Place) -> Option<ValueType> {
+    match place {
+        Place::Parameter(id) => program
+            .parameters()
+            .get(id.0)
+            .filter(|p| p.id == id && p.function == function)
+            .and_then(|p| match p.ty {
+                ParameterType::Value(ty) => Some(ty),
+                _ => None,
+            }),
+        Place::Local(id) => program
+            .locals()
+            .get(id.0)
+            .filter(|l| l.id == id && l.function == function)
+            .map(|l| l.ty),
+    }
+}
+/// Immutable location metadata only; never caches state-dependent lineage.
+/// Borrow canonical expressions and share this once-built index across snapshots.
+struct Initializers<'a> {
+    function: FunctionId,
+    entries: BTreeMap<LocalId, &'a TypedExpr>,
+    invalid: Option<Span>,
+}
+impl<'a> Initializers<'a> {
+    fn new(program: &'a Program, function: &'a ValueFunction) -> Self {
+        let mut index = Self {
+            function: function.id,
+            entries: BTreeMap::new(),
+            invalid: None,
+        };
+        let result = (|| {
+            if !program
+                .functions()
+                .get(function.id.0)
+                .and_then(|f| f.as_ordinary())
+                .is_some_and(|canonical| std::ptr::eq(canonical, function))
+            {
+                return Err(function.span);
+            }
+            index.statements(program, &function.body)?;
+            // Require the complete reciprocal table/statement relationship,
+            // including locals not reached by an actual reference use.
+            for (position, local) in program.locals().iter().enumerate() {
+                if local.function == function.id
+                    && (local.id != LocalId(position) || !index.entries.contains_key(&local.id))
+                {
+                    return Err(local.span);
+                }
+            }
+            Ok(())
+        })();
+        index.invalid = result.err();
+        index
+    }
+    fn statements(&mut self, program: &Program, body: &'a [ValueStatement]) -> Result<(), Span> {
+        for statement in body {
+            #[cfg(test)]
+            initializer_probe::update(|c| c.construction_visits += 1);
+            match statement {
+                ValueStatement::Let {
+                    local,
+                    initializer,
+                    span,
+                } => {
+                    let declaration = program
+                        .locals()
+                        .get(local.0)
+                        .filter(|l| l.id == *local && l.function == self.function)
+                        .ok_or(*span)?;
+                    // Check structural source identity before traversal can index
+                    // a forged root. No availability/loan/transfer fact is cached.
+                    if matches!(
+                        declaration.ty,
+                        ValueType::SharedRef(_) | ValueType::MutableRef(_)
+                    ) {
+                        let source = match initializer.kind {
+                            ExprKind::Parameter(id) => Some(Place::Parameter(id)),
+                            ExprKind::Local(id) => Some(Place::Local(id)),
+                            ExprKind::Borrow { place, .. } => Some(place),
+                            _ => None,
+                        };
+                        if source.is_some_and(|place| {
+                            checked_place_type(program, self.function, place).is_none()
+                        }) {
+                            return Err(*span);
+                        }
+                    }
+                    if initializer.ty != ExprType::from(declaration.ty)
+                        || self.entries.insert(*local, initializer).is_some()
+                    {
+                        return Err(*span);
+                    }
+                }
+                ValueStatement::If {
+                    then_body,
+                    else_body,
+                    ..
+                } => {
+                    self.statements(program, then_body)?;
+                    self.statements(program, else_body)?;
+                }
+                ValueStatement::While { body, .. } => self.statements(program, body)?,
+                ValueStatement::ReturnNoValue { .. }
+                | ValueStatement::CallNoValue { .. }
+                | ValueStatement::Break { .. }
+                | ValueStatement::Continue { .. }
+                | ValueStatement::CopyFieldAssign { .. }
+                | ValueStatement::Assign { .. }
+                | ValueStatement::DerefAssign { .. }
+                | ValueStatement::Return { .. } => {}
+            }
+        }
+        Ok(())
+    }
+    fn get(&self, function: FunctionId, local: LocalId) -> Option<&'a TypedExpr> {
+        #[cfg(test)]
+        initializer_probe::update(|c| c.lookups += 1);
+        if self.invalid.is_some() || function != self.function {
+            return None;
+        }
+        self.entries.get(&local).copied()
+    }
+}
+// Test-only actual operation counts, separate from ownership transaction state.
+#[cfg(test)]
+mod initializer_probe {
+    use std::cell::Cell;
+    #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+    pub(super) struct Counts {
+        pub construction_visits: usize,
+        pub lookups: usize,
+        pub origin_calls: usize,
+        pub max_depth: usize,
+    }
+    std::thread_local! { static COUNTS: Cell<Counts> = Cell::new(Counts::default()); }
+    pub(super) fn reset() {
+        COUNTS.with(|c| c.set(Counts::default()));
+    }
+    pub(super) fn counts() -> Counts {
+        COUNTS.with(Cell::get)
+    }
+    pub(super) fn update(f: impl FnOnce(&mut Counts)) {
+        COUNTS.with(|c| {
+            let mut value = c.get();
+            f(&mut value);
+            c.set(value);
+        });
+    }
+}
 // Each nested loop owns a distinct header boundary. Branch snapshots inherit it;
 // locals introduced in an outer iteration are pre-existing at an inner header.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -356,6 +506,7 @@ struct LoopTarget<'a> {
 struct Checker<'a> {
     program: &'a Program,
     function: FunctionId,
+    initializers: Rc<Initializers<'a>>,
     states: BTreeMap<Place, State>,
     loans: BTreeMap<LoanId, Loan>,
     handles: BTreeMap<Place, LoanId>,
@@ -370,10 +521,11 @@ struct Checker<'a> {
     terminal_return: bool,
 }
 impl<'a> Checker<'a> {
-    fn new(program: &'a Program, function: &ValueFunction) -> Self {
+    fn new(program: &'a Program, function: &'a ValueFunction) -> Self {
         let mut checker = Self {
             program,
             function: function.id,
+            initializers: Rc::new(Initializers::new(program, function)),
             states: BTreeMap::new(),
             loans: BTreeMap::new(),
             handles: BTreeMap::new(),
@@ -384,6 +536,9 @@ impl<'a> Checker<'a> {
             targets: Vec::new(),
             terminal_return: false,
         };
+        if checker.initializers.invalid.is_some() {
+            return checker;
+        }
         for id in &function.parameters {
             if let ParameterType::Value(ty) = program.parameter(*id).ty {
                 let place = Place::Parameter(*id);
@@ -406,6 +561,10 @@ impl<'a> Checker<'a> {
         checker
     }
     fn body(&mut self, function: &ValueFunction) -> OwnershipResult {
+        if let Some(span) = self.initializers.invalid {
+            return Err(self.diagnostic(span, "invalid canonical local initializer index".into(),
+                "each current-function LocalId must have exactly one canonical, exact-typed initializer in its statement tree", None));
+        }
         let flow = self.statements_with(&function.body, function.id, &FutureUses::new())?;
         if function.return_type.is_some() {
             assert_eq!(flow, Flow::Return);
@@ -1280,23 +1439,7 @@ impl<'a> Checker<'a> {
         Ok(())
     }
     fn checked_type(&self, place: Place) -> Option<ValueType> {
-        match place {
-            Place::Parameter(id) => self
-                .program
-                .parameters()
-                .get(id.0)
-                .filter(|p| p.id == id && p.function == self.function)
-                .and_then(|p| match p.ty {
-                    ParameterType::Value(ty) => Some(ty),
-                    _ => None,
-                }),
-            Place::Local(id) => self
-                .program
-                .locals()
-                .get(id.0)
-                .filter(|l| l.id == id && l.function == self.function)
-                .map(|l| l.ty),
-        }
+        checked_place_type(self.program, self.function, place)
     }
     fn provenance_error(&self, span: Span) -> Box<Diagnostic> {
         self.diagnostic(span, "reference access has invalid loan provenance or lineage".into(),
@@ -1379,6 +1522,14 @@ impl<'a> Checker<'a> {
         loan: LoanId,
         seen: &mut BTreeSet<Place>,
     ) -> Option<(Option<Place>, LoanOrigin, Span)> {
+        #[cfg(test)]
+        initializer_probe::update(|c| {
+            c.origin_calls += 1;
+            c.max_depth = c.max_depth.max(seen.len() + 1);
+        });
+        if self.initializers.invalid.is_some() {
+            return None;
+        }
         if !seen.insert(place) || self.handles.get(&place) != Some(&loan) {
             return None;
         }
@@ -1390,39 +1541,7 @@ impl<'a> Checker<'a> {
                 self.program.parameters().get(id.0)?.span,
             )),
             Place::Local(id) => {
-                fn initializer(body: &[ValueStatement], id: LocalId) -> Option<&TypedExpr> {
-                    for statement in body {
-                        match statement {
-                            ValueStatement::Let {
-                                local, initializer, ..
-                            } if *local == id => return Some(initializer),
-                            ValueStatement::If {
-                                then_body,
-                                else_body,
-                                ..
-                            } => {
-                                if let Some(value) = initializer(then_body, id)
-                                    .or_else(|| initializer(else_body, id))
-                                {
-                                    return Some(value);
-                                }
-                            }
-                            ValueStatement::While { body, .. } => {
-                                if let Some(value) = initializer(body, id) {
-                                    return Some(value);
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    None
-                }
-                let function = self
-                    .program
-                    .functions()
-                    .get(self.function.0)?
-                    .as_ordinary()?;
-                let value = initializer(&function.body, id)?;
+                let value = self.initializers.get(self.function, id)?;
                 if value.ty != ExprType::from(ty) {
                     return None;
                 }
@@ -6447,5 +6566,318 @@ mod tests {
     #[test]
     fn transferred_exclusive_carried_lineage_accepts_backedge_continue_and_discharge() {
         lawful_carried_lineage(true);
+    }
+    #[test]
+    fn initializer_index_borrows_direct_reference_and_unrelated_initializers() {
+        let p = typed("fn f(t: Ticket, flag: bool) -> Percent {let other = flag; let view = &t; let result = view.value; return result;}");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let c = Checker::new(&p, f);
+        assert!(c.initializers.invalid.is_none());
+        assert_eq!(c.initializers.entries.len(), 3);
+        for statement in &f.body {
+            if let ValueStatement::Let {
+                local, initializer, ..
+            } = statement
+            {
+                assert!(std::ptr::eq(
+                    c.initializers.get(f.id, *local).unwrap(),
+                    initializer
+                ));
+            }
+        }
+        check(&p).unwrap();
+    }
+    #[test]
+    fn initializer_index_covers_then_else_while_and_nested_compositions() {
+        let p = typed("fn f(t: Ticket, flag: bool) -> Percent {if flag {let a = &t; while flag {if flag {let b = a; let x = b.value; continue;} else {let c = &t; let y = c.value; break;}}} else {while flag {let d = &t; let z = d.value;}} let e = &t; return e.value;}");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let c = Checker::new(&p, f);
+        fn inspect(c: &Checker<'_>, body: &[ValueStatement]) -> usize {
+            let mut count = 0;
+            for statement in body {
+                match statement {
+                    ValueStatement::Let {
+                        local, initializer, ..
+                    } => {
+                        assert!(std::ptr::eq(
+                            c.initializers.get(c.function, *local).unwrap(),
+                            initializer
+                        ));
+                        count += 1;
+                    }
+                    ValueStatement::If {
+                        then_body,
+                        else_body,
+                        ..
+                    } => {
+                        count += inspect(c, then_body) + inspect(c, else_body);
+                    }
+                    ValueStatement::While { body, .. } => count += inspect(c, body),
+                    _ => {}
+                }
+            }
+            count
+        }
+        assert_eq!(inspect(&c, &f.body), p.locals().len());
+        assert_eq!(c.initializers.entries.len(), p.locals().len());
+        check(&p).unwrap();
+    }
+    #[test]
+    fn initializer_index_lookup_uses_ids_independent_of_unrelated_order_and_function() {
+        for declarations in [
+            "let first = flag; let second = flag;",
+            "let second = flag; let first = flag;",
+        ] {
+            let p = typed(&format!("fn f(t: Ticket,flag: bool) -> Percent {{{declarations} let view = &t; return view.value;}} fn g(t: Ticket,flag: bool) -> Percent {{let view = &t; return view.value;}}"));
+            for f in p.functions().iter().filter_map(|f| f.as_ordinary()) {
+                let c = Checker::new(&p, f);
+                assert!(c.initializers.invalid.is_none());
+                for local in p.locals() {
+                    let found = c.initializers.get(f.id, local.id);
+                    assert_eq!(found.is_some(), local.function == f.id);
+                    assert!(c
+                        .initializers
+                        .get(FunctionId(usize::MAX), local.id)
+                        .is_none());
+                }
+            }
+            check(&p).unwrap();
+        }
+    }
+    fn indexed_chain(n: usize, exclusive: bool) -> Program {
+        let capability = if exclusive { "&mut " } else { "&" };
+        let mut body = format!("fn f(r0: {capability}Ticket) -> Percent {{");
+        for i in 1..=n {
+            body.push_str(&format!("let r{i} = r{};", i - 1));
+        }
+        body.push_str(&format!("return r{n}.value;}}"));
+        typed(&body)
+    }
+    #[test]
+    fn initializer_index_deep_shared_chain_retains_one_live_authority() {
+        let p = indexed_chain(128, false);
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..128], f.id).unwrap();
+        let id = c.handles[&Place::Parameter(f.parameters[0])];
+        assert_eq!(c.initializers.entries.len(), 128);
+        assert!(c.handles.values().all(|loan| *loan == id));
+        assert_eq!(
+            c.live_handle(Place::Local(LocalId(127)), f.span).unwrap(),
+            id
+        );
+        check(&p).unwrap();
+    }
+    #[test]
+    fn initializer_index_exclusive_chain_validates_moved_source_edges_live() {
+        let p = indexed_chain(64, true);
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..64], f.id).unwrap();
+        let last = Place::Local(LocalId(63));
+        let id = c.live_handle(last, f.span).unwrap();
+        assert!(matches!(
+            c.states[&Place::Parameter(f.parameters[0])],
+            State::Moved {
+                transfer: Transfer::Local(LocalId(0)),
+                ..
+            }
+        ));
+        let mut broken = c.clone();
+        let State::Moved { transfer, .. } =
+            broken.states.get_mut(&Place::Local(LocalId(30))).unwrap()
+        else {
+            panic!()
+        };
+        *transfer = Transfer::Local(LocalId(999));
+        assert!(broken.live_handle(last, f.span).is_err());
+        assert_eq!(c.live_handle(last, f.span).unwrap(), id);
+        assert!(Rc::ptr_eq(&c.initializers, &broken.initializers));
+        check(&p).unwrap();
+    }
+    #[test]
+    fn initializer_index_is_shared_across_snapshots_and_expression_rollback() {
+        let p = reference_typed("fn f(b: Ticket,t: Ticket) -> Percent {let view = &b; return pair(view.value,duplicate(t,t));}");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let (value, _) = operand(&f.body[1]);
+        prepared_expression(&mut c, value);
+        let before = c.clone();
+        initializer_probe::reset();
+        for _ in 0..100 {
+            assert!(Rc::ptr_eq(&c.initializers, &c.clone().initializers));
+        }
+        assert_eq!(initializer_probe::counts().construction_visits, 0);
+        assert!(c.expression(value, Transfer::Return(f.id)).is_err());
+        assert_atomic(&c, &before);
+        assert!(Rc::ptr_eq(&c.initializers, &before.initializers));
+        assert_eq!(initializer_probe::counts().construction_visits, 0);
+    }
+    #[test]
+    fn initializer_index_faults_fail_closed_before_ownership_without_panic() {
+        for fault in 0..11 {
+            let mut p = typed("fn f(t: Ticket) -> Percent {let view = &t; return view.value;} fn g(t: Ticket) -> Percent {let view = &t; return view.value;}");
+            let foreign = p.locals()[1].id;
+            match fault {
+                0 => {
+                    let crate::hir::Function::Ordinary(f) = &mut p.functions[0] else {
+                        panic!()
+                    };
+                    f.body.remove(0);
+                }
+                1 => {
+                    let crate::hir::Function::Ordinary(f) = &mut p.functions[0] else {
+                        panic!()
+                    };
+                    f.body.insert(1, f.body[0].clone());
+                }
+                2 | 3 => {
+                    let crate::hir::Function::Ordinary(f) = &mut p.functions[0] else {
+                        panic!()
+                    };
+                    let ValueStatement::Let { local, .. } = &mut f.body[0] else {
+                        panic!()
+                    };
+                    *local = if fault == 2 {
+                        LocalId(usize::MAX)
+                    } else {
+                        foreign
+                    };
+                }
+                4 => p.locals[0].function = FunctionId(1),
+                5 => p.locals[0].id = LocalId(999),
+                6 => {
+                    let crate::hir::Function::Ordinary(f) = &mut p.functions[0] else {
+                        panic!()
+                    };
+                    let ValueStatement::Let { initializer, .. } = &mut f.body[0] else {
+                        panic!()
+                    };
+                    initializer.ty = ExprType::Bool;
+                }
+                7 => {
+                    let mut orphan = p.locals[0].clone();
+                    orphan.id = LocalId(p.locals.len());
+                    p.locals.push(orphan);
+                }
+                8..=10 => {
+                    let crate::hir::Function::Ordinary(f) = &mut p.functions[0] else {
+                        panic!()
+                    };
+                    let ValueStatement::Let { initializer, .. } = &mut f.body[0] else {
+                        panic!()
+                    };
+                    initializer.kind = match fault {
+                        8 => ExprKind::Local(LocalId(usize::MAX)),
+                        9 => ExprKind::Local(foreign),
+                        _ => ExprKind::Parameter(ParameterId(usize::MAX)),
+                    };
+                }
+                _ => unreachable!(),
+            }
+            let f = p.functions()[0].as_ordinary().unwrap();
+            let c = Checker::new(&p, f);
+            assert!(c.initializers.invalid.is_some(), "fault {fault}");
+            assert!(c.initializers.get(f.id, LocalId(0)).is_none());
+            let errors = check(&p).unwrap_err();
+            assert!(
+                errors[0]
+                    .message
+                    .contains("canonical local initializer index"),
+                "fault {fault}"
+            );
+        }
+    }
+    #[test]
+    fn initializer_index_missing_entry_never_falls_back_to_body_scan() {
+        let p = typed("fn f(t: Ticket) -> Percent {let view = &t; return view.value;}");
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let view = Place::Local(LocalId(0));
+        c.live_handle(view, f.span).unwrap();
+        // Replace structural metadata only in this injected private fixture.
+        c.initializers = Rc::new(Initializers {
+            function: f.id,
+            entries: BTreeMap::new(),
+            invalid: None,
+        });
+        initializer_probe::reset();
+        assert!(c.live_handle(view, f.span).is_err());
+        assert_eq!(initializer_probe::counts().lookups, 1);
+        assert_eq!(initializer_probe::counts().construction_visits, 0);
+    }
+    #[test]
+    fn initializer_index_rejects_same_typed_but_malformed_initializer_lineage() {
+        let mut p = indexed_chain(2, false);
+        let crate::hir::Function::Ordinary(f) = &mut p.functions[0] else {
+            panic!()
+        };
+        let ValueStatement::Let { initializer, .. } = &mut f.body[1] else {
+            panic!()
+        };
+        initializer.kind = ExprKind::Local(LocalId(1)); // Self-cycle, exact ref type.
+        let f = p.functions()[0].as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        assert!(c.initializers.invalid.is_none()); // Location is sound; lineage is not cached.
+        c.handles.insert(
+            Place::Local(LocalId(1)),
+            c.handles[&Place::Parameter(f.parameters[0])],
+        );
+        assert!(c.live_handle(Place::Local(LocalId(1)), f.span).is_err());
+    }
+    #[test]
+    fn initializer_index_actual_events_separate_construction_lookup_lineage_and_depth() {
+        for n in [0, 1, 10, 25, 50] {
+            for family in ["shared", "exclusive", "fanout", "scalar"] {
+                let p = if family == "shared" || family == "exclusive" {
+                    indexed_chain(n, family == "exclusive")
+                } else {
+                    let mut body = if family == "fanout" {
+                        "fn f(r0: &Ticket) -> Percent {".to_owned()
+                    } else {
+                        "fn f(r0: Percent) -> Percent {".to_owned()
+                    };
+                    for i in 1..=n {
+                        body.push_str(&format!(
+                            "let r{i} = r{};",
+                            if family == "fanout" { 0 } else { i - 1 }
+                        ));
+                    }
+                    body.push_str(&format!(
+                        "return r{n}{};}}",
+                        if family == "fanout" { ".value" } else { "" }
+                    ));
+                    typed(&body)
+                };
+                let f = p.functions()[0].as_ordinary().unwrap();
+                initializer_probe::reset();
+                let mut c = Checker::new(&p, f);
+                let construction = initializer_probe::counts();
+                assert_eq!(construction.construction_visits, n + 1);
+                assert_eq!(construction.lookups, 0);
+                assert_eq!(c.initializers.entries.len(), n);
+                let snapshot = c.clone();
+                assert!(Rc::ptr_eq(&c.initializers, &snapshot.initializers));
+                c.body(f).unwrap();
+                let actual = initializer_probe::counts();
+                let (lookups, calls, depth) = match family {
+                    "shared" | "exclusive" => (n * (n + 1) / 2, (n + 1) * (n + 2) / 2, n + 1),
+                    "fanout" => (
+                        usize::from(n > 0),
+                        n + 1 + usize::from(n > 0),
+                        if n > 0 { 2 } else { 1 },
+                    ),
+                    _ => (0, 0, 0),
+                };
+                assert_eq!(actual.construction_visits, n + 1); // No per-ancestor statement scans.
+                assert_eq!(
+                    (actual.lookups, actual.origin_calls, actual.max_depth),
+                    (lookups, calls, depth),
+                    "{family} n={n}"
+                );
+            }
+        }
     }
 }
