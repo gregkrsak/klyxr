@@ -511,3 +511,22 @@ fn reference_field_reads_cli_preserves_last_use_and_whole_record_proof_boundarie
         }
     }
 }
+
+#[test]
+fn exclusive_reference_field_write_cli_preserves_proof_scope_and_final_gate_diagnostic() {
+    for command in ["check", "verify"] {
+        let output = run(&[command, &example("reference_field_assignment.klx")]);
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("ordinary MIR control-flow lowering passed: 3 functions"));
+        assert!(text.contains("function bodies proven: 0"));
+        assert!(text.contains("calls checked: 0"));
+        let output = run(&[command, &example("reference_field_assignment_fail.klx")]);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let text = String::from_utf8(output.stderr).unwrap();
+        assert!(text.contains("moved value `access`"));
+        assert!(text.contains("reference_field_assignment_fail.klx"));
+    }
+}

@@ -882,3 +882,32 @@ remain separate and unchanged; no leaf transaction or global hold-balancing rule
 is added. Owned reads/assignment and verified/harness eligibility/proofs remain
 unchanged. Broader projection, reference mutation, reborrowing and generalized
 cyclic analysis remain unresolved; ordinary code is checked/lowered only.
+
+## Exclusive referenced Copy-field assignment (KED-025 / KD-040)
+
+The existing parser, AST and resolved FieldAssign retain the named root, field,
+complete RHS and individual spans. Typing classifies the actual root type before
+owned-local restrictions: exact mutable record references produce the distinct
+CopyReferenceFieldAssign with Place/RecordId/FieldId, full TypedExpr and spans.
+Shared and non-record references receive targeted Type diagnostics. HIR checks
+canonical root/function membership, exact referent, reciprocal field/range tables,
+nominal RHS type and every descendant. MIR preserves this operation and its RHS;
+its structural validator has no canonical or loan tables.
+
+The existing ownership checker adds a bounded operation transaction after
+statement-list liveness and entry expiry. Read-only target authorization checks
+loop eligibility, availability, exact reference type and existing live lineage.
+It captures the original LoanId, consumes one finite target use without expiry,
+and adds one hold to that loan before evaluating the entire RHS. Final read-only
+authorization independently checks availability and canonical lineage resolving
+to the same original LoanId. Only then is writing authorized; the operation
+releases exactly its own hold and expires normally. No runtime field state is
+modeled. Failure restores the complete prepared snapshot; success commits lawful
+RHS transfers and temporary allocation. Nested calls release their own holds.
+
+Both summary visitors include the target and every RHS occurrence. The immutable
+initializer-index walker recognizes this non-declaration without adding an entry;
+Rc metadata remains shared across snapshots. Existing join candidate validation,
+semantic loop-edge checks and pre-discharge break gates remain intact. No second
+loan map/checker, field identity in Place, projected authority, reborrow, coercion,
+generalized dataflow, verifier/harness extension or CFG machinery is introduced.

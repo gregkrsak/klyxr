@@ -322,24 +322,38 @@ fn value_statements(
                 value,
                 span,
             } => {
-                let local = match owner {
-                    hir::Place::Local(id) => *id,
-                    hir::Place::Parameter(id) => return Err(Diagnostic::semantic(*owner_span, format!("cannot assign field of parameter `{}`", program.parameter(*id).name), "field assignment requires a directly named mutable owned record local; mutable owned parameters are unsupported").into()),
+                let ty = match owner {
+                    hir::Place::Parameter(id) => match program.parameter(*id).ty {
+                        ParameterType::Value(ty) => ty,
+                        _ => unreachable!("resolved ordinary field target"),
+                    },
+                    hir::Place::Local(id) => program.local(*id).ty,
                 };
-                let target = program.local(local);
-                let record = match target.ty {
-                    ValueType::Record(id) => id,
-                    ValueType::SharedRef(_) | ValueType::MutableRef(_) => return Err(Diagnostic::semantic(*owner_span, "field assignment through a reference is unsupported", "use a directly named mutable owned record local; no reference projection or auto-dereference").into()),
-                    _ => return Err(Diagnostic::semantic(*owner_span, "field assignment requires an owned record local", format!("found {}", display_type(program, target.ty.into()))).into()),
+                let (record, owned) = match ty {
+                    ValueType::MutableRef(hir::ReferentType::Record(id)) => (id, None),
+                    ValueType::SharedRef(hir::ReferentType::Record(_)) => return Err(Diagnostic::semantic(*owner_span,
+                        "field assignment through a reference requires exact &mut Record authority",
+                        "shared record references cannot write; no implicit reborrow or capability conversion is supported").into()),
+                    ValueType::SharedRef(_) | ValueType::MutableRef(_) => return Err(Diagnostic::semantic(*owner_span,
+                        "reference field assignment requires a record referent",
+                        format!("found {}; only exact &mut Record references may assign a declared Copy field", display_type(program, ty.into()))).into()),
+                    _ => {
+                        let local = match owner {
+                            hir::Place::Local(id) => *id,
+                            hir::Place::Parameter(id) => return Err(Diagnostic::semantic(*owner_span, format!("cannot assign field of parameter `{}`", program.parameter(*id).name), "field assignment requires a directly named mutable owned record local; mutable owned parameters are unsupported").into()),
+                        };
+                        let ValueType::Record(record) = ty else {
+                            return Err(Diagnostic::semantic(*owner_span, "field assignment requires an owned record local", format!("found {}", display_type(program, ty.into()))).into());
+                        };
+                        let target = program.local(local);
+                        if !target.mutable {
+                            return Err(Diagnostic::semantic(*owner_span,
+                                format!("cannot assign field of immutable local `{}`", target.name),
+                                "field assignment requires a let mut / let mutable owned record local").into());
+                        }
+                        (record, Some(local))
+                    }
                 };
-                if !target.mutable {
-                    return Err(Diagnostic::semantic(
-                        *owner_span,
-                        format!("cannot assign field of immutable local `{}`", target.name),
-                        "field assignment requires a let mut / let mutable owned record local",
-                    )
-                    .into());
-                }
                 let field = program
                     .record(record)
                     .fields
@@ -363,14 +377,26 @@ fn value_statements(
                     ValueType::Range(program.field(field).ty),
                     "field assignment RHS",
                 )?;
-                hir::ValueStatement::CopyFieldAssign {
-                    owner: local,
-                    record,
-                    field,
-                    owner_span: *owner_span,
-                    field_span: *field_span,
-                    value,
-                    span: *span,
+                if let Some(local) = owned {
+                    hir::ValueStatement::CopyFieldAssign {
+                        owner: local,
+                        record,
+                        field,
+                        owner_span: *owner_span,
+                        field_span: *field_span,
+                        value,
+                        span: *span,
+                    }
+                } else {
+                    hir::ValueStatement::CopyReferenceFieldAssign {
+                        reference: *owner,
+                        record,
+                        field,
+                        reference_span: *owner_span,
+                        field_span: *field_span,
+                        value,
+                        span: *span,
+                    }
                 }
             }
             ResolvedValueStatement::Assign {

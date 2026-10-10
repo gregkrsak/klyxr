@@ -58,7 +58,10 @@ fn count_statements(statements: &[ValueStatement], uses: &mut FutureUses) {
             ValueStatement::CopyFieldAssign { value, .. }
             | ValueStatement::Return { value, .. }
             | ValueStatement::Assign { value, .. } => count_expression(value, uses),
-            ValueStatement::DerefAssign {
+            ValueStatement::CopyReferenceFieldAssign {
+                reference, value, ..
+            }
+            | ValueStatement::DerefAssign {
                 reference, value, ..
             } => {
                 *uses.entry(*reference).or_default() += 1;
@@ -258,7 +261,10 @@ fn reference_uses(body: &[ValueStatement]) -> BTreeSet<Place> {
                 ValueStatement::CopyFieldAssign { value, .. }
                 | ValueStatement::Assign { value, .. }
                 | ValueStatement::Return { value, .. } => expression(value, uses),
-                ValueStatement::DerefAssign {
+                ValueStatement::CopyReferenceFieldAssign {
+                    reference, value, ..
+                }
+                | ValueStatement::DerefAssign {
                     reference, value, ..
                 } => {
                     uses.insert(*reference);
@@ -433,6 +439,7 @@ impl<'a> Initializers<'a> {
                 | ValueStatement::Break { .. }
                 | ValueStatement::Continue { .. }
                 | ValueStatement::CopyFieldAssign { .. }
+                | ValueStatement::CopyReferenceFieldAssign { .. }
                 | ValueStatement::Assign { .. }
                 | ValueStatement::DerefAssign { .. }
                 | ValueStatement::Return { .. } => {}
@@ -682,6 +689,24 @@ impl<'a> Checker<'a> {
                     self.handles.insert(place, loan);
                 }
             }
+            ValueStatement::CopyReferenceFieldAssign {
+                reference,
+                record,
+                field,
+                value,
+                reference_span,
+                span,
+                ..
+            } => {
+                self.copy_reference_field_assign(
+                    *reference,
+                    *record,
+                    *field,
+                    value,
+                    *reference_span,
+                    *span,
+                )?;
+            }
             ValueStatement::CopyFieldAssign {
                 owner,
                 record,
@@ -769,6 +794,103 @@ impl<'a> Checker<'a> {
                     Some(loan.span),
                 ));
             }
+            Ok(())
+        })();
+        if result.is_err() {
+            *self = before;
+        }
+        result
+    }
+    /// Read-only authorization; never accounts a use, expires, or reconstructs authority.
+    fn exclusive_record_handle(
+        &self,
+        reference: Place,
+        record: RecordId,
+        span: Span,
+    ) -> OwnershipResult<LoanId> {
+        self.loop_handle(reference, span)?;
+        if self.checked_type(reference) != Some(ValueType::MutableRef(ReferentType::Record(record)))
+            || self
+                .program
+                .records()
+                .get(record.0)
+                .filter(|r| r.id == record)
+                .is_none()
+        {
+            return Err(self.provenance_error(span));
+        }
+        self.available(reference, span)?;
+        self.live_handle(reference, span)
+    }
+    /// The captured ID is operation-local continuity evidence, not an identity map.
+    fn validate_reference_write_completion(
+        &self,
+        reference: Place,
+        record: RecordId,
+        original: LoanId,
+        span: Span,
+    ) -> OwnershipResult {
+        if self.exclusive_record_handle(reference, record, span)? != original
+            || !self.loans.get(&original).is_some_and(|loan| loan.held > 0)
+        {
+            return Err(self.provenance_error(span));
+        }
+        Ok(())
+    }
+    /// KED-025: snapshot after caller liveness/expiry, before target accounting.
+    /// Retain existing authority continuously; successful RHS effects stay committed.
+    fn copy_reference_field_assign(
+        &mut self,
+        reference: Place,
+        record: RecordId,
+        field: FieldId,
+        value: &TypedExpr,
+        reference_span: Span,
+        span: Span,
+    ) -> OwnershipResult {
+        let before = self.clone();
+        let result = (|| {
+            let id = self.exclusive_record_handle(reference, record, reference_span)?;
+            let declaration = self
+                .program
+                .fields()
+                .get(field.0)
+                .filter(|f| f.id == field && f.record == record)
+                .filter(|_| self.program.record(record).fields.contains(&field))
+                .ok_or_else(|| self.provenance_error(span))?;
+            if value.ty != ExprType::Range(declaration.ty)
+                || self
+                    .program
+                    .ranges()
+                    .get(declaration.ty.0)
+                    .filter(|r| r.id == declaration.ty && r.min <= r.max)
+                    .is_none()
+            {
+                return Err(self.provenance_error(span));
+            }
+            let remaining = self
+                .remaining
+                .get_mut(&reference)
+                .ok_or_else(|| before.provenance_error(reference_span))?;
+            *remaining = remaining
+                .checked_sub(1)
+                .ok_or_else(|| before.provenance_error(reference_span))?;
+            // No expiry between the target's final finite use and this retention.
+            let loan = self.loans.get_mut(&id).expect("validated live target loan");
+            loan.held = loan
+                .held
+                .checked_add(1)
+                .ok_or_else(|| before.provenance_error(reference_span))?;
+            self.expression(value, Transfer::WriteThrough(reference))?;
+            // Availability is independent of a held loan. No additional finite use.
+            self.validate_reference_write_completion(reference, record, id, reference_span)?;
+            // Only now is the distinct Copy-field write authorized. No runtime
+            // field state, target transfer, allocation or provenance is created.
+            self.loans
+                .get_mut(&id)
+                .expect("revalidated retained target loan")
+                .held -= 1;
+            self.expire();
             Ok(())
         })();
         if result.is_err() {
@@ -6879,5 +7001,456 @@ mod tests {
                 );
             }
         }
+    }
+    fn reference_write(c: &mut Checker<'_>, s: &ValueStatement) -> OwnershipResult {
+        let ValueStatement::CopyReferenceFieldAssign {
+            reference,
+            record,
+            field,
+            value,
+            reference_span,
+            span,
+            ..
+        } = s
+        else {
+            panic!()
+        };
+        c.copy_reference_field_assign(*reference, *record, *field, value, *reference_span, *span)
+    }
+    fn prepare_reference_write(c: &mut Checker<'_>, s: &ValueStatement) {
+        c.remaining = future_uses(std::slice::from_ref(s));
+        c.expire();
+    }
+    fn assert_reference_write_atomic(c: &Checker<'_>, before: &Checker<'_>) {
+        assert_atomic(c, before);
+        assert!(Rc::ptr_eq(&c.initializers, &before.initializers));
+    }
+    #[test]
+    fn reference_write_inert_rhs_has_no_intrinsic_transfer_or_allocation_and_only_its_own_hold() {
+        let p = field_typed("fn f(v: &mut Ticket) {v.value=80;}");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let target = Place::Parameter(f.parameters[0]);
+        let id = c.handles[&target];
+        c.loans.get_mut(&id).unwrap().held = 2;
+        c.recurrent.push(BTreeSet::from([id]));
+        add_test_target(&mut c);
+        c.loop_scope = Some(LoopScope::new(&c, false));
+        c.terminal_return = true;
+        prepare_reference_write(&mut c, &f.body[0]);
+        let before = c.clone();
+        reference_write(&mut c, &f.body[0]).unwrap();
+        assert_eq!(c.remaining[&target], 0);
+        c.remaining = before.remaining.clone();
+        assert_reference_write_atomic(&c, &before);
+    }
+    #[test]
+    fn reference_write_final_use_expires_only_after_complete_write() {
+        let p = field_typed("fn f(v: &mut Ticket) {v.value=v.value;}");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let before = c.clone();
+        let target = Place::Parameter(f.parameters[0]);
+        assert_eq!(c.remaining[&target], 2);
+        reference_write(&mut c, &f.body[0]).unwrap();
+        assert_eq!(c.remaining[&target], 0);
+        assert!(c.loans.is_empty());
+        assert_eq!(c.handles, before.handles);
+        assert_eq!(c.states, before.states);
+        assert_eq!(c.next_loan, before.next_loan);
+    }
+    #[test]
+    fn reference_write_success_retains_lawful_temporary_allocator_advancement() {
+        for rhs in [
+            "sample(&other)",
+            "sample_mut(&mut other)",
+            "hold(&other,sample(&other))",
+        ] {
+            let p = field_typed(&format!(
+                "fn f(v: &mut Ticket,t: Ticket) {{let mut other=t; v.value={rhs};}}"
+            ));
+            let f = return_function(&p);
+            let mut c = Checker::new(&p, f);
+            c.statements(&f.body[..1], f.id).unwrap();
+            prepare_reference_write(&mut c, &f.body[1]);
+            let before = c.clone();
+            reference_write(&mut c, &f.body[1]).unwrap();
+            assert!(c.next_loan > before.next_loan);
+            assert_eq!(c.states, before.states);
+            assert_eq!(c.handles, before.handles);
+            assert!(c.loans.is_empty());
+            c.assert_no_holds();
+        }
+    }
+    #[test]
+    fn reference_write_success_commits_unrelated_owner_transfer() {
+        let p = field_typed("fn f(v: &mut Ticket,t: Ticket) {v.value=consume(t);}");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let before = c.clone();
+        reference_write(&mut c, &f.body[0]).unwrap();
+        assert!(matches!(
+            c.states[&Place::Parameter(f.parameters[1])],
+            State::Moved { .. }
+        ));
+        assert_eq!(
+            c.states[&Place::Parameter(f.parameters[0])],
+            State::Available
+        );
+        assert_eq!(c.next_loan, before.next_loan);
+        c.assert_no_holds();
+    }
+    #[test]
+    fn reference_write_late_rhs_failure_restores_prepared_operation_not_list_entry() {
+        let p=field_typed("fn fresh() -> Ticket {return fresh();} fn f(flag: bool,v: &mut Ticket) {while flag {let t=fresh(); let other=fresh(); v.value=join(consume(t),sample(&other),duplicate(other,other));}}");
+        let f = return_function(&p);
+        let ValueStatement::While { body, .. } = &f.body[0] else {
+            panic!()
+        };
+        let s = &body[2];
+        let mut c = Checker::new(&p, f);
+        install_continue_target(&mut c, body, FutureUses::new());
+        c.statements_with(&body[..2], f.id, &future_uses(&body[2..]))
+            .unwrap();
+        let target = Place::Parameter(f.parameters[1]);
+        let id = c.handles[&target];
+        assert!(c.loop_scope.is_some());
+        assert!(!c.targets.is_empty());
+        assert!(!c.recurrent.is_empty());
+        c.terminal_return = true;
+        prepare_reference_write(&mut c, s);
+        let before = c.clone();
+        let ValueStatement::CopyReferenceFieldAssign { value, .. } = s else {
+            panic!()
+        };
+        let ExprKind::Call { arguments, .. } = &value.kind else {
+            panic!()
+        };
+        let mut prefix = c.clone();
+        prefix.loans.get_mut(&id).unwrap().held += 1;
+        prefix
+            .expression(&arguments[0], Transfer::WriteThrough(target))
+            .unwrap();
+        prefix
+            .expression(&arguments[1], Transfer::WriteThrough(target))
+            .unwrap();
+        assert_ne!(prefix.states, before.states);
+        assert!(prefix.next_loan > before.next_loan);
+        assert!(prefix
+            .expression(&arguments[2], Transfer::WriteThrough(target))
+            .is_err());
+        assert!(reference_write(&mut c, s)
+            .unwrap_err()
+            .message
+            .contains("moved value"));
+        assert_reference_write_atomic(&c, &before);
+    }
+    #[test]
+    fn reference_write_successful_rhs_transfer_fails_at_final_gate_and_restores_exact_entry() {
+        let p = field_typed("fn f(v: &mut Ticket) {v.value=inspect_mut(v);}");
+        let f = return_function(&p);
+        let s = &f.body[0];
+        let mut c = Checker::new(&p, f);
+        prepare_reference_write(&mut c, s);
+        let before = c.clone();
+        let target = Place::Parameter(f.parameters[0]);
+        let id = c.handles[&target];
+        let ValueStatement::CopyReferenceFieldAssign { value, .. } = s else {
+            panic!()
+        };
+        // Independently prove that the entire RHS succeeds; failure is final availability.
+        let mut rhs = c.clone();
+        *rhs.remaining.get_mut(&target).unwrap() -= 1;
+        rhs.loans.get_mut(&id).unwrap().held += 1;
+        rhs.expression(value, Transfer::WriteThrough(target))
+            .unwrap();
+        assert!(matches!(rhs.states[&target], State::Moved { .. }));
+        assert!(rhs.loans.contains_key(&id));
+        assert_eq!(rhs.loans[&id].held, 1);
+        assert!(rhs.available(target, value.span).is_err());
+        assert!(reference_write(&mut c, s)
+            .unwrap_err()
+            .message
+            .contains("moved value"));
+        assert_reference_write_atomic(&c, &before);
+    }
+    #[test]
+    fn reference_write_nested_calls_cannot_expire_or_release_target_retention() {
+        let p=field_typed("fn f(t: Ticket,other: Ticket) {let mut owned=t; let v=&mut owned; v.value=hold(&other,join(v.value,sample(&other),owned.value));}");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        prepare_reference_write(&mut c, &f.body[2]);
+        let before = c.clone();
+        assert!(reference_write(&mut c, &f.body[2])
+            .unwrap_err()
+            .message
+            .contains("exclusively borrowed"));
+        assert_reference_write_atomic(&c, &before);
+        let p=field_typed("fn f(t: Ticket,other: Ticket) {let mut owned=t; let v=&mut owned; v.value=hold(&other,join(v.value,sample(&other),80));}");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let target = Place::Local(p.locals()[1].id);
+        let id = c.handles[&target];
+        c.loans.get_mut(&id).unwrap().held = 2;
+        prepare_reference_write(&mut c, &f.body[2]);
+        reference_write(&mut c, &f.body[2]).unwrap();
+        assert_eq!(c.loans[&id].held, 2);
+    }
+    #[test]
+    fn reference_write_faults_reject_live_mapping_origin_owner_span_kind_and_availability_atomically(
+    ) {
+        let p = field_typed("fn f(a: &mut Ticket,b: &mut Ticket) {a.value=80; b.value=80;}");
+        let f = return_function(&p);
+        let c = Checker::new(&p, f);
+        let a = Place::Parameter(f.parameters[0]);
+        let b = Place::Parameter(f.parameters[1]);
+        let id = c.handles[&a];
+        for defect in 0..8 {
+            let mut broken = c.clone();
+            match defect {
+                0 => {
+                    broken.handles.insert(a, broken.handles[&b]);
+                }
+                1 => {
+                    broken.handles.remove(&a);
+                }
+                2 => broken.loans.get_mut(&id).unwrap().span.end += 1,
+                3 => {
+                    broken.loans.get_mut(&id).unwrap().origin =
+                        LoanOrigin::ExternalParameter(f.parameters[1])
+                }
+                4 => broken.loans.get_mut(&id).unwrap().owner = Some(b),
+                5 => broken.loans.get_mut(&id).unwrap().kind = BorrowKind::Shared,
+                6 => {
+                    broken
+                        .states
+                        .insert(a, State::ConditionalMove { span: f.span });
+                }
+                7 => {
+                    broken.loans.remove(&id);
+                }
+                _ => unreachable!(),
+            };
+            assert!(broken.live_handle(a, f.span).is_err() || broken.available(a, f.span).is_err());
+            let before = broken.clone();
+            assert!(
+                reference_write(&mut broken, &f.body[0]).is_err(),
+                "defect {defect}"
+            );
+            assert_reference_write_atomic(&broken, &before);
+        }
+    }
+    #[test]
+    fn reference_write_transferred_recipient_validates_exact_transfer_payload_without_source_availability(
+    ) {
+        let p=field_typed("fn f(t: Ticket) {let mut owned=t; let first=&mut owned; let second=first; second.value=80;}");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..3], f.id).unwrap();
+        prepare_reference_write(&mut c, &f.body[3]);
+        let valid = c.clone();
+        assert!(matches!(
+            c.states[&Place::Local(p.locals()[1].id)],
+            State::Moved { .. }
+        ));
+        reference_write(&mut c, &f.body[3]).unwrap();
+        let mut broken = valid;
+        let State::Moved { transfer, .. } = broken
+            .states
+            .get_mut(&Place::Local(p.locals()[1].id))
+            .unwrap()
+        else {
+            panic!()
+        };
+        *transfer = Transfer::Local(LocalId(999));
+        let before = broken.clone();
+        assert!(reference_write(&mut broken, &f.body[3]).is_err());
+        assert_reference_write_atomic(&broken, &before);
+    }
+    #[test]
+    fn reference_write_invalid_target_ids_and_field_metadata_reject_without_panic() {
+        let p = field_typed("fn f(v: &mut Ticket) {v.value=80;}");
+        let f = return_function(&p);
+        for defect in 0..5 {
+            let mut s = f.body[0].clone();
+            let ValueStatement::CopyReferenceFieldAssign {
+                reference,
+                record,
+                field,
+                value,
+                ..
+            } = &mut s
+            else {
+                panic!()
+            };
+            match defect {
+                0 => *reference = Place::Parameter(ParameterId(usize::MAX)),
+                1 => *reference = Place::Local(LocalId(usize::MAX)),
+                2 => *record = RecordId(usize::MAX),
+                3 => *field = FieldId(usize::MAX),
+                4 => value.ty = ExprType::Range(crate::hir::RangeTypeId(usize::MAX)),
+                _ => unreachable!(),
+            };
+            let mut c = Checker::new(&p, f);
+            let before = c.clone();
+            assert!(reference_write(&mut c, &s).is_err());
+            assert_reference_write_atomic(&c, &before);
+        }
+    }
+    #[test]
+    fn reference_write_summaries_count_target_and_every_nested_rhs_child() {
+        for construction in [false, true] {
+            for pos in 0..3 {
+                let mut args = ["80", "80", "80"];
+                args[pos] = "v.value";
+                let rhs = if construction {
+                    format!(
+                        "triple(Triple {{last:{},first:{},middle:{}}})",
+                        args[0], args[1], args[2]
+                    )
+                } else {
+                    format!("three({})", args.join(","))
+                };
+                let p = reference_typed(&format!("fn f(v: &mut Ticket) {{v.value={rhs};}}"));
+                let f = return_function(&p);
+                let target = Place::Parameter(f.parameters[0]);
+                assert_eq!(future_uses(&f.body), FutureUses::from([(target, 2)]));
+                assert_eq!(reference_uses(&f.body), BTreeSet::from([target]));
+                let mut c = Checker::new(&p, f);
+                let id = c.handles[&target];
+                c.recurrent.push(BTreeSet::from([id]));
+                let before = c.clone();
+                reference_write(&mut c, &f.body[0]).unwrap();
+                assert_eq!(c.remaining[&target], 0);
+                assert_eq!(c.next_loan, before.next_loan);
+                assert_eq!(c.handles, before.handles);
+                assert!(c.loans.contains_key(&id));
+                c.assert_no_holds();
+                assert!(Rc::ptr_eq(&c.initializers, &before.initializers));
+            }
+        }
+    }
+    #[test]
+    fn reference_write_join_rejects_mapping_substitution_before_write_authorization() {
+        let p = field_typed("fn f(a: &mut Ticket,b: &mut Ticket) {a.value=80; b.value=80;}");
+        let f = return_function(&p);
+        let c = Checker::new(&p, f);
+        let a = Place::Parameter(f.parameters[0]);
+        let b = Place::Parameter(f.parameters[1]);
+        for side in [false, true] {
+            let mut entry = c.clone();
+            let mut broken = c.clone();
+            broken.handles.insert(a, broken.handles[&b]);
+            assert!(reference_write(&mut broken, &f.body[0]).is_err());
+            let before = entry.clone();
+            let (yes, no) = if side {
+                (broken, c.clone())
+            } else {
+                (c.clone(), broken)
+            };
+            assert!(entry.join(yes, no, c.remaining.clone(), f.span).is_err());
+            assert_reference_write_atomic(&entry, &before);
+        }
+    }
+    #[test]
+    fn reference_write_recurrent_edges_validate_lineage_before_discharge() {
+        let p = field_typed(
+            "fn f(flag: bool,v: &mut Ticket) {let carried=v; while flag {carried.value=80;}}",
+        );
+        let f = return_function(&p);
+        let mut entry = Checker::new(&p, f);
+        entry.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::While { body, span, .. } = &f.body[1] else {
+            panic!()
+        };
+        let header = install_continue_target(&mut entry, body, FutureUses::new());
+        let carried = Place::Local(p.locals()[0].id);
+        let id = entry.handles[&carried];
+        for edge in 0..3 {
+            for defect in 0..2 {
+                let mut c = entry.clone();
+                if defect == 0 {
+                    c.loans.get_mut(&id).unwrap().span.end += 1;
+                } else {
+                    let State::Moved { transfer, .. } = c
+                        .states
+                        .get_mut(&Place::Parameter(f.parameters[1]))
+                        .unwrap()
+                    else {
+                        panic!()
+                    };
+                    *transfer = Transfer::Local(LocalId(999));
+                }
+                let before = c.clone();
+                assert!(reference_write(&mut c, &body[0]).is_err());
+                assert_reference_write_atomic(&c, &before);
+                let result = match edge {
+                    0 => c.validate_loop_backedge(&header, *span),
+                    1 => c.continue_edge(*span).map(|_| ()),
+                    2 => c.break_edge(*span).map(|_| ()),
+                    _ => unreachable!(),
+                };
+                assert!(result.is_err());
+                assert_reference_write_atomic(&c, &before);
+            }
+        }
+        for edge in 0..3 {
+            let mut c = entry.clone();
+            prepare_reference_write(&mut c, &body[0]);
+            reference_write(&mut c, &body[0]).unwrap();
+            assert!(c.loans.contains_key(&id));
+            match edge {
+                0 => c.validate_loop_backedge(&header, *span).unwrap(),
+                1 => {
+                    c.continue_edge(*span).unwrap();
+                }
+                2 => {
+                    c.break_edge(*span).unwrap();
+                }
+                _ => unreachable!(),
+            };
+            if edge == 2 {
+                assert!(c.loans.is_empty());
+            } else {
+                assert!(c.loans.contains_key(&id));
+            }
+            c.assert_no_holds();
+        }
+    }
+    #[test]
+    fn reference_write_final_gate_rejects_a_different_live_id_even_with_identical_lineage() {
+        let p = field_typed("fn f(v: &mut Ticket) {v.value=80;}");
+        let f = return_function(&p);
+        let mut c = Checker::new(&p, f);
+        let ValueStatement::CopyReferenceFieldAssign {
+            reference,
+            record,
+            reference_span,
+            ..
+        } = &f.body[0]
+        else {
+            panic!()
+        };
+        let original = c.handles[reference];
+        c.loans.get_mut(&original).unwrap().held = 1;
+        c.validate_reference_write_completion(*reference, *record, original, *reference_span)
+            .unwrap();
+        let replacement = LoanId(c.next_loan);
+        c.next_loan += 1;
+        c.loans.insert(replacement, c.loans[&original].clone());
+        c.handles.insert(*reference, replacement);
+        // The sole active mapping and canonical lineage are valid on their own.
+        assert_eq!(
+            c.exclusive_record_handle(*reference, *record, *reference_span)
+                .unwrap(),
+            replacement
+        );
+        let before = c.clone();
+        assert!(c
+            .validate_reference_write_completion(*reference, *record, original, *reference_span)
+            .is_err());
+        assert_reference_write_atomic(&c, &before);
     }
 }

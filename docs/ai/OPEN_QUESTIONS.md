@@ -253,9 +253,9 @@ Still open:
 - reborrowing syntax and semantics;
 - whether and when `&mut T` may coerce to `&T`;
 - auto-deref and dereference coercions;
-- generalized field access through references beyond KD-039 direct named Copy-field reads;
+- generalized field access through references beyond KD-039/KD-040 direct named Copy-field reads/writes;
 - field/partial borrowing and disjoint field loans;
-- reference mutation beyond Copy-safe whole-value write-through;
+- reference mutation beyond Copy-safe whole-value write-through and KD-040 named Copy-field writes;
 - two-phase borrows;
 - temporary lifetime extension and borrowing arbitrary temporary expressions;
 - cyclic loan/lifetime analysis across loops/backedges and general CFG lifetime inference;
@@ -325,7 +325,7 @@ Still open:
 - non-Copy replacement and the fate/destruction of displaced values;
 - reference-local reassignment and provenance/lifetime replacement;
 - general place-expression architecture;
-- field/projected assignment beyond KD-038 direct Copy-field writes, partial mutation, and broader aggregate mutation;
+- field/projected assignment beyond KD-038/KD-040 direct Copy-field writes, partial mutation, and broader aggregate mutation;
 - compound assignment;
 - swap/take/replace primitives;
 - assignment-expression semantics, if any;
@@ -569,3 +569,14 @@ Whole-record non-Copy dereference, reference-field assignment, temporary/nested/
 dereference projection, partial moves/loans, reference returns, lifetime syntax,
 properties, destruction, execution and generalized cyclic inference remain open.
 Owned-field assignment remains KD-038; the verified/harness path is unchanged.
+
+### KD-040 refinement of OQ-024/OQ-025
+
+KED-025 settles direct Copy-field assignment through a named ordinary exact
+`&mut Record` handle using its continuously retained existing whole-record loan.
+It requires final available-handle, live-lineage and original-LoanId authorization
+and exact prepared-entry rollback on failure, while preserving lawful successful
+RHS effects. This extends KD-039 reads and complements KD-038 owned-local writes.
+General reference mutation/projection, reborrowing/coercion, field loans, partial
+ownership, generalized places, replacement, properties/invariants, destruction,
+cyclic lifetime inference and verified/harness expansion remain open or excluded.

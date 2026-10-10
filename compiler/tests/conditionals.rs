@@ -352,6 +352,7 @@ fn nested_and_sequential_mir_is_deterministic_acyclic_and_has_only_one_return() 
                 mir::Statement::Let { .. }
                 | mir::Statement::DerefAssign { .. }
                 | mir::Statement::CopyFieldAssign { .. }
+                | mir::Statement::CopyReferenceFieldAssign { .. }
                 | mir::Statement::Assign { .. }
                 | mir::Statement::CallNoValue { .. } => {}
             }

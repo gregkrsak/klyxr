@@ -1,0 +1,12 @@
+type Percent = range 0..100;
+record Battery { charge: Percent, health: Percent }
+
+fn consume_and_read(access: &mut Battery) -> Percent {
+    return access.health;
+}
+
+// The RHS is well typed and can complete, but transfers the target handle.
+// A held loan cannot authorize a write through a moved handle.
+fn bad(access: &mut Battery) {
+    access.charge = consume_and_read(access);
+}
