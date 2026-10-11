@@ -843,6 +843,118 @@ fn p01_mixed_program_admission_does_not_evaluate_verified_proof() {
 const RENDER_HOST_EMERGENCY: &[u8] =
     b"error: detected host/tool failure: render allocation [diagnostic unavailable]\n";
 
+const ORIGINAL_HOST_TRUNCATED: &[u8] =
+    b"error: detected host/tool failure [diagnostic truncated: rendering allowance exhausted]\n";
+
+#[test]
+fn p03_original_host_survives_preparation_render_allowance_exhaustion() {
+    let original = ExecutionError::new(ErrorKind::Host("source input"), START);
+    assert!(matches!(
+        render_admission_error(&original, 4),
+        Err(ExecutionError {
+            kind: ErrorKind::ConfiguredLimit("rendered output"),
+            ..
+        })
+    ));
+    let mut output = Vec::new();
+    assert_eq!(
+        crate::run_reporting::preparation_error(&original, 4, &mut output),
+        Err(2)
+    );
+    assert_eq!(output, ORIGINAL_HOST_TRUNCATED);
+}
+
+#[test]
+fn p03_original_host_survives_execution_render_allowance_exhaustion() {
+    let e = prepare("fn demo()->bool{return true;}");
+    let original = ExecutionError::new(ErrorKind::Host("runtime allocation"), START);
+    assert!(matches!(
+        e.render_error(&original, 4),
+        Err(ExecutionError {
+            kind: ErrorKind::ConfiguredLimit("rendered output"),
+            ..
+        })
+    ));
+    let mut output = Vec::new();
+    assert_eq!(
+        crate::run_reporting::execution_error(&e, &original, 4, &mut output),
+        Err(2)
+    );
+    assert_eq!(output, ORIGINAL_HOST_TRUNCATED);
+}
+
+#[test]
+fn p03_failing_reader_host_survives_preparation_render_allowance_exhaustion() {
+    struct FailedReader;
+    impl Read for FailedReader {
+        fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::ErrorKind::Other.into())
+        }
+    }
+    let limits = AdmissionLimits {
+        rendered_output: 4,
+        ..AdmissionLimits::default()
+    };
+    limits.validate().unwrap();
+    let original = prepare_execution_from_reader(FailedReader, limits)
+        .err()
+        .unwrap();
+    assert!(matches!(original.kind, ErrorKind::Host("source input")));
+    let mut output = Vec::new();
+    assert_eq!(
+        crate::run_reporting::preparation_error(&original, limits.rendered_output, &mut output),
+        Err(2)
+    );
+    assert_eq!(output, ORIGINAL_HOST_TRUNCATED);
+}
+
+#[test]
+fn p03_renderer_host_after_original_host_remains_class_two() {
+    let e = prepare("fn demo()->bool{return true;}");
+    let original = ExecutionError::new(ErrorKind::Host("source input"), START);
+    for preparation in [true, false] {
+        let mut output = Vec::new();
+        let result = render::with_allocation_failure(|| {
+            if preparation {
+                crate::run_reporting::preparation_error(&original, 65536, &mut output)
+            } else {
+                crate::run_reporting::execution_error(&e, &original, 65536, &mut output)
+            }
+        });
+        assert_eq!(result, Err(2));
+        assert_eq!(output, RENDER_HOST_EMERGENCY);
+    }
+}
+
+#[test]
+fn p03_writer_failure_on_normal_and_emergency_cli_reports_remains_host() {
+    struct FailedWriter;
+    impl std::io::Write for FailedWriter {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::ErrorKind::BrokenPipe.into())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let e = prepare("fn demo()->bool{return true;}");
+    for original in [
+        ExecutionError::integrity("original error"),
+        ExecutionError::new(ErrorKind::Host("source input"), START),
+    ] {
+        for allowance in [4, 65536] {
+            for preparation in [true, false] {
+                let result = if preparation {
+                    crate::run_reporting::preparation_error(&original, allowance, FailedWriter)
+                } else {
+                    crate::run_reporting::execution_error(&e, &original, allowance, FailedWriter)
+                };
+                assert_eq!(result, Err(2));
+            }
+        }
+    }
+}
+
 #[test]
 fn p03_preparation_renderer_host_failure_reaches_cli_exit_two() {
     let original = prepare_execution("fn", AdmissionLimits::default())

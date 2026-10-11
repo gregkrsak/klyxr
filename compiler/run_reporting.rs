@@ -29,6 +29,7 @@ fn report(
     rendered: Result<String, ExecutionError>,
     destination: impl Write,
 ) -> Result<(), i32> {
+    let original_host = matches!(original.kind, ErrorKind::Host(_));
     let (text, kind) = match &rendered {
         Ok(text) => (text.as_str(), &original.kind),
         Err(error) => (
@@ -38,6 +39,9 @@ fn report(
                 }
                 ErrorKind::Host(_) => {
                     "error: detected host/tool failure while rendering diagnostic [diagnostic unavailable]"
+                }
+                ErrorKind::ConfiguredLimit(_) if original_host => {
+                    "error: detected host/tool failure [diagnostic truncated: rendering allowance exhausted]"
                 }
                 ErrorKind::ConfiguredLimit(_) => {
                     "error: diagnostic rendering allowance exhausted [truncated]"
@@ -50,7 +54,7 @@ fn report(
     // Borrow the emergency message: failure reporting must not allocate another
     // String, retry the renderer, or replace a host failure with limit exhaustion.
     execution::write_output(destination, text).map_err(|_| 2)?;
-    Err(if matches!(kind, ErrorKind::Host(_)) {
+    Err(if original_host || matches!(kind, ErrorKind::Host(_)) {
         2
     } else {
         1

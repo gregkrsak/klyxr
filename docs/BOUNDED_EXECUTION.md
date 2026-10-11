@@ -108,9 +108,12 @@ can still be reported.
 Rendering is bounded before each write, including deterministic truncation. The
 CLI has borrowed, fixed emergency diagnostics when even the truncation text
 cannot fit or the renderer detects allocation failure; reporting those failures
-does not allocate another String or retry ordinary rendering. A rendering failure
-that prevents the original diagnostic determines the exit classification:
-allowance exhaustion is class 1, and detected render allocation failure is class 2.
+does not allocate another String or retry ordinary rendering. Host/tool
+classification takes precedence if a host/tool failure is detected either by the
+original operation or while rendering or writing its diagnostic. Configured
+rendering exhaustion remains class 1 only when no host/tool failure has already
+occurred. An original host failure followed by rendering allowance exhaustion
+uses a static host-identifying truncation message and retains class 2.
 Host allocator overhead and fixed stack/error bookkeeping are outside byte-buffer
 accounting. Arbitrary allocator abort, external corruption, process kill, and
 hardware failure are outside structured reporting; detected reader, allocation,
