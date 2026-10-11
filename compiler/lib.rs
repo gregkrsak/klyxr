@@ -1,11 +1,15 @@
 pub mod ast;
+mod bounded;
 pub mod diagnostics;
+pub mod execution;
 pub mod hir;
 pub mod lexer;
 pub mod mir;
 pub mod ownership;
 pub mod parser;
 pub mod resolve;
+#[cfg(test)]
+mod run_reporting;
 pub mod types;
 pub mod verify;
 

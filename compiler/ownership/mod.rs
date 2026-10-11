@@ -331,6 +331,17 @@ pub fn check(program: &Program) -> Result<(), Vec<Diagnostic>> {
     }
     Ok(())
 }
+pub(crate) fn check_bounded(
+    program: &Program,
+    context: &crate::bounded::Context,
+) -> Result<(), Vec<Diagnostic>> {
+    for function in program.functions().iter().filter_map(|f| f.as_ordinary()) {
+        let mut checker = Checker::new(program, function);
+        checker.context = Some(context);
+        checker.body(function).map_err(|e| vec![*e])?;
+    }
+    Ok(())
+}
 fn checked_place_type(program: &Program, function: FunctionId, place: Place) -> Option<ValueType> {
     match place {
         Place::Parameter(id) => program
@@ -512,6 +523,7 @@ struct LoopTarget<'a> {
 #[derive(Clone)]
 struct Checker<'a> {
     program: &'a Program,
+    context: Option<&'a crate::bounded::Context>,
     function: FunctionId,
     initializers: Rc<Initializers<'a>>,
     states: BTreeMap<Place, State>,
@@ -531,6 +543,7 @@ impl<'a> Checker<'a> {
     fn new(program: &'a Program, function: &'a ValueFunction) -> Self {
         let mut checker = Self {
             program,
+            context: None,
             function: function.id,
             initializers: Rc::new(Initializers::new(program, function)),
             states: BTreeMap::new(),
@@ -1649,6 +1662,11 @@ impl<'a> Checker<'a> {
             c.origin_calls += 1;
             c.max_depth = c.max_depth.max(seen.len() + 1);
         });
+        if self.context.is_some_and(|c| {
+            !c.lineage(seen.len() + 1, self.program.function(self.function).span())
+        }) {
+            return None;
+        }
         if self.initializers.invalid.is_some() {
             return None;
         }

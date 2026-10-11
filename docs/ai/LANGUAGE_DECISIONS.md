@@ -1233,3 +1233,32 @@ code generation remain unsupported. Verified-state and harness representations,
 eligibility, proof counts and the affine kernel are unchanged. This narrowly
 refines OQ-024/OQ-025; historical KD boundaries remain historical. Independent
 implementation review and Greg's merge authorization remain separate stages.
+
+## KD-041 — Deterministic bounded ordinary MIR execution
+
+**Status:** Accepted (KED-026 Draft 3; frozen and implementation-authorized in
+Issue #58, comments 6110717709 and 6110730498).
+
+Ordinary execution is a bounded tool operation over an opaque artifact produced
+by the existing complete frontend and ownership pipeline. The complete currently
+accepted ordinary MIR subset executes with canonical nominal metadata, dynamic
+frame/place locations, distinct consuming/non-consuming access, ordered resumable
+evaluation, and no runtime borrow checker or transaction. MIR controls branches,
+initializers, loops, break, continue, and returns. Shared handles copy; exclusive
+handles transfer. Prefix mutations survive later traps/stops; incomplete values
+are not published. Each subtraction checks its widened mathematical result before
+materialization. Short-circuit operators skip all unused RHS work and fuel.
+
+Finite preparation limits begin before input accumulation; alias depth and total
+work are independently bounded. Runtime fuel charges statements, terminators,
+expression nodes, and function entry. Origins and bounded traces are compilation
+bound metadata. Limits are tool contracts, not nontermination proofs or language
+exceptions. `run` selects a zero-parameter ordinary entry and never invokes proofs,
+verified functions/harnesses, verifier state, or the affine kernel. Existing `check`
+and `verify` behavior remains unchanged. See `docs/BOUNDED_EXECUTION.md` for APIs,
+accounting, supported maxima, reporting, and host-failure exclusions.
+
+This adds no executable source subset, generalized places, partial ownership,
+reborrowing, runtime loans, destruction/cleanup, heap semantics, source effects,
+exceptions, I/O, concurrency, or native code generation. Independent review and
+separate merge authorization remain required.

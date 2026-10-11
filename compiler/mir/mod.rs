@@ -99,30 +99,38 @@ impl MirFunction {
     }
     /// Validate compiler structure, not source semantics or numerical obligations.
     pub fn validate(&self) -> Result<(), &'static str> {
-        fn visit(f: &MirFunction, id: BasicBlockId, marks: &mut [u8]) -> Result<(), &'static str> {
-            let Some(mark) = marks.get(id.0) else {
-                return Err("invalid block target");
-            };
-            if *mark != 0 {
-                return Ok(());
-            }
-            marks[id.0] = 1;
-            match &f.block(id).terminator {
-                Terminator::Goto { target } => visit(f, *target, marks)?,
-                Terminator::Branch {
-                    condition,
-                    then_target,
-                    else_target,
-                } => {
-                    if condition.ty != hir::ExprType::Bool {
-                        return Err("non-Bool branch condition");
-                    }
-                    visit(f, *then_target, marks)?;
-                    visit(f, *else_target, marks)?;
+        fn visit(
+            f: &MirFunction,
+            entry: BasicBlockId,
+            marks: &mut [u8],
+        ) -> Result<(), &'static str> {
+            let mut pending = Vec::new();
+            pending
+                .try_reserve_exact(f.blocks.len().saturating_add(1))
+                .map_err(|_| "MIR validation allocation failed")?;
+            pending.push(entry);
+            while let Some(id) = pending.pop() {
+                let mark = marks.get_mut(id.0).ok_or("invalid block target")?;
+                if *mark != 0 {
+                    continue;
                 }
-                Terminator::Return { .. } | Terminator::ReturnNoValue => {}
+                *mark = 1;
+                match &f.block(id).terminator {
+                    Terminator::Goto { target } => pending.push(*target),
+                    Terminator::Branch {
+                        condition,
+                        then_target,
+                        else_target,
+                    } => {
+                        if condition.ty != hir::ExprType::Bool {
+                            return Err("non-Bool branch condition");
+                        }
+                        pending.push(*else_target);
+                        pending.push(*then_target);
+                    }
+                    Terminator::Return { .. } | Terminator::ReturnNoValue => {}
+                }
             }
-            marks[id.0] = 2;
             Ok(())
         }
         fn expression_valid(expression: &TypedExpr) -> Result<(), &'static str> {
@@ -173,7 +181,11 @@ impl MirFunction {
                 Terminator::Goto { .. } | Terminator::ReturnNoValue => {}
             }
         }
-        let mut marks = vec![0; self.blocks.len()];
+        let mut marks = Vec::new();
+        marks
+            .try_reserve_exact(self.blocks.len())
+            .map_err(|_| "MIR validation allocation failed")?;
+        marks.resize(self.blocks.len(), 0);
         visit(self, self.entry, &mut marks)?;
         if marks.contains(&0) {
             return Err("unreachable block");
@@ -197,7 +209,28 @@ impl MirProgram {
 /// functions retain their specialized proof path. Unsupported valid HIR is a
 /// compiler defect, never a new user diagnostic phase.
 pub fn lower(program: &hir::Program) -> MirProgram {
-    let functions = program
+    lower_internal(program, true).0
+}
+
+/// Produced by the same lowering, never reconstructed by the runtime.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OriginKind {
+    Statement,
+    Initializer,
+    If,
+    While,
+    FunctionBoundary,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Origin {
+    pub span: Span,
+    pub kind: OriginKind,
+}
+pub(crate) fn lower_with_origins(program: &hir::Program) -> (MirProgram, Vec<Vec<Origin>>) {
+    lower_internal(program, false)
+}
+fn lower_internal(program: &hir::Program, legacy_assert: bool) -> (MirProgram, Vec<Vec<Origin>>) {
+    let pairs: Vec<_> = program
         .functions()
         .iter()
         .filter_map(|f| f.as_ordinary())
@@ -205,6 +238,7 @@ pub fn lower(program: &hir::Program) -> MirProgram {
             let mut builder = Builder {
                 blocks: Vec::new(),
                 loop_targets: Vec::new(),
+                origins: Vec::new(),
             };
             let entry = builder.reserve();
             if let Some((tail, statements)) = builder.body(entry, &f.body) {
@@ -212,7 +246,15 @@ pub fn lower(program: &hir::Program) -> MirProgram {
                     f.return_type.is_none(),
                     "value functions have no closing-brace fallthrough"
                 );
-                builder.finish(tail, statements, Terminator::ReturnNoValue);
+                builder.finish(
+                    tail,
+                    statements,
+                    Terminator::ReturnNoValue,
+                    Origin {
+                        span: f.span,
+                        kind: OriginKind::FunctionBoundary,
+                    },
+                );
             }
             let function = MirFunction {
                 function: f.id,
@@ -223,23 +265,42 @@ pub fn lower(program: &hir::Program) -> MirProgram {
                     .map(|b| b.expect("all reserved blocks finished"))
                     .collect(),
             };
-            debug_assert_eq!(function.validate(), Ok(()));
-            function
+            if legacy_assert {
+                debug_assert_eq!(function.validate(), Ok(()));
+            }
+            (
+                function,
+                builder
+                    .origins
+                    .into_iter()
+                    .map(|o| o.expect("lowering origin finished"))
+                    .collect::<Vec<_>>(),
+            )
         })
         .collect();
-    MirProgram { functions }
+    let (functions, origins) = pairs.into_iter().unzip();
+    (MirProgram { functions }, origins)
 }
 struct Builder {
     blocks: Vec<Option<BasicBlock>>,
     loop_targets: Vec<(BasicBlockId, BasicBlockId)>,
+    origins: Vec<Option<Origin>>,
 }
 impl Builder {
     fn reserve(&mut self) -> BasicBlockId {
         let id = BasicBlockId(self.blocks.len());
         self.blocks.push(None);
+        self.origins.push(None);
         id
     }
-    fn finish(&mut self, id: BasicBlockId, statements: Vec<Statement>, terminator: Terminator) {
+    fn finish(
+        &mut self,
+        id: BasicBlockId,
+        statements: Vec<Statement>,
+        terminator: Terminator,
+        origin: Origin,
+    ) {
+        self.origins[id.0] = Some(origin);
         assert!(self.blocks[id.0].is_none(), "block finished once");
         self.blocks[id.0] = Some(BasicBlock {
             statements,
@@ -257,6 +318,10 @@ impl Builder {
         span: Span,
         join: BasicBlockId,
     ) {
+        let origin = Origin {
+            span,
+            kind: OriginKind::Initializer,
+        };
         if let hir::ExprKind::IfValue {
             condition,
             then_value,
@@ -273,6 +338,7 @@ impl Builder {
                     then_target,
                     else_target,
                 },
+                origin,
             );
             self.initialize(then_target, Vec::new(), local, then_value, span, join);
             self.initialize(else_target, Vec::new(), local, else_value, span, join);
@@ -282,7 +348,12 @@ impl Builder {
                 initializer: value.clone(),
                 span,
             });
-            self.finish(current, statements, Terminator::Goto { target: join });
+            self.finish(
+                current,
+                statements,
+                Terminator::Goto { target: join },
+                origin,
+            );
         }
     }
     fn body(
@@ -292,9 +363,27 @@ impl Builder {
     ) -> Option<(BasicBlockId, Vec<Statement>)> {
         let mut statements = Vec::new();
         for statement in body {
+            let span = match statement {
+                ValueStatement::ReturnNoValue { span }
+                | ValueStatement::CallNoValue { span, .. }
+                | ValueStatement::Break { span }
+                | ValueStatement::Continue { span }
+                | ValueStatement::Let { span, .. }
+                | ValueStatement::CopyReferenceFieldAssign { span, .. }
+                | ValueStatement::CopyFieldAssign { span, .. }
+                | ValueStatement::Assign { span, .. }
+                | ValueStatement::DerefAssign { span, .. }
+                | ValueStatement::While { span, .. }
+                | ValueStatement::If { span, .. }
+                | ValueStatement::Return { span, .. } => *span,
+            };
+            let origin = Origin {
+                span,
+                kind: OriginKind::Statement,
+            };
             match statement {
                 ValueStatement::ReturnNoValue { .. } => {
-                    self.finish(current, statements, Terminator::ReturnNoValue);
+                    self.finish(current, statements, Terminator::ReturnNoValue, origin);
                     return None;
                 }
                 ValueStatement::CallNoValue {
@@ -310,12 +399,12 @@ impl Builder {
                 }
                 ValueStatement::Break { .. } => {
                     let target = self.loop_targets.last().expect("checked innermost loop").1;
-                    self.finish(current, statements, Terminator::Goto { target });
+                    self.finish(current, statements, Terminator::Goto { target }, origin);
                     return None;
                 }
                 ValueStatement::Continue { .. } => {
                     let target = self.loop_targets.last().expect("checked innermost loop").0;
-                    self.finish(current, statements, Terminator::Goto { target });
+                    self.finish(current, statements, Terminator::Goto { target }, origin);
                     return None;
                 }
                 ValueStatement::Let {
@@ -399,6 +488,10 @@ impl Builder {
                 ValueStatement::While {
                     condition, body, ..
                 } => {
+                    let origin = Origin {
+                        span,
+                        kind: OriginKind::While,
+                    };
                     let header = self.reserve();
                     let body_target = self.reserve();
                     let exit = self.reserve();
@@ -406,6 +499,7 @@ impl Builder {
                         current,
                         std::mem::take(&mut statements),
                         Terminator::Goto { target: header },
+                        origin,
                     );
                     self.finish(
                         header,
@@ -415,10 +509,11 @@ impl Builder {
                             then_target: body_target,
                             else_target: exit,
                         },
+                        origin,
                     );
                     self.loop_targets.push((header, exit));
                     if let Some((end, body)) = self.body(body_target, body) {
-                        self.finish(end, body, Terminator::Goto { target: header });
+                        self.finish(end, body, Terminator::Goto { target: header }, origin);
                     }
                     assert_eq!(self.loop_targets.pop(), Some((header, exit)));
                     current = exit;
@@ -429,6 +524,10 @@ impl Builder {
                     else_body,
                     ..
                 } => {
+                    let origin = Origin {
+                        span,
+                        kind: OriginKind::If,
+                    };
                     let then_target = self.reserve();
                     let else_target = if else_body.is_empty() {
                         None
@@ -448,6 +547,7 @@ impl Builder {
                             then_target,
                             else_target: else_target.or(join).expect("false edge"),
                         },
+                        origin,
                     );
                     if let Some((end, body)) = self.body(then_target, then_body) {
                         self.finish(
@@ -456,6 +556,7 @@ impl Builder {
                             Terminator::Goto {
                                 target: join.expect("then fallthrough"),
                             },
+                            origin,
                         );
                     }
                     if let Some(target) = else_target {
@@ -466,6 +567,7 @@ impl Builder {
                                 Terminator::Goto {
                                     target: join.expect("else fallthrough"),
                                 },
+                                origin,
                             );
                         }
                     }
@@ -479,6 +581,7 @@ impl Builder {
                         Terminator::Return {
                             value: value.clone(),
                         },
+                        origin,
                     );
                     return None;
                 }
@@ -1581,5 +1684,24 @@ mod multiple_field_tests {
             };
             assert!(f.validate().is_err());
         }
+    }
+}
+
+#[cfg(test)]
+impl MirProgram {
+    pub(crate) fn test_functions_mut(&mut self) -> &mut Vec<MirFunction> {
+        &mut self.functions
+    }
+}
+#[cfg(test)]
+impl MirFunction {
+    pub(crate) fn test_blocks_mut(&mut self) -> &mut Vec<BasicBlock> {
+        &mut self.blocks
+    }
+}
+#[cfg(test)]
+impl BasicBlock {
+    pub(crate) fn test_terminator_mut(&mut self) -> &mut Terminator {
+        &mut self.terminator
     }
 }

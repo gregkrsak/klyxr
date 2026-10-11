@@ -79,6 +79,18 @@ impl fmt::Display for LexError {
 impl std::error::Error for LexError {}
 
 pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
+    lex_impl(source, None)
+}
+pub(crate) fn lex_bounded(
+    source: &str,
+    context: &crate::bounded::Context,
+) -> Result<Vec<Token>, LexError> {
+    lex_impl(source, Some(context))
+}
+fn lex_impl(
+    source: &str,
+    context: Option<&crate::bounded::Context>,
+) -> Result<Vec<Token>, LexError> {
     let bytes = source.as_bytes();
     let mut tokens = Vec::new();
     let mut i = 0usize;
@@ -87,6 +99,41 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
 
     while i < bytes.len() {
         let b = bytes[i];
+        if let Some(c) = context {
+            let span = Span {
+                line,
+                column,
+                start: i,
+                end: i,
+            };
+            let emits = !(matches!(b, b' ' | b'\t' | b'\r' | b'\n')
+                || b == b'/' && bytes.get(i + 1) == Some(&b'/'));
+            if emits
+                && tokens
+                    .len()
+                    .checked_add(1)
+                    .map_or(true, |n| n >= c.limits.tokens)
+            {
+                c.fail(crate::bounded::ResourceFailure::limit(
+                    "token storage",
+                    span,
+                ));
+                return Err(LexError {
+                    message: "configured token limit exhausted".into(),
+                    span,
+                });
+            }
+            if emits && tokens.try_reserve(1).is_err() {
+                c.fail(crate::bounded::ResourceFailure::host(
+                    "token allocation",
+                    span,
+                ));
+                return Err(LexError {
+                    message: "token allocation failed".into(),
+                    span,
+                });
+            }
+        }
         match b {
             b' ' | b'\t' | b'\r' => {
                 i += 1;
@@ -112,7 +159,11 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 }
                 let text = &source[start..i];
                 let value = text.parse::<u64>().map_err(|_| LexError {
-                    message: format!("integer literal is out of range: {text}"),
+                    message: if context.is_some() {
+                        "integer literal is out of range".into()
+                    } else {
+                        format!("integer literal is out of range: {text}")
+                    },
                     span: Span {
                         line,
                         column: start_column,
@@ -139,6 +190,24 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 }
 
                 let text = &source[start..i];
+                if let Some(c) = context {
+                    if text.len() > c.limits.identifier_bytes {
+                        let span = Span {
+                            line,
+                            column: start_column,
+                            start,
+                            end: i,
+                        };
+                        c.fail(crate::bounded::ResourceFailure::limit(
+                            "identifier bytes",
+                            span,
+                        ));
+                        return Err(LexError {
+                            message: "configured identifier limit exhausted".into(),
+                            span,
+                        });
+                    }
+                }
                 let kind = match text {
                     "type" => TokenKind::Type,
                     "range" => TokenKind::Range,
@@ -159,7 +228,29 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                     "old" => TokenKind::Old,
                     "true" => TokenKind::True,
                     "false" => TokenKind::False,
-                    _ => TokenKind::Ident(text.to_owned()),
+                    _ => {
+                        let mut name = String::new();
+                        if let Some(c) = context {
+                            if name.try_reserve_exact(text.len()).is_err() {
+                                let span = Span {
+                                    line,
+                                    column: start_column,
+                                    start,
+                                    end: i,
+                                };
+                                c.fail(crate::bounded::ResourceFailure::host(
+                                    "identifier allocation",
+                                    span,
+                                ));
+                                return Err(LexError {
+                                    message: "identifier allocation failed".into(),
+                                    span,
+                                });
+                            }
+                        }
+                        name.push_str(text);
+                        TokenKind::Ident(name)
+                    }
                 };
 
                 tokens.push(Token {
@@ -325,6 +416,24 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
         }
     }
 
+    if let Some(c) = context {
+        if tokens.try_reserve(1).is_err() {
+            let span = Span {
+                line,
+                column,
+                start: i,
+                end: i,
+            };
+            c.fail(crate::bounded::ResourceFailure::host(
+                "token allocation",
+                span,
+            ));
+            return Err(LexError {
+                message: "token allocation failed".into(),
+                span,
+            });
+        }
+    }
     tokens.push(Token {
         kind: TokenKind::Eof,
         span: Span {

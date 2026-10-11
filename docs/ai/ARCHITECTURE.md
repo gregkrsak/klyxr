@@ -911,3 +911,25 @@ Rc metadata remains shared across snapshots. Existing join candidate validation,
 semantic loop-edge checks and pre-discharge break gates remain intact. No second
 loan map/checker, field identity in Place, projected authority, reborrow, coercion,
 generalized dataflow, verifier/harness extension or CFG machinery is introduced.
+
+## KED-026 bounded ordinary execution (KD-041)
+
+`bounded` provides preparation limits and shared, non-refundable lineage counters.
+Budget-aware lexer/parser/ownership entry points reuse existing semantic engines;
+conservative preflight envelopes protect resolution, typing, checking, lowering,
+and rejected representations. `mir::lower_with_origins` preserves block origins;
+CFG reachability validation is iterative. `execution` owns the opaque immutable
+successful-ownership artifact and exact HIR/MIR/origin correspondence validation.
+Canonical FunctionId lookup accommodates verified/ordinary ID gaps. Private
+runtime frames use monotonic IDs and canonical places; explicit continuations
+execute only MIR flow. Storage growth, recursion, work, fuel, diagnostics, and
+rendering are bounded. Typed values distinguish raw operands, ranges, records,
+and references. There are no runtime loans, snapshots, or rollback. `main` routes
+`run` to bounded reader preparation and execution independently of `verify_report`.
+Private stopped-machine tests inspect prefix effects and unpublished destinations.
+Retained verified-body operands receive the same bounded structural admission as
+contracts before recursive validation and authority comparison, without proof
+evaluation. Detached runtime payloads are reserved together with receiving buffer
+growth. The private CLI reporting boundary preserves renderer host failures and
+uses borrowed static emergency diagnostics without a second String allocation.
+See `docs/BOUNDED_EXECUTION.md` for the full tool contract and host-failure boundary.

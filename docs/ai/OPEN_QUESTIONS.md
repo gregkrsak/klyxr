@@ -580,3 +580,13 @@ RHS effects. This extends KD-039 reads and complements KD-038 owned-local writes
 General reference mutation/projection, reborrowing/coercion, field loans, partial
 ownership, generalized places, replacement, properties/invariants, destruction,
 cyclic lifetime inference and verified/harness expansion remain open or excluded.
+
+### KD-041 refinement of execution questions
+
+KED-026 Draft 3 settles bounded interpretation of the complete accepted ordinary
+MIR subset, its authority artifact, written evaluation order, immediate range
+traps, non-rollback, resource limits, and origins. Execution does not prove ordinary
+contracts. Native code generation, destruction, source effects/exceptions/I/O,
+concurrency, generalized places, reborrowing, and runtime verified/harness execution
+remain outside this accepted boundary. Earlier statements that execution is open
+now apply to those extensions rather than the frozen KD-041 interpreter.
