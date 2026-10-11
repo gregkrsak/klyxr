@@ -6,6 +6,12 @@ name resolution → expression and value-flow type checking → typed HIR → co
 ownership, loan, and borrowed-access checking → ordinary MIR CFG lowering or
 specialized verified integer contract proof → diagnostics.
 
+KED-026 Draft 3 additionally provides bounded ordinary MIR interpretation through
+`run`. The KED-004 through KED-025 sections below describe the frontend boundaries
+introduced by those decisions; their historical execution exclusions are refined
+by KD-041. No ordinary contract proof or native code generation is implied.
+See [bounded execution](../docs/BOUNDED_EXECUTION.md).
+
 ## Run it
 
 Install Rust through rustup. `rust-toolchain.toml` pins Rust 1.80.0, rustfmt, and Clippy,
@@ -16,6 +22,7 @@ From the repository root:
 ```bash
 cargo run --locked --bin klyxr -- verify examples/battery_ok.klx
 cargo run --locked --bin klyxr -- check examples/battery_ok.klx
+cargo run --locked --bin klyxr -- run examples/ordinary_run.klx --function demo
 cargo test --locked --workspace
 cargo clippy --locked --workspace --all-targets -- -D warnings
 ```
@@ -1618,3 +1625,10 @@ field loans/provenance, partial ownership, compound/expression assignment and
 whole-record replacement remain unsupported. Ordinary functions are checked and
 lowered only, without execution or proof. Specialized verified-state/harness
 eligibility, battery proofs and the affine kernel are unchanged.
+
+KED-026 Draft 3 adds the public `execution` module and CLI `run` through bounded
+source/reader preparation into an opaque successful-ownership artifact. Explicit
+frames/continuations execute ordinary MIR, with ordered mutations, immediate
+widened range traps, deterministic fuel, and bound lowering origins. Existing
+check/verify paths retain their behavior. See `../docs/BOUNDED_EXECUTION.md` for
+limits, APIs, host-failure exclusions, and verifier isolation.

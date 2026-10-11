@@ -62,3 +62,8 @@ Initially prove structural restrictions that the compiler can actually establish
 ## DP-014 — Project knowledge must be portable
 
 If Klyxr can only be understood because one conversation remembers its history, the project is under-documented. A fresh expert should be able to read the repository context and become productive quickly.
+
+KD-041 applies the existing trust-boundary principles to bounded ordinary
+execution: an opaque successful-ownership artifact grants authority, MIR controls
+runtime flow, and explicit limits begin before source ingestion. A runtime trap
+or configured stop is a tool outcome; execution never implies contract proof.

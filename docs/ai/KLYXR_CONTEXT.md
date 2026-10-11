@@ -142,7 +142,7 @@ MIR uses Goto → header Branch → body/exit, with body Goto back to header. It
 validator now accepts cycles with visited tracking; structural validity does not
 prove termination. Both constant-condition edges remain. For and labeled loop transfers (KD-031/KD-032 settle unlabeled continue/break),
 loop values, verified loops, and general cyclic ownership/loans
-remain unresolved. Ordinary loops are neither executed nor proven.
+remain unresolved. Ordinary loops are not executed by `check`/`verify` or proven; KD-041 `run` executes their MIR.
 
 KED-013 permits iteration-local Move ownership in ordinary while bodies (KD-028):
 fresh record call results, transfer chains, by-value consumption, and existing
@@ -153,10 +153,10 @@ remaining header/backedge state. Pre-existing owners cannot transfer in the loop
 non-Copy conditions remain forbidden, KED-014 refines the body-reference boundary, and non-Copy
 replacement remains unresolved. Lexical cleanup is not runtime destruction.
 No syntax, HIR/MIR representation, second ownership engine, or fixed-point solver
-is added by KED-013. KD-035 later adds ordinary record construction; execution remains absent.
+is added by KED-013. KD-035 later adds ordinary record construction; KD-041 later adds bounded MIR execution.
 
 Ordinary functions are parsed, resolved, type-checked, and ownership-checked,
-including loan and borrowed-access legality, and lowered to ordinary MIR, but not executed or proven. A range result type does not establish that the
+including loan and borrowed-access legality, and lowered to ordinary MIR. `check`/`verify` do not execute or prove ordinary functions; KD-041 `run` executes them through bounded preparation. A range result type does not establish that the
 produced value meets its bounds. Plain `fn` does not yet implement the complete
 future `safe` assurance model. Forward and recursive calls remain structurally
 valid without a termination claim. Diagnostic traversal order does not settle
@@ -648,3 +648,16 @@ break and existing convergence integrity remain authoritative. HIR/MIR preserve
 CopyReferenceFieldAssign distinctly. General projection, reborrow/coercion, field
 loans, partial ownership and whole-record replacement remain excluded. Ordinary
 functions are checked/lowered only; verified/harness behavior and proofs are unchanged.
+
+## KED-026 execution addition (KD-041)
+
+Frozen Draft 3 adds bounded `run` of the complete accepted ordinary MIR subset.
+Source ingestion and the existing frontend/ownership pipeline are protected before
+growth; an opaque checked artifact binds canonical HIR, MIR, and lowering origins.
+Explicit frames and continuations preserve written evaluation order, moves,
+short-circuiting, prefix mutations, and immediate widened named-range traps.
+Execution is independent of specialized proof and harness evaluation. `check` and
+`verify` retain their existing behavior. This is interpretation, not native code
+generation or ordinary contract proof. APIs, limits, origins, and tool reporting
+are documented in `docs/BOUNDED_EXECUTION.md`; excluded language boundaries remain
+unchanged. General execution mechanisms beyond this frozen subset remain open.

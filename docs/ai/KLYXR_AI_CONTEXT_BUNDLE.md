@@ -155,7 +155,7 @@ MIR uses Goto → header Branch → body/exit, with body Goto back to header. It
 validator now accepts cycles with visited tracking; structural validity does not
 prove termination. Both constant-condition edges remain. For and labeled loop transfers (KD-031/KD-032 settle unlabeled continue/break),
 loop values, verified loops, and general cyclic ownership/loans
-remain unresolved. Ordinary loops are neither executed nor proven.
+remain unresolved. Ordinary loops are not executed by `check`/`verify` or proven; KD-041 `run` executes their MIR.
 
 KED-013 permits iteration-local Move ownership in ordinary while bodies (KD-028):
 fresh record call results, transfer chains, by-value consumption, and existing
@@ -166,10 +166,10 @@ remaining header/backedge state. Pre-existing owners cannot transfer in the loop
 non-Copy conditions remain forbidden, KED-014 refines the body-reference boundary, and non-Copy
 replacement remains unresolved. Lexical cleanup is not runtime destruction.
 No syntax, HIR/MIR representation, second ownership engine, or fixed-point solver
-is added by KED-013. KD-035 later adds ordinary record construction; execution remains absent.
+is added by KED-013. KD-035 later adds ordinary record construction; KD-041 later adds bounded MIR execution.
 
 Ordinary functions are parsed, resolved, type-checked, and ownership-checked,
-including loan and borrowed-access legality, and lowered to ordinary MIR, but not executed or proven. A range result type does not establish that the
+including loan and borrowed-access legality, and lowered to ordinary MIR. `check`/`verify` do not execute or prove ordinary functions; KD-041 `run` executes them through bounded preparation. A range result type does not establish that the
 produced value meets its bounds. Plain `fn` does not yet implement the complete
 future `safe` assurance model. Forward and recursive calls remain structurally
 valid without a termination claim. Diagnostic traversal order does not settle
@@ -662,6 +662,19 @@ CopyReferenceFieldAssign distinctly. General projection, reborrow/coercion, fiel
 loans, partial ownership and whole-record replacement remain excluded. Ordinary
 functions are checked/lowered only; verified/harness behavior and proofs are unchanged.
 
+## KED-026 execution addition (KD-041)
+
+Frozen Draft 3 adds bounded `run` of the complete accepted ordinary MIR subset.
+Source ingestion and the existing frontend/ownership pipeline are protected before
+growth; an opaque checked artifact binds canonical HIR, MIR, and lowering origins.
+Explicit frames and continuations preserve written evaluation order, moves,
+short-circuiting, prefix mutations, and immediate widened named-range traps.
+Execution is independent of specialized proof and harness evaluation. `check` and
+`verify` retain their existing behavior. This is interpretation, not native code
+generation or ordinary contract proof. APIs, limits, origins, and tool reporting
+are documented in `docs/BOUNDED_EXECUTION.md`; excluded language boundaries remain
+unchanged. General execution mechanisms beyond this frozen subset remain open.
+
 <!-- END KLYXR_CONTEXT.md -->
 
 ---
@@ -732,6 +745,11 @@ Initially prove structural restrictions that the compiler can actually establish
 ## DP-014 — Project knowledge must be portable
 
 If Klyxr can only be understood because one conversation remembers its history, the project is under-documented. A fresh expert should be able to read the repository context and become productive quickly.
+
+KD-041 applies the existing trust-boundary principles to bounded ordinary
+execution: an opaque successful-ownership artifact grants authority, MIR controls
+runtime flow, and explicit limits begin before source ingestion. A runtime trap
+or configured stop is a tool outcome; execution never implies contract proof.
 
 <!-- END DESIGN_PRINCIPLES.md -->
 
@@ -1975,6 +1993,35 @@ eligibility, proof counts and the affine kernel are unchanged. This narrowly
 refines OQ-024/OQ-025; historical KD boundaries remain historical. Independent
 implementation review and Greg's merge authorization remain separate stages.
 
+## KD-041 — Deterministic bounded ordinary MIR execution
+
+**Status:** Accepted (KED-026 Draft 3; frozen and implementation-authorized in
+Issue #58, comments 6110717709 and 6110730498).
+
+Ordinary execution is a bounded tool operation over an opaque artifact produced
+by the existing complete frontend and ownership pipeline. The complete currently
+accepted ordinary MIR subset executes with canonical nominal metadata, dynamic
+frame/place locations, distinct consuming/non-consuming access, ordered resumable
+evaluation, and no runtime borrow checker or transaction. MIR controls branches,
+initializers, loops, break, continue, and returns. Shared handles copy; exclusive
+handles transfer. Prefix mutations survive later traps/stops; incomplete values
+are not published. Each subtraction checks its widened mathematical result before
+materialization. Short-circuit operators skip all unused RHS work and fuel.
+
+Finite preparation limits begin before input accumulation; alias depth and total
+work are independently bounded. Runtime fuel charges statements, terminators,
+expression nodes, and function entry. Origins and bounded traces are compilation
+bound metadata. Limits are tool contracts, not nontermination proofs or language
+exceptions. `run` selects a zero-parameter ordinary entry and never invokes proofs,
+verified functions/harnesses, verifier state, or the affine kernel. Existing `check`
+and `verify` behavior remains unchanged. See `docs/BOUNDED_EXECUTION.md` for APIs,
+accounting, supported maxima, reporting, and host-failure exclusions.
+
+This adds no executable source subset, generalized places, partial ownership,
+reborrowing, runtime loans, destruction/cleanup, heap semantics, source effects,
+exceptions, I/O, concurrency, or native code generation. Independent review and
+separate merge authorization remain required.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -2895,6 +2942,23 @@ semantic loop-edge checks and pre-discharge break gates remain intact. No second
 loan map/checker, field identity in Place, projected authority, reborrow, coercion,
 generalized dataflow, verifier/harness extension or CFG machinery is introduced.
 
+## KED-026 bounded ordinary execution (KD-041)
+
+`bounded` provides preparation limits and shared, non-refundable lineage counters.
+Budget-aware lexer/parser/ownership entry points reuse existing semantic engines;
+conservative preflight envelopes protect resolution, typing, checking, lowering,
+and rejected representations. `mir::lower_with_origins` preserves block origins;
+CFG reachability validation is iterative. `execution` owns the opaque immutable
+successful-ownership artifact and exact HIR/MIR/origin correspondence validation.
+Canonical FunctionId lookup accommodates verified/ordinary ID gaps. Private
+runtime frames use monotonic IDs and canonical places; explicit continuations
+execute only MIR flow. Storage growth, recursion, work, fuel, diagnostics, and
+rendering are bounded. Typed values distinguish raw operands, ranges, records,
+and references. There are no runtime loans, snapshots, or rollback. `main` routes
+`run` to bounded reader preparation and execution independently of `verify_report`.
+Private stopped-machine tests inspect prefix effects and unpublished destinations.
+See `docs/BOUNDED_EXECUTION.md` for the full tool contract and host-failure boundary.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -3483,5 +3547,15 @@ RHS effects. This extends KD-039 reads and complements KD-038 owned-local writes
 General reference mutation/projection, reborrowing/coercion, field loans, partial
 ownership, generalized places, replacement, properties/invariants, destruction,
 cyclic lifetime inference and verified/harness expansion remain open or excluded.
+
+### KD-041 refinement of execution questions
+
+KED-026 Draft 3 settles bounded interpretation of the complete accepted ordinary
+MIR subset, its authority artifact, written evaluation order, immediate range
+traps, non-rollback, resource limits, and origins. Execution does not prove ordinary
+contracts. Native code generation, destruction, source effects/exceptions/I/O,
+concurrency, generalized places, reborrowing, and runtime verified/harness execution
+remain outside this accepted boundary. Earlier statements that execution is open
+now apply to those extensions rather than the frozen KD-041 interpreter.
 
 <!-- END OPEN_QUESTIONS.md -->

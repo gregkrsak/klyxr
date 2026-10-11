@@ -25,6 +25,10 @@ fn run() -> Result<(), i32> {
         return Ok(());
     }
 
+    if command == "run" {
+        return run_execution(args);
+    }
+
     if command != "check" && command != "verify" {
         eprintln!("error: unknown command `{command}`");
         print_usage();
@@ -141,4 +145,129 @@ fn run() -> Result<(), i32> {
 
 fn print_usage() {
     eprintln!("usage: klyxr <check|verify> <file.klx>");
+}
+
+fn run_execution(mut args: impl Iterator<Item = String>) -> Result<(), i32> {
+    use klyxr_compiler::execution::{self, AdmissionLimits, ErrorKind, ExecutionLimits};
+    let Some(path) = args.next() else {
+        eprintln!("usage: klyxr run <file.klx> --function <name> [limit overrides]");
+        return Err(2);
+    };
+    let mut admission = AdmissionLimits::default();
+    let mut execution = ExecutionLimits::default();
+    let mut entry = None;
+    let mut flags = std::collections::BTreeSet::new();
+    for _ in 0..32 {
+        let Some(flag) = args.next() else {
+            break;
+        };
+        if flag.len() > 64 || !flags.insert(flag.clone()) {
+            eprintln!("error: invalid or repeated run option");
+            return Err(2);
+        }
+        let Some(value) = args.next() else {
+            eprintln!("error: missing run option value");
+            return Err(2);
+        };
+        if flag == "--function" {
+            if value.len() > AdmissionLimits::MAX.identifier_bytes {
+                eprintln!("error: selected function name exceeds supported maximum");
+                return Err(2);
+            }
+            entry = Some(value);
+            continue;
+        }
+        let n: u64 = match value.parse() {
+            Ok(n) => n,
+            Err(_) => {
+                eprintln!("error: invalid or overflowing run limit");
+                return Err(2);
+            }
+        };
+        let size = match usize::try_from(n) {
+            Ok(n) => n,
+            Err(_) => {
+                eprintln!("error: overflowing run limit");
+                return Err(2);
+            }
+        };
+        match flag.as_str() {
+            "--max-source-bytes" => admission.source_bytes = size,
+            "--max-tokens" => admission.tokens = size,
+            "--max-identifier-bytes" => admission.identifier_bytes = size,
+            "--max-frontend-work" => admission.frontend_work = n,
+            "--max-traversal-depth" => admission.traversal_depth = size,
+            "--max-alias-depth" => admission.alias_depth = size,
+            "--max-alias-work" => admission.alias_work = n,
+            "--max-admission-storage" => admission.working_storage = size,
+            "--max-diagnostic-storage" => admission.diagnostic_storage = size,
+            "--max-output-bytes" => {
+                admission.rendered_output = size;
+                execution.rendered_output = size;
+            }
+            "--max-steps" => execution.steps = n,
+            "--max-call-depth" => execution.call_depth = size,
+            "--max-expression-depth" => execution.expression_depth = size,
+            "--max-working-storage" => execution.working_storage = size,
+            "--max-trace-depth" => execution.trace_depth = size,
+            _ => {
+                eprintln!("error: unknown run option");
+                return Err(2);
+            }
+        }
+    }
+    if args.next().is_some() {
+        eprintln!("error: too many run options");
+        return Err(2);
+    }
+    let Some(entry) = entry else {
+        eprintln!("error: run requires --function <name>");
+        return Err(2);
+    };
+    if admission.validate().is_err() || execution.validate().is_err() {
+        eprintln!("error: configured run limit is zero or exceeds supported maximum");
+        return Err(2);
+    }
+    let file = match fs::File::open(&path) {
+        Ok(f) => f,
+        Err(_) => {
+            eprintln!("error: detected host/tool failure: source input");
+            return Err(2);
+        }
+    };
+    let artifact = match execution::prepare_execution_from_reader(file, admission) {
+        Ok(e) => e,
+        Err(e) => {
+            let text = execution::render_admission_error(&e, admission.rendered_output)
+                .unwrap_or_else(|_| {
+                    "error: diagnostic rendering allowance exhausted [truncated]".into()
+                });
+            execution::write_output(std::io::stderr().lock(), &text).map_err(|_| 2)?;
+            return Err(if matches!(e.kind, ErrorKind::Host(_)) {
+                2
+            } else {
+                1
+            });
+        }
+    };
+    let result = artifact
+        .entry(&entry)
+        .and_then(|entry| execution::execute(&artifact, entry, execution))
+        .and_then(|r| artifact.render_result(&r, execution.rendered_output));
+    match result {
+        Ok(text) => execution::write_output(std::io::stdout().lock(), &text).map_err(|_| 2),
+        Err(e) => {
+            let text = artifact
+                .render_error(&e, execution.rendered_output)
+                .unwrap_or_else(|_| {
+                    "error: diagnostic rendering allowance exhausted [truncated]".into()
+                });
+            execution::write_output(std::io::stderr().lock(), &text).map_err(|_| 2)?;
+            Err(if matches!(e.kind, ErrorKind::Host(_)) {
+                2
+            } else {
+                1
+            })
+        }
+    }
 }

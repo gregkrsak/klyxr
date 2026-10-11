@@ -268,6 +268,12 @@ pub enum Function {
     Verified(VerifiedFunction),
 }
 impl Function {
+    pub fn span(&self) -> Span {
+        match self {
+            Self::Ordinary(f) => f.span,
+            Self::Verified(f) => f.span,
+        }
+    }
     pub fn id(&self) -> FunctionId {
         match self {
             Self::Ordinary(f) => f.id,

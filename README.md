@@ -409,7 +409,8 @@ Current design areas include:
 - [x] visible trusted / unsafe boundaries
 - [ ] compiler MVP
 - [x] core move and whole-value loan checker with acyclic branch joins
-- [x] nested statement while, Copy-state loop stability, iteration-local Move/borrowing, stable carried references, structured continue/break with canonical exits, and cyclic MIR (no execution or termination proof)
+- [x] nested statement while, Copy-state loop stability, iteration-local Move/borrowing, stable carried references, structured continue/break with canonical exits, and cyclic MIR (no termination proof)
+- [x] bounded ordinary MIR interpretation with opaque execution authority and deterministic fuel (KD-041)
 - [ ] advanced borrowing and destruction
 - [ ] verifier integration
 - [ ] standard library
@@ -529,3 +530,16 @@ And ultimately toward software where engineers can say, with much greater precis
 <p align="center">
   <sub>Own what moves. Constrain what exists. Prove what matters. Make every escape hatch visible.</sub>
 </p>
+
+### Run an ordinary function
+
+```sh
+cargo run --locked --bin klyxr -- run examples/ordinary_run.klx --function demo
+```
+
+This prints `Pair { first: Percent(89), second: Percent(90) }`. `run` performs the
+existing frontend and ownership checks through bounded preparation, then executes
+ordinary MIR. It does not evaluate verified proofs or harness calls and does not
+prove ordinary contracts. Named-range violations stop immediately; configured
+resource stops are not nontermination proofs. See
+[bounded execution](docs/BOUNDED_EXECUTION.md) for supported limits and reporting.

@@ -1,5 +1,7 @@
 pub mod ast;
+mod bounded;
 pub mod diagnostics;
+pub mod execution;
 pub mod hir;
 pub mod lexer;
 pub mod mir;

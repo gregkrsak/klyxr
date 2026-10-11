@@ -26,12 +26,30 @@ impl fmt::Display for ParseError {
 impl std::error::Error for ParseError {}
 
 pub fn parse(tokens: &[Token]) -> Result<Program, ParseError> {
-    Parser { tokens, current: 0 }.parse_program()
+    Parser {
+        tokens,
+        current: 0,
+        context: None,
+    }
+    .parse_program()
+}
+
+pub(crate) fn parse_bounded<'a>(
+    tokens: &'a [Token],
+    context: &'a crate::bounded::Context,
+) -> Result<Program, ParseError> {
+    Parser {
+        tokens,
+        current: 0,
+        context: Some(context),
+    }
+    .parse_program()
 }
 
 struct Parser<'a> {
     tokens: &'a [Token],
     current: usize,
+    context: Option<&'a crate::bounded::Context>,
 }
 
 impl Parser<'_> {
@@ -255,6 +273,11 @@ impl Parser<'_> {
         &mut self,
         loop_depth: usize,
     ) -> Result<(Vec<ValueStatement>, usize), ParseError> {
+        let _depth = self
+            .context
+            .map(|c| c.enter(self.tokens[self.current].span))
+            .transpose()
+            .map_err(|_| self.error("configured parser depth exhausted".into()))?;
         let mut body = Vec::new();
         while !self.at(&TokenKind::RBrace) {
             let span = self.tokens[self.current].span;
@@ -444,6 +467,11 @@ impl Parser<'_> {
     // Conditional values are initializer-only, recursively at whole branch results.
     // They deliberately do not participate in the general expression grammar.
     fn parse_initializer(&mut self) -> Result<Expr, ParseError> {
+        let _depth = self
+            .context
+            .map(|c| c.enter(self.tokens[self.current].span))
+            .transpose()
+            .map_err(|_| self.error("configured parser depth exhausted".into()))?;
         if !self.at(&TokenKind::If) {
             return self.parse_expression(0);
         }
@@ -459,14 +487,19 @@ impl Parser<'_> {
         self.expect(&TokenKind::LBrace)?;
         let else_value = self.parse_initializer()?;
         let end = self.expect(&TokenKind::RBrace)?.span.end;
-        Ok(Expr {
+        let expression = Expr {
             kind: ExprKind::IfValue {
                 condition: Box::new(condition),
                 then_value: Box::new(then_value),
                 else_value: Box::new(else_value),
             },
             span: Span { end, ..span },
-        })
+        };
+        if let Some(c) = self.context {
+            c.expression(&expression)
+                .map_err(|_| self.error("configured expression depth exhausted".into()))?;
+        }
+        Ok(expression)
     }
 
     // Precedence climbing: only the explicitly authorized operators participate.
@@ -481,6 +514,11 @@ impl Parser<'_> {
         minimum: u8,
         block_boundary: bool,
     ) -> Result<Expr, ParseError> {
+        let _depth = self
+            .context
+            .map(|c| c.enter(self.tokens[self.current].span))
+            .transpose()
+            .map_err(|_| self.error("configured parser depth exhausted".into()))?;
         let mut left = self.parse_primary_at(block_boundary)?;
         let mut comparison_seen = None;
         while let Some((op, precedence)) = self.binary_operator() {
@@ -507,6 +545,10 @@ impl Parser<'_> {
                 },
                 span,
             };
+            if let Some(c) = self.context {
+                c.expression(&left)
+                    .map_err(|_| self.error("configured expression depth exhausted".into()))?;
+            }
             if comparison {
                 comparison_seen = Some(op);
             }
@@ -538,6 +580,11 @@ impl Parser<'_> {
         self.parse_primary_at(false)
     }
     fn parse_primary_at(&mut self, block_boundary: bool) -> Result<Expr, ParseError> {
+        let _depth = self
+            .context
+            .map(|c| c.enter(self.tokens[self.current].span))
+            .transpose()
+            .map_err(|_| self.error("configured parser depth exhausted".into()))?;
         let start = self.tokens[self.current].span;
         let kind = match self.peek_kind() {
             TokenKind::True | TokenKind::False => {
@@ -694,13 +741,18 @@ impl Parser<'_> {
         if self.at(&TokenKind::Dot) {
             return Err(self.error("field access through a temporary or nested projection is unsupported; use a directly named ordinary record owner or reference".into()));
         }
-        Ok(Expr {
+        let expression = Expr {
             kind,
             span: Span {
                 end: self.tokens[self.current - 1].span.end,
                 ..start
             },
-        })
+        };
+        if let Some(c) = self.context {
+            c.expression(&expression)
+                .map_err(|_| self.error("configured expression depth exhausted".into()))?;
+        }
+        Ok(expression)
     }
 
     fn parse_binding(&mut self) -> Result<RecordBinding, ParseError> {
