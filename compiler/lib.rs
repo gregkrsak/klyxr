@@ -8,6 +8,8 @@ pub mod mir;
 pub mod ownership;
 pub mod parser;
 pub mod resolve;
+#[cfg(test)]
+mod run_reporting;
 pub mod types;
 pub mod verify;
 

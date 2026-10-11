@@ -201,9 +201,16 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     fn value(&mut self, value: Value) -> Result<(), ExecutionError> {
-        self.reserve(value.extra_storage())?;
-        if self.values.len() == self.values.capacity() {
-            self.reserve(size_of::<Value>())?;
+        let grow = self.values.len() == self.values.capacity();
+        // A detached payload is absent from storage(); reserve it together with
+        // its receiving buffer, before either growth or publication.
+        self.reserve(
+            value
+                .extra_storage()
+                .checked_add(if grow { size_of::<Value>() } else { 0 })
+                .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
+        )?;
+        if grow {
             self.values
                 .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("value allocation")))?;
@@ -230,16 +237,29 @@ impl<'a> Machine<'a> {
         }
     }
     fn slot_index(&mut self, at: Location) -> Result<(usize, usize), ExecutionError> {
+        self.slot_index_with_payload(at, 0)
+    }
+    fn slot_index_with_payload(
+        &mut self,
+        at: Location,
+        payload: usize,
+    ) -> Result<(usize, usize), ExecutionError> {
         let f = self.frame_index(at.frame)?;
         if let Some(i) = self.frames[f]
             .slots
             .iter()
             .position(|(p, _)| *p == at.place)
         {
+            self.reserve(payload)?;
             return Ok((f, i));
         }
-        if self.frames[f].slots.len() == self.frames[f].slots.capacity() {
-            self.reserve(size_of::<(Place, Slot)>())?;
+        let grow = self.frames[f].slots.len() == self.frames[f].slots.capacity();
+        self.reserve(
+            payload
+                .checked_add(if grow { size_of::<(Place, Slot)>() } else { 0 })
+                .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
+        )?;
+        if grow {
             self.frames[f]
                 .slots
                 .try_reserve_exact(1)
@@ -293,8 +313,7 @@ impl<'a> Machine<'a> {
     fn publish(&mut self, destination: Destination, value: Value) -> Result<(), ExecutionError> {
         match destination {
             Destination::Slot(at) => {
-                self.reserve(value.extra_storage())?;
-                let (f, i) = self.slot_index(at)?;
+                let (f, i) = self.slot_index_with_payload(at, value.extra_storage())?;
                 self.frames[f].slots[i].1 = Slot::Available(value);
             }
             Destination::Field(at, record, field) => {
@@ -759,6 +778,11 @@ impl<'a> Machine<'a> {
         if self.values.len() < fields.len() {
             return Err(self.integrity("record operands missing"));
         }
+        // Admitted records are nonempty and their fields are scalar ranges.
+        // Draining them frees a value entry for the completed record, so this
+        // construction cannot also grow the value buffer. enter() separately
+        // reserves parameter and frame headers together while argument payloads
+        // remain counted; return publication reuses the entry just popped.
         self.reserve(
             fields
                 .len()
@@ -893,6 +917,170 @@ impl<'a> Machine<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn detached_record(e: &CheckedExecutable) -> Value {
+        let record = &e.program.records()[0];
+        let mut fields = Vec::new();
+        fields.try_reserve_exact(record.fields.len()).unwrap();
+        for id in &record.fields {
+            fields.push((
+                *id,
+                RangeValue {
+                    ty: e.program.fields()[id.0].ty,
+                    value: 80,
+                },
+            ));
+        }
+        Value::Public(RuntimeValue::Record {
+            record: record.id,
+            fields,
+        })
+    }
+
+    const STORAGE_SOURCE: &str = "type P=range 0..100;record R{x:P,y:P}fn demo()->R{let pending=R{x:80,y:80};return pending;}";
+
+    #[test]
+    fn p02_detached_record_and_value_buffer_require_combined_budget() {
+        let e = artifact(STORAGE_SOURCE);
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.value(Value::Public(RuntimeValue::Bool(true))).unwrap();
+        while m.values.len() < m.values.capacity() {
+            m.value(Value::Public(RuntimeValue::Bool(true))).unwrap();
+        }
+        let value = detached_record(&e);
+        let payload = value.extra_storage();
+        let header = size_of::<Value>();
+        let initial = m.storage().unwrap();
+        let old_budget = initial.checked_add(payload.max(header)).unwrap();
+        let combined = initial
+            .checked_add(payload)
+            .unwrap()
+            .checked_add(header)
+            .unwrap();
+        assert!(old_budget < combined);
+        assert!(initial.checked_add(payload).unwrap() <= old_budget);
+        assert!(initial.checked_add(header).unwrap() <= old_budget);
+        let capacity = m.values.capacity();
+        let count = m.values.len();
+        m.limits.working_storage = old_budget;
+        assert!(matches!(
+            m.value(value),
+            Err(ExecutionError {
+                kind: ErrorKind::ConfiguredLimit("working storage"),
+                ..
+            })
+        ));
+        assert_eq!((m.values.len(), m.values.capacity()), (count, capacity));
+        assert_eq!(m.storage(), Some(initial));
+        assert!(m.storage().unwrap() <= m.limits.working_storage);
+        // The adjacent byte below the complete prospective peak also rejects.
+        m.limits.working_storage = combined - 1;
+        assert!(m.value(detached_record(&e)).is_err());
+        assert_eq!(m.storage(), Some(initial));
+        m.limits.working_storage = combined;
+        m.value(detached_record(&e)).unwrap();
+        assert_eq!(m.values.capacity(), capacity + 1);
+        assert_eq!(m.storage(), Some(combined));
+        assert!(m.storage().unwrap() <= m.limits.working_storage);
+    }
+
+    #[test]
+    fn p02_detached_record_and_new_destination_slot_require_combined_budget() {
+        let e = artifact(STORAGE_SOURCE);
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        assert_eq!(m.frames[0].slots.capacity(), 0);
+        let pending = e
+            .program
+            .locals()
+            .iter()
+            .find(|l| l.name == "pending")
+            .unwrap()
+            .id;
+        let destination = Destination::Slot(Location {
+            frame: m.frames[0].id,
+            place: Place::Local(pending),
+        });
+        let value = detached_record(&e);
+        let payload = value.extra_storage();
+        let header = size_of::<(Place, Slot)>();
+        let initial = m.storage().unwrap();
+        let old_budget = initial.checked_add(payload.max(header)).unwrap();
+        let combined = initial
+            .checked_add(payload)
+            .unwrap()
+            .checked_add(header)
+            .unwrap();
+        assert!(old_budget < combined);
+        assert!(initial.checked_add(payload).unwrap() <= old_budget);
+        assert!(initial.checked_add(header).unwrap() <= old_budget);
+        for budget in [old_budget, combined - 1] {
+            m.limits.working_storage = budget;
+            assert!(matches!(
+                m.publish(destination, detached_record(&e)),
+                Err(ExecutionError {
+                    kind: ErrorKind::ConfiguredLimit("working storage"),
+                    ..
+                })
+            ));
+            assert!(
+                m.frames[0].slots.is_empty(),
+                "destination must remain unpublished"
+            );
+            assert_eq!(m.frames[0].slots.capacity(), 0);
+            assert_eq!(m.storage(), Some(initial));
+            assert!(m.storage().unwrap() <= m.limits.working_storage);
+        }
+        m.limits.working_storage = combined;
+        m.publish(destination, value).unwrap();
+        assert!(matches!(
+            slot(&m, "pending"),
+            Slot::Available(Value::Public(RuntimeValue::Record { .. }))
+        ));
+        assert_eq!(m.storage(), Some(combined));
+        assert!(m.storage().unwrap() <= m.limits.working_storage);
+    }
+
+    #[test]
+    fn p02_record_moves_calls_returns_and_construction_stay_within_storage_after_each_step() {
+        let e = artifact(concat!(
+            "type P=range 0..100;record R{x:P,y:P}",
+            "fn take(a:R,b:R)->R{let moved=b;return moved;}",
+            "fn wrap(a:R)->R{let moved=a;return moved;}",
+            "fn demo()->R{let a=R{x:80,y:70};let b=R{x:60,y:50};",
+            "let result=take(wrap(a),b);return result;}"
+        ));
+        let mut peak = 0;
+        for budget in [ExecutionLimits::default().working_storage, 0] {
+            let budget = if budget == 0 { peak } else { budget };
+            let mut m = Machine::new(
+                &e,
+                ExecutionLimits {
+                    working_storage: budget,
+                    ..ExecutionLimits::default()
+                },
+            );
+            m.start(e.entry("demo").unwrap()).unwrap();
+            assert!(m.storage().unwrap() <= budget);
+            peak = peak.max(m.storage().unwrap());
+            while let Some(task) = m.tasks.pop() {
+                m.step(task).unwrap();
+                let actual = m.storage().unwrap();
+                assert!(
+                    actual <= budget,
+                    "successful transition exceeded its storage allowance"
+                );
+                peak = peak.max(actual);
+            }
+            let result = m.resume().unwrap();
+            assert_eq!(
+                e.render_result(&result, 65536).unwrap(),
+                "R { x: P(60), y: P(50) }"
+            );
+            assert!(m.storage().unwrap() <= budget);
+        }
+    }
+
     fn artifact(s: &str) -> CheckedExecutable {
         prepare_execution(
             &if (s.contains("type P=") || s.contains("type P =")) && !s.contains("fn seed(") {

@@ -86,18 +86,31 @@ not a promise every combination of maxima fits. They bound successful and reject
 paths, including diagnostic construction and disposal. Parser call depth is
 checked before recursion; expression depth is checked at construction (including
 flat left-associated trees) before later visitors or recursive disposal. MIR
-reachability is iterative. Canonical bounded shape checks precede recursive
-correspondence validation. Alias traversal has separate actual depth and cumulative
-work counters shared across checker snapshots; analysis rollback cannot refund
+reachability is iterative. Canonical bounded shape checks cover ordinary bodies,
+verified contracts, and retained verified-body operands before recursive record
+validation, authority comparison, or correspondence validation. This structural
+guard neither evaluates proofs nor executes verified bodies or harnesses. Other
+retained tables and harness metadata contain scalar identities and values rather
+than additional expression subtrees. Alias traversal has separate actual depth and
+cumulative work counters shared across checker snapshots; analysis rollback cannot refund
 these counters. Token, identifier, input, explicit runtime buffers, trace, and
 rendering growth use fallible reservation. Existing bounded semantic collections
 remain behind the pre-reserved envelope.
 
 Runtime storage accounts for vector capacities, frame slots, record payloads,
-pending arguments, and continuation buffers before growth. Error traces reserve
-separate bounded capacity of at most 64 entries so exhaustion can still be reported.
+pending arguments, and continuation buffers before growth. Detached record
+payloads and receiving value-buffer or destination-slot growth are reserved
+together with checked arithmetic before allocation or publication. Parameter and
+frame growth are likewise reserved together while argument payloads remain
+counted. Record construction and return publication reuse vacated value entries.
+Error traces reserve separate bounded capacity of at most 64 entries so exhaustion
+can still be reported.
 Rendering is bounded before each write, including deterministic truncation. The
-CLI has a fixed emergency diagnostic when even the truncation text cannot fit.
+CLI has borrowed, fixed emergency diagnostics when even the truncation text
+cannot fit or the renderer detects allocation failure; reporting those failures
+does not allocate another String or retry ordinary rendering. A rendering failure
+that prevents the original diagnostic determines the exit classification:
+allowance exhaustion is class 1, and detected render allocation failure is class 2.
 Host allocator overhead and fixed stack/error bookkeeping are outside byte-buffer
 accounting. Arbitrary allocator abort, external corruption, process kill, and
 hardware failure are outside structured reporting; detected reader, allocation,

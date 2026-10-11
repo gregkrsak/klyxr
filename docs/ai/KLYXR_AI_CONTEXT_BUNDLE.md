@@ -2957,6 +2957,11 @@ rendering are bounded. Typed values distinguish raw operands, ranges, records,
 and references. There are no runtime loans, snapshots, or rollback. `main` routes
 `run` to bounded reader preparation and execution independently of `verify_report`.
 Private stopped-machine tests inspect prefix effects and unpublished destinations.
+Retained verified-body operands receive the same bounded structural admission as
+contracts before recursive validation and authority comparison, without proof
+evaluation. Detached runtime payloads are reserved together with receiving buffer
+growth. The private CLI reporting boundary preserves renderer host failures and
+uses borrowed static emergency diagnostics without a second String allocation.
 See `docs/BOUNDED_EXECUTION.md` for the full tool contract and host-failure boundary.
 
 <!-- END ARCHITECTURE.md -->

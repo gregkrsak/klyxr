@@ -1,6 +1,7 @@
 use std::{env, fs, process};
 
-use klyxr_compiler::{compile_source, diagnostics::Diagnostic, verify, FrontendError};
+use klyxr_compiler::{compile_source, diagnostics::Diagnostic, execution, verify, FrontendError};
+mod run_reporting;
 
 fn main() {
     if let Err(code) = run() {
@@ -148,7 +149,7 @@ fn print_usage() {
 }
 
 fn run_execution(mut args: impl Iterator<Item = String>) -> Result<(), i32> {
-    use klyxr_compiler::execution::{self, AdmissionLimits, ErrorKind, ExecutionLimits};
+    use execution::{AdmissionLimits, ExecutionLimits};
     let Some(path) = args.next() else {
         eprintln!("usage: klyxr run <file.klx> --function <name> [limit overrides]");
         return Err(2);
@@ -238,16 +239,11 @@ fn run_execution(mut args: impl Iterator<Item = String>) -> Result<(), i32> {
     let artifact = match execution::prepare_execution_from_reader(file, admission) {
         Ok(e) => e,
         Err(e) => {
-            let text = execution::render_admission_error(&e, admission.rendered_output)
-                .unwrap_or_else(|_| {
-                    "error: diagnostic rendering allowance exhausted [truncated]".into()
-                });
-            execution::write_output(std::io::stderr().lock(), &text).map_err(|_| 2)?;
-            return Err(if matches!(e.kind, ErrorKind::Host(_)) {
-                2
-            } else {
-                1
-            });
+            return run_reporting::preparation_error(
+                &e,
+                admission.rendered_output,
+                std::io::stderr().lock(),
+            );
         }
     };
     let result = artifact
@@ -256,18 +252,11 @@ fn run_execution(mut args: impl Iterator<Item = String>) -> Result<(), i32> {
         .and_then(|r| artifact.render_result(&r, execution.rendered_output));
     match result {
         Ok(text) => execution::write_output(std::io::stdout().lock(), &text).map_err(|_| 2),
-        Err(e) => {
-            let text = artifact
-                .render_error(&e, execution.rendered_output)
-                .unwrap_or_else(|_| {
-                    "error: diagnostic rendering allowance exhausted [truncated]".into()
-                });
-            execution::write_output(std::io::stderr().lock(), &text).map_err(|_| 2)?;
-            Err(if matches!(e.kind, ErrorKind::Host(_)) {
-                2
-            } else {
-                1
-            })
-        }
+        Err(e) => run_reporting::execution_error(
+            &artifact,
+            &e,
+            execution.rendered_output,
+            std::io::stderr().lock(),
+        ),
     }
 }

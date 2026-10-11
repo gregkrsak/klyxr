@@ -3,6 +3,11 @@
 use super::*;
 use crate::hir::{ExprKind, ExprType, ParameterType, Place, TypedExpr, ValueStatement};
 
+#[cfg(test)]
+thread_local! {
+    pub(super) static RECORD_WALKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 fn bad() -> ExecutionError {
     ExecutionError::integrity("invalid canonical execution metadata")
 }
@@ -421,8 +426,15 @@ pub(super) fn program_shape(p: &hir::Program, c: &Context) -> Result<(), Executi
         } else if let Some(f) = f.as_verified() {
             expression(p, f.id, &f.requires, c, 1, false, false)?;
             expression(p, f.id, &f.ensures, c, 1, false, false)?;
+            // Retained proof operands are visited by record validation and the
+            // authority comparison even though ordinary execution skips them.
+            for statement in &f.body {
+                expression(p, f.id, &statement.operand, c, 1, false, false)?;
+            }
         }
     }
+    #[cfg(test)]
+    RECORD_WALKS.with(|n| n.set(n.get() + 1));
     p.validate_record_expressions().map_err(|_| bad())?;
     Ok(())
 }

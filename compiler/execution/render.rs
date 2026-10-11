@@ -4,6 +4,25 @@ use std::{
     io::Write,
 };
 
+#[cfg(test)]
+thread_local! {
+    static FAIL_ALLOCATION: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Inject failure at the actual renderer growth boundary, isolated to this test
+/// thread. The guard restores the previous setting even if a test unwinds.
+#[cfg(test)]
+pub(super) fn with_allocation_failure<T>(f: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            FAIL_ALLOCATION.with(|flag| flag.set(self.0));
+        }
+    }
+    let _restore = Restore(FAIL_ALLOCATION.with(|flag| flag.replace(true)));
+    f()
+}
+
 struct Output {
     text: String,
     limit: usize,
@@ -39,6 +58,13 @@ impl fmt::Write for Output {
             .map_or(true, |n| n > self.limit)
         {
             self.failure = Some(ErrorKind::ConfiguredLimit("rendered output"));
+            return Err(fmt::Error);
+        }
+        #[cfg(test)]
+        if s.len() > self.text.capacity() - self.text.len()
+            && FAIL_ALLOCATION.with(std::cell::Cell::get)
+        {
+            self.failure = Some(ErrorKind::Host("render allocation"));
             return Err(fmt::Error);
         }
         if self.text.try_reserve_exact(s.len()).is_err() {

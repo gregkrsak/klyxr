@@ -654,3 +654,302 @@ fn function_entry_fuel_precedes_call_depth() {
         );
     }
 }
+
+const MIXED: &str = concat!(
+    "type Percent=range 0..100;record Battery{charge:Percent}",
+    "verified fn consume(battery:&mut Battery,amount:Percent)",
+    "requires amount<=battery.charge ",
+    "ensures battery.charge==old(battery.charge)-amount ",
+    "{battery.charge-=amount;}fn demo()->bool{return true;}"
+);
+
+fn verified_operand(e: &mut CheckedExecutable) -> &mut hir::TypedExpr {
+    let hir::Function::Verified(f) = &mut e.program.functions[0] else {
+        panic!("verified fixture missing")
+    };
+    &mut f.body[0].operand
+}
+
+// Move each node into the chain rather than recursively cloning it. Likewise,
+// peel injected nodes before dropping the artifact or any rejected expression.
+fn subtract_chain(mut leaf: hir::TypedExpr, depth: usize) -> hir::TypedExpr {
+    for _ in 1..depth {
+        let ty = leaf.ty;
+        let span = leaf.span;
+        leaf = hir::TypedExpr {
+            ty,
+            span,
+            kind: hir::ExprKind::Binary {
+                op: hir::BinaryOp::Subtract,
+                left: Box::new(leaf),
+                right: Box::new(hir::TypedExpr {
+                    ty: hir::ExprType::IntegerLiteral,
+                    span,
+                    kind: hir::ExprKind::IntegerLiteral(0),
+                }),
+            },
+        };
+    }
+    leaf
+}
+fn dispose_injected_chain(mut expression: hir::TypedExpr) {
+    loop {
+        match expression.kind {
+            hir::ExprKind::Binary { left, right, .. } => {
+                // Each right operand in the injected chain is a scalar leaf.
+                drop(right);
+                expression = *left;
+            }
+            hir::ExprKind::Unary { operand, .. } => expression = *operand,
+            _ => break,
+        }
+    }
+}
+
+#[test]
+fn p01_verified_operand_depth_rejects_before_legacy_record_walk() {
+    let mut e = prepare(MIXED);
+    let leaf = verified_operand(&mut e).clone();
+    *verified_operand(&mut e) = subtract_chain(leaf.clone(), e.limits.traversal_depth + 1);
+    validate::RECORD_WALKS.with(|n| n.set(0));
+    let result = e.validate();
+    let walks = validate::RECORD_WALKS.with(std::cell::Cell::get);
+    let injected = std::mem::replace(verified_operand(&mut e), leaf);
+    dispose_injected_chain(injected);
+    assert!(matches!(
+        result,
+        Err(ExecutionError {
+            kind: ErrorKind::ConfiguredLimit("admission expression depth"),
+            ..
+        })
+    ));
+    assert_eq!(walks, 0, "legacy recursive validation must not start");
+}
+
+#[test]
+fn p01_verified_operand_at_depth_limit_passes_bounded_and_legacy_walks() {
+    let mut e = prepare(MIXED);
+    let leaf = verified_operand(&mut e).clone();
+    *verified_operand(&mut e) = subtract_chain(leaf.clone(), e.limits.traversal_depth);
+    validate::RECORD_WALKS.with(|n| n.set(0));
+    let result = validate::program_shape(&e.program, &Context::new(e.limits));
+    let walks = validate::RECORD_WALKS.with(std::cell::Cell::get);
+    let injected = std::mem::replace(verified_operand(&mut e), leaf);
+    dispose_injected_chain(injected);
+    result.unwrap();
+    assert_eq!(walks, 1);
+}
+
+#[test]
+fn p01_retained_contracts_remain_guarded_before_legacy_record_walk() {
+    for requires in [true, false] {
+        let mut e = prepare(MIXED);
+        let hir::Function::Verified(f) = &mut e.program.functions[0] else {
+            panic!()
+        };
+        let contract = if requires {
+            &mut f.requires
+        } else {
+            &mut f.ensures
+        };
+        let original = contract.clone();
+        let mut injected = original.clone();
+        for _ in 0..e.limits.traversal_depth {
+            let span = injected.span;
+            injected = hir::TypedExpr {
+                ty: hir::ExprType::Bool,
+                span,
+                kind: hir::ExprKind::Unary {
+                    op: hir::UnaryOp::Not,
+                    operand: Box::new(injected),
+                },
+            };
+        }
+        *contract = injected;
+        validate::RECORD_WALKS.with(|n| n.set(0));
+        let result = validate::program_shape(&e.program, &Context::new(e.limits));
+        let walks = validate::RECORD_WALKS.with(std::cell::Cell::get);
+        let hir::Function::Verified(f) = &mut e.program.functions[0] else {
+            panic!()
+        };
+        let contract = if requires {
+            &mut f.requires
+        } else {
+            &mut f.ensures
+        };
+        dispose_injected_chain(std::mem::replace(contract, original));
+        assert!(matches!(
+            result,
+            Err(ExecutionError {
+                kind: ErrorKind::ConfiguredLimit("admission expression depth"),
+                ..
+            })
+        ));
+        assert_eq!(walks, 0);
+    }
+}
+
+#[test]
+fn p01_verified_operand_invalid_canonical_id_rejects_without_indexing() {
+    for parameter in [true, false] {
+        let mut e = prepare(MIXED);
+        let operand = verified_operand(&mut e);
+        if parameter {
+            operand.kind = hir::ExprKind::Parameter(hir::ParameterId(usize::MAX));
+        } else {
+            operand.ty = hir::ExprType::Range(hir::RangeTypeId(usize::MAX));
+        }
+        validate::RECORD_WALKS.with(|n| n.set(0));
+        assert!(matches!(
+            e.validate(),
+            Err(ExecutionError {
+                kind: ErrorKind::Integrity(_),
+                ..
+            })
+        ));
+        assert_eq!(validate::RECORD_WALKS.with(std::cell::Cell::get), 0);
+    }
+}
+
+#[test]
+fn p01_mixed_program_admission_does_not_evaluate_verified_proof() {
+    for source in [
+        MIXED.to_owned(),
+        MIXED.replace(
+            "ensures battery.charge==old(battery.charge)-amount",
+            "ensures battery.charge==old(battery.charge)",
+        ),
+    ] {
+        let e = prepare(&source);
+        e.validate().unwrap();
+        let report = crate::verify::verify_report(&e.program);
+        if source == MIXED {
+            assert!(report.diagnostics.is_empty());
+            assert_eq!(report.functions_proven, 1);
+        } else {
+            assert!(
+                !report.diagnostics.is_empty(),
+                "control must have a failing proof"
+            );
+        }
+        assert_eq!(
+            execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).unwrap(),
+            ExecutionResult::Value(RuntimeValue::Bool(true))
+        );
+        assert!(e.entry("consume").is_err());
+    }
+}
+
+const RENDER_HOST_EMERGENCY: &[u8] =
+    b"error: detected host/tool failure: render allocation [diagnostic unavailable]\n";
+
+#[test]
+fn p03_preparation_renderer_host_failure_reaches_cli_exit_two() {
+    let original = prepare_execution("fn", AdmissionLimits::default())
+        .err()
+        .unwrap();
+    assert!(matches!(original.kind, ErrorKind::Frontend { .. }));
+    let mut output = Vec::new();
+    let result = render::with_allocation_failure(|| {
+        crate::run_reporting::preparation_error(
+            &original,
+            AdmissionLimits::default().rendered_output,
+            &mut output,
+        )
+    });
+    assert_eq!(result, Err(2));
+    assert_eq!(output, RENDER_HOST_EMERGENCY);
+}
+
+#[test]
+fn p03_runtime_trap_renderer_host_failure_reaches_cli_exit_two() {
+    let e = prepare("type P=range 0..100;fn demo()->P{let p=seed(0);return p-1;}");
+    let original = execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).unwrap_err();
+    assert!(matches!(
+        original.kind,
+        ErrorKind::RangeTrap { computed: -1, .. }
+    ));
+    let mut output = Vec::new();
+    let result = render::with_allocation_failure(|| {
+        crate::run_reporting::execution_error(
+            &e,
+            &original,
+            ExecutionLimits::default().rendered_output,
+            &mut output,
+        )
+    });
+    assert_eq!(result, Err(2));
+    assert_eq!(output, RENDER_HOST_EMERGENCY);
+}
+
+#[test]
+fn p03_configured_render_allowance_failure_remains_exit_one() {
+    let e = prepare("fn demo()->bool{return true;}");
+    let original = ExecutionError::integrity("original error");
+    for preparation in [true, false] {
+        let mut output = Vec::new();
+        let result = if preparation {
+            crate::run_reporting::preparation_error(&original, 4, &mut output)
+        } else {
+            crate::run_reporting::execution_error(&e, &original, 4, &mut output)
+        };
+        assert_eq!(result, Err(1));
+        assert_eq!(
+            output,
+            b"error: diagnostic rendering allowance exhausted [truncated]\n"
+        );
+    }
+}
+
+#[test]
+fn p03_successful_cli_error_rendering_preserves_original_class_and_diagnostic() {
+    let e = prepare("fn demo()->bool{return true;}");
+    for original in [
+        ExecutionError::integrity("original error"),
+        ExecutionError::new(ErrorKind::Host("source input"), START),
+    ] {
+        let want = if matches!(original.kind, ErrorKind::Host(_)) {
+            2
+        } else {
+            1
+        };
+        for preparation in [true, false] {
+            let mut output = Vec::new();
+            let result = if preparation {
+                crate::run_reporting::preparation_error(&original, 65536, &mut output)
+            } else {
+                crate::run_reporting::execution_error(&e, &original, 65536, &mut output)
+            };
+            assert_eq!(result, Err(want));
+            let mut expected = e.render_error(&original, 65536).unwrap().into_bytes();
+            expected.push(b'\n');
+            assert_eq!(output, expected);
+        }
+    }
+}
+
+#[test]
+fn p03_emergency_writer_failure_still_returns_host_exit_two() {
+    struct FailedWriter;
+    impl std::io::Write for FailedWriter {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::ErrorKind::Other.into())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let original = ExecutionError::integrity("original error");
+    assert_eq!(
+        render::with_allocation_failure(|| crate::run_reporting::preparation_error(
+            &original,
+            65536,
+            FailedWriter
+        )),
+        Err(2)
+    );
+    assert_eq!(
+        crate::run_reporting::preparation_error(&original, 4, FailedWriter),
+        Err(2)
+    );
+}
