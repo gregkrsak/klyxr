@@ -110,11 +110,18 @@ impl Catalog {
                 .and_then(Function::as_ordinary)
                 .ok_or("trusted operation is not canonical ordinary function")?;
             if acquire {
+                if !matches!(f.body.as_slice(), [ValueStatement::Return { value: TypedExpr { kind: ExprKind::RecordConstruct { record, fields }, ty: ExprType::Record(ty), .. }, .. }] if *record == leaf.record && *ty == leaf.record && fields.is_empty())
+                {
+                    return Err("trusted acquisition must have the canonical private stub");
+                }
                 if !f.parameters.is_empty() || f.return_type != Some(ValueType::Record(leaf.record))
                 {
                     return Err("trusted acquisition signature mismatch");
                 }
             } else {
+                if !f.body.is_empty() {
+                    return Err("trusted release cannot dispatch user code");
+                }
                 if f.return_type.is_some() || f.parameters.len() != 1 {
                     return Err("trusted release signature mismatch");
                 }
@@ -212,40 +219,50 @@ impl Catalog {
 }
 
 #[cfg(test)]
+pub(crate) fn fixture() -> Program {
+    let mut p = crate::compile_source("type R = range 0..1; record Leaf { data: R } record Pair { first: R, inert: R, last: R } fn acquire() -> Leaf { return Leaf { data: 0 }; } fn release(x: Leaf) {} ").unwrap();
+    p.records[0].fields.clear();
+    p.fields.remove(0);
+    for (i, f) in p.fields.iter_mut().enumerate() {
+        f.id = FieldId(i);
+    }
+    p.records[1].fields = vec![FieldId(0), FieldId(1), FieldId(2)];
+    p.fields[0].ty = ValueType::Record(RecordId(0));
+    p.fields[2].ty = ValueType::Record(RecordId(0));
+    if let Function::Ordinary(f) = &mut p.functions[0] {
+        if let ValueStatement::Return { value, .. } = &mut f.body[0] {
+            value.kind = ExprKind::RecordConstruct {
+                record: RecordId(0),
+                fields: Vec::new(),
+            };
+        }
+    }
+    p.resources = Catalog {
+        leaves: vec![Leaf {
+            id: ResourceId(0),
+            record: RecordId(0),
+            acquire: OperationId(0),
+            release: OperationId(1),
+        }],
+        operations: vec![
+            Operation {
+                id: OperationId(0),
+                function: FunctionId(0),
+                kind: OperationKind::Acquire(ResourceId(0)),
+            },
+            Operation {
+                id: OperationId(1),
+                function: FunctionId(1),
+                kind: OperationKind::Release(ResourceId(0)),
+            },
+        ],
+    };
+    p
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    fn fixture() -> Program {
-        let mut p = crate::compile_source("type R = range 0..1; record Leaf { data: R } record Pair { first: R, inert: R, last: R } fn acquire() -> Leaf { return Leaf { data: 0 }; } fn release(x: Leaf) {} ").unwrap();
-        p.records[0].fields.clear();
-        p.fields.remove(0);
-        for (i, f) in p.fields.iter_mut().enumerate() {
-            f.id = FieldId(i);
-        }
-        p.records[1].fields = vec![FieldId(0), FieldId(1), FieldId(2)];
-        p.fields[0].ty = ValueType::Record(RecordId(0));
-        p.fields[2].ty = ValueType::Record(RecordId(0));
-        p.resources = Catalog {
-            leaves: vec![Leaf {
-                id: ResourceId(0),
-                record: RecordId(0),
-                acquire: OperationId(0),
-                release: OperationId(1),
-            }],
-            operations: vec![
-                Operation {
-                    id: OperationId(0),
-                    function: FunctionId(0),
-                    kind: OperationKind::Acquire(ResourceId(0)),
-                },
-                Operation {
-                    id: OperationId(1),
-                    function: FunctionId(1),
-                    kind: OperationKind::Release(ResourceId(0)),
-                },
-            ],
-        };
-        p
-    }
     #[test]
     fn plans_share_leaf_identity_in_reverse_canonical_order() {
         let p = fixture();

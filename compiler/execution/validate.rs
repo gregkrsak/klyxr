@@ -458,6 +458,26 @@ pub(super) fn mir_shape(
         if f.blocks().len() > c.limits.tokens.checked_mul(4).ok_or_else(bad)? {
             return Err(bad());
         }
+        if let Some(flow) = &f.cleanup {
+            if flow.scopes.len() > c.limits.tokens
+                || flow.blocks.len() > c.limits.tokens.saturating_mul(4)
+                || flow.parameters.len() > c.limits.tokens
+            {
+                return Err(bad());
+            }
+            for scope in &flow.scopes {
+                if scope.owners.len() > c.limits.tokens {
+                    return Err(bad());
+                }
+            }
+            for block in &flow.blocks {
+                if block.initialize.len() > c.limits.tokens
+                    || block.exit.len() > c.limits.traversal_depth
+                {
+                    return Err(bad());
+                }
+            }
+        }
         for (_, b) in f.blocks() {
             if b.statements().len() > c.limits.tokens {
                 return Err(bad());

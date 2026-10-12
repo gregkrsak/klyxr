@@ -46,3 +46,33 @@ their range-identity and malformed-metadata witnesses through the explicit
 
 Runtime cleanup, lexical activation, resource payloads and synthetic execution are
 not implemented at this milestone. No PR or merge is authorized by this ledger.
+
+Milestone 1 commit: `60cee544039ecd22b7ed01576490231e2a17cfd1`.
+All four push workflows passed:
+
+| Workflow | Run |
+| --- | --- |
+| build | https://github.com/gregkrsak/klyxr/actions/runs/38297326807 |
+| tests | https://github.com/gregkrsak/klyxr/actions/runs/38297326828 |
+| docs | https://github.com/gregkrsak/klyxr/actions/runs/38297326804 |
+| verify | https://github.com/gregkrsak/klyxr/actions/runs/38297326820 |
+
+Debug/release: 1,590 passed each. All 1,581 predecessor identities and outcomes
+remain present; nine new identities passed in each profile. No failures or ignored
+tests. Local fmt/check/Clippy passed as advisory only.
+
+## Milestone 2 — lexical MIR cleanup metadata
+
+The existing structured lowerer now emits private MIR scope descriptors, static
+scope-entry sites, explicit successful-initialization sites, exact inner-to-outer
+exit sets and synthesized origins. Function metadata retains reverse-ordered owned
+record parameters and a protected-return boundary. Resource-free source lowering
+retains its previous representation with no cleanup metadata.
+
+MIR validation rejects duplicate exits, missing activations and missing cleanup
+origins. Opaque execution correspondence compares the new metadata as part of the
+complete deterministic MIR artifact. Admission bounds the new vectors before
+recursive comparison. Trusted acquisition/release stubs reject arbitrary user
+bodies, and canonical fixture construction repeats ordinary HIR validation and
+ownership checking before lowering. Four new lowering/malformed-metadata controls
+are authored; runtime cleanup is still pending.

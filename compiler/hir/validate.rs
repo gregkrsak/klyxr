@@ -223,7 +223,7 @@ impl Program {
                     .get(record.0)
                     .filter(|r| r.id == *record)
                     .ok_or_else(|| invalid("construction has an invalid canonical record"))?;
-                if fields.is_empty() {
+                if fields.is_empty() && !self.resources.operations.iter().any(|op| op.function == function && matches!(op.kind, resources::OperationKind::Acquire(id) if self.resources.leaves.get(id.0).is_some_and(|leaf| leaf.record == *record))) {
                     return Err(invalid(
                         "construction initializer sequence must be nonempty",
                     ));

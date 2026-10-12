@@ -1,6 +1,7 @@
 //! Deterministic control-flow lowering of checked ordinary HIR. No execution or proof.
 use crate::hir::{self, FunctionId, LocalId, Place, TypedExpr, ValueStatement};
 use crate::lexer::Span;
+pub(crate) mod cleanup;
 
 /// Compilation-local CFG identity, unrelated to source declaration identities.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -77,6 +78,7 @@ impl BasicBlock {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MirFunction {
+    pub(crate) cleanup: Option<cleanup::Flow>,
     function: FunctionId,
     entry: BasicBlockId,
     blocks: Vec<BasicBlock>,
@@ -181,6 +183,9 @@ impl MirFunction {
                 Terminator::Goto { .. } | Terminator::ReturnNoValue => {}
             }
         }
+        if let Some(flow) = &self.cleanup {
+            flow.validate(self)?;
+        }
         let mut marks = Vec::new();
         marks
             .try_reserve_exact(self.blocks.len())
@@ -215,6 +220,9 @@ pub fn lower(program: &hir::Program) -> MirProgram {
 /// Produced by the same lowering, never reconstructed by the runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OriginKind {
+    ScopeEntry,
+    OwnerInitialization,
+    ScopeExit,
     Statement,
     Initializer,
     If,
@@ -239,6 +247,27 @@ fn lower_internal(program: &hir::Program, legacy_assert: bool) -> (MirProgram, V
                 blocks: Vec::new(),
                 loop_targets: Vec::new(),
                 origins: Vec::new(),
+                cleanup: if program.resources.leaves.is_empty() {
+                    None
+                } else {
+                    Some(cleanup::Flow {
+                        parameters: f
+                            .parameters
+                            .iter()
+                            .rev()
+                            .copied()
+                            .filter(|id| {
+                                matches!(
+                                    program.parameter(*id).ty,
+                                    hir::ParameterType::Value(hir::ValueType::Record(_))
+                                )
+                            })
+                            .collect(),
+                        protected_return: matches!(f.return_type, Some(hir::ValueType::Record(_))),
+                        ..cleanup::Flow::default()
+                    })
+                },
+                active_scopes: Vec::new(),
             };
             let entry = builder.reserve();
             if let Some((tail, statements)) = builder.body(entry, &f.body) {
@@ -257,6 +286,7 @@ fn lower_internal(program: &hir::Program, legacy_assert: bool) -> (MirProgram, V
                 );
             }
             let function = MirFunction {
+                cleanup: builder.cleanup,
                 function: f.id,
                 entry,
                 blocks: builder
@@ -281,9 +311,27 @@ fn lower_internal(program: &hir::Program, legacy_assert: bool) -> (MirProgram, V
     let (functions, origins) = pairs.into_iter().unzip();
     (MirProgram { functions }, origins)
 }
+fn value_statement_span(statement: &ValueStatement) -> Span {
+    match statement {
+        ValueStatement::ReturnNoValue { span }
+        | ValueStatement::Break { span }
+        | ValueStatement::Continue { span }
+        | ValueStatement::CallNoValue { span, .. }
+        | ValueStatement::Let { span, .. }
+        | ValueStatement::Return { span, .. }
+        | ValueStatement::Assign { span, .. }
+        | ValueStatement::DerefAssign { span, .. }
+        | ValueStatement::CopyFieldAssign { span, .. }
+        | ValueStatement::CopyReferenceFieldAssign { span, .. }
+        | ValueStatement::If { span, .. }
+        | ValueStatement::While { span, .. } => *span,
+    }
+}
 struct Builder {
     blocks: Vec<Option<BasicBlock>>,
-    loop_targets: Vec<(BasicBlockId, BasicBlockId)>,
+    loop_targets: Vec<(BasicBlockId, BasicBlockId, usize)>,
+    cleanup: Option<cleanup::Flow>,
+    active_scopes: Vec<cleanup::ScopeId>,
     origins: Vec<Option<Origin>>,
 }
 impl Builder {
@@ -291,6 +339,9 @@ impl Builder {
         let id = BasicBlockId(self.blocks.len());
         self.blocks.push(None);
         self.origins.push(None);
+        if let Some(flow) = &mut self.cleanup {
+            flow.blocks.push(cleanup::Block::default());
+        }
         id
     }
     fn finish(
@@ -343,6 +394,7 @@ impl Builder {
             self.initialize(then_target, Vec::new(), local, then_value, span, join);
             self.initialize(else_target, Vec::new(), local, else_value, span, join);
         } else {
+            self.initialization(current, statements.len(), local, span);
             statements.push(Statement::Let {
                 local,
                 initializer: value.clone(),
@@ -357,6 +409,84 @@ impl Builder {
         }
     }
     fn body(
+        &mut self,
+        current: BasicBlockId,
+        body: &[ValueStatement],
+    ) -> Option<(BasicBlockId, Vec<Statement>)> {
+        let scope = self.cleanup.as_mut().map(|flow| {
+            let id = cleanup::ScopeId(flow.scopes.len());
+            flow.scopes.push(cleanup::Scope {
+                id,
+                parent: self.active_scopes.last().copied(),
+                owners: Vec::new(),
+            });
+            let span = body
+                .first()
+                .map(value_statement_span)
+                .unwrap_or(crate::bounded::START);
+            flow.blocks[current.0].enter = Some((
+                id,
+                Origin {
+                    span,
+                    kind: OriginKind::ScopeEntry,
+                },
+            ));
+            self.active_scopes.push(id);
+            id
+        });
+        let result = self.body_inner(current, body);
+        if let Some(scope) = scope {
+            if let Some((tail, _)) = &result {
+                let flow = self.cleanup.as_mut().unwrap();
+                flow.blocks[tail.0].exit.push(scope);
+                flow.blocks[tail.0].exit_origin = Some(Origin {
+                    span: body
+                        .last()
+                        .map(value_statement_span)
+                        .unwrap_or(crate::bounded::START),
+                    kind: OriginKind::ScopeExit,
+                });
+            }
+            assert_eq!(self.active_scopes.pop(), Some(scope));
+        }
+        result
+    }
+    fn exiting(&mut self, current: BasicBlockId, depth: usize, span: Span) {
+        if let Some(flow) = &mut self.cleanup {
+            flow.blocks[current.0].exit =
+                self.active_scopes[depth..].iter().rev().copied().collect();
+            flow.blocks[current.0].exit_origin = Some(Origin {
+                span,
+                kind: OriginKind::ScopeExit,
+            });
+        }
+    }
+    fn initialization(
+        &mut self,
+        current: BasicBlockId,
+        statement: usize,
+        local: LocalId,
+        span: Span,
+    ) {
+        if let Some(flow) = &mut self.cleanup {
+            let scope = *self.active_scopes.last().expect("lexical initialization");
+            if !flow.scopes[scope.0].owners.contains(&local) {
+                flow.scopes[scope.0].owners.push(local);
+            }
+            flow.blocks[current.0]
+                .initialize
+                .push(cleanup::Initialization {
+                    statement,
+                    local,
+                    scope,
+                    origin: Origin {
+                        span,
+                        kind: OriginKind::OwnerInitialization,
+                    },
+                });
+        }
+    }
+    fn body_inner(
         &mut self,
         mut current: BasicBlockId,
         body: &[ValueStatement],
@@ -383,6 +513,7 @@ impl Builder {
             };
             match statement {
                 ValueStatement::ReturnNoValue { .. } => {
+                    self.exiting(current, 0, span);
                     self.finish(current, statements, Terminator::ReturnNoValue, origin);
                     return None;
                 }
@@ -398,12 +529,16 @@ impl Builder {
                     });
                 }
                 ValueStatement::Break { .. } => {
-                    let target = self.loop_targets.last().expect("checked innermost loop").1;
+                    let (_, target, depth) =
+                        *self.loop_targets.last().expect("checked innermost loop");
+                    self.exiting(current, depth, span);
                     self.finish(current, statements, Terminator::Goto { target }, origin);
                     return None;
                 }
                 ValueStatement::Continue { .. } => {
-                    let target = self.loop_targets.last().expect("checked innermost loop").0;
+                    let (target, _, depth) =
+                        *self.loop_targets.last().expect("checked innermost loop");
+                    self.exiting(current, depth, span);
                     self.finish(current, statements, Terminator::Goto { target }, origin);
                     return None;
                 }
@@ -424,6 +559,7 @@ impl Builder {
                         );
                         current = join;
                     } else {
+                        self.initialization(current, statements.len(), *local, *span);
                         statements.push(Statement::Let {
                             local: *local,
                             initializer: initializer.clone(),
@@ -511,11 +647,15 @@ impl Builder {
                         },
                         origin,
                     );
-                    self.loop_targets.push((header, exit));
+                    self.loop_targets
+                        .push((header, exit, self.active_scopes.len()));
                     if let Some((end, body)) = self.body(body_target, body) {
                         self.finish(end, body, Terminator::Goto { target: header }, origin);
                     }
-                    assert_eq!(self.loop_targets.pop(), Some((header, exit)));
+                    assert_eq!(
+                        self.loop_targets.pop().map(|(h, e, _)| (h, e)),
+                        Some((header, exit))
+                    );
                     current = exit;
                 }
                 ValueStatement::If {
@@ -575,6 +715,7 @@ impl Builder {
                     current = join;
                 }
                 ValueStatement::Return { value, .. } => {
+                    self.exiting(current, 0, span);
                     self.finish(
                         current,
                         statements,
@@ -972,6 +1113,7 @@ mod tests {
                 },
             ] {
                 let m = MirFunction {
+                    cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
                     blocks: vec![BasicBlock {
@@ -998,6 +1140,7 @@ mod tests {
                 },
             ] {
                 let m = MirFunction {
+                    cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
                     blocks: vec![
@@ -1042,6 +1185,7 @@ mod tests {
                 hir::ExprKind::FieldAccess(access)
             };
             let m = MirFunction {
+                cleanup: None,
                 function: f.id,
                 entry: BasicBlockId(0),
                 blocks: vec![BasicBlock {
@@ -1114,6 +1258,7 @@ mod multiple_field_tests {
                 ];
                 for statement in statements {
                     let m = MirFunction {
+                        cleanup: None,
                         function: f.id,
                         entry: BasicBlockId(0),
                         blocks: vec![BasicBlock {
@@ -1127,6 +1272,7 @@ mod multiple_field_tests {
                     );
                 }
                 let m = MirFunction {
+                    cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
                     blocks: vec![BasicBlock {
@@ -1140,6 +1286,7 @@ mod multiple_field_tests {
                 );
                 e.ty = hir::ExprType::Bool;
                 let m = MirFunction {
+                    cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
                     blocks: vec![
@@ -1189,6 +1336,7 @@ mod multiple_field_tests {
                     hir::ExprKind::FieldAccess(access)
                 };
                 let m = MirFunction {
+                    cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
                     blocks: vec![BasicBlock {
@@ -1231,6 +1379,7 @@ mod multiple_field_tests {
                     arguments[0].ty = hir::ExprType::Bool;
                 }
                 let m = MirFunction {
+                    cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
                     blocks: vec![BasicBlock {
@@ -1255,6 +1404,7 @@ mod multiple_field_tests {
             span: value.span,
         };
         let m = MirFunction {
+            cleanup: None,
             function: f.id,
             entry: BasicBlockId(0),
             blocks: vec![BasicBlock {
@@ -1343,6 +1493,7 @@ mod multiple_field_tests {
                     },
                 ] {
                     let m = MirFunction {
+                        cleanup: None,
                         function: f.id,
                         entry: BasicBlockId(0),
                         blocks: vec![BasicBlock {
@@ -1353,6 +1504,7 @@ mod multiple_field_tests {
                     assert_eq!(m.validate(), Err(error));
                 }
                 let m = MirFunction {
+                    cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
                     blocks: vec![BasicBlock {
@@ -1363,6 +1515,7 @@ mod multiple_field_tests {
                 assert_eq!(m.validate(), Err(error));
                 if e.ty == hir::ExprType::Bool {
                     let m = MirFunction {
+                        cleanup: None,
                         function: f.id,
                         entry: BasicBlockId(0),
                         blocks: vec![
