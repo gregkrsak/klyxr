@@ -1983,8 +1983,11 @@ mod conservation_tests {
                 .count(),
             1
         );
-        let events = m.resources.as_ref().unwrap().events.clone();
+        let events = format!("{:?}", m.resources.as_ref().unwrap().events);
         assert!(m.resume().is_err());
-        assert_eq!(m.resources.as_ref().unwrap().events, events);
+        assert_eq!(
+            format!("{:?}", m.resources.as_ref().unwrap().events),
+            events
+        );
     }
 }
