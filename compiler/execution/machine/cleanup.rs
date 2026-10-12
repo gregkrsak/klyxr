@@ -91,8 +91,8 @@ impl State {
 impl<'a> Machine<'a> {
     pub(super) fn enable_resources(&mut self) -> Result<(), ExecutionError> {
         if self.resources.is_none() {
+            self.reserve(size_of::<State>())?;
             self.resources = Some(State::default());
-            self.reserve(0)?;
         }
         Ok(())
     }
@@ -1930,7 +1930,11 @@ mod conservation_tests {
                 },
             );
             let result = m.start(e.entry("demo").unwrap()).and_then(|()| m.resume());
-            assert!(m.storage().unwrap() <= bytes);
+            assert!(
+                m.storage().unwrap() <= bytes,
+                "storage {:?} exceeds {bytes}",
+                m.storage()
+            );
             if m.resources.is_some() {
                 conserved(&m);
             }

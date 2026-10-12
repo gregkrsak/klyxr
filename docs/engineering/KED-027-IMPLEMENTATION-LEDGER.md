@@ -259,3 +259,14 @@ and verify (38305853303) passed. Classified as an ordinary test compilation defe
 The correction snapshots Debug text and checks exact equality after the rejected
 retry; it does not add Clone or alter the resource payload or event contract.
 Local Clippy passed after the correction, as advisory only.
+
+The first correction publication (`fc25ade22981441d94ada804190fbcd1670e2a14`)
+contained the ledger but omitted the staged test correction because the publisher
+listed only unstaged paths. No compiler design change was involved. Publication
+was repaired to enumerate all paths changed from HEAD; the exact non-cloning
+assertion was published at `48236c4d22b7ead4f660c413fe8a31760baba795`.
+Its build (38305977868), docs (38305977877) and verify (38305977916) passed.
+Tests (38305978022) failed the new aggregate storage assertion: lazy State activation
+installed its accounted bytes before reserving them. Classified as an implementation
+accounting defect. The repair reserves State bytes before activation; the exact
+storage and unique-leaf conservation assertions remain unchanged.
