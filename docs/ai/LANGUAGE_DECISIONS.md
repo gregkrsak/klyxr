@@ -1262,3 +1262,93 @@ This adds no executable source subset, generalized places, partial ownership,
 reborrowing, runtime loans, destruction/cleanup, heap semantics, source effects,
 exceptions, I/O, concurrency, or native code generation. Independent review and
 separate merge authorization remain required.
+
+## KD-042 — Deterministic scope cleanup for owned resources
+
+**Status:** Accepted (KED-027 Draft 1, Issue #60; frozen October 11, 2026 at
+baseline `06fa4ac8491ae297981051b0544299bfe849c7f2`, tree
+`f2e405a4a22e4a27d525950cb47bb9cec904e3b3`).
+
+Klyxr uses RAII-like deterministic scope cleanup for resource-bearing owned
+values. A type is resource-bearing exactly when canonical compiler metadata
+identifies it as a trusted resource leaf or it is a record containing at least
+one resource-bearing field. Structural classification is recursive. Every
+resource-bearing type is Move and cannot be Copy; an ordinary non-resource Move
+type has semantically inert destruction.
+
+A successfully initialized owned resource-bearing value carries exactly one
+cleanup responsibility. Moving the value transfers that responsibility without
+running cleanup at the source. Borrowing neither transfers nor duplicates it,
+and reference last use or loan expiry never determines destruction. A trusted
+resource API may provide an explicit consuming release operation that discharges
+the responsibility early, but there is no generic manual-drop operation.
+
+Each resource leaf has one fixed release operation selected by canonical type
+identity at a trusted runtime, standard-library, or equivalent boundary. It
+accepts no user callback, returns no source-visible result, cannot report a
+recoverable source-level failure, cannot transfer new authority into the program,
+and cannot silently perform fallible completion. Host inability to perform that
+release is a runtime or tool boundary failure, not successful cleanup or completion.
+
+A resource-bearing record is one complete whole owner of its constituent cleanup
+responsibilities. Compiler-synthesized cleanup visits fields recursively in
+reverse canonical declaration order, skips inert fields, and invokes no arbitrary
+record-level destructor body. Whole-owner source semantics remain intact: this
+does not introduce field-sensitive availability, partial moves, or independently
+addressable source-level field obligations.
+
+A cleanup responsibility begins only after successful initialization. Pending
+record construction owns every resource-bearing field value that has completed;
+the complete record is published only after every required field succeeds. If
+future typed recoverable failure exits construction, the actual initialized field
+set cleans in reverse canonical declaration order. That set need not be a
+declaration-order prefix, and cleanup never restores moved sources or implies
+runtime rollback.
+
+Every still-live owned resource-bearing value cleans exactly once when its owning
+lexical scope is exited through ordinary block fallthrough, implicit NoValue
+completion, explicit value or NoValue return, break, continue, or future typed
+recoverable propagation. Break and continue clean only scopes actually exited.
+Loop-carried owners whose scope continues remain live. Owned parameters clean at
+function exit unless already moved or consumed.
+
+Cleanup order is deterministic: exited inner scopes precede outer scopes; within
+one scope, locals clean in reverse successful-initialization order; function
+locals precede parameters; parameters clean in reverse declaration order; and
+record fields clean recursively in reverse declaration order. A value return
+fully evaluates and transfers the result into protected return-result ownership
+before remaining locals and parameters clean. The callee never cleans that result.
+
+Automatic cleanup relinquishes the resource or authority. It never asserts
+successful flush, commit, publication, durable synchronization, or protocol
+completion. Any completion whose success matters remains an explicit fallible
+program operation. Ordinary field syntax and lexical exit dispatch no arbitrary
+user-authored code.
+
+The compiler must represent cleanup through explicit auditable cleanup edges or
+equivalent MIR operations on every covered structured exit. Correspondence
+validation must reject malformed cleanup structure rather than repairing it.
+Execution follows validated MIR; it must not reconstruct lexical cleanup by
+walking HIR or resolve destructors by textual name. The exact instruction shape,
+trusted registration representation, and bounded executor mechanics remain
+implementation choices under these semantic constraints.
+
+KD-042 guarantees no cleanup across range traps, configured preparation/execution
+stops, admission or integrity failures, detected host/tool failures, hostile host
+or process termination, panic/exception unwinding, or task cancellation. It adds
+no user-authored destructor bodies or callbacks, `defer`, `finally`, garbage
+collection, nondeterministic finalization, non-Copy replacement, overwrite
+destruction, partial moves, generalized projection, implicit reborrowing, heap
+model, FFI, operating-system resource syntax, `Result`/propagation syntax,
+effects system, concurrency, cancellation, or production resource API. Resource-
+bearing expression-temporary destruction points require a focused later decision
+before those forms are admitted.
+
+Sarah's architectural review found no specification finding and returned READY
+FOR IMPLEMENTATION-PRESSURE REVIEW. Arnold's independent read-only pressure review
+found no K27-P finding and returned READY TO FREEZE. Freeze does not authorize
+implementation. A later directive must bind canonical metadata, trusted resource
+admission, HIR/MIR representation, cleanup synthesis and correspondence, executor
+behavior, bounds, diagnostics, temporary admission, synthetic evidence, branch/base,
+validation, reporting, and phase structure. Any newly exposed semantic choice
+returns to Greg rather than being decided in code.
