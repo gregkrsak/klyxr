@@ -6,6 +6,13 @@ type Result = std::result::Result<(), Box<Diagnostic>>;
 
 impl Program {
     pub(crate) fn validate_record_expressions(&self) -> Result {
+        self.resources.validate(self).map_err(|message| {
+            Box::new(Diagnostic::semantic(
+                crate::bounded::START,
+                message,
+                "canonical trusted resource schema must remain valid",
+            ))
+        })?;
         self.validate_record_tables()?;
         for function in &self.functions {
             match function {
@@ -15,7 +22,14 @@ impl Program {
                         .records
                         .get(f.state_type.0)
                         .filter(|r| r.id == f.state_type)
-                        .map_or(true, |r| r.fields.len() != 1)
+                        .map_or(true, |r| {
+                            r.fields.len() != 1
+                                || self
+                                    .fields
+                                    .get(r.fields[0].0)
+                                    .and_then(Field::range_type)
+                                    .is_none()
+                        })
                     {
                         return Err(Box::new(Diagnostic::semantic(
                             f.span,
@@ -216,13 +230,13 @@ impl Program {
                 }
                 let mut seen = std::collections::BTreeSet::new();
                 for entry in fields {
-                    let range = self.record_field(*record, entry.field).ok_or_else(|| {
+                    let field_type = self.field_type(*record, entry.field).ok_or_else(|| {
                         invalid("construction field does not belong to the canonical record")
                     })?;
                     if !seen.insert(entry.field) {
                         return Err(invalid("construction has a duplicate canonical field"));
                     }
-                    if entry.value.ty != ExprType::Range(range) {
+                    if entry.value.ty != ExprType::from(field_type) {
                         return Err(invalid("construction result or initializer type is inconsistent with its canonical record field"));
                     }
                     self.record_expression(function, &entry.value, ordinary, false)?;
@@ -361,7 +375,7 @@ impl Program {
             if record.id != RecordId(index) {
                 return Err(invalid(record.span, "record table identity is invalid"));
             }
-            if record.fields.is_empty() {
+            if record.fields.is_empty() && !self.resources.is_leaf(record.id) {
                 return Err(invalid(
                     record.span,
                     "record declaration field sequence must be nonempty",
@@ -397,12 +411,7 @@ impl Program {
                         "record and field membership is reciprocally inconsistent",
                     ));
                 }
-                if self
-                    .ranges
-                    .get(field.ty.0)
-                    .filter(|r| r.id == field.ty)
-                    .is_none()
-                {
+                if !self.resources.field_type_valid(self, field.ty) {
                     return Err(invalid(
                         field.span,
                         "record field has an invalid named-range type",
@@ -428,6 +437,14 @@ impl Program {
         }
         Ok(())
     }
+    fn field_type(&self, record: RecordId, field: FieldId) -> Option<ValueType> {
+        self.record(record).fields.contains(&field).then_some(())?;
+        let f = self
+            .fields
+            .get(field.0)
+            .filter(|f| f.id == field && f.record == record)?;
+        self.resources.field_type_valid(self, f.ty).then_some(f.ty)
+    }
     fn record_field(&self, record: RecordId, field: FieldId) -> Option<RangeTypeId> {
         let r = self
             .records
@@ -437,8 +454,9 @@ impl Program {
             .fields
             .get(field.0)
             .filter(|f| f.id == field && f.record == r.id)?;
-        self.ranges.get(f.ty.0).filter(|r| r.id == f.ty)?;
-        Some(f.ty)
+        let id = f.range_type()?;
+        self.ranges.get(id.0).filter(|r| r.id == id)?;
+        Some(id)
     }
 }
 
@@ -808,7 +826,7 @@ mod multiple_fields {
                 6 => {
                     p.records[1].fields.pop();
                 }
-                7 => p.fields[4].ty = RangeTypeId(999),
+                7 => p.fields[4].ty = ValueType::Range(RangeTypeId(999)),
                 8 => p.fields[4].id = p.fields[3].id,
                 9 => {
                     let mut field = p.fields[4].clone();
@@ -1291,7 +1309,7 @@ mod multiple_fields {
                 4 => p.locals[0].function = FunctionId(2),
                 5 => p.locals[0].id = LocalId(usize::MAX),
                 6 => p.locals[0].ty = ValueType::SharedRef(ReferentType::Record(RecordId(0))),
-                7 => p.fields[0].ty = RangeTypeId(usize::MAX),
+                7 => p.fields[0].ty = ValueType::Range(RangeTypeId(usize::MAX)),
                 8 => p.ranges[0].id = RangeTypeId(usize::MAX),
                 9 => {
                     let ValueStatement::CopyFieldAssign { record, .. } = field_statement(&mut p)
@@ -1471,7 +1489,7 @@ mod multiple_fields {
                 2 => p.ranges.clear(),
                 3 => p.records[0].fields.clear(),
                 4 => p.fields[0].record = RecordId(1),
-                5 => p.fields[0].ty = RangeTypeId(usize::MAX),
+                5 => p.fields[0].ty = ValueType::Range(RangeTypeId(usize::MAX)),
                 6 => p.records[0].id = RecordId(usize::MAX),
                 _ => unreachable!(),
             }
@@ -1543,7 +1561,7 @@ mod multiple_fields {
                 18 => p.records[0].fields.push(FieldId(0)),
                 19 => p.records[0].fields.pop().map(|_| ()).unwrap(),
                 20 => p.fields[0].record = RecordId(1),
-                21 => p.fields[0].ty = RangeTypeId(usize::MAX),
+                21 => p.fields[0].ty = ValueType::Range(RangeTypeId(usize::MAX)),
                 22 => p.ranges[0].min = 101,
                 23 => {
                     let Function::Ordinary(f) = &mut p.functions[0] else {

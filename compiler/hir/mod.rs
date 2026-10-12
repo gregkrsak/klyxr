@@ -3,6 +3,7 @@
 //! Public inspection is read-only; compiler-internal mutation must preserve identity
 //! and reference invariants. Names and spans are diagnostic metadata.
 use crate::lexer::Span;
+pub(crate) mod resources;
 mod validate;
 
 macro_rules! id {
@@ -21,6 +22,7 @@ id!(LocalId);
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Program {
+    pub(crate) resources: resources::Catalog,
     pub(crate) ranges: Vec<RangeType>,
     pub(crate) records: Vec<Record>,
     pub(crate) fields: Vec<Field>,
@@ -101,8 +103,16 @@ pub struct Field {
     pub id: FieldId,
     pub record: RecordId,
     pub name: String,
-    pub ty: RangeTypeId,
+    pub ty: ValueType,
     pub span: Span,
+}
+impl Field {
+    pub fn range_type(&self) -> Option<RangeTypeId> {
+        match self.ty {
+            ValueType::Range(id) => Some(id),
+            _ => None,
+        }
+    }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParameterType {

@@ -926,7 +926,7 @@ mod tests {
             fields.push((
                 *id,
                 RangeValue {
-                    ty: e.program.fields()[id.0].ty,
+                    ty: e.program.fields()[id.0].range_type().unwrap(),
                     value: 80,
                 },
             ));

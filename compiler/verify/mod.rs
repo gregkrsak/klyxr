@@ -208,7 +208,8 @@ fn prove_function(program: &Program, function: &VerifiedFunction) -> Verificatio
     let state = program.range(
         program
             .field(program.record(function.state_type).fields[0])
-            .ty,
+            .range_type()
+            .expect("verified field is range"),
     );
     let amount = program.range(function.amount_param.ty);
     prove_affine_function(program, function, state, amount, &body)
@@ -313,7 +314,12 @@ fn validate_binding(program: &Program, binding: &RecordBinding) -> VerificationR
         ));
     }
     let field = &program.field(binding.field).name;
-    let range = program.range(program.field(binding.field).ty);
+    let range = program.range(
+        program
+            .field(binding.field)
+            .range_type()
+            .expect("verified field is range"),
+    );
     if binding.value < range.min || binding.value > range.max {
         return Err(Diagnostic {
             message: "range constraint cannot be established".into(),
@@ -474,7 +480,8 @@ mod tests {
                             let state = RangeType {
                                 id: prototype
                                     .field(prototype.record(template.state_type).fields[0])
-                                    .ty,
+                                    .range_type()
+                                    .unwrap(),
                                 name: "State".into(),
                                 min: low,
                                 max: high,

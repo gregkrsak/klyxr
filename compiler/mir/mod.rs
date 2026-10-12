@@ -1506,7 +1506,10 @@ mod multiple_field_tests {
         );
         assert_eq!(record, p.records()[0].id);
         assert_eq!(field, p.records()[0].fields[0]);
-        assert_eq!(value.ty, hir::ExprType::Range(p.field(field).ty));
+        assert_eq!(
+            value.ty,
+            hir::ExprType::Range(p.field(field).range_type().unwrap())
+        );
         assert_eq!(m, lower(&p));
     }
     #[test]

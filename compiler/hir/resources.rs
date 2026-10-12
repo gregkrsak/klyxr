@@ -1,0 +1,319 @@
+//! Canonical private trusted-resource registration and shared structural cleanup.
+//! A leaf uses the same nominal RecordId space as owned records. Only this
+//! compiler-owned catalog can distinguish a trusted leaf from an inert record;
+//! no spelling, source declaration or public constructor registers authority.
+use super::*;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ResourceId(pub(crate) usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct OperationId(pub(crate) usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // Constructed only by private synthetic registration, never by source.
+pub(crate) enum OperationKind {
+    Acquire(ResourceId),
+    Release(ResourceId),
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Operation {
+    pub(crate) id: OperationId,
+    pub(crate) function: FunctionId,
+    pub(crate) kind: OperationKind,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Leaf {
+    pub(crate) id: ResourceId,
+    pub(crate) record: RecordId,
+    pub(crate) acquire: OperationId,
+    pub(crate) release: OperationId,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct Catalog {
+    pub(crate) leaves: Vec<Leaf>,
+    pub(crate) operations: Vec<Operation>,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CleanupPlan {
+    Release(ResourceId, OperationId),
+    /// Reverse canonical declaration order. Children reference shared plans;
+    /// nested records never expand into repeated leaf paths.
+    Fields(Vec<(FieldId, RecordId)>),
+}
+impl Catalog {
+    pub(crate) fn is_leaf(&self, record: RecordId) -> bool {
+        self.leaves.iter().any(|l| l.record == record)
+    }
+    pub(crate) fn field_type_valid(&self, p: &Program, ty: ValueType) -> bool {
+        match ty {
+            ValueType::Range(id) => p.ranges.get(id.0).is_some_and(|r| r.id == id),
+            ValueType::Record(id) if !self.leaves.is_empty() => {
+                p.records.get(id.0).is_some_and(|r| r.id == id)
+            }
+            // The synthetic boundary admits owned range/record fields only.
+            // Reference fields and wider source schemas remain deferred.
+            _ => false,
+        }
+    }
+    pub(crate) fn validate(&self, p: &Program) -> Result<(), &'static str> {
+        if self.leaves.is_empty() && self.operations.is_empty() {
+            return Ok(());
+        }
+        if self.leaves.len() > 4096 || self.operations.len() > 8192 {
+            return Err("trusted resource catalog exceeds bounded capacity");
+        }
+        for (i, leaf) in self.leaves.iter().enumerate() {
+            if leaf.id != ResourceId(i)
+                || self.leaves[..i].iter().any(|l| l.record == leaf.record)
+                || p.records
+                    .get(leaf.record.0)
+                    .map_or(true, |r| r.id != leaf.record || !r.fields.is_empty())
+            {
+                return Err("invalid or duplicate canonical resource leaf");
+            }
+            for (id, expected) in [
+                (leaf.acquire, OperationKind::Acquire(leaf.id)),
+                (leaf.release, OperationKind::Release(leaf.id)),
+            ] {
+                if self
+                    .operations
+                    .get(id.0)
+                    .map_or(true, |o| o.id != id || o.kind != expected)
+                {
+                    return Err("trusted acquisition/release pairing mismatch");
+                }
+            }
+        }
+        for (i, op) in self.operations.iter().enumerate() {
+            if op.id != OperationId(i)
+                || self.operations[..i]
+                    .iter()
+                    .any(|o| o.function == op.function)
+            {
+                return Err("invalid or duplicate trusted operation identity");
+            }
+            let (resource, acquire) = match op.kind {
+                OperationKind::Acquire(id) => (id, true),
+                OperationKind::Release(id) => (id, false),
+            };
+            let leaf = self
+                .leaves
+                .get(resource.0)
+                .filter(|l| l.id == resource)
+                .ok_or("foreign trusted resource identity")?;
+            if (acquire && leaf.acquire != op.id) || (!acquire && leaf.release != op.id) {
+                return Err("orphan trusted operation");
+            }
+            let f = p
+                .functions
+                .get(op.function.0)
+                .filter(|f| f.id() == op.function)
+                .and_then(Function::as_ordinary)
+                .ok_or("trusted operation is not canonical ordinary function")?;
+            if acquire {
+                if !f.parameters.is_empty() || f.return_type != Some(ValueType::Record(leaf.record))
+                {
+                    return Err("trusted acquisition signature mismatch");
+                }
+            } else {
+                if f.return_type.is_some() || f.parameters.len() != 1 {
+                    return Err("trusted release signature mismatch");
+                }
+                let a = p
+                    .parameters
+                    .get(f.parameters[0].0)
+                    .filter(|a| a.id == f.parameters[0] && a.function == f.id)
+                    .ok_or("foreign trusted release parameter")?;
+                if a.ty != ParameterType::Value(ValueType::Record(leaf.record)) {
+                    return Err("trusted release must consume the exact owned leaf");
+                }
+            }
+        }
+        // Check the graph even for inert schemas; cycles are never permitted.
+        self.plans(p).map(|_| ())
+    }
+    pub(crate) fn plans(&self, p: &Program) -> Result<Vec<Option<CleanupPlan>>, &'static str> {
+        if p.records.len() > 4096 || p.fields.len() > 8192 {
+            return Err("cleanup type graph exceeds bounded capacity");
+        }
+        let mut plans = Vec::new();
+        plans
+            .try_reserve_exact(p.records.len())
+            .map_err(|_| "cleanup plan allocation failed")?;
+        plans.resize(p.records.len(), None);
+        let mut marks = Vec::new();
+        marks
+            .try_reserve_exact(p.records.len())
+            .map_err(|_| "cleanup graph allocation failed")?;
+        marks.resize(p.records.len(), 0u8);
+        fn visit(
+            c: &Catalog,
+            p: &Program,
+            id: RecordId,
+            marks: &mut [u8],
+            plans: &mut [Option<CleanupPlan>],
+            depth: usize,
+        ) -> Result<(), &'static str> {
+            if depth > 32 {
+                return Err("cleanup type graph depth exceeded");
+            }
+            let mark = marks
+                .get(id.0)
+                .copied()
+                .ok_or("foreign cleanup record identity")?;
+            if mark == 1 {
+                return Err("cyclic owned cleanup schema");
+            }
+            if mark == 2 {
+                return Ok(());
+            }
+            let r = p
+                .records
+                .get(id.0)
+                .filter(|r| r.id == id)
+                .ok_or("noncanonical cleanup record")?;
+            if r.fields.len() > p.fields.len() {
+                return Err("cleanup field membership exceeds canonical table");
+            }
+            marks[id.0] = 1;
+            if let Some(l) = c.leaves.iter().find(|l| l.record == id) {
+                plans[id.0] = Some(CleanupPlan::Release(l.id, l.release));
+            } else {
+                let mut children = Vec::new();
+                children
+                    .try_reserve_exact(r.fields.len())
+                    .map_err(|_| "cleanup field plan allocation failed")?;
+                for field in r.fields.iter().rev() {
+                    let f = p
+                        .fields
+                        .get(field.0)
+                        .filter(|f| f.id == *field && f.record == id)
+                        .ok_or("foreign cleanup field identity")?;
+                    if let ValueType::Record(child) = f.ty {
+                        visit(c, p, child, marks, plans, depth + 1)?;
+                        if plans[child.0].is_some() {
+                            children.push((*field, child));
+                        }
+                    } else if !c.field_type_valid(p, f.ty) {
+                        return Err("unsupported cleanup field type");
+                    }
+                }
+                if !children.is_empty() {
+                    plans[id.0] = Some(CleanupPlan::Fields(children));
+                }
+            }
+            marks[id.0] = 2;
+            Ok(())
+        }
+        for i in 0..p.records.len() {
+            visit(self, p, RecordId(i), &mut marks, &mut plans, 1)?;
+        }
+        Ok(plans)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn fixture() -> Program {
+        let mut p = crate::compile_source("type R = range 0..1; record Leaf { data: R } record Pair { first: R, inert: R, last: R } fn acquire() -> Leaf { return Leaf { data: 0 }; } fn release(x: Leaf) {} ").unwrap();
+        p.records[0].fields.clear();
+        p.fields.remove(0);
+        for (i, f) in p.fields.iter_mut().enumerate() {
+            f.id = FieldId(i);
+        }
+        p.records[1].fields = vec![FieldId(0), FieldId(1), FieldId(2)];
+        p.fields[0].ty = ValueType::Record(RecordId(0));
+        p.fields[2].ty = ValueType::Record(RecordId(0));
+        p.resources = Catalog {
+            leaves: vec![Leaf {
+                id: ResourceId(0),
+                record: RecordId(0),
+                acquire: OperationId(0),
+                release: OperationId(1),
+            }],
+            operations: vec![
+                Operation {
+                    id: OperationId(0),
+                    function: FunctionId(0),
+                    kind: OperationKind::Acquire(ResourceId(0)),
+                },
+                Operation {
+                    id: OperationId(1),
+                    function: FunctionId(1),
+                    kind: OperationKind::Release(ResourceId(0)),
+                },
+            ],
+        };
+        p
+    }
+    #[test]
+    fn plans_share_leaf_identity_in_reverse_canonical_order() {
+        let p = fixture();
+        p.resources.validate(&p).unwrap();
+        assert_eq!(
+            p.resources.plans(&p).unwrap(),
+            vec![
+                Some(CleanupPlan::Release(ResourceId(0), OperationId(1))),
+                Some(CleanupPlan::Fields(vec![
+                    (FieldId(2), RecordId(0)),
+                    (FieldId(0), RecordId(0))
+                ]))
+            ]
+        );
+    }
+    #[test]
+    fn names_never_classify_or_dispatch_resources() {
+        let mut p = fixture();
+        let before = p.resources.plans(&p).unwrap();
+        for r in &mut p.records {
+            r.name = "same".into();
+        }
+        for f in &mut p.fields {
+            f.name = "same".into();
+        }
+        assert_eq!(p.resources.plans(&p).unwrap(), before);
+    }
+    #[test]
+    fn inert_move_records_have_no_cleanup() {
+        let p =
+            crate::compile_source("type R = range 0..1; record Inert { x: R } fn f() {}").unwrap();
+        assert_eq!(p.resources.plans(&p).unwrap(), vec![None]);
+    }
+    #[test]
+    fn foreign_resource_identity_rejects() {
+        let mut p = fixture();
+        p.resources.operations[0].kind = OperationKind::Acquire(ResourceId(9));
+        assert!(p.resources.validate(&p).is_err());
+    }
+    #[test]
+    fn wrong_trusted_pairing_rejects() {
+        let mut p = fixture();
+        p.resources.leaves[0].release = OperationId(0);
+        assert!(p.resources.validate(&p).is_err());
+    }
+    #[test]
+    fn duplicate_leaf_identity_rejects() {
+        let mut p = fixture();
+        p.resources.leaves.push(p.resources.leaves[0].clone());
+        assert!(p.resources.validate(&p).is_err());
+    }
+    #[test]
+    fn borrowed_release_signature_rejects() {
+        let mut p = fixture();
+        p.parameters[0].ty =
+            ParameterType::Value(ValueType::SharedRef(ReferentType::Record(RecordId(0))));
+        assert!(p.resources.validate(&p).is_err());
+    }
+    #[test]
+    fn cycles_reject_without_expanding_plans() {
+        let mut p = fixture();
+        p.fields[0].ty = ValueType::Record(RecordId(1));
+        assert!(p.resources.validate(&p).is_err());
+    }
+    #[test]
+    fn foreign_field_identity_rejects() {
+        let mut p = fixture();
+        p.records[1].fields[0] = FieldId(99);
+        assert!(p.resources.validate(&p).is_err());
+    }
+}

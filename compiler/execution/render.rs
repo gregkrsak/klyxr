@@ -118,7 +118,7 @@ pub(super) fn result(
                 let (_, v) = found
                     .next()
                     .ok_or_else(|| ExecutionError::integrity("render field missing"))?;
-                if found.next().is_some() || v.ty != f.ty {
+                if found.next().is_some() || Some(v.ty) != f.range_type() {
                     return Err(ExecutionError::integrity("render field nominal mismatch"));
                 }
                 if i != 0 {

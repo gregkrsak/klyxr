@@ -66,8 +66,9 @@ fn field(
         .get(field.0)
         .filter(|f| f.id == field && f.record == record && r.fields.contains(&field))
         .ok_or_else(bad)?;
-    ty(p, ExprType::Range(f.ty))?;
-    Ok(f.ty)
+    let range = f.range_type().ok_or_else(bad)?;
+    ty(p, ExprType::Range(range))?;
+    Ok(range)
 }
 pub(super) fn expression(
     p: &hir::Program,
@@ -271,7 +272,7 @@ pub(super) fn expression(
             let f = p
                 .fields()
                 .get(a.field.0)
-                .filter(|f| f.id == a.field && f.ty == a.ty)
+                .filter(|f| f.id == a.field && f.range_type() == Some(a.ty))
                 .ok_or_else(bad)?;
             field(p, f.record, a.field)?;
         }

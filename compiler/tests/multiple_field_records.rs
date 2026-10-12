@@ -105,7 +105,10 @@ fn canonical_orders_spans_and_direct_read_representation_survive_to_mir() {
     assert!(
         matches!(read.kind,hir::ExprKind::CopyFieldRead { field, .. } if field==pair.fields[1])
     );
-    assert_eq!(read.ty, hir::ExprType::Range(p.field(pair.fields[1]).ty));
+    assert_eq!(
+        read.ty,
+        hir::ExprType::Range(p.field(pair.fields[1]).range_type().unwrap())
+    );
     let m = mir::lower(&p);
     assert!(m
         .functions()

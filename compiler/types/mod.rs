@@ -374,7 +374,7 @@ fn value_statements(
                     program,
                     functions,
                     value,
-                    ValueType::Range(program.field(field).ty),
+                    program.field(field).ty,
                     "field assignment RHS",
                 )?;
                 if let Some(local) = owned {
@@ -759,7 +759,7 @@ fn expression(
                     program,
                     functions,
                     &entry.value,
-                    ValueType::Range(program.field(entry.field).ty),
+                    program.field(entry.field).ty,
                     "record field initializer",
                 )?;
                 typed.push(hir::RecordFieldInit {
@@ -825,7 +825,7 @@ fn expression(
                         field,
                     }
                 },
-                ExprType::Range(declaration.ty),
+                ExprType::from(declaration.ty),
             )
         }
         ResolvedExprKind::BoolLiteral(value) => (ExprKind::BoolLiteral(*value), ExprType::Bool),
