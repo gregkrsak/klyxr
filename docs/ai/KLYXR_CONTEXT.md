@@ -79,9 +79,11 @@ Availability and loans are separate ID-based state within the same ownership pha
 Borrowing/cloning/reborrowing/coercion are never implicit. Ordinary owned parameters
 remain immutable. Reference returns, nested references, explicit lifetimes,
 auto-dereference, generalized reference projection beyond KD-039/KD-040, and partial
-borrowing/moves remain unsupported (KD-021 / OQ-024). KD-042 accepts deterministic
-ownership-attached cleanup semantics for canonically resource-bearing values, but
-the compiler does not yet implement resource leaves, cleanup edges, or runtime release.
+borrowing/moves remain unsupported (KD-021 / OQ-024). KED-027 implements KD-042's
+deterministic ownership-attached cleanup through private synthetic resource leaves,
+explicit lexical MIR metadata and bounded runtime release. Public source records
+still have named-range fields; no resource registration or production resource API
+is exposed.
 
 KED-007 adds explicit `*reference` for directly named ordinary reference parameters
 and locals. Copy referents (Bool/ranges) may be read through shared or mutable
@@ -692,5 +694,18 @@ integrity failures, host/tool failures, process termination, panic/unwind, and t
 cancellation receive no cleanup guarantee from KD-042. The decision adds no partial
 moves, non-Copy replacement, generalized projection, arbitrary destructor code,
 resource API, effects system, heap, FFI, exception model, or temporary-lifetime rule.
-Implementation remains separately unauthorized and must begin with an explicitly
-bounded directive and synthetic-resource evidence.
+The authorized KED-027 implementation supplies private canonical acquisition and
+release descriptors, non-cloneable resource payloads, bounded shared cleanup plans,
+explicit MIR scope entries/initializations/exits and protected return ownership.
+Runtime activations retain actual successful initialization order; transferred
+slots have explicit provenance distinct from vacancy. Pending construction tracks
+exact field membership and a private bounded failure facility demonstrates abort
+order without admitting source-level recoverable propagation. Cleanup stops retain
+earlier effects and remaining owned payloads and cannot retry or publish success.
+Undefined resource argument temporaries reject at canonical admission. Every
+private fixture repeats canonical validation, ownership, lowering, correspondence
+and opaque approval. Source syntax and ordinary resource-free accounting remain
+unchanged. Implementation evidence and the exact predecessor inventory are in
+`docs/engineering/KED-027-IMPLEMENTATION-LEDGER.md`; during K27-I01 only GitHub
+Actions supplies authoritative executable evidence. Acceptance remains Greg's
+decision and merge remains a human action.

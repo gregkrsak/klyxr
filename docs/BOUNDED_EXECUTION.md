@@ -33,7 +33,9 @@ place, permission, and referent type. Slots are uninitialized, available, or
 vacant. Shared handles copy; exclusive handles and records transfer. Reads of
 fields, dereferences, borrows, and assignment targets do not consume their roots.
 Each loop `Let` initializes afresh and publishes only on completed evaluation.
-No runtime loans, borrow checking, snapshots, transactions, or cleanup execute.
+No runtime loans, borrow checking, snapshots, or transactions execute.
+KED-027 adds private synthetic cleanup described below; public source data remains
+resource-free.
 A callee's reference slot and caller referent are distinct. Retired IDs are never
 reused; references cannot be public return values.
 
@@ -145,3 +147,52 @@ tool outcomes, not source-level exceptions, catchable results, effects, or I/O.
 Exit status is 0 on success, 1 on frontend/integrity/trap/limit stops, and 2 on
 usage/configuration or detected host/tool failures. No host addresses or Rust
 runtime diagnostics are emitted by the structured error renderer.
+
+## KED-027 private cleanup extension
+
+The frozen KD-042 extension separates canonical resource identity, owned/reference
+identity and Copy/Move classification. Trusted acquisition/release descriptors and
+shared acyclic cleanup plans are private. Source record fields still require named
+ranges, and the CLI/public data boundary never admits a live resource result.
+
+Resource functions carry explicit lexical MIR Flow and synthesized origins.
+Activations retain successful owner-initialization history, exact inner-to-outer
+exits and reverse owned-parameter order. Runtime payloads own responsibility;
+explicit transfer markers justify skipping former owners, while mere vacancy
+does not. A protected return is retained outside callee cleanup, and delivered only
+after cleanup and frame retirement complete. Borrowed handles and inert Move
+records have no cleanup plan. Unused private catalogs preserve resource-free fuel
+and storage behavior.
+
+Pending aggregates evaluate fields in written order and publish only after exact
+canonical membership is complete. Complete cleanup and synthetic partial abort
+visit reverse canonical declaration order, with abort filtered by initialized
+membership. Independent nested pending containers abort inside-out. Moving into a
+pending field never restores the old source on failure. This private synthetic
+failure facility demonstrates KD-042 and does not add source recoverable propagation
+or general unwinding. Unnamed resource arguments without a defined lifetime reject.
+
+Type classification shares child plans and caps its acyclic depth at 32 (also
+subject to configured admission traversal depth), record tables at 4,096 and field
+tables at 8,192. Execution admission retains the stricter configured token-based
+table/node bounds and identifier cap and reserves its expanded frontend envelope.
+Cleanup State, activation/history buffers, events, pending fields, protected/current/
+detached payloads and work-list capacities participate in checked prospective
+working-storage accounting. State is reserved before lazy activation. Detachment
+and receiving-container growth are counted together. Error traces and reporting
+retain the existing separate bounded diagnostic contract.
+
+In addition to KD-041 charges, fuel is charged before scope entry/exit and owner
+inspection, successful initialization recording, pending field progress, aggregate
+traversal and fixed trusted operations. Resource-free continuations retain their
+previous costs. Release attempts reserve event storage before any effect and record
+completion exactly once. Configured exhaustion or controlled host release failure
+retains prior effects and all uncompleted payloads, cannot retry, and cannot publish
+ordinary success. Disposal of host interpreter state is not a release effect.
+
+The 76 new KD-042 tests cover canonical/malformed authority, structured exits,
+transfers/returns, aggregates/pending abort, exact fuel/storage thresholds, terminal
+failure/reporting and unique-leaf conservation. GitHub debug and release profiles
+also reconcile the 1,581 predecessor identities and each run the 1,800-case affine
+cross-check. See `docs/engineering/KED-027-IMPLEMENTATION-LEDGER.md` for executed
+evidence; no local executable conformance is claimed during K27-I01.

@@ -9,7 +9,9 @@ specialized verified integer contract proof → diagnostics.
 KED-026 Draft 3 additionally provides bounded ordinary MIR interpretation through
 `run`. The KED-004 through KED-025 sections below describe the frontend boundaries
 introduced by those decisions; their historical execution exclusions are refined
-by KD-041. No ordinary contract proof or native code generation is implied.
+by KD-041. KED-027 adds private synthetic deterministic cleanup under KD-042;
+it exposes no production resource API. No ordinary contract proof or native code
+generation is implied.
 See [bounded execution](../docs/BOUNDED_EXECUTION.md).
 
 ## Run it
@@ -1632,3 +1634,34 @@ frames/continuations execute ordinary MIR, with ordered mutations, immediate
 widened range traps, deterministic fuel, and bound lowering origins. Existing
 check/verify paths retain their behavior. See `../docs/BOUNDED_EXECUTION.md` for
 limits, APIs, host-failure exclusions, and verifier isolation.
+
+## KED-027 private deterministic cleanup (KD-042)
+
+The canonical resource catalog, structural internal field types and bounded shared
+cleanup plans live in `hir/resources.rs`. `mir/cleanup.rs` preserves scope entry,
+successful owner initialization, exact structured exit sets and cleanup origins
+before CFG flattening. Opaque approval compares that metadata with the complete
+HIR/MIR artifact. The runtime executes MIR metadata, not HIR scope trees.
+
+`execution/machine/cleanup.rs` maintains non-cloneable resource leaves/aggregates,
+dynamic activations, protected returns, pending field membership and bounded
+cleanup continuations. Moves retain the same acquisition identity. Explicit
+release and implicit scope exit discharge responsibility once; actual runtime
+ownership determines cleanup, independently of conservative source usability.
+Locals clean in reverse successful initialization order, inner scopes first,
+then reverse parameters. Aggregate and partial construction cleanup use reverse
+canonical declaration order, filtered by actual initialized membership.
+
+Fixed synthetic acquire/release operations record deterministic events and private
+failure controls. Fixtures repeat canonical admission, ownership, lowering and
+opaque approval. No source resource syntax, callback, destructor body, operating
+system handle, recoverable propagation, replacement destruction, partial move or
+generalized projection is introduced. Public live-resource results are rejected.
+Terminal stops retain completed effects and remaining responsibilities without
+retry, rollback or successful completion. Host bookkeeping disposal is not cleanup.
+
+During K27-I01, local source edits and static checks are advisory. The four GitHub
+Actions workflows supply build, debug/release, doctest, Rustdoc, CLI and repository
+conformance evidence. The tests workflow reconciles all 1,581 baseline identities
+and 76 new KD-042 identities separately in each profile. See the
+[implementation ledger](../docs/engineering/KED-027-IMPLEMENTATION-LEDGER.md).

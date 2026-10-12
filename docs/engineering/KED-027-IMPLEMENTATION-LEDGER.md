@@ -290,3 +290,84 @@ Build 38306434532 failed Clippy's eight-argument helper finding. Classified as a
 ordinary implementation lint defect; depth/current-maximum are now one bounds
 pair without a lint suppression. Local Clippy passed after this correction.
 Tests 38306434486, docs 38306434474 and verify 38306434482 are retained evidence.
+
+## Complete push evidence index
+
+Every linked run is retained, including failed attempts. No infrastructure rerun
+was used; fixes are separately committed and re-run the complete workflow set.
+
+| Milestone | Commit | build | tests | docs | verify | Outcome |
+| --- | --- | --- | --- | --- | --- | --- |
+| baseline | `8d5b60ac9f46ba44d6df0392b505ebf8343eba5e` | [38296578935](https://github.com/gregkrsak/klyxr/actions/runs/38296578935) | [38296578865](https://github.com/gregkrsak/klyxr/actions/runs/38296578865) | [38296578897](https://github.com/gregkrsak/klyxr/actions/runs/38296578897) | [38296578863](https://github.com/gregkrsak/klyxr/actions/runs/38296578863) | pass |
+| M1 | `60cee544039ecd22b7ed01576490231e2a17cfd1` | [38297326807](https://github.com/gregkrsak/klyxr/actions/runs/38297326807) | [38297326828](https://github.com/gregkrsak/klyxr/actions/runs/38297326828) | [38297326804](https://github.com/gregkrsak/klyxr/actions/runs/38297326804) | [38297326820](https://github.com/gregkrsak/klyxr/actions/runs/38297326820) | pass |
+| M2 | `0bf7542f029040ce270c57b0ca398045e9df5a8f` | [38297981588](https://github.com/gregkrsak/klyxr/actions/runs/38297981588) | [38297981569](https://github.com/gregkrsak/klyxr/actions/runs/38297981569) | [38297981517](https://github.com/gregkrsak/klyxr/actions/runs/38297981517) | [38297981600](https://github.com/gregkrsak/klyxr/actions/runs/38297981600) | pass |
+| M3 | `2127503186654e618260fad063df9509e4ab4f34` | [38298735533](https://github.com/gregkrsak/klyxr/actions/runs/38298735533) | [38298735645](https://github.com/gregkrsak/klyxr/actions/runs/38298735645) | [38298735624](https://github.com/gregkrsak/klyxr/actions/runs/38298735624) | [38298735531](https://github.com/gregkrsak/klyxr/actions/runs/38298735531) | pass |
+| M4–5 fixtures | `2fbc0720f955a9da9d90abc6b7eb69bc85326ce0` | [38299407894](https://github.com/gregkrsak/klyxr/actions/runs/38299407894) | [38299407839](https://github.com/gregkrsak/klyxr/actions/runs/38299407839) | [38299407807](https://github.com/gregkrsak/klyxr/actions/runs/38299407807) | [38299407860](https://github.com/gregkrsak/klyxr/actions/runs/38299407860) | tests fail |
+| M4–5 corrected | `85a122266e0cde4897b15192d7fd91982e9f0366` | [38299632722](https://github.com/gregkrsak/klyxr/actions/runs/38299632722) | [38299632462](https://github.com/gregkrsak/klyxr/actions/runs/38299632462) | [38299633208](https://github.com/gregkrsak/klyxr/actions/runs/38299633208) | [38299632633](https://github.com/gregkrsak/klyxr/actions/runs/38299632633) | pass |
+| M6 fixtures | `bf03f406220397508c84135f348c346d2bef8cf3` | [38301193001](https://github.com/gregkrsak/klyxr/actions/runs/38301193001) | [38301192993](https://github.com/gregkrsak/klyxr/actions/runs/38301192993) | [38301193008](https://github.com/gregkrsak/klyxr/actions/runs/38301193008) | [38301193007](https://github.com/gregkrsak/klyxr/actions/runs/38301193007) | tests fail |
+| M6 corrected | `c25b4dad318bc60aa32141d04729b085197f9de7` | [38301659243](https://github.com/gregkrsak/klyxr/actions/runs/38301659243) | [38301659298](https://github.com/gregkrsak/klyxr/actions/runs/38301659298) | [38301659138](https://github.com/gregkrsak/klyxr/actions/runs/38301659138) | [38301659270](https://github.com/gregkrsak/klyxr/actions/runs/38301659270) | pass |
+| M7 | `c3b38909ab3a1662d0da93f05f26a5b84278d7cc` | [38305366758](https://github.com/gregkrsak/klyxr/actions/runs/38305366758) | [38305366703](https://github.com/gregkrsak/klyxr/actions/runs/38305366703) | [38305366688](https://github.com/gregkrsak/klyxr/actions/runs/38305366688) | [38305366727](https://github.com/gregkrsak/klyxr/actions/runs/38305366727) | pass |
+| conservation compile | `ba6207aa1baa12860cb4b3047b9d4b30c789d0ba` | [38305853409](https://github.com/gregkrsak/klyxr/actions/runs/38305853409) | [38305853260](https://github.com/gregkrsak/klyxr/actions/runs/38305853260) | [38305853346](https://github.com/gregkrsak/klyxr/actions/runs/38305853346) | [38305853303](https://github.com/gregkrsak/klyxr/actions/runs/38305853303) | build/tests fail |
+| omitted staged fix | `fc25ade22981441d94ada804190fbcd1670e2a14` | [38305928194](https://github.com/gregkrsak/klyxr/actions/runs/38305928194) | [38305928509](https://github.com/gregkrsak/klyxr/actions/runs/38305928509) | [38305928238](https://github.com/gregkrsak/klyxr/actions/runs/38305928238) | [38305928555](https://github.com/gregkrsak/klyxr/actions/runs/38305928555) | build/tests fail |
+| conservation assertion | `48236c4d22b7ead4f660c413fe8a31760baba795` | [38305977868](https://github.com/gregkrsak/klyxr/actions/runs/38305977868) | [38305978022](https://github.com/gregkrsak/klyxr/actions/runs/38305978022) | [38305977877](https://github.com/gregkrsak/klyxr/actions/runs/38305977877) | [38305977916](https://github.com/gregkrsak/klyxr/actions/runs/38305977916) | tests fail |
+| storage corrected | `a747e568686dd7a52c820d792b14ee3681f8f87a` | [38306153091](https://github.com/gregkrsak/klyxr/actions/runs/38306153091) | [38306153088](https://github.com/gregkrsak/klyxr/actions/runs/38306153088) | [38306153312](https://github.com/gregkrsak/klyxr/actions/runs/38306153312) | [38306153269](https://github.com/gregkrsak/klyxr/actions/runs/38306153269) | pass |
+| depth repair | `17adb10aaf0eec4a76890332a46650f736c5d87a` | [38306434532](https://github.com/gregkrsak/klyxr/actions/runs/38306434532) | [38306434486](https://github.com/gregkrsak/klyxr/actions/runs/38306434486) | [38306434474](https://github.com/gregkrsak/klyxr/actions/runs/38306434474) | [38306434482](https://github.com/gregkrsak/klyxr/actions/runs/38306434482) | build fail |
+| depth corrected | `c7df86870256d60cf630c212d503299cdc43004b` | [38306538179](https://github.com/gregkrsak/klyxr/actions/runs/38306538179) | [38306538085](https://github.com/gregkrsak/klyxr/actions/runs/38306538085) | [38306538097](https://github.com/gregkrsak/klyxr/actions/runs/38306538097) | [38306538120](https://github.com/gregkrsak/klyxr/actions/runs/38306538120) | pass |
+
+## Final conformance and audit
+
+The final gate adds warnings-denied Rustdoc, repository scaffold validation and
+byte-for-byte context regeneration to the existing four workflows. Tests capture
+complete Cargo logs and explicitly compare canonical test identities/outcomes to
+`ked-027-predecessors.json`, extracted from baseline job 114968984399. Doctest line
+numbers are source coordinates, not identities, and are normalized; the compile-fail
+witness remains required. Cargo target/group ordering avoids stdout/stderr timing
+misclassification. All expected new categories and the affine check are required.
+
+Expected final profile: 1,580 predecessor unit/integration tests, one predecessor
+compile-fail doctest and 76 new KD-042 unit tests = 1,657. New categories: catalog
+10; lexical MIR 4; vertical leaf/authority 7; transfer/structured exits 18; aggregate/
+pending construction 10; bounds/malformed artifacts 16; Copy/reporting 6; conservation
+5. The 1,800-case affine kernel test must pass independently in debug and release.
+CLI suites include 26 proof-scope/regression tests and five execution CLI tests
+covering exact record/loop output, range trap, invalid limits, bounded I/O, host
+input failure and independence from failing specialized harness evaluation.
+
+Final diff audit checks resource identities and classification, single ownership
+authority, lexical MIR/origin correspondence, deterministic structured-exit order,
+protected returns, exact pending membership, no source restoration, shared graph
+bounds, prospective storage, terminal effects and conservation. Canonical decision
+semantics (`LANGUAGE_DECISIONS.md`) and deferred-question documents are unchanged.
+Predecessor source-test changes adapt field access to structural ValueType while
+retaining test identities and canonical range/malformed witnesses. No dependency,
+public resource registration, source resource syntax, OS handle, callback, unwinding,
+rollback, projection, replacement destruction or general failure system is added.
+No architectural/semantic pressure remains deferred from this implementation audit.
+Independent conformance review and Greg's acceptance remain outstanding.
+
+Local commands (advisory only): `cargo fmt --all`, `cargo fmt --all -- --check`,
+`cargo check --locked --workspace --all-targets`,
+`cargo clippy --locked --workspace --all-targets -- -D warnings`. Successful local
+static results are not executable evidence; corruption warnings were not repaired.
+An ordinary test compile error and a helper-argument Clippy finding were corrected
+and independently gated in GitHub. Local `python scripts/verify-readme.py`,
+`python scripts/verify-repo-scaffold.py`, `python scripts/build-ai-context.py`,
+byte comparisons, identity reconciliation of GitHub logs, and `git diff --check`
+are source/static verification. No local Cargo tests or generated Rust binaries
+were executed in this assignment. Command-line push was blocked by unavailable
+credentials; connected GitHub Git-data publication preserved reviewed content,
+parents and exact tree comparisons. The omitted staged correction is recorded above.
+
+This implementation remains private and synthetic. Resource-free public syntax
+and applicable runtime costs are preserved. K27-I01 remains a local execution
+platform limitation. Only GitHub Actions supplies executable conformance evidence.
+No merge, Issue #60 closure, self-approval or acceptance action is authorized.
+
+
+Depth correction `c7df86870256d60cf630c212d503299cdc43004b` passed all four
+workflows. Both profiles executed and passed all 1,657 identities (76 new),
+including the graph-depth control, compile-fail doctest and affine kernel check.
+The complete source diff and implementation-facing documentation were audited
+before the final documentation/conformance commit. The exact prod commit/tree
+were reconfirmed unchanged. Generated context and local scaffold/asset checks
+passed; their authoritative checks are included in the final workflow gate.
