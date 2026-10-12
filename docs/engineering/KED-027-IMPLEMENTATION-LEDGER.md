@@ -251,3 +251,11 @@ protected aggregate return, complete cleanup at every fuel stop, exact storage
 threshold and sampled lower storage stops, and controlled host failure during
 partial abort. They retain remaining leaves rather than retrying or restoring
 sources. Local formatting and Clippy are advisory only.
+
+Additional conservation commit: `ba6207aa1baa12860cb4b3047b9d4b30c789d0ba`.
+Build (38305853409) and tests (38305853260) failed to compile a new retry assertion
+that cloned the deliberately non-cloneable private Event log. Docs (38305853346)
+and verify (38305853303) passed. Classified as an ordinary test compilation defect.
+The correction snapshots Debug text and checks exact equality after the rejected
+retry; it does not add Clone or alter the resource payload or event contract.
+Local Clippy passed after the correction, as advisory only.
