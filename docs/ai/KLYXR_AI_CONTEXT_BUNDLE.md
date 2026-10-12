@@ -779,6 +779,19 @@ Initially prove structural restrictions that the compiler can actually establish
 
 If Klyxr can only be understood because one conversation remembers its history, the project is under-documented. A fresh expert should be able to read the repository context and become productive quickly.
 
+## DP-015 — Humans execute repository merges
+
+The final act of merging any repository pull request is reserved to a human.
+AI agents may prepare changes, create branches and commits, open pull requests,
+run validation, inspect exact heads, conduct merge reviews, recommend a
+disposition, and record explicit human authorization. They must never execute a
+merge through an API, command, user interface, automation, or equivalent action.
+
+A human statement that a pull request is authorized for merge authorizes the AI
+to record that decision and hand the ready pull request back to the human. It does
+not authorize the AI to perform the merge. This boundary applies equally to code,
+documentation, and governance changes.
+
 KD-041 applies the existing trust-boundary principles to bounded ordinary
 execution: an opaque successful-ownership artifact grants authority, MIR controls
 runtime flow, and explicit limits begin before source ingestion. A runtime trap
