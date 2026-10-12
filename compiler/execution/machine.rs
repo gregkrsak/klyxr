@@ -16,6 +16,10 @@ enum Value {
         record: hir::RecordId,
         identity: u64,
     },
+    Aggregate {
+        record: hir::RecordId,
+        fields: Vec<(hir::FieldId, Value)>,
+    },
     Public(RuntimeValue),
     Raw(i64),
     Reference {
@@ -46,6 +50,16 @@ impl Value {
     }
     fn extra_storage(&self) -> usize {
         match self {
+            Self::Aggregate { fields, .. } => fields
+                .iter()
+                .try_fold(
+                    fields
+                        .capacity()
+                        .checked_mul(size_of::<(hir::FieldId, Value)>())
+                        .unwrap_or(usize::MAX),
+                    |sum, (_, v)| sum.checked_add(v.extra_storage()),
+                )
+                .unwrap_or(usize::MAX),
             Self::Public(RuntimeValue::Record { fields, .. }) => fields
                 .capacity()
                 .checked_mul(size_of::<(hir::FieldId, RangeValue)>())
@@ -88,6 +102,8 @@ enum Action<'a> {
     Select(BasicBlockId, BasicBlockId),
     Return,
     DropNoValue,
+    PendingNext(u64, &'a [hir::RecordFieldInit], usize, usize),
+    PendingField(u64, hir::FieldId),
 }
 struct Task<'a> {
     frame: u64,
@@ -288,7 +304,7 @@ impl<'a> Machine<'a> {
         let (f, i) = self.slot_index(at)?;
         let vacant = if matches!(
             self.frames[f].slots[i].1,
-            Slot::Available(Value::Leaf { .. })
+            Slot::Available(Value::Leaf { .. } | Value::Aggregate { .. })
         ) {
             Slot::Transferred
         } else {
@@ -328,6 +344,14 @@ impl<'a> Machine<'a> {
                 .find(|(f, _)| *f == field)
                 .map(|(_, v)| Value::Public(RuntimeValue::Range(v.clone())))
                 .ok_or_else(|| self.integrity("runtime record field missing")),
+            Value::Aggregate { record: r, fields } if *r == record => {
+                match fields.iter().find(|(id, _)| *id == field).map(|(_, v)| v) {
+                    Some(Value::Public(RuntimeValue::Range(v))) => {
+                        Ok(Value::Public(RuntimeValue::Range(v.clone())))
+                    }
+                    _ => Err(self.integrity("Copy-field is not an owned range")),
+                }
+            }
             _ => Err(self.integrity("runtime record identity mismatch")),
         }
     }
@@ -342,6 +366,23 @@ impl<'a> Machine<'a> {
                     return Err(self.integrity("field RHS is not a range"));
                 };
                 let (f, i) = self.slot_index(at)?;
+                if let Slot::Available(Value::Aggregate { record: r, fields }) =
+                    &mut self.frames[f].slots[i].1
+                {
+                    if *r != record {
+                        return Err(self.integrity("field owner nominal mismatch"));
+                    }
+                    let Some((_, Value::Public(RuntimeValue::Range(old)))) =
+                        fields.iter_mut().find(|(id, _)| *id == field)
+                    else {
+                        return Err(self.integrity("Copy-field destination is not a range"));
+                    };
+                    if old.ty != value.ty {
+                        return Err(self.integrity("field range nominal mismatch"));
+                    }
+                    *old = value;
+                    return Ok(());
+                }
                 let Slot::Available(Value::Public(RuntimeValue::Record { record: r, fields })) =
                     &mut self.frames[f].slots[i].1
                 else {
@@ -690,6 +731,10 @@ impl<'a> Machine<'a> {
                 self.value(v)?;
             }
             ExprKind::RecordConstruct { record, fields } => {
+                if self.resources.is_some() && !self.executable.program.resources.is_leaf(*record) {
+                    self.pending_start(frame, *record, fields, depth)?;
+                    return Ok(());
+                }
                 self.task(
                     frame,
                     self.origin,
@@ -849,7 +894,10 @@ impl<'a> Machine<'a> {
             .ok_or_else(|| self.integrity("return function"))?
             .return_type;
         let matches = match (&value, declared) {
-            (Value::Leaf { record, .. }, Some(ValueType::Record(t))) => *record == t,
+            (
+                Value::Leaf { record, .. } | Value::Aggregate { record, .. },
+                Some(ValueType::Record(t)),
+            ) => *record == t,
             (Value::Completion, None) => true,
             (Value::Public(RuntimeValue::Bool(_)), Some(ValueType::Bool)) => true,
             (Value::Public(RuntimeValue::Range(v)), Some(ValueType::Range(t))) => v.ty == t,
@@ -869,6 +917,9 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     fn step(&mut self, task: Task<'a>) -> Result<(), ExecutionError> {
+        if self.resources.as_ref().is_some_and(|s| s.terminal) {
+            return Err(self.integrity("resource execution is terminal"));
+        }
         self.origin = task.origin;
         self.expression = task.expression;
         match task.action {
@@ -913,6 +964,10 @@ impl<'a> Machine<'a> {
                 self.frames[index].statement = 0;
                 self.task(task.frame, task.origin, None, Action::Drive)?;
             }
+            Action::PendingNext(id, fields, index, depth) => {
+                self.pending_next(task.frame, id, fields, index, depth)?
+            }
+            Action::PendingField(id, field) => self.pending_field(id, field)?,
             Action::Return => self.finish_return(task.frame)?,
             Action::DropNoValue => {
                 if self.pop()? != Value::Completion {
@@ -931,8 +986,16 @@ impl<'a> Machine<'a> {
         self.task(frame, self.origin, None, Action::Drive)
     }
     fn resume(&mut self) -> Result<ExecutionResult, ExecutionError> {
+        if self.resources.as_ref().is_some_and(|s| s.terminal) {
+            return Err(self.integrity("resource execution is terminal"));
+        }
         while let Some(task) = self.tasks.pop() {
-            self.step(task)?;
+            if let Err(error) = self.step(task) {
+                if let Some(state) = &mut self.resources {
+                    state.terminal = true;
+                }
+                return Err(error);
+            }
         }
         if !self.frames.is_empty() || self.values.len() != 1 {
             return Err(self.integrity("incomplete execution state"));

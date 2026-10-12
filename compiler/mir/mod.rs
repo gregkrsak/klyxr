@@ -263,7 +263,7 @@ fn lower_internal(program: &hir::Program, legacy_assert: bool) -> (MirProgram, V
                                 )
                             })
                             .collect(),
-                        protected_return: matches!(f.return_type, Some(hir::ValueType::Record(_))),
+                        protected_return: matches!(f.return_type, Some(hir::ValueType::Record(id)) if program.resources.plans(program).expect("validated cleanup schemas")[id.0].is_some()),
                         ..cleanup::Flow::default()
                     })
                 },
@@ -1867,5 +1867,11 @@ impl MirFunction {
 impl BasicBlock {
     pub(crate) fn test_terminator_mut(&mut self) -> &mut Terminator {
         &mut self.terminator
+    }
+}
+#[cfg(test)]
+impl BasicBlock {
+    pub(crate) fn test_statements_mut(&mut self) -> &mut Vec<Statement> {
+        &mut self.statements
     }
 }

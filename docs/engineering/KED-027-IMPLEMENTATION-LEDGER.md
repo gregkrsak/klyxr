@@ -148,3 +148,40 @@ short-circuit fixtures during resolution: source spelled the accepted built-in
 or semantic defect. The correction changes only that spelling and preserves both
 skipped-consumption and executed-consumption assertions. No later architectural
 layer is being added until the corrected complete workflow gate passes.
+
+Milestones 4–5 correction: `85a122266e0cde4897b15192d7fd91982e9f0366`.
+All four corrected push workflows passed:
+
+| Workflow | Run |
+| --- | --- |
+| build | https://github.com/gregkrsak/klyxr/actions/runs/38299632722 |
+| tests | https://github.com/gregkrsak/klyxr/actions/runs/38299632462 |
+| docs | https://github.com/gregkrsak/klyxr/actions/runs/38299633208 |
+| verify | https://github.com/gregkrsak/klyxr/actions/runs/38299632633 |
+
+## Milestone 6 — aggregates and pending construction
+
+Private aggregate payloads cannot clone resource leaves. Pending constructions
+retain canonical record/field IDs, exact initialized membership, owned field
+payloads and completion state. Each field is evaluated and committed in written
+order; complete publication requires the full canonical field set. Cleanup uses
+shared reverse-declaration plans and explicit bounded continuations.
+
+The private synthetic failure control aborts pending construction and then stops
+the tool. It is separate from range traps, configured stops, integrity failures
+and host failures, and adds no recoverable source syntax, general propagation or
+unwinding. Initialized pending resource fields clean in reverse canonical order,
+not evaluation order. Nested pending containers abort inside-out. Moved sources
+remain transferred and are never restored.
+
+Retained detached payloads, pending fields, aggregate buffers, cleanup work,
+protected return results and synthetic events participate in prospective storage
+accounting. Field initialization, cleanup traversal and fixed release charge fuel.
+Ten new aggregate controls cover complete reverse-order cleanup, a non-last
+resource field, the exact third/first/second-fails witness, aggregate move/return,
+nested complete/pending structures, source non-restoration, projection rejection
+and incomplete-publication rejection.
+
+Advisory local checking/Clippy completed but also reported a corrupt incremental
+cache artifact. No repair, target experiment or local executable test was attempted;
+GitHub remains the only authoritative executable environment.

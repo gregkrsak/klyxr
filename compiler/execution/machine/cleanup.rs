@@ -17,9 +17,22 @@ pub(super) struct State {
     next_identity: u64,
     next_activation: u64,
     protected: Option<Value>,
+    detached: Option<Value>,
     current: Option<Value>,
     pub(super) failure_at: Option<u64>,
-    terminal: bool,
+    pub(super) terminal: bool,
+    pending: Vec<Pending>,
+    work: Vec<Value>,
+    next_pending: u64,
+    pub(super) fail_field: Option<(hir::RecordId, hir::FieldId)>,
+    pub(super) fail_field_skip: usize,
+}
+struct Pending {
+    id: u64,
+    frame: u64,
+    record: hir::RecordId,
+    initialized: Vec<(hir::FieldId, Value)>,
+    complete: bool,
 }
 struct ResourceFrame {
     id: u64,
@@ -40,6 +53,22 @@ impl State {
                     .capacity()
                     .checked_mul(size_of::<ResourceFrame>())?,
             )?;
+        n = n
+            .checked_add(self.pending.capacity().checked_mul(size_of::<Pending>())?)?
+            .checked_add(self.work.capacity().checked_mul(size_of::<Value>())?)?;
+        for p in &self.pending {
+            n = n.checked_add(
+                p.initialized
+                    .capacity()
+                    .checked_mul(size_of::<(hir::FieldId, Value)>())?,
+            )?;
+            for (_, v) in &p.initialized {
+                n = n.checked_add(v.extra_storage())?;
+            }
+        }
+        for v in &self.work {
+            n = n.checked_add(v.extra_storage())?;
+        }
         for f in &self.frames {
             n = n.checked_add(f.scopes.capacity().checked_mul(size_of::<Activation>())?)?;
             for a in &f.scopes {
@@ -50,13 +79,16 @@ impl State {
                 )?;
             }
         }
-        for v in [&self.protected, &self.current].into_iter().flatten() {
+        for v in [&self.protected, &self.current, &self.detached]
+            .into_iter()
+            .flatten()
+        {
             n = n.checked_add(v.extra_storage())?;
         }
         Some(n)
     }
 }
-impl Machine<'_> {
+impl<'a> Machine<'a> {
     fn resource_frame_index(&self, id: u64) -> Result<usize, ExecutionError> {
         self.resources
             .as_ref()
@@ -171,7 +203,10 @@ impl Machine<'_> {
         {
             return Err(self.integrity("owner slot reused before activation cleanup"));
         }
-        if matches!(self.slot(at), Ok(Value::Leaf { .. })) {
+        if matches!(
+            self.slot(at),
+            Ok(Value::Leaf { .. } | Value::Aggregate { .. })
+        ) {
             return Err(self.integrity("live resource overwritten at initialization"));
         }
         Ok(())
@@ -226,7 +261,7 @@ impl Machine<'_> {
             .push(init.local);
         Ok(())
     }
-    fn release_value(&mut self, value: Value) -> Result<(), ExecutionError> {
+    fn release_leaf(&mut self, value: Value) -> Result<(), ExecutionError> {
         // Detachment does not evade accounting: the current cleanup payload stays
         // retained even when a terminal host outcome prevents completion.
         self.reserve(value.extra_storage())?;
@@ -263,6 +298,23 @@ impl Machine<'_> {
         {
             return Err(self.integrity("cleanup trusted release pairing"));
         }
+        let needed = 2usize.saturating_sub(
+            self.resources.as_ref().unwrap().events.capacity()
+                - self.resources.as_ref().unwrap().events.len(),
+        );
+        if needed > 0 {
+            self.reserve(
+                needed
+                    .checked_mul(size_of::<Event>())
+                    .ok_or_else(|| self.integrity("release event reservation overflow"))?,
+            )?;
+            self.resources
+                .as_mut()
+                .unwrap()
+                .events
+                .try_reserve_exact(2)
+                .map_err(|_| self.failure(ErrorKind::Host("release event allocation")))?;
+        }
         self.event(Event::Attempt(identity))?;
         if self.resources.as_ref().unwrap().failure_at == Some(identity) {
             self.event(Event::Failure(identity))?;
@@ -273,6 +325,75 @@ impl Machine<'_> {
         self.resources.as_mut().unwrap().current = None;
         Ok(())
     }
+    fn queue_cleanup(&mut self, value: Value) -> Result<(), ExecutionError> {
+        if self.resources.as_ref().unwrap().detached.is_some() {
+            return Err(self.integrity("detached cleanup payload already occupied"));
+        }
+        self.resources.as_mut().unwrap().detached = Some(value);
+        let grow = self.resources.as_ref().unwrap().work.len()
+            == self.resources.as_ref().unwrap().work.capacity();
+        self.reserve(if grow { size_of::<Value>() } else { 0 })?;
+        if grow {
+            self.resources
+                .as_mut()
+                .unwrap()
+                .work
+                .try_reserve_exact(1)
+                .map_err(|_| self.failure(ErrorKind::Host("cleanup continuation allocation")))?;
+        }
+        let value = self.resources.as_mut().unwrap().detached.take().unwrap();
+        self.resources.as_mut().unwrap().work.push(value);
+        Ok(())
+    }
+    fn release_value(&mut self, value: Value) -> Result<(), ExecutionError> {
+        self.queue_cleanup(value)?;
+        while let Some(value) = self.resources.as_mut().unwrap().work.pop() {
+            self.resources.as_mut().unwrap().current = Some(value);
+            self.charge()?;
+            let value = self.resources.as_mut().unwrap().current.take().unwrap();
+            match value {
+                Value::Leaf { .. } => self.release_leaf(value)?,
+                Value::Aggregate { record, fields } => {
+                    let Some(hir::resources::CleanupPlan::Fields(plan)) = self
+                        .executable
+                        .cleanup_plans
+                        .get(record.0)
+                        .and_then(Option::as_ref)
+                    else {
+                        return Err(self.integrity("aggregate has no canonical cleanup plan"));
+                    };
+                    self.resources.as_mut().unwrap().current =
+                        Some(Value::Aggregate { record, fields });
+                    // Plans are reverse declaration order; push in opposite order
+                    // so the explicit LIFO continuation executes canonical order.
+                    for (field, child) in plan.iter().rev() {
+                        self.charge()?;
+                        let position =
+                            match self.resources.as_ref().unwrap().current.as_ref().unwrap() {
+                                Value::Aggregate { fields, .. } => {
+                                    fields.iter().position(|(id, _)| id == field)
+                                }
+                                _ => None,
+                            }
+                            .ok_or_else(|| self.integrity("cleanup field membership mismatch"))?;
+                        let value = match self.resources.as_mut().unwrap().current.as_mut().unwrap()
+                        {
+                            Value::Aggregate { fields, .. } => fields.remove(position).1,
+                            _ => unreachable!(),
+                        };
+                        if !matches!(&value,Value::Leaf {record,..}|Value::Aggregate {record,..} if record==child)
+                        {
+                            return Err(self.integrity("cleanup child canonical type mismatch"));
+                        }
+                        self.queue_cleanup(value)?;
+                    }
+                    self.resources.as_mut().unwrap().current = None;
+                }
+                _ => return Err(self.integrity("cleanup targets inert value or reference")),
+            }
+        }
+        Ok(())
+    }
     fn cleanup_owner(&mut self, at: Location) -> Result<(), ExecutionError> {
         self.charge()?;
         let (f, i) = self.slot_index(at)?;
@@ -281,7 +402,7 @@ impl Machine<'_> {
         }
         if !matches!(
             self.frames[f].slots[i].1,
-            Slot::Available(Value::Leaf { .. })
+            Slot::Available(Value::Leaf { .. } | Value::Aggregate { .. })
         ) {
             return Err(
                 self.integrity("cleanup owner has no validated live or transferred responsibility")
@@ -349,11 +470,11 @@ impl Machine<'_> {
         Ok(())
     }
     pub(super) fn cleanup_return(&mut self, id: u64, value: Value) -> Result<(), ExecutionError> {
-        self.reserve(value.extra_storage())?;
         if self.resources.as_ref().unwrap().protected.is_some() {
             return Err(self.integrity("protected return already occupied"));
         }
         self.resources.as_mut().unwrap().protected = Some(value);
+        self.reserve(0)?;
         self.cleanup_exit(id)?;
         let r = self.resource_frame_index(id)?;
         if !self.resources.as_ref().unwrap().frames[r].scopes.is_empty() {
@@ -376,8 +497,227 @@ impl Machine<'_> {
         self.event(Event::Retire(id))?;
         self.frames.pop();
         self.resources.as_mut().unwrap().frames.remove(r);
-        let value = self.resources.as_mut().unwrap().protected.take().unwrap();
-        self.value(value)
+        let grow = self.values.len() == self.values.capacity();
+        self.reserve(if grow { size_of::<Value>() } else { 0 })?;
+        if grow {
+            self.values
+                .try_reserve_exact(1)
+                .map_err(|_| self.failure(ErrorKind::Host("protected result allocation")))?;
+        }
+        self.reserve(0)?;
+        self.values
+            .push(self.resources.as_mut().unwrap().protected.take().unwrap());
+        Ok(())
+    }
+    fn pending_index(&self, id: u64) -> Result<usize, ExecutionError> {
+        self.resources
+            .as_ref()
+            .unwrap()
+            .pending
+            .iter()
+            .position(|p| p.id == id)
+            .ok_or_else(|| self.integrity("unknown pending construction"))
+    }
+    pub(super) fn pending_start(
+        &mut self,
+        frame: u64,
+        record: hir::RecordId,
+        fields: &'a [hir::RecordFieldInit],
+        depth: usize,
+    ) -> Result<(), ExecutionError> {
+        self.charge()?;
+        let grow = self.resources.as_ref().unwrap().pending.len()
+            == self.resources.as_ref().unwrap().pending.capacity();
+        if grow {
+            self.reserve(size_of::<Pending>())?;
+            self.resources
+                .as_mut()
+                .unwrap()
+                .pending
+                .try_reserve_exact(1)
+                .map_err(|_| self.failure(ErrorKind::Host("pending construction allocation")))?;
+        }
+        let s = self.resources.as_mut().unwrap();
+        let id = s.next_pending;
+        s.next_pending = s
+            .next_pending
+            .checked_add(1)
+            .ok_or_else(|| ExecutionError::integrity("pending construction identity exhausted"))?;
+        s.pending.push(Pending {
+            id,
+            frame,
+            record,
+            initialized: Vec::new(),
+            complete: false,
+        });
+        self.task(
+            frame,
+            self.origin,
+            self.expression,
+            Action::PendingNext(id, fields, 0, depth),
+        )
+    }
+    pub(super) fn pending_next(
+        &mut self,
+        frame: u64,
+        id: u64,
+        fields: &'a [hir::RecordFieldInit],
+        index: usize,
+        depth: usize,
+    ) -> Result<(), ExecutionError> {
+        self.charge()?;
+        let p = self.pending_index(id)?;
+        if self.resources.as_ref().unwrap().pending[p].frame != frame
+            || self.resources.as_ref().unwrap().pending[p].complete
+        {
+            return Err(self.integrity("pending construction completion state"));
+        }
+        if let Some(field) = fields.get(index) {
+            if self.resources.as_ref().unwrap().fail_field
+                == Some((
+                    self.resources.as_ref().unwrap().pending[p].record,
+                    field.field,
+                ))
+            {
+                if self.resources.as_ref().unwrap().fail_field_skip > 0 {
+                    self.resources.as_mut().unwrap().fail_field_skip -= 1;
+                } else {
+                    self.expression = Some(field.span);
+                    self.pending_abort()?;
+                    self.resources.as_mut().unwrap().terminal = true;
+                    return Err(self.failure(ErrorKind::SyntheticConstructionFailure));
+                }
+            }
+            self.task(
+                frame,
+                self.origin,
+                self.expression,
+                Action::PendingNext(id, fields, index + 1, depth),
+            )?;
+            self.task(
+                frame,
+                self.origin,
+                Some(field.span),
+                Action::PendingField(id, field.field),
+            )?;
+            self.eval(frame, &field.value, depth + 1)?;
+        } else {
+            let pending = &self.resources.as_ref().unwrap().pending[p];
+            let declaration = self.executable.program.record(pending.record);
+            if pending.initialized.len() != declaration.fields.len()
+                || declaration
+                    .fields
+                    .iter()
+                    .any(|f| !pending.initialized.iter().any(|(id, _)| id == f))
+            {
+                return Err(self.integrity("incomplete construction cannot publish"));
+            }
+            self.resources.as_mut().unwrap().pending[p].complete = true;
+            let pending = self.resources.as_mut().unwrap().pending.remove(p);
+            self.resources.as_mut().unwrap().detached = Some(Value::Aggregate {
+                record: pending.record,
+                fields: pending.initialized,
+            });
+            let grow = self.values.len() == self.values.capacity();
+            self.reserve(if grow { size_of::<Value>() } else { 0 })?;
+            if grow {
+                self.values
+                    .try_reserve_exact(1)
+                    .map_err(|_| self.failure(ErrorKind::Host("aggregate result allocation")))?;
+            }
+            self.reserve(0)?;
+            self.values
+                .push(self.resources.as_mut().unwrap().detached.take().unwrap());
+        }
+        Ok(())
+    }
+    pub(super) fn pending_field(
+        &mut self,
+        id: u64,
+        field: hir::FieldId,
+    ) -> Result<(), ExecutionError> {
+        self.charge()?;
+        let p = self.pending_index(id)?;
+        let pending = &self.resources.as_ref().unwrap().pending[p];
+        if pending.complete
+            || pending.initialized.iter().any(|(id, _)| *id == field)
+            || !self
+                .executable
+                .program
+                .record(pending.record)
+                .fields
+                .contains(&field)
+        {
+            return Err(self.integrity("pending field membership or duplicate initialization"));
+        }
+        let value = self.pop()?;
+        if self.resources.as_ref().unwrap().detached.is_some() {
+            return Err(self.integrity("detached construction payload already occupied"));
+        }
+        self.resources.as_mut().unwrap().detached = Some(value);
+        let grow = {
+            let v = &self.resources.as_ref().unwrap().pending[p].initialized;
+            v.len() == v.capacity()
+        };
+        self.reserve(if grow {
+            size_of::<(hir::FieldId, Value)>()
+        } else {
+            0
+        })?;
+        if grow {
+            self.resources.as_mut().unwrap().pending[p]
+                .initialized
+                .try_reserve_exact(1)
+                .map_err(|_| self.failure(ErrorKind::Host("pending field allocation")))?;
+        }
+        let value = self.resources.as_mut().unwrap().detached.take().unwrap();
+        self.resources.as_mut().unwrap().pending[p]
+            .initialized
+            .push((field, value));
+        Ok(())
+    }
+    fn pending_abort(&mut self) -> Result<(), ExecutionError> {
+        while let Some(pending) = self.resources.as_ref().unwrap().pending.last() {
+            if pending.complete {
+                return Err(self.integrity("complete aggregate presented as pending"));
+            }
+            let record = pending.record;
+            if let Some(hir::resources::CleanupPlan::Fields(plan)) = self
+                .executable
+                .cleanup_plans
+                .get(record.0)
+                .and_then(Option::as_ref)
+            {
+                for (field, _) in plan {
+                    self.charge()?;
+                    let position = self
+                        .resources
+                        .as_ref()
+                        .unwrap()
+                        .pending
+                        .last()
+                        .unwrap()
+                        .initialized
+                        .iter()
+                        .position(|(id, _)| id == field);
+                    if let Some(position) = position {
+                        let value = self
+                            .resources
+                            .as_mut()
+                            .unwrap()
+                            .pending
+                            .last_mut()
+                            .unwrap()
+                            .initialized
+                            .remove(position)
+                            .1;
+                        self.release_value(value)?;
+                    }
+                }
+            }
+            self.resources.as_mut().unwrap().pending.pop();
+        }
+        Ok(())
     }
     pub(super) fn trusted_invoke(
         &mut self,
@@ -405,6 +745,28 @@ impl Machine<'_> {
             OperationKind::Acquire(resource) => {
                 if count != 0 {
                     return Err(self.integrity("acquisition argument count"));
+                }
+                let value_grow = self.values.len() == self.values.capacity();
+                let event_grow = self.resources.as_ref().unwrap().events.len()
+                    == self.resources.as_ref().unwrap().events.capacity();
+                self.reserve(
+                    (if value_grow { size_of::<Value>() } else { 0 })
+                        + (if event_grow { size_of::<Event>() } else { 0 }),
+                )?;
+                if value_grow {
+                    self.values.try_reserve_exact(1).map_err(|_| {
+                        self.failure(ErrorKind::Host("acquisition value allocation"))
+                    })?;
+                }
+                if event_grow {
+                    self.resources
+                        .as_mut()
+                        .unwrap()
+                        .events
+                        .try_reserve_exact(1)
+                        .map_err(|_| {
+                            self.failure(ErrorKind::Host("acquisition event allocation"))
+                        })?;
                 }
                 let s = self.resources.as_mut().unwrap();
                 let identity = s.next_identity;
@@ -694,5 +1056,284 @@ mod transfer_and_flow_tests {
             crate::compile_source(s),
             Err(crate::FrontendError::Ownership(_))
         ));
+    }
+}
+#[cfg(test)]
+mod aggregate_tests {
+    use super::*;
+    fn acquire(span: Span) -> hir::TypedExpr {
+        hir::TypedExpr {
+            kind: hir::ExprKind::Call {
+                function: FunctionId(0),
+                arguments: Vec::new(),
+            },
+            ty: hir::ExprType::Record(hir::RecordId(0)),
+            span,
+        }
+    }
+    fn pair(span: Span) -> hir::TypedExpr {
+        hir::TypedExpr {
+            kind: hir::ExprKind::RecordConstruct {
+                record: hir::RecordId(1),
+                fields: [2, 0, 1]
+                    .into_iter()
+                    .map(|i| hir::RecordFieldInit {
+                        field: hir::FieldId(i),
+                        value: acquire(span),
+                        span,
+                    })
+                    .collect(),
+            },
+            ty: hir::ExprType::Record(hir::RecordId(1)),
+            span,
+        }
+    }
+    fn program(extra: &str, bearing: [bool; 3]) -> hir::Program {
+        let mut p = hir::resources::fixture_with(extra);
+        for (i, resource) in bearing.into_iter().enumerate() {
+            p.fields[i].ty = if resource {
+                ValueType::Record(hir::RecordId(0))
+            } else {
+                ValueType::Range(hir::RangeTypeId(0))
+            };
+        }
+        fn expression(e: &mut hir::TypedExpr, bearing: [bool; 3]) {
+            match &mut e.kind {
+                hir::ExprKind::RecordConstruct { record, fields }
+                    if *record == hir::RecordId(1) =>
+                {
+                    for f in fields {
+                        if bearing[f.field.0] {
+                            f.value = acquire(f.value.span);
+                        }
+                    }
+                }
+                hir::ExprKind::Call { arguments, .. } => {
+                    for a in arguments {
+                        expression(a, bearing);
+                    }
+                }
+                _ => {}
+            }
+        }
+        for f in &mut p.functions {
+            if let hir::Function::Ordinary(f) = f {
+                for s in &mut f.body {
+                    match s {
+                        hir::ValueStatement::Let { initializer, .. } => {
+                            expression(initializer, bearing)
+                        }
+                        hir::ValueStatement::Return { value, .. } => expression(value, bearing),
+                        _ => {}
+                    }
+                }
+            }
+        }
+        p
+    }
+    fn artifact(p: hir::Program) -> CheckedExecutable {
+        super::super::super::prepare_synthetic(p, AdmissionLimits::default()).unwrap()
+    }
+    fn completes(s: &State) -> Vec<u64> {
+        s.events
+            .iter()
+            .filter_map(|e| {
+                if let Event::Complete(id) = e {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    fn run(e: &CheckedExecutable) -> Machine<'_> {
+        let mut m = Machine::new(e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        assert_eq!(m.resume().unwrap(), ExecutionResult::NoValue);
+        m
+    }
+    #[test]
+    fn complete_aggregate_cleanup_is_reverse_declaration_not_evaluation() {
+        let e = artifact(program(
+            "fn demo(){let owner=Pair{last:0,first:0,inert:0};}",
+            [true; 3],
+        ));
+        let m = run(&e);
+        assert_eq!(completes(m.resources.as_ref().unwrap()), vec![0, 2, 1]);
+    }
+    #[test]
+    fn resource_field_not_last_declared_still_releases() {
+        let e = artifact(program(
+            "fn demo(){let owner=Pair{last:0,first:0,inert:0};}",
+            [true, false, false],
+        ));
+        let m = run(&e);
+        assert_eq!(completes(m.resources.as_ref().unwrap()), vec![0]);
+    }
+    #[test]
+    fn pending_third_first_second_fails_uses_filtered_reverse_declaration_order() {
+        let e = artifact(program(
+            "fn demo(){let owner=Pair{last:0,first:0,inert:0};}",
+            [true; 3],
+        ));
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.resources.as_mut().unwrap().fail_field = Some((hir::RecordId(1), hir::FieldId(1)));
+        m.start(e.entry("demo").unwrap()).unwrap();
+        assert_eq!(
+            m.resume().unwrap_err().kind,
+            ErrorKind::SyntheticConstructionFailure
+        );
+        assert_eq!(completes(m.resources.as_ref().unwrap()), vec![0, 1]);
+        assert!(m.resources.as_ref().unwrap().pending.is_empty());
+        assert!(!m.frames.is_empty());
+        assert!(!m
+            .resources
+            .as_ref()
+            .unwrap()
+            .events
+            .iter()
+            .any(|e| matches!(e, Event::Retire(_))));
+        assert!(matches!(m.frames[0].slots[0].1, Slot::Uninitialized));
+    }
+    #[test]
+    fn whole_aggregate_moves_without_cloning_responsibility() {
+        let e = artifact(program(
+            "fn demo(){let a=Pair{first:0,inert:0,last:0};let b=a;}",
+            [true; 3],
+        ));
+        let m = run(&e);
+        assert_eq!(completes(m.resources.as_ref().unwrap()), vec![2, 1, 0]);
+    }
+    #[test]
+    fn aggregate_return_is_protected_until_caller_cleanup() {
+        let e = artifact(program(
+            "fn make()->Pair{return Pair{last:0,first:0,inert:0};}fn demo(){let owner=make();}",
+            [true; 3],
+        ));
+        let m = run(&e);
+        assert_eq!(completes(m.resources.as_ref().unwrap()), vec![0, 2, 1]);
+        let events = &m.resources.as_ref().unwrap().events;
+        assert!(
+            events.iter().position(|e| *e == Event::Retire(1)).unwrap()
+                < events
+                    .iter()
+                    .position(|e| matches!(e, Event::Complete(_)))
+                    .unwrap()
+        );
+    }
+    fn nested(extra: &str) -> hir::Program {
+        let mut p = program(extra, [true; 3]);
+        p.fields[3].ty = ValueType::Record(hir::RecordId(1));
+        p.fields[4].ty = ValueType::Record(hir::RecordId(0));
+        for f in &mut p.functions {
+            if let hir::Function::Ordinary(f) = f {
+                for s in &mut f.body {
+                    if let hir::ValueStatement::Let {
+                        initializer:
+                            hir::TypedExpr {
+                                kind: hir::ExprKind::RecordConstruct { record, fields },
+                                ..
+                            },
+                        ..
+                    } = s
+                    {
+                        if *record == hir::RecordId(2) {
+                            for field in fields {
+                                field.value = if field.field == hir::FieldId(3) {
+                                    pair(field.value.span)
+                                } else {
+                                    acquire(field.value.span)
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        p
+    }
+    #[test]
+    fn nested_resource_records_clean_shared_plans_recursively() {
+        let e = artifact(nested(
+            "record Wrap{x:R,last:R}fn demo(){let owner=Wrap{last:0,x:0};}",
+        ));
+        let m = run(&e);
+        assert_eq!(completes(m.resources.as_ref().unwrap()), vec![0, 1, 3, 2]);
+    }
+    #[test]
+    fn nested_pending_states_abort_inner_before_outer() {
+        let e = artifact(nested(
+            "record Wrap{x:R,last:R}fn demo(){let owner=Wrap{last:0,x:0};}",
+        ));
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.resources.as_mut().unwrap().fail_field = Some((hir::RecordId(1), hir::FieldId(1)));
+        m.start(e.entry("demo").unwrap()).unwrap();
+        assert_eq!(
+            m.resume().unwrap_err().kind,
+            ErrorKind::SyntheticConstructionFailure
+        );
+        assert_eq!(completes(m.resources.as_ref().unwrap()), vec![1, 2, 0]);
+    }
+    #[test]
+    fn pending_move_does_not_restore_source_on_later_failure() {
+        let mut p = program(
+            "fn demo(){let source=acquire();let owner=Pair{first:0,inert:0,last:0};}",
+            [true; 3],
+        );
+        let hir::Function::Ordinary(f) = &mut p.functions[2] else {
+            panic!()
+        };
+        let hir::ValueStatement::Let {
+            initializer:
+                hir::TypedExpr {
+                    kind: hir::ExprKind::RecordConstruct { fields, .. },
+                    ..
+                },
+            ..
+        } = &mut f.body[1]
+        else {
+            panic!()
+        };
+        fields[0].value = hir::TypedExpr {
+            kind: hir::ExprKind::Local(hir::LocalId(0)),
+            ty: hir::ExprType::Record(hir::RecordId(0)),
+            span: fields[0].span,
+        };
+        let e = artifact(p);
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.resources.as_mut().unwrap().fail_field = Some((hir::RecordId(1), hir::FieldId(1)));
+        m.start(e.entry("demo").unwrap()).unwrap();
+        assert_eq!(
+            m.resume().unwrap_err().kind,
+            ErrorKind::SyntheticConstructionFailure
+        );
+        assert_eq!(completes(m.resources.as_ref().unwrap()), vec![0]);
+        assert!(matches!(m.frames[0].slots[0].1, Slot::Transferred));
+    }
+    #[test]
+    fn resource_field_projection_is_not_admitted() {
+        let p = program(
+            "fn demo(){let owner=Pair{first:0,inert:0,last:0};let forbidden=owner.first;}",
+            [true; 3],
+        );
+        assert!(super::super::super::prepare_synthetic(p, AdmissionLimits::default()).is_err());
+    }
+    #[test]
+    fn incomplete_aggregate_mir_is_rejected_by_correspondence() {
+        let mut e = artifact(program(
+            "fn demo(){let owner=Pair{first:0,inert:0,last:0};}",
+            [true; 3],
+        ));
+        let initializer = match &mut e.mir.test_functions_mut()[2].test_blocks_mut()[0]
+            .test_statements_mut()[0]
+        {
+            Statement::Let { initializer, .. } => initializer,
+            _ => panic!(),
+        };
+        let hir::ExprKind::RecordConstruct { fields, .. } = &mut initializer.kind else {
+            panic!()
+        };
+        fields.pop();
+        assert!(e.validate().is_err());
     }
 }

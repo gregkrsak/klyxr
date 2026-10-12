@@ -168,6 +168,12 @@ pub(super) fn error(
         ErrorKind::Integrity(n) => {
             let _ = write!(out, "execution integrity failure: {n}");
         }
+        ErrorKind::SyntheticConstructionFailure => {
+            let _ = write!(
+                out,
+                "private synthetic construction stopped after pending cleanup"
+            );
+        }
         ErrorKind::Host(n) => {
             let _ = write!(out, "detected host/tool failure: {n}");
         }

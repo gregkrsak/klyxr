@@ -171,7 +171,18 @@ pub(super) fn expression(
             }
             for (i, item) in fields.iter().enumerate() {
                 if fields[..i].iter().any(|a| a.field == item.field)
-                    || item.value.ty != ExprType::Range(field(p, *record, item.field)?)
+                    || item.value.ty
+                        != ExprType::from(
+                            p.fields
+                                .get(item.field.0)
+                                .filter(|f| {
+                                    f.id == item.field
+                                        && f.record == *record
+                                        && r.fields.contains(&item.field)
+                                })
+                                .ok_or_else(bad)?
+                                .ty,
+                        )
                 {
                     return Err(bad());
                 }

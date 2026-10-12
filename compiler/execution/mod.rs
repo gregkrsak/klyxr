@@ -118,6 +118,8 @@ pub enum ErrorKind {
     ConfiguredLimit(&'static str),
     Integrity(&'static str),
     Host(&'static str),
+    /// Private synthetic construction control, not a recoverable source error.
+    SyntheticConstructionFailure,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CallTrace {
