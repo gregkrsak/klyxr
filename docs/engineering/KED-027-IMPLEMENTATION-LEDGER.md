@@ -139,3 +139,12 @@ parameter return, both branch-dependent consumption paths, skipped and executed
 short-circuit consumption, nested fallthrough, repeated loop iterations, continue,
 break, nested loops, nested return, conditional initialization and borrow-rule
 preservation. No language semantics or predecessor assertion is weakened.
+
+Milestones 4–5 initial commit: `2fbc0720f955a9da9d90abc6b7eb69bc85326ce0`.
+Build/docs/verify passed. Tests run
+https://github.com/gregkrsak/klyxr/actions/runs/38299407839 failed two new
+short-circuit fixtures during resolution: source spelled the accepted built-in
+`bool` as `Bool`. Classified as a test-construction defect, not an implementation
+or semantic defect. The correction changes only that spelling and preserves both
+skipped-consumption and executed-consumption assertions. No later architectural
+layer is being added until the corrected complete workflow gate passes.

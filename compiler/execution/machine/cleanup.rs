@@ -637,7 +637,7 @@ mod transfer_and_flow_tests {
     #[test]
     fn skipped_short_circuit_consumption_does_not_suppress_cleanup() {
         for condition in ["false && take(a)", "true || take(a)"] {
-            let es=events(&format!("fn take(x:Leaf)->Bool{{return true;}} fn demo(){{let a=acquire();let ignored={condition};}}"));
+            let es=events(&format!("fn take(x:Leaf)->bool{{return true;}} fn demo(){{let a=acquire();let ignored={condition};}}"));
             assert_eq!(completes(&es), vec![0]);
             assert_eq!(
                 es.iter().filter(|e| matches!(e, Event::Retire(_))).count(),
@@ -647,7 +647,7 @@ mod transfer_and_flow_tests {
     }
     #[test]
     fn executed_short_circuit_consumption_cleans_callee_parameter() {
-        assert_eq!(completes(&events("fn take(x:Leaf)->Bool{return true;} fn demo(){let a=acquire();let ignored=true && take(a);}")),vec![0]);
+        assert_eq!(completes(&events("fn take(x:Leaf)->bool{return true;} fn demo(){let a=acquire();let ignored=true && take(a);}")),vec![0]);
     }
     #[test]
     fn nested_fallthrough_exits_inner_before_outer() {
