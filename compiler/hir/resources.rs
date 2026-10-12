@@ -255,12 +255,18 @@ impl Catalog {
             .try_reserve_exact(p.records.len())
             .map_err(|_| "cleanup graph allocation failed")?;
         marks.resize(p.records.len(), 0u8);
+        let mut heights = Vec::new();
+        heights
+            .try_reserve_exact(p.records.len())
+            .map_err(|_| "cleanup graph allocation failed")?;
+        heights.resize(p.records.len(), 0usize);
         fn visit(
             c: &Catalog,
             p: &Program,
             id: RecordId,
             marks: &mut [u8],
             plans: &mut [Option<CleanupPlan>],
+            heights: &mut [usize],
             depth: usize,
             max_depth: usize,
         ) -> Result<(), &'static str> {
@@ -275,6 +281,12 @@ impl Catalog {
                 return Err("cyclic owned cleanup schema");
             }
             if mark == 2 {
+                if depth
+                    .checked_add(heights[id.0].saturating_sub(1))
+                    .map_or(true, |d| d > max_depth)
+                {
+                    return Err("cleanup type graph depth exceeded");
+                }
                 return Ok(());
             }
             let r = p
@@ -286,6 +298,7 @@ impl Catalog {
                 return Err("cleanup field membership exceeds canonical table");
             }
             marks[id.0] = 1;
+            let mut height = 1;
             if let Some(l) = c.leaves.iter().find(|l| l.record == id) {
                 plans[id.0] = Some(CleanupPlan::Release(l.id, l.release));
             } else {
@@ -300,7 +313,8 @@ impl Catalog {
                         .filter(|f| f.id == *field && f.record == id)
                         .ok_or("foreign cleanup field identity")?;
                     if let ValueType::Record(child) = f.ty {
-                        visit(c, p, child, marks, plans, depth + 1, max_depth)?;
+                        visit(c, p, child, marks, plans, heights, depth + 1, max_depth)?;
+                        height = height.max(heights[child.0] + 1);
                         if plans[child.0].is_some() {
                             children.push((*field, child));
                         }
@@ -313,10 +327,20 @@ impl Catalog {
                 }
             }
             marks[id.0] = 2;
+            heights[id.0] = height;
             Ok(())
         }
         for i in 0..p.records.len() {
-            visit(self, p, RecordId(i), &mut marks, &mut plans, 1, max_depth)?;
+            visit(
+                self,
+                p,
+                RecordId(i),
+                &mut marks,
+                &mut plans,
+                &mut heights,
+                1,
+                max_depth,
+            )?;
         }
         Ok(plans)
     }
@@ -458,6 +482,16 @@ pub(crate) fn fixture_with(extra: &str) -> Program {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cached_child_plans_do_not_hide_full_type_graph_depth() {
+        let mut p = fixture_with("record Outer{payload:R}");
+        p.fields[3].ty = ValueType::Record(RecordId(1));
+        assert_eq!(
+            p.resources.plans_bounded(&p, 2),
+            Err("cleanup type graph depth exceeded")
+        );
+        assert!(p.resources.plans_bounded(&p, 3).is_ok());
+    }
     #[test]
     fn plans_share_leaf_identity_in_reverse_canonical_order() {
         let p = fixture();

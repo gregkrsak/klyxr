@@ -270,3 +270,17 @@ Tests (38305978022) failed the new aggregate storage assertion: lazy State activ
 installed its accounted bytes before reserving them. Classified as an implementation
 accounting defect. The repair reserves State bytes before activation; the exact
 storage and unique-leaf conservation assertions remain unchanged.
+
+Storage repair: `a747e568686dd7a52c820d792b14ee3681f8f87a`.
+All four push workflows passed: build 38306153091, tests 38306153088,
+docs 38306153312, verify 38306153269. Debug/release each passed 1,656 tests:
+all 1,581 predecessors and 75 new identities, with no failures/ignored/filtered.
+The baseline identity inventory and reconciliation script were independently
+checked against both decoded GitHub profile logs; that is analysis of remote
+execution evidence, not local Rust test execution.
+
+Final source audit found a shared-plan graph-depth defect: a cached child could
+skip descendant depth on a later parent walk. The repair memoizes subtree heights
+and checks the full prospective depth on cache hits, retaining shared plans.
+A new control rejects a three-level graph at depth two and accepts it at depth
+three. No cleanup order, ownership rule or semantic boundary changes.
