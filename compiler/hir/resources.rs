@@ -230,7 +230,94 @@ pub(crate) fn fixture_with(extra: &str) -> Program {
     for (i, f) in p.fields.iter_mut().enumerate() {
         f.id = FieldId(i);
     }
-    p.records[1].fields = vec![FieldId(0), FieldId(1), FieldId(2)];
+    for record in &mut p.records[1..] {
+        for field in &mut record.fields {
+            field.0 -= 1;
+        }
+    }
+    fn field(id: &mut FieldId) {
+        if id.0 > 0 {
+            id.0 -= 1;
+        }
+    }
+    fn expression(e: &mut TypedExpr) {
+        match &mut e.kind {
+            ExprKind::RecordConstruct { fields, .. } => {
+                for f in fields {
+                    field(&mut f.field);
+                    expression(&mut f.value);
+                }
+            }
+            ExprKind::CopyFieldRead { field: id, .. }
+            | ExprKind::CopyReferenceFieldRead { field: id, .. } => field(id),
+            ExprKind::Call { arguments, .. } => {
+                for a in arguments {
+                    expression(a);
+                }
+            }
+            ExprKind::IfValue {
+                condition,
+                then_value,
+                else_value,
+            } => {
+                expression(condition);
+                expression(then_value);
+                expression(else_value);
+            }
+            ExprKind::Unary { operand, .. } => expression(operand),
+            ExprKind::Binary { left, right, .. } => {
+                expression(left);
+                expression(right);
+            }
+            _ => {}
+        }
+    }
+    fn statements(body: &mut [ValueStatement]) {
+        for s in body {
+            match s {
+                ValueStatement::Let { initializer, .. } => expression(initializer),
+                ValueStatement::Return { value, .. }
+                | ValueStatement::Assign { value, .. }
+                | ValueStatement::DerefAssign { value, .. } => expression(value),
+                ValueStatement::CopyFieldAssign {
+                    field: id, value, ..
+                }
+                | ValueStatement::CopyReferenceFieldAssign {
+                    field: id, value, ..
+                } => {
+                    field(id);
+                    expression(value);
+                }
+                ValueStatement::CallNoValue { arguments, .. } => {
+                    for a in arguments {
+                        expression(a);
+                    }
+                }
+                ValueStatement::If {
+                    condition,
+                    then_body,
+                    else_body,
+                    ..
+                } => {
+                    expression(condition);
+                    statements(then_body);
+                    statements(else_body);
+                }
+                ValueStatement::While {
+                    condition, body, ..
+                } => {
+                    expression(condition);
+                    statements(body);
+                }
+                _ => {}
+            }
+        }
+    }
+    for f in &mut p.functions {
+        if let Function::Ordinary(f) = f {
+            statements(&mut f.body);
+        }
+    }
     p.fields[0].ty = ValueType::Record(RecordId(0));
     p.fields[2].ty = ValueType::Record(RecordId(0));
     if let Function::Ordinary(f) = &mut p.functions[0] {

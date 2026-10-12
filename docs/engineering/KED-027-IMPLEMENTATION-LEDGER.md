@@ -185,3 +185,13 @@ and incomplete-publication rejection.
 Advisory local checking/Clippy completed but also reported a corrupt incremental
 cache artifact. No repair, target experiment or local executable test was attempted;
 GitHub remains the only authoritative executable environment.
+
+Milestone 6 initial commit: `bf03f406220397508c84135f348c346d2bef8cf3`.
+Build/docs/verify passed. Tests run
+https://github.com/gregkrsak/klyxr/actions/runs/38301192993 stopped ten new aggregate
+fixtures: the private fixture's placeholder-field removal renumbered the canonical
+field table but had not remapped every expression and additional record. Classified
+as fixture-translation failure against the existing canonical FieldId contract.
+The correction remaps constructor/read/write field identities and record member
+vectors; no cleanup-order, partial-construction or source-restoration assertion is
+changed. Later milestones remain gated on a complete corrected workflow result.
