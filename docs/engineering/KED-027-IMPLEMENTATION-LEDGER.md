@@ -76,3 +76,38 @@ recursive comparison. Trusted acquisition/release stubs reject arbitrary user
 bodies, and canonical fixture construction repeats ordinary HIR validation and
 ownership checking before lowering. Four new lowering/malformed-metadata controls
 are authored; runtime cleanup is still pending.
+
+Milestone 2 commit: `0bf7542f029040ce270c57b0ca398045e9df5a8f`.
+All four push workflows passed:
+
+| Workflow | Run |
+| --- | --- |
+| build | https://github.com/gregkrsak/klyxr/actions/runs/38297981588 |
+| tests | https://github.com/gregkrsak/klyxr/actions/runs/38297981569 |
+| docs | https://github.com/gregkrsak/klyxr/actions/runs/38297981517 |
+| verify | https://github.com/gregkrsak/klyxr/actions/runs/38297981600 |
+
+Debug/release: 1,594 passed each (1,581 predecessors plus thirteen new tests).
+Local fmt/check/Clippy passed as advisory only.
+
+## Milestone 3 — private synthetic leaf vertical slice
+
+A non-cloneable runtime leaf retains canonical resource/type identity and a fresh
+acquisition identity. Fixed trusted operations dispatch by FunctionId and catalog
+identity; they do not execute the stub body or invoke callbacks. Scope activation
+histories come from explicit MIR, including successful initialization and exit
+sets. A transferred resource slot is distinguished from mere vacancy; cleanup
+rejects an invalid owner state. Only resource-bearing local initialization and
+parameter identities participate in cleanup.
+
+The protected result, current cleanup payload, event trace, activation histories
+and frame metadata are included in runtime storage accounting. Acquisition,
+release attempts/completions/failures and frame retirement have a deterministic
+private event trace. No source-visible production API or live-resource public
+result is admitted. Private fixtures re-enter canonical admission, ownership,
+lowering, opaque approval and correspondence; they are not public constructors.
+
+Seven new vertical controls cover implicit completion, explicit NoValue return,
+borrowed handles, name-independent trusted dispatch, public-result rejection,
+missing cleanup, and forged cleanup plans. Aggregate payloads, pending construction
+and the full boundary/failure batteries remain later milestones.

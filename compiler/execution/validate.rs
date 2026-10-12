@@ -372,6 +372,10 @@ fn statements(
     Ok(())
 }
 pub(super) fn program_shape(p: &hir::Program, c: &Context) -> Result<(), ExecutionError> {
+    if p.resources.leaves.len() > c.limits.tokens || p.resources.operations.len() > c.limits.tokens
+    {
+        return Err(bad());
+    }
     if p.functions().len() > c.limits.tokens
         || p.locals().len() > c.limits.tokens
         || p.parameters().len() > c.limits.tokens

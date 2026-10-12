@@ -2,6 +2,7 @@ use super::*;
 use crate::hir::{BinaryOp, BorrowKind, ExprKind, ExprType, Place, ReferentType, TypedExpr};
 use crate::mir::{BasicBlockId, OriginKind, Statement, Terminator};
 use std::mem::size_of;
+mod cleanup;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Location {
@@ -10,6 +11,11 @@ struct Location {
 }
 #[derive(Debug, PartialEq, Eq)]
 enum Value {
+    Leaf {
+        resource: hir::resources::ResourceId,
+        record: hir::RecordId,
+        identity: u64,
+    },
     Public(RuntimeValue),
     Raw(i64),
     Reference {
@@ -53,6 +59,8 @@ enum Slot {
     Uninitialized,
     Available(Value),
     Vacant,
+    Transferred,
+    Cleaned,
 }
 #[derive(Debug)]
 struct Frame {
@@ -98,6 +106,7 @@ pub(super) struct Machine<'a> {
     steps: u64,
     origin: Origin,
     expression: Option<Span>,
+    resources: Option<cleanup::State>,
 }
 impl<'a> Machine<'a> {
     pub fn new(executable: &'a CheckedExecutable, limits: ExecutionLimits) -> Self {
@@ -107,6 +116,7 @@ impl<'a> Machine<'a> {
             frames: Vec::new(),
             tasks: Vec::new(),
             values: Vec::new(),
+            resources: (!executable.cleanup_plans.is_empty()).then(cleanup::State::default),
             next_frame: 0,
             steps: 0,
             origin: Origin {
@@ -166,6 +176,9 @@ impl<'a> Machine<'a> {
         }
         for v in &self.values {
             n = n.checked_add(v.extra_storage())?;
+        }
+        if let Some(s) = &self.resources {
+            n = n.checked_add(s.storage()?)?;
         }
         Some(n)
     }
@@ -273,7 +286,15 @@ impl<'a> Machine<'a> {
             return Ok(v);
         }
         let (f, i) = self.slot_index(at)?;
-        match std::mem::replace(&mut self.frames[f].slots[i].1, Slot::Vacant) {
+        let vacant = if matches!(
+            self.frames[f].slots[i].1,
+            Slot::Available(Value::Leaf { .. })
+        ) {
+            Slot::Transferred
+        } else {
+            Slot::Vacant
+        };
+        match std::mem::replace(&mut self.frames[f].slots[i].1, vacant) {
             Slot::Available(v) => Ok(v),
             _ => Err(self.integrity("unavailable Move source")),
         }
@@ -397,6 +418,7 @@ impl<'a> Machine<'a> {
             slots,
             call_site: self.expression.unwrap_or(self.origin.span),
         });
+        self.cleanup_frame(id)?;
         Ok(id)
     }
     fn eval(&mut self, frame: u64, e: &'a TypedExpr, depth: usize) -> Result<(), ExecutionError> {
@@ -415,6 +437,7 @@ impl<'a> Machine<'a> {
     }
     fn drive(&mut self, id: u64) -> Result<(), ExecutionError> {
         let index = self.frame_index(id)?;
+        self.cleanup_enter_block(id)?;
         let frame = &self.frames[index];
         let f = self.executable.function(frame.function)?;
         let block = f.block(frame.block);
@@ -542,6 +565,8 @@ impl<'a> Machine<'a> {
             self.charge()?;
             match block.terminator() {
                 Terminator::Goto { target } => {
+                    self.cleanup_exit(id)?;
+                    self.cleanup_next_block(id)?;
                     self.frames[index].block = *target;
                     self.frames[index].statement = 0;
                     self.task(id, origin, None, Action::Drive)?;
@@ -823,6 +848,7 @@ impl<'a> Machine<'a> {
             .ok_or_else(|| self.integrity("return function"))?
             .return_type;
         let matches = match (&value, declared) {
+            (Value::Leaf { record, .. }, Some(ValueType::Record(t))) => *record == t,
             (Value::Completion, None) => true,
             (Value::Public(RuntimeValue::Bool(_)), Some(ValueType::Bool)) => true,
             (Value::Public(RuntimeValue::Range(v)), Some(ValueType::Range(t))) => v.ty == t,
@@ -834,8 +860,9 @@ impl<'a> Machine<'a> {
         if !matches {
             return Err(self.integrity("return result or escaping reference mismatch"));
         }
-        // Publish the completed result before retiring its storage; no cleanup
-        // hooks, loans, snapshots or source-level destruction are involved.
+        if self.resources.is_some() {
+            return self.cleanup_return(id, value);
+        }
         self.value(value)?;
         self.frames.pop();
         Ok(())
@@ -863,17 +890,24 @@ impl<'a> Machine<'a> {
             }
             Action::Record(r, f) => self.finish_record(r, f)?,
             Action::Invoke(f, n) => {
-                let frame = self.enter(f, n)?;
-                self.task(frame, self.origin, None, Action::Drive)?;
+                if !self.trusted_invoke(f, n)? {
+                    let frame = self.enter(f, n)?;
+                    self.task(frame, self.origin, None, Action::Drive)?;
+                }
             }
             Action::Commit(d) => {
                 let v = self.pop()?;
                 self.publish(d, v)?;
+                if let Destination::Slot(at) = d {
+                    self.cleanup_initialized(at)?;
+                }
             }
             Action::Select(yes, no) => {
                 let v = self.pop()?;
                 let b = self.boolean(v)?;
                 let index = self.frame_index(task.frame)?;
+                self.cleanup_exit(task.frame)?;
+                self.cleanup_next_block(task.frame)?;
                 self.frames[index].block = if b { yes } else { no };
                 self.frames[index].statement = 0;
                 self.task(task.frame, task.origin, None, Action::Drive)?;

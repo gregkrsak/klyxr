@@ -5,7 +5,7 @@ pub(crate) mod cleanup;
 
 /// Compilation-local CFG identity, unrelated to source declaration identities.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct BasicBlockId(usize);
+pub struct BasicBlockId(pub(crate) usize);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
@@ -259,13 +259,17 @@ fn lower_internal(program: &hir::Program, legacy_assert: bool) -> (MirProgram, V
                             .filter(|id| {
                                 matches!(
                                     program.parameter(*id).ty,
-                                    hir::ParameterType::Value(hir::ValueType::Record(_))
+                                    hir::ParameterType::Value(hir::ValueType::Record(id)) if program.resources.plans(program).expect("validated cleanup schemas")[id.0].is_some()
                                 )
                             })
                             .collect(),
                         protected_return: matches!(f.return_type, Some(hir::ValueType::Record(_))),
                         ..cleanup::Flow::default()
                     })
+                },
+                resource_locals: if program.resources.leaves.is_empty() { Vec::new() } else {
+                    let plans=program.resources.plans(program).expect("validated cleanup schemas");
+                    program.locals.iter().filter(|l| l.function==f.id && matches!(l.ty, hir::ValueType::Record(id) if plans[id.0].is_some())).map(|l|l.id).collect()
                 },
                 active_scopes: Vec::new(),
             };
@@ -332,6 +336,7 @@ struct Builder {
     loop_targets: Vec<(BasicBlockId, BasicBlockId, usize)>,
     cleanup: Option<cleanup::Flow>,
     active_scopes: Vec<cleanup::ScopeId>,
+    resource_locals: Vec<LocalId>,
     origins: Vec<Option<Origin>>,
 }
 impl Builder {
@@ -468,6 +473,9 @@ impl Builder {
         local: LocalId,
         span: Span,
     ) {
+        if !self.resource_locals.contains(&local) {
+            return;
+        }
         if let Some(flow) = &mut self.cleanup {
             let scope = *self.active_scopes.last().expect("lexical initialization");
             if !flow.scopes[scope.0].owners.contains(&local) {

@@ -220,7 +220,11 @@ impl Catalog {
 
 #[cfg(test)]
 pub(crate) fn fixture() -> Program {
-    let mut p = crate::compile_source("type R = range 0..1; record Leaf { data: R } record Pair { first: R, inert: R, last: R } fn acquire() -> Leaf { return Leaf { data: 0 }; } fn release(x: Leaf) {} ").unwrap();
+    fixture_with("")
+}
+#[cfg(test)]
+pub(crate) fn fixture_with(extra: &str) -> Program {
+    let mut p = crate::compile_source(&format!("type R = range 0..1; record Leaf {{ data: R }} record Pair {{ first: R, inert: R, last: R }} fn acquire() -> Leaf {{ return Leaf {{ data: 0 }}; }} fn release(x: Leaf) {{}} {extra}")).unwrap();
     p.records[0].fields.clear();
     p.fields.remove(0);
     for (i, f) in p.fields.iter_mut().enumerate() {
