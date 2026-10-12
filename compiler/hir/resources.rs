@@ -267,9 +267,9 @@ impl Catalog {
             marks: &mut [u8],
             plans: &mut [Option<CleanupPlan>],
             heights: &mut [usize],
-            depth: usize,
-            max_depth: usize,
+            bounds: (usize, usize),
         ) -> Result<(), &'static str> {
+            let (depth, max_depth) = bounds;
             if depth > max_depth {
                 return Err("cleanup type graph depth exceeded");
             }
@@ -313,7 +313,7 @@ impl Catalog {
                         .filter(|f| f.id == *field && f.record == id)
                         .ok_or("foreign cleanup field identity")?;
                     if let ValueType::Record(child) = f.ty {
-                        visit(c, p, child, marks, plans, heights, depth + 1, max_depth)?;
+                        visit(c, p, child, marks, plans, heights, (depth + 1, max_depth))?;
                         height = height.max(heights[child.0] + 1);
                         if plans[child.0].is_some() {
                             children.push((*field, child));
@@ -338,8 +338,7 @@ impl Catalog {
                 &mut marks,
                 &mut plans,
                 &mut heights,
-                1,
-                max_depth,
+                (1, max_depth),
             )?;
         }
         Ok(plans)

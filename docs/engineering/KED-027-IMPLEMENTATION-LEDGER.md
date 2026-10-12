@@ -284,3 +284,9 @@ skip descendant depth on a later parent walk. The repair memoizes subtree height
 and checks the full prospective depth on cache hits, retaining shared plans.
 A new control rejects a three-level graph at depth two and accepts it at depth
 three. No cleanup order, ownership rule or semantic boundary changes.
+
+Depth repair commit: `17adb10aaf0eec4a76890332a46650f736c5d87a`.
+Build 38306434532 failed Clippy's eight-argument helper finding. Classified as an
+ordinary implementation lint defect; depth/current-maximum are now one bounds
+pair without a lint suppression. Local Clippy passed after this correction.
+Tests 38306434486, docs 38306434474 and verify 38306434482 are retained evidence.
