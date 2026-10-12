@@ -111,3 +111,31 @@ Seven new vertical controls cover implicit completion, explicit NoValue return,
 borrowed handles, name-independent trusted dispatch, public-result rejection,
 missing cleanup, and forged cleanup plans. Aggregate payloads, pending construction
 and the full boundary/failure batteries remain later milestones.
+
+Milestone 3 commit: `2127503186654e618260fad063df9509e4ab4f34`.
+All four push workflows passed:
+
+| Workflow | Run |
+| --- | --- |
+| build | https://github.com/gregkrsak/klyxr/actions/runs/38298735533 |
+| tests | https://github.com/gregkrsak/klyxr/actions/runs/38298735645 |
+| docs | https://github.com/gregkrsak/klyxr/actions/runs/38298735624 |
+| verify | https://github.com/gregkrsak/klyxr/actions/runs/38298735531 |
+
+Debug/release: 1,601 passed each (1,581 predecessors plus twenty new tests).
+No local executable evidence is used.
+
+## Milestones 4–5 — transfer and structured-exit conformance
+
+The vertical runtime already includes the inseparable transfer, parameter and
+protected-result machinery. This milestone independently exercises those contracts
+and structured control flow before aggregate payloads are added. An explicit guard
+rejects reuse of an owner slot before its activation has completed cleanup.
+Terminal trusted-release failure cannot resume scope cleanup.
+
+Eighteen new tests cover same-scope A/B/C transfer ordering, explicit release,
+reverse parameters, locals-before-parameters, parameter moves, protected returns,
+parameter return, both branch-dependent consumption paths, skipped and executed
+short-circuit consumption, nested fallthrough, repeated loop iterations, continue,
+break, nested loops, nested return, conditional initialization and borrow-rule
+preservation. No language semantics or predecessor assertion is weakened.

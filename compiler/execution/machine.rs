@@ -481,6 +481,7 @@ impl<'a> Machine<'a> {
                         frame: id,
                         place: Place::Local(*local),
                     };
+                    self.cleanup_reinitialization(at)?;
                     let (f, i) = self.slot_index(at)?;
                     self.frames[f].slots[i].1 = Slot::Uninitialized;
                     self.task(id, self.origin, None, Action::Commit(Destination::Slot(at)))?;

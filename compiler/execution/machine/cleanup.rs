@@ -159,6 +159,23 @@ impl Machine<'_> {
         }
         Ok(())
     }
+    pub(super) fn cleanup_reinitialization(&self, at: Location) -> Result<(), ExecutionError> {
+        if self.resources.is_none() {
+            return Ok(());
+        }
+        let r = self.resource_frame_index(at.frame)?;
+        if self.resources.as_ref().unwrap().frames[r]
+            .scopes
+            .iter()
+            .any(|s| s.initialized.iter().any(|l| at.place == Place::Local(*l)))
+        {
+            return Err(self.integrity("owner slot reused before activation cleanup"));
+        }
+        if matches!(self.slot(at), Ok(Value::Leaf { .. })) {
+            return Err(self.integrity("live resource overwritten at initialization"));
+        }
+        Ok(())
+    }
     pub(super) fn cleanup_initialized(&mut self, at: Location) -> Result<(), ExecutionError> {
         if self.resources.is_none() {
             return Ok(());
@@ -279,6 +296,9 @@ impl Machine<'_> {
     pub(super) fn cleanup_exit(&mut self, id: u64) -> Result<(), ExecutionError> {
         if self.resources.is_none() {
             return Ok(());
+        }
+        if self.resources.as_ref().unwrap().terminal {
+            return Err(self.integrity("cleanup cannot resume after terminal release failure"));
         }
         let r = self.resource_frame_index(id)?;
         let frame = &self.frames[self.frame_index(id)?];
@@ -513,5 +533,166 @@ mod tests {
         let mut e = artifact("fn demo() { let owner = acquire(); }");
         e.cleanup_plans[0] = None;
         assert!(e.validate().is_err());
+    }
+}
+#[cfg(test)]
+mod transfer_and_flow_tests {
+    use super::*;
+    fn events(extra: &str) -> Vec<Event> {
+        let e = super::super::super::prepare_synthetic(
+            hir::resources::fixture_with(extra),
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        assert_eq!(m.resume().unwrap(), ExecutionResult::NoValue);
+        m.resources.unwrap().events
+    }
+    fn completes(events: &[Event]) -> Vec<u64> {
+        events
+            .iter()
+            .filter_map(|e| {
+                if let Event::Complete(id) = e {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    #[test]
+    fn same_scope_transfer_uses_reverse_successful_initialization() {
+        let es = events("fn demo() { let a=acquire(); let b=acquire(); let c=a; }");
+        assert_eq!(completes(&es), vec![0, 1]);
+        assert_eq!(
+            es.iter().filter(|e| matches!(e, Event::Attempt(_))).count(),
+            2
+        );
+    }
+    #[test]
+    fn explicit_consuming_release_prevents_later_cleanup() {
+        assert_eq!(
+            completes(&events("fn demo() { let a=acquire(); release(a); }")),
+            vec![0]
+        );
+    }
+    #[test]
+    fn callee_parameters_clean_in_reverse_declaration_order() {
+        assert_eq!(
+            completes(&events(
+                "fn take(a:Leaf,b:Leaf) {} fn demo() {let a=acquire();let b=acquire();take(a,b);}"
+            )),
+            vec![1, 0]
+        );
+    }
+    #[test]
+    fn locals_clean_before_parameters() {
+        assert_eq!(
+            completes(&events(
+                "fn take(a:Leaf) {let b=acquire();} fn demo() {let a=acquire();take(a);}"
+            )),
+            vec![1, 0]
+        );
+    }
+    #[test]
+    fn parameter_transfer_into_local_changes_cleanup_position_without_duplicate() {
+        assert_eq!(completes(&events("fn take(a:Leaf,b:Leaf) {let moved=a;} fn demo(){let a=acquire();let b=acquire();take(a,b);}")),vec![0,1]);
+    }
+    #[test]
+    fn protected_return_reaches_caller_after_callee_cleanup() {
+        let es=events("fn make()->Leaf {let unused=acquire();let returned=acquire();return returned;} fn demo(){let received=make();}");
+        assert_eq!(
+            es,
+            vec![
+                Event::Acquire(0),
+                Event::Acquire(1),
+                Event::Attempt(0),
+                Event::Complete(0),
+                Event::Retire(1),
+                Event::Attempt(1),
+                Event::Complete(1),
+                Event::Retire(0)
+            ]
+        );
+    }
+    #[test]
+    fn returning_owned_parameter_preserves_responsibility() {
+        assert_eq!(
+            completes(&events(
+                "fn pass(x:Leaf)->Leaf {return x;} fn demo(){let a=acquire();let b=pass(a);}"
+            )),
+            vec![0]
+        );
+    }
+    #[test]
+    fn conditional_move_cleans_actual_owner_on_both_runtime_paths() {
+        for flag in ["true", "false"] {
+            let es = events(&format!(
+                "fn demo(){{let a=acquire();if {flag} {{release(a);}}}}"
+            ));
+            assert_eq!(completes(&es), vec![0]);
+        }
+    }
+    #[test]
+    fn skipped_short_circuit_consumption_does_not_suppress_cleanup() {
+        for condition in ["false && take(a)", "true || take(a)"] {
+            let es=events(&format!("fn take(x:Leaf)->Bool{{return true;}} fn demo(){{let a=acquire();let ignored={condition};}}"));
+            assert_eq!(completes(&es), vec![0]);
+            assert_eq!(
+                es.iter().filter(|e| matches!(e, Event::Retire(_))).count(),
+                1
+            );
+        }
+    }
+    #[test]
+    fn executed_short_circuit_consumption_cleans_callee_parameter() {
+        assert_eq!(completes(&events("fn take(x:Leaf)->Bool{return true;} fn demo(){let a=acquire();let ignored=true && take(a);}")),vec![0]);
+    }
+    #[test]
+    fn nested_fallthrough_exits_inner_before_outer() {
+        assert_eq!(
+            completes(&events(
+                "fn demo(){let a=acquire();if true {let b=acquire();if true {let c=acquire();}}}"
+            )),
+            vec![2, 1, 0]
+        );
+    }
+    #[test]
+    fn loop_body_fallthrough_cleans_before_reentry() {
+        assert_eq!(completes(&events("type Count=range 0..3; fn start()->Count{return 3;} fn demo(){let mut n=start();while !(n==0) {let a=acquire();n=n-1;}}")),vec![0,1,2]);
+    }
+    #[test]
+    fn continue_cleans_each_iteration() {
+        assert_eq!(completes(&events("type Count=range 0..3; fn start()->Count{return 3;} fn demo(){let mut n=start();while !(n==0){let a=acquire();n=n-1;continue;}}")),vec![0,1,2]);
+    }
+    #[test]
+    fn break_cleans_only_exited_scopes() {
+        assert_eq!(completes(&events("fn demo(){let a=acquire();while true {let b=acquire();if true {let c=acquire();break;}}}")),vec![2,1,0]);
+    }
+    #[test]
+    fn nested_loop_break_retains_outer_owner() {
+        assert_eq!(completes(&events("fn demo(){while true {let a=acquire();while true {let b=acquire();break;}let c=acquire();break;}}")),vec![1,2,0]);
+    }
+    #[test]
+    fn nested_return_cleans_all_exited_scopes() {
+        assert_eq!(completes(&events("fn demo(){let a=acquire();while true {let b=acquire();if true {let c=acquire();return;}}}")),vec![2,1,0]);
+    }
+    #[test]
+    fn conditional_initialization_transfers_only_selected_owner() {
+        for flag in ["true", "false"] {
+            assert_eq!(completes(&events(&format!("fn demo(){{let a=acquire();let b=acquire();let selected=if {flag}{{a}}else{{b}};}}"))),if flag=="true"{vec![0,1]}else{vec![1,0]});
+        }
+    }
+    #[test]
+    fn moved_owner_remains_protected_by_existing_borrow_rules() {
+        let p = hir::resources::fixture_with("fn demo(){let a=acquire();let view=&a;let b=a;}");
+        assert!(super::super::super::prepare_synthetic(p, AdmissionLimits::default()).is_ok());
+        // A live loan still prohibits transfer; the source compiler must reject it.
+        let s="type R=range 0..1;record Leaf{data:R}fn acquire()->Leaf{return Leaf{data:0};}fn use_view(v:&Leaf){}fn demo(){let a=acquire();let view=&a;let b=a;use_view(view);}";
+        assert!(matches!(
+            crate::compile_source(s),
+            Err(crate::FrontendError::Ownership(_))
+        ));
     }
 }
