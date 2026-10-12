@@ -89,6 +89,17 @@ impl State {
     }
 }
 impl<'a> Machine<'a> {
+    pub(super) fn enable_resources(&mut self) -> Result<(), ExecutionError> {
+        if self.resources.is_none() {
+            self.resources = Some(State::default());
+            self.reserve(0)?;
+        }
+        Ok(())
+    }
+    fn has_cleanup(&self, id: u64) -> Result<bool, ExecutionError> {
+        let f = &self.frames[self.frame_index(id)?];
+        Ok(self.executable.function(f.function)?.cleanup.is_some())
+    }
     fn resource_frame_index(&self, id: u64) -> Result<usize, ExecutionError> {
         self.resources
             .as_ref()
@@ -111,6 +122,10 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     pub(super) fn cleanup_frame(&mut self, id: u64) -> Result<(), ExecutionError> {
+        if !self.has_cleanup(id)? {
+            return Ok(());
+        }
+
         if self.resources.is_none() {
             return Ok(());
         }
@@ -132,6 +147,10 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     pub(super) fn cleanup_enter_block(&mut self, id: u64) -> Result<(), ExecutionError> {
+        if !self.has_cleanup(id)? {
+            return Ok(());
+        }
+
         if self.resources.is_none() {
             return Ok(());
         }
@@ -185,6 +204,10 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     pub(super) fn cleanup_next_block(&mut self, id: u64) -> Result<(), ExecutionError> {
+        if !self.has_cleanup(id)? {
+            return Ok(());
+        }
+
         if self.resources.is_some() {
             let r = self.resource_frame_index(id)?;
             self.resources.as_mut().unwrap().frames[r].entered = false;
@@ -192,6 +215,10 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     pub(super) fn cleanup_reinitialization(&self, at: Location) -> Result<(), ExecutionError> {
+        if !self.has_cleanup(at.frame)? {
+            return Ok(());
+        }
+
         if self.resources.is_none() {
             return Ok(());
         }
@@ -212,6 +239,10 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     pub(super) fn cleanup_initialized(&mut self, at: Location) -> Result<(), ExecutionError> {
+        if !self.has_cleanup(at.frame)? {
+            return Ok(());
+        }
+
         if self.resources.is_none() {
             return Ok(());
         }
@@ -415,6 +446,10 @@ impl<'a> Machine<'a> {
         self.release_value(v)
     }
     pub(super) fn cleanup_exit(&mut self, id: u64) -> Result<(), ExecutionError> {
+        if !self.has_cleanup(id)? {
+            return Ok(());
+        }
+
         if self.resources.is_none() {
             return Ok(());
         }
@@ -734,6 +769,7 @@ impl<'a> Machine<'a> {
         else {
             return Ok(false);
         };
+        self.enable_resources()?;
         self.charge()?;
         if self.frames.len() >= self.limits.call_depth {
             return Err(self.failure(ErrorKind::ConfiguredLimit("call depth")));
@@ -1177,8 +1213,8 @@ mod aggregate_tests {
             [true; 3],
         ));
         let mut m = Machine::new(&e, ExecutionLimits::default());
-        m.resources.as_mut().unwrap().fail_field = Some((hir::RecordId(1), hir::FieldId(1)));
         m.start(e.entry("demo").unwrap()).unwrap();
+        m.resources.as_mut().unwrap().fail_field = Some((hir::RecordId(1), hir::FieldId(1)));
         assert_eq!(
             m.resume().unwrap_err().kind,
             ErrorKind::SyntheticConstructionFailure
@@ -1266,8 +1302,8 @@ mod aggregate_tests {
             "record Wrap{x:R,last:R}fn demo(){let owner=Wrap{last:0,x:0};}",
         ));
         let mut m = Machine::new(&e, ExecutionLimits::default());
-        m.resources.as_mut().unwrap().fail_field = Some((hir::RecordId(1), hir::FieldId(1)));
         m.start(e.entry("demo").unwrap()).unwrap();
+        m.resources.as_mut().unwrap().fail_field = Some((hir::RecordId(1), hir::FieldId(1)));
         assert_eq!(
             m.resume().unwrap_err().kind,
             ErrorKind::SyntheticConstructionFailure
@@ -1301,8 +1337,8 @@ mod aggregate_tests {
         };
         let e = artifact(p);
         let mut m = Machine::new(&e, ExecutionLimits::default());
-        m.resources.as_mut().unwrap().fail_field = Some((hir::RecordId(1), hir::FieldId(1)));
         m.start(e.entry("demo").unwrap()).unwrap();
+        m.resources.as_mut().unwrap().fail_field = Some((hir::RecordId(1), hir::FieldId(1)));
         assert_eq!(
             m.resume().unwrap_err().kind,
             ErrorKind::SyntheticConstructionFailure
@@ -1335,5 +1371,517 @@ mod aggregate_tests {
         };
         fields.pop();
         assert!(e.validate().is_err());
+    }
+}
+#[cfg(test)]
+mod bounds_and_artifact_tests {
+    use super::*;
+    fn artifact(s: &str) -> CheckedExecutable {
+        super::super::super::prepare_synthetic(
+            hir::resources::fixture_with(s),
+            AdmissionLimits::default(),
+        )
+        .unwrap()
+    }
+    fn start(e: &CheckedExecutable, limits: ExecutionLimits) -> Machine<'_> {
+        let mut m = Machine::new(e, limits);
+        m.start(e.entry("demo").unwrap()).unwrap();
+        m
+    }
+    fn completes(m: &Machine<'_>) -> Vec<u64> {
+        m.resources
+            .as_ref()
+            .unwrap()
+            .events
+            .iter()
+            .filter_map(|e| {
+                if let Event::Complete(id) = e {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    #[test]
+    fn exact_sufficient_and_insufficient_cleanup_fuel() {
+        let e = artifact("fn demo(){let owner=acquire();}");
+        let mut m = start(&e, ExecutionLimits::default());
+        m.resume().unwrap();
+        let steps = m.steps;
+        assert_eq!(steps, 11);
+        assert_eq!(
+            execute(
+                &e,
+                e.entry("demo").unwrap(),
+                ExecutionLimits {
+                    steps,
+                    ..ExecutionLimits::default()
+                }
+            )
+            .unwrap(),
+            ExecutionResult::NoValue
+        );
+        let mut m = start(
+            &e,
+            ExecutionLimits {
+                steps: steps - 1,
+                ..ExecutionLimits::default()
+            },
+        );
+        assert!(matches!(
+            m.resume().unwrap_err().kind,
+            ErrorKind::ConfiguredLimit("steps")
+        ));
+        assert!(completes(&m).is_empty());
+        assert!(m.resources.as_ref().unwrap().current.is_some());
+    }
+    #[test]
+    fn exact_sufficient_and_insufficient_resource_storage() {
+        let e = artifact("fn demo(){let owner=acquire();}");
+        let id = e.entry("demo").unwrap();
+        let succeeds = |bytes| {
+            execute(
+                &e,
+                id,
+                ExecutionLimits {
+                    working_storage: bytes,
+                    ..ExecutionLimits::default()
+                },
+            )
+            .is_ok()
+        };
+        let mut low = 1;
+        let mut high = 16_384;
+        assert!(succeeds(high));
+        while low < high {
+            let mid = (low + high) / 2;
+            if succeeds(mid) {
+                high = mid;
+            } else {
+                low = mid + 1;
+            }
+        }
+        assert!(succeeds(low));
+        assert!(!succeeds(low - 1));
+        assert!(matches!(
+            execute(
+                &e,
+                id,
+                ExecutionLimits {
+                    working_storage: low - 1,
+                    ..ExecutionLimits::default()
+                }
+            )
+            .unwrap_err()
+            .kind,
+            ErrorKind::ConfiguredLimit("working storage")
+        ));
+    }
+    #[test]
+    fn controlled_release_failure_preserves_prefix_and_never_retries() {
+        let e = artifact("fn demo(){let a=acquire();let b=acquire();}");
+        let mut m = start(&e, ExecutionLimits::default());
+        m.resources.as_mut().unwrap().failure_at = Some(0);
+        assert_eq!(
+            m.resume().unwrap_err().kind,
+            ErrorKind::Host("synthetic trusted release")
+        );
+        assert_eq!(completes(&m), vec![1]);
+        let before = m.resources.as_ref().unwrap().events.clone_for_test();
+        assert!(matches!(
+            m.resume().unwrap_err().kind,
+            ErrorKind::Integrity("resource execution is terminal")
+        ));
+        assert_eq!(
+            m.resources.as_ref().unwrap().events.clone_for_test(),
+            before
+        );
+        assert!(matches!(
+            m.resources.as_ref().unwrap().current,
+            Some(Value::Leaf { identity: 0, .. })
+        ));
+    }
+    #[test]
+    fn failure_while_cleaning_callee_keeps_protected_result_outside_cleanup() {
+        let e=artifact("fn make()->Leaf{let failed=acquire();let returned=acquire();return returned;}fn demo(){let owner=make();}");
+        let mut m = start(&e, ExecutionLimits::default());
+        m.resources.as_mut().unwrap().failure_at = Some(0);
+        assert_eq!(
+            m.resume().unwrap_err().kind,
+            ErrorKind::Host("synthetic trusted release")
+        );
+        assert!(matches!(
+            m.resources.as_ref().unwrap().protected,
+            Some(Value::Leaf { identity: 1, .. })
+        ));
+        assert!(!m
+            .resources
+            .as_ref()
+            .unwrap()
+            .events
+            .iter()
+            .any(|e| matches!(e, Event::Retire(_))));
+        assert!(!m.frames.is_empty());
+    }
+    #[test]
+    fn undefined_resource_argument_temporary_is_rejected() {
+        let p = hir::resources::fixture_with("fn demo(){release(acquire());}");
+        assert!(super::super::super::prepare_synthetic(p, AdmissionLimits::default()).is_err());
+    }
+    #[test]
+    fn unused_resource_catalog_preserves_resource_free_fuel_and_storage() {
+        let e = artifact("fn demo(){}");
+        let mut m = start(&e, ExecutionLimits::default());
+        m.resume().unwrap();
+        assert_eq!(m.steps, 2);
+        assert!(m.resources.is_none());
+        let plain = prepare_execution("fn demo(){}", AdmissionLimits::default()).unwrap();
+        let mut other = Machine::new(&plain, ExecutionLimits::default());
+        other.start(plain.entry("demo").unwrap()).unwrap();
+        other.resume().unwrap();
+        assert_eq!(m.storage(), other.storage());
+    }
+    #[test]
+    fn resource_free_caller_can_invoke_resource_owning_helper() {
+        let e = artifact("fn helper(){let owner=acquire();}fn demo(){helper();}");
+        let mut m = start(&e, ExecutionLimits::default());
+        assert!(m.resources.is_none());
+        m.resume().unwrap();
+        assert_eq!(completes(&m), vec![0]);
+    }
+    #[test]
+    fn reference_only_function_does_not_acquire_cleanup_responsibility() {
+        let e = artifact("fn inspect(view:&Leaf){}fn demo(){let owner=acquire();inspect(&owner);}");
+        let mut m = start(&e, ExecutionLimits::default());
+        m.resume().unwrap();
+        assert_eq!(completes(&m), vec![0]);
+    }
+    #[test]
+    fn configured_type_graph_depth_is_enforced() {
+        let p = hir::resources::fixture_with("fn demo(){let owner=acquire();}");
+        assert!(matches!(
+            super::super::super::prepare_synthetic(
+                p,
+                AdmissionLimits {
+                    traversal_depth: 1,
+                    ..AdmissionLimits::default()
+                }
+            )
+            .err()
+            .unwrap()
+            .kind,
+            ErrorKind::ConfiguredLimit("cleanup type graph depth")
+        ));
+    }
+    #[test]
+    fn oversized_resource_metadata_is_rejected_before_approval() {
+        let mut p = hir::resources::fixture_with("fn demo(){let owner=acquire();}");
+        p.records[0].name = "x".repeat(257);
+        assert!(matches!(
+            super::super::super::prepare_synthetic(p, AdmissionLimits::default())
+                .err()
+                .unwrap()
+                .kind,
+            ErrorKind::ConfiguredLimit("resource identifier bytes")
+        ));
+    }
+    #[test]
+    fn malformed_cleanup_owner_scope_exit_and_origin_controls() {
+        for fault in 0..9 {
+            let mut e = artifact("fn demo(){let owner=acquire();if true {let inner=acquire();}}");
+            let flow = e.mir.test_functions_mut()[2].cleanup.as_mut().unwrap();
+            match fault {
+                0 => flow.scopes[0].owners.push(hir::LocalId(999)),
+                1 => flow.blocks[0].initialize[0].local = hir::LocalId(999),
+                2 => flow.blocks[0].initialize[0].scope = crate::mir::cleanup::ScopeId(1),
+                3 => flow.blocks[0].initialize[0].origin.kind = OriginKind::Statement,
+                4 => flow
+                    .blocks
+                    .iter_mut()
+                    .find(|b| !b.exit.is_empty())
+                    .unwrap()
+                    .exit
+                    .clear(),
+                5 => {
+                    let b = flow.blocks.iter_mut().find(|b| !b.exit.is_empty()).unwrap();
+                    b.exit.push(b.exit[0]);
+                }
+                6 => flow.scopes[1].parent = None,
+                7 => flow.protected_return = true,
+                8 => flow.parameters.push(hir::ParameterId(999)),
+                _ => unreachable!(),
+            }
+            assert!(e.validate().is_err(), "fault {fault}");
+        }
+    }
+    #[test]
+    fn cleanup_targeting_inert_value_or_reference_rejects() {
+        for body in ["let inert=true;", "let view=&owner;"] {
+            let mut e = artifact(&format!("fn demo(){{let owner=acquire();{body}}}"));
+            let flow = e.mir.test_functions_mut()[2].cleanup.as_mut().unwrap();
+            flow.scopes[0].owners.push(hir::LocalId(1));
+            let mut forged = flow.blocks[0].initialize[0].clone();
+            forged.local = hir::LocalId(1);
+            forged.statement = 1;
+            flow.blocks[0].initialize.push(forged);
+            assert!(e.validate().is_err());
+        }
+    }
+    #[test]
+    fn loop_cleanup_omission_or_reordering_cannot_gain_authority() {
+        for fault in 0..2 {
+            let mut e =
+                artifact("fn demo(){let outer=acquire();while true{let inner=acquire();break;}}");
+            let flow = e.mir.test_functions_mut()[2].cleanup.as_mut().unwrap();
+            let b = flow
+                .blocks
+                .iter_mut()
+                .find(|b| b.exit == vec![crate::mir::cleanup::ScopeId(1)])
+                .unwrap();
+            if fault == 0 {
+                b.exit.clear();
+            } else {
+                b.exit = vec![crate::mir::cleanup::ScopeId(0)];
+            }
+            assert!(e.validate().is_err());
+        }
+    }
+    #[test]
+    fn reordered_or_foreign_cleanup_plan_is_rejected() {
+        for fault in 0..3 {
+            let mut e = artifact("fn demo(){let owner=acquire();}");
+            let Some(hir::resources::CleanupPlan::Fields(fields)) = &mut e.cleanup_plans[1] else {
+                panic!()
+            };
+            match fault {
+                0 => fields.reverse(),
+                1 => fields[0].0 = hir::FieldId(999),
+                2 => fields[0].1 = hir::RecordId(999),
+                _ => unreachable!(),
+            }
+            assert!(e.validate().is_err());
+        }
+    }
+    #[test]
+    fn foreign_trusted_function_and_resource_pairing_rejects() {
+        for fault in 0..2 {
+            let mut p = hir::resources::fixture_with("fn demo(){let owner=acquire();}");
+            if fault == 0 {
+                p.resources.operations[0].function = FunctionId(2);
+            } else {
+                p.resources.leaves[0].release = hir::resources::OperationId(0);
+            }
+            assert!(super::super::super::prepare_synthetic(p, AdmissionLimits::default()).is_err());
+        }
+    }
+    #[test]
+    fn ordinary_noncopy_replacement_remains_rejected() {
+        let source="type R=range 0..1;record Leaf{data:R}fn acquire()->Leaf{return Leaf{data:0};}fn demo(){let mut a=acquire();let b=acquire();a=b;}";
+        assert!(matches!(
+            crate::compile_source(source),
+            Err(crate::FrontendError::Ownership(_))
+        ));
+    }
+}
+#[cfg(test)]
+trait TestEvents {
+    fn clone_for_test(&self) -> Vec<(u8, u64)>;
+}
+#[cfg(test)]
+impl TestEvents for Vec<Event> {
+    fn clone_for_test(&self) -> Vec<(u8, u64)> {
+        self.iter()
+            .map(|e| match e {
+                Event::Acquire(id) => (0, *id),
+                Event::Attempt(id) => (1, *id),
+                Event::Complete(id) => (2, *id),
+                Event::Failure(id) => (3, *id),
+                Event::Retire(id) => (4, *id),
+            })
+            .collect()
+    }
+}
+#[cfg(test)]
+mod copy_and_reporting_tests {
+    use super::*;
+    fn artifact() -> CheckedExecutable {
+        super::super::super::prepare_synthetic(
+            hir::resources::fixture_with("fn demo(){let owner=acquire();}"),
+            AdmissionLimits::default(),
+        )
+        .unwrap()
+    }
+    #[test]
+    fn forged_copy_local_cannot_seal_a_resource_payload() {
+        let mut p = hir::resources::fixture_with("fn demo(){let owner=acquire();}");
+        p.locals[0].ty = ValueType::Bool;
+        assert!(super::super::super::prepare_synthetic(p, AdmissionLimits::default()).is_err());
+    }
+    #[test]
+    fn mismatched_statement_call_cannot_hide_resource_in_copy_parameter() {
+        let mut p = hir::resources::fixture_with(
+            "fn take(x:Leaf){}fn demo(){let owner=acquire();take(owner);}",
+        );
+        p.parameters[1].ty = hir::ParameterType::Value(ValueType::Bool);
+        assert!(super::super::super::prepare_synthetic(p, AdmissionLimits::default()).is_err());
+    }
+    #[test]
+    fn trusted_acquisition_cannot_be_reclassified_as_copy() {
+        let mut p = hir::resources::fixture_with("fn demo(){let owner=acquire();}");
+        let hir::Function::Ordinary(f) = &mut p.functions[0] else {
+            panic!()
+        };
+        f.return_type = Some(ValueType::Bool);
+        assert!(super::super::super::prepare_synthetic(p, AdmissionLimits::default()).is_err());
+    }
+    #[test]
+    fn resource_payloads_and_aggregates_have_no_copy_operation() {
+        let leaf = Value::Leaf {
+            resource: hir::resources::ResourceId(0),
+            record: hir::RecordId(0),
+            identity: 0,
+        };
+        assert!(leaf.copy().is_none());
+        let aggregate = Value::Aggregate {
+            record: hir::RecordId(1),
+            fields: vec![(hir::FieldId(0), leaf)],
+        };
+        assert!(aggregate.copy().is_none());
+    }
+    #[test]
+    fn host_failure_reporting_stays_bounded_and_writer_failure_is_host() {
+        let e = artifact();
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        m.resources.as_mut().unwrap().failure_at = Some(0);
+        let error = m.resume().unwrap_err();
+        let text = e.render_error(&error, 4096).unwrap();
+        assert!(text.contains("detected host/tool failure"));
+        assert!(matches!(
+            e.render_error(&error, 1).unwrap_err().kind,
+            ErrorKind::ConfiguredLimit("rendered output")
+        ));
+        struct Fails;
+        impl std::io::Write for Fails {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::ErrorKind::Other.into())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        assert_eq!(
+            write_output(Fails, &text).unwrap_err().kind,
+            ErrorKind::Host("output write")
+        );
+    }
+    #[test]
+    fn diagnostic_allocation_failure_preserves_resource_host_classification() {
+        let e = artifact();
+        let error = ExecutionError::new(ErrorKind::Host("synthetic trusted release"), START);
+        super::super::super::render::FAIL_ALLOCATION.with(|v| v.set(true));
+        let result = e.render_error(&error, 4096);
+        super::super::super::render::FAIL_ALLOCATION.with(|v| v.set(false));
+        assert!(matches!(
+            result.unwrap_err().kind,
+            ErrorKind::Host("render allocation")
+        ));
+    }
+}
+#[cfg(test)]
+mod conservation_tests {
+    use super::*;
+    fn leaves(value: &Value, ids: &mut Vec<u64>) {
+        match value {
+            Value::Leaf { identity, .. } => ids.push(*identity),
+            Value::Aggregate { fields, .. } => {
+                for (_, v) in fields {
+                    leaves(v, ids);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn conserved(m: &Machine<'_>) {
+        let s = m.resources.as_ref().unwrap();
+        let mut acquired = Vec::new();
+        let mut completed = Vec::new();
+        for e in &s.events {
+            match e {
+                Event::Acquire(id) => acquired.push(*id),
+                Event::Complete(id) => completed.push(*id),
+                _ => {}
+            }
+        }
+        let mut owned = Vec::new();
+        for f in &m.frames {
+            for (_, slot) in &f.slots {
+                if let Slot::Available(v) = slot {
+                    leaves(v, &mut owned);
+                }
+            }
+        }
+        for v in &m.values {
+            leaves(v, &mut owned);
+        }
+        for v in [&s.current, &s.protected, &s.detached]
+            .into_iter()
+            .flatten()
+        {
+            leaves(v, &mut owned);
+        }
+        for v in &s.work {
+            leaves(v, &mut owned);
+        }
+        for p in &s.pending {
+            for (_, v) in &p.initialized {
+                leaves(v, &mut owned);
+            }
+        }
+        owned.extend(completed);
+        owned.sort_unstable();
+        acquired.sort_unstable();
+        assert_eq!(owned, acquired);
+        assert!(owned.windows(2).all(|ids| ids[0] != ids[1]));
+    }
+    #[test]
+    fn every_cleanup_fuel_stop_conserves_acquired_leaf_responsibilities() {
+        let e = super::super::super::prepare_synthetic(
+            hir::resources::fixture_with("fn demo(){let a=acquire();let b=acquire();let c=a;}"),
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        let mut full = Machine::new(&e, ExecutionLimits::default());
+        full.start(e.entry("demo").unwrap()).unwrap();
+        full.resume().unwrap();
+        let complete = full.steps;
+        conserved(&full);
+        for steps in 1..complete {
+            let mut m = Machine::new(
+                &e,
+                ExecutionLimits {
+                    steps,
+                    ..ExecutionLimits::default()
+                },
+            );
+            if m.start(e.entry("demo").unwrap()).is_ok() {
+                assert!(m.resume().is_err());
+                conserved(&m);
+            }
+        }
+    }
+    #[test]
+    fn controlled_host_failure_retains_unique_uncompleted_payload() {
+        let e = super::super::super::prepare_synthetic(
+            hir::resources::fixture_with("fn demo(){let a=acquire();let b=acquire();}"),
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        m.resources.as_mut().unwrap().failure_at = Some(0);
+        assert!(m.resume().is_err());
+        conserved(&m);
     }
 }

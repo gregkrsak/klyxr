@@ -136,9 +136,112 @@ impl Catalog {
             }
         }
         // Check the graph even for inert schemas; cycles are never permitted.
-        self.plans(p).map(|_| ())
+        let plans = self.plans(p)?;
+        self.temporaries(p, &plans)
+    }
+    fn temporaries(&self, p: &Program, plans: &[Option<CleanupPlan>]) -> Result<(), &'static str> {
+        fn bearing(e: &TypedExpr, plans: &[Option<CleanupPlan>]) -> bool {
+            matches!(e.ty,ExprType::Record(id) if plans.get(id.0).is_some_and(Option::is_some))
+        }
+        fn expression(
+            e: &TypedExpr,
+            plans: &[Option<CleanupPlan>],
+            boundary: bool,
+        ) -> Result<(), &'static str> {
+            if bearing(e, plans)
+                && !boundary
+                && !matches!(e.kind, ExprKind::Local(_) | ExprKind::Parameter(_))
+            {
+                return Err(
+                    "resource-bearing expression temporary has no admitted lifetime boundary",
+                );
+            }
+            match &e.kind {
+                ExprKind::RecordConstruct { fields, .. } => {
+                    for f in fields {
+                        expression(&f.value, plans, true)?;
+                    }
+                }
+                ExprKind::Call { arguments, .. } => {
+                    for a in arguments {
+                        expression(a, plans, false)?;
+                    }
+                }
+                ExprKind::IfValue {
+                    condition,
+                    then_value,
+                    else_value,
+                } => {
+                    expression(condition, plans, false)?;
+                    expression(then_value, plans, boundary)?;
+                    expression(else_value, plans, boundary)?;
+                }
+                ExprKind::Unary { operand, .. } => expression(operand, plans, false)?,
+                ExprKind::Binary { left, right, .. } => {
+                    expression(left, plans, false)?;
+                    expression(right, plans, false)?;
+                }
+                _ => {}
+            }
+            Ok(())
+        }
+        fn statements(
+            body: &[ValueStatement],
+            plans: &[Option<CleanupPlan>],
+        ) -> Result<(), &'static str> {
+            for s in body {
+                match s {
+                    ValueStatement::Let { initializer, .. } => {
+                        expression(initializer, plans, true)?
+                    }
+                    ValueStatement::Return { value, .. } => expression(value, plans, true)?,
+                    ValueStatement::CallNoValue { arguments, .. } => {
+                        for a in arguments {
+                            expression(a, plans, false)?;
+                        }
+                    }
+                    ValueStatement::Assign { value, .. }
+                    | ValueStatement::DerefAssign { value, .. }
+                    | ValueStatement::CopyFieldAssign { value, .. }
+                    | ValueStatement::CopyReferenceFieldAssign { value, .. } => {
+                        expression(value, plans, false)?
+                    }
+                    ValueStatement::If {
+                        condition,
+                        then_body,
+                        else_body,
+                        ..
+                    } => {
+                        expression(condition, plans, false)?;
+                        statements(then_body, plans)?;
+                        statements(else_body, plans)?;
+                    }
+                    ValueStatement::While {
+                        condition, body, ..
+                    } => {
+                        expression(condition, plans, false)?;
+                        statements(body, plans)?;
+                    }
+                    _ => {}
+                }
+            }
+            Ok(())
+        }
+        for f in &p.functions {
+            if let Function::Ordinary(f) = f {
+                statements(&f.body, plans)?;
+            }
+        }
+        Ok(())
     }
     pub(crate) fn plans(&self, p: &Program) -> Result<Vec<Option<CleanupPlan>>, &'static str> {
+        self.plans_bounded(p, 32)
+    }
+    pub(crate) fn plans_bounded(
+        &self,
+        p: &Program,
+        max_depth: usize,
+    ) -> Result<Vec<Option<CleanupPlan>>, &'static str> {
         if p.records.len() > 4096 || p.fields.len() > 8192 {
             return Err("cleanup type graph exceeds bounded capacity");
         }
@@ -159,8 +262,9 @@ impl Catalog {
             marks: &mut [u8],
             plans: &mut [Option<CleanupPlan>],
             depth: usize,
+            max_depth: usize,
         ) -> Result<(), &'static str> {
-            if depth > 32 {
+            if depth > max_depth {
                 return Err("cleanup type graph depth exceeded");
             }
             let mark = marks
@@ -196,7 +300,7 @@ impl Catalog {
                         .filter(|f| f.id == *field && f.record == id)
                         .ok_or("foreign cleanup field identity")?;
                     if let ValueType::Record(child) = f.ty {
-                        visit(c, p, child, marks, plans, depth + 1)?;
+                        visit(c, p, child, marks, plans, depth + 1, max_depth)?;
                         if plans[child.0].is_some() {
                             children.push((*field, child));
                         }
@@ -212,7 +316,7 @@ impl Catalog {
             Ok(())
         }
         for i in 0..p.records.len() {
-            visit(self, p, RecordId(i), &mut marks, &mut plans, 1)?;
+            visit(self, p, RecordId(i), &mut marks, &mut plans, 1, max_depth)?;
         }
         Ok(plans)
     }

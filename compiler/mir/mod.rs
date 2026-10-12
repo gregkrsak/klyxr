@@ -243,38 +243,15 @@ fn lower_internal(program: &hir::Program, legacy_assert: bool) -> (MirProgram, V
         .iter()
         .filter_map(|f| f.as_ordinary())
         .map(|f| {
-            let mut builder = Builder {
-                blocks: Vec::new(),
-                loop_targets: Vec::new(),
-                origins: Vec::new(),
-                cleanup: if program.resources.leaves.is_empty() {
-                    None
-                } else {
-                    Some(cleanup::Flow {
-                        parameters: f
-                            .parameters
-                            .iter()
-                            .rev()
-                            .copied()
-                            .filter(|id| {
-                                matches!(
-                                    program.parameter(*id).ty,
-                                    hir::ParameterType::Value(hir::ValueType::Record(id)) if program.resources.plans(program).expect("validated cleanup schemas")[id.0].is_some()
-                                )
-                            })
-                            .collect(),
-                        protected_return: matches!(f.return_type, Some(hir::ValueType::Record(id)) if program.resources.plans(program).expect("validated cleanup schemas")[id.0].is_some()),
-                        ..cleanup::Flow::default()
-                    })
-                },
-                resource_locals: if program.resources.leaves.is_empty() { Vec::new() } else {
-                    let plans=program.resources.plans(program).expect("validated cleanup schemas");
-                    program.locals.iter().filter(|l| l.function==f.id && matches!(l.ty, hir::ValueType::Record(id) if plans[id.0].is_some())).map(|l|l.id).collect()
-                },
-                active_scopes: Vec::new(),
-            };
+            let plans = if program.resources.leaves.is_empty() {Vec::new()} else {program.resources.plans(program).expect("validated cleanup schemas")};
+            let bearing = |ty| matches!(ty, hir::ValueType::Record(id) if plans.get(id.0).is_some_and(Option::is_some));
+            let resource_locals:Vec<_> = program.locals.iter().filter(|l| l.function==f.id && bearing(l.ty)).map(|l|l.id).collect();
+            let parameters:Vec<_> = f.parameters.iter().rev().copied().filter(|id| matches!(program.parameter(*id).ty,hir::ParameterType::Value(ty) if bearing(ty))).collect();
+            let protected_return=f.return_type.is_some_and(bearing);
+            let cleanup=(!resource_locals.is_empty() || !parameters.is_empty() || protected_return).then_some(cleanup::Flow {parameters,protected_return,..cleanup::Flow::default()});
+            let mut builder = Builder {blocks:Vec::new(),loop_targets:Vec::new(),origins:Vec::new(),cleanup,resource_locals,active_scopes:Vec::new()};
             let entry = builder.reserve();
-            if let Some((tail, statements)) = builder.body(entry, &f.body) {
+            if let Some((tail, statements)) = builder.body(entry, &f.body, f.span) {
                 assert!(
                     f.return_type.is_none(),
                     "value functions have no closing-brace fallthrough"
@@ -417,18 +394,17 @@ impl Builder {
         &mut self,
         current: BasicBlockId,
         body: &[ValueStatement],
+        scope_span: Span,
     ) -> Option<(BasicBlockId, Vec<Statement>)> {
         let scope = self.cleanup.as_mut().map(|flow| {
             let id = cleanup::ScopeId(flow.scopes.len());
             flow.scopes.push(cleanup::Scope {
                 id,
+                span: scope_span,
                 parent: self.active_scopes.last().copied(),
                 owners: Vec::new(),
             });
-            let span = body
-                .first()
-                .map(value_statement_span)
-                .unwrap_or(crate::bounded::START);
+            let span = scope_span;
             flow.blocks[current.0].enter = Some((
                 id,
                 Origin {
@@ -445,10 +421,7 @@ impl Builder {
                 let flow = self.cleanup.as_mut().unwrap();
                 flow.blocks[tail.0].exit.push(scope);
                 flow.blocks[tail.0].exit_origin = Some(Origin {
-                    span: body
-                        .last()
-                        .map(value_statement_span)
-                        .unwrap_or(crate::bounded::START),
+                    span: body.last().map(value_statement_span).unwrap_or(scope_span),
                     kind: OriginKind::ScopeExit,
                 });
             }
@@ -657,7 +630,7 @@ impl Builder {
                     );
                     self.loop_targets
                         .push((header, exit, self.active_scopes.len()));
-                    if let Some((end, body)) = self.body(body_target, body) {
+                    if let Some((end, body)) = self.body(body_target, body, span) {
                         self.finish(end, body, Terminator::Goto { target: header }, origin);
                     }
                     assert_eq!(
@@ -697,7 +670,7 @@ impl Builder {
                         },
                         origin,
                     );
-                    if let Some((end, body)) = self.body(then_target, then_body) {
+                    if let Some((end, body)) = self.body(then_target, then_body, span) {
                         self.finish(
                             end,
                             body,
@@ -708,7 +681,7 @@ impl Builder {
                         );
                     }
                     if let Some(target) = else_target {
-                        if let Some((end, body)) = self.body(target, else_body) {
+                        if let Some((end, body)) = self.body(target, else_body, span) {
                             self.finish(
                                 end,
                                 body,

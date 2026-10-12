@@ -118,6 +118,7 @@ impl ResourceFailure {
 /// Shared only within one preparation. Checker snapshots share counters, so
 /// analysis rollback cannot refund tool work or hide a resource failure.
 pub(crate) struct Context {
+    pub(crate) resource_nodes: Cell<usize>,
     pub limits: AdmissionLimits,
     pub failure: Cell<Option<ResourceFailure>>,
     depth: Cell<usize>,
@@ -126,11 +127,27 @@ pub(crate) struct Context {
 impl Context {
     pub fn new(limits: AdmissionLimits) -> Self {
         Self {
+            resource_nodes: Cell::new(0),
             limits,
             failure: Cell::new(None),
             depth: Cell::new(0),
             alias_work: Cell::new(0),
         }
+    }
+    pub(crate) fn resource_node(&self, span: Span) -> Result<(), ResourceFailure> {
+        let next = self
+            .resource_nodes
+            .get()
+            .checked_add(1)
+            .ok_or_else(|| ResourceFailure::limit("resource representation nodes", span))?;
+        if next > self.limits.tokens {
+            return Err(ResourceFailure::limit(
+                "resource representation nodes",
+                span,
+            ));
+        }
+        self.resource_nodes.set(next);
+        Ok(())
     }
     pub fn fail(&self, failure: ResourceFailure) {
         if self.failure.get().is_none() {

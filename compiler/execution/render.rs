@@ -6,7 +6,7 @@ use std::{
 
 #[cfg(test)]
 thread_local! {
-    static FAIL_ALLOCATION: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    pub(super) static FAIL_ALLOCATION: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Inject failure at the actual renderer growth boundary, isolated to this test

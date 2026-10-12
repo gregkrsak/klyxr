@@ -195,3 +195,37 @@ as fixture-translation failure against the existing canonical FieldId contract.
 The correction remaps constructor/read/write field identities and record member
 vectors; no cleanup-order, partial-construction or source-restoration assertion is
 changed. Later milestones remain gated on a complete corrected workflow result.
+
+Milestone 6 correction: `c25b4dad318bc60aa32141d04729b085197f9de7`.
+All four corrected push workflows passed:
+
+| Workflow | Run |
+| --- | --- |
+| build | https://github.com/gregkrsak/klyxr/actions/runs/38301659243 |
+| tests | https://github.com/gregkrsak/klyxr/actions/runs/38301659298 |
+| docs | https://github.com/gregkrsak/klyxr/actions/runs/38301659138 |
+| verify | https://github.com/gregkrsak/klyxr/actions/runs/38301659270 |
+
+## Milestone 7 — bounds, malformed artifacts and reporting
+
+Only functions with owned resource locals/parameters or protected resource results
+receive cleanup flow. The resource runtime starts lazily, so an unused private
+catalog retains resource-free fuel and storage behavior. Resource-free callers can
+invoke resource-owning helpers; reference-only callees carry no responsibility.
+
+Canonical admission checks initializer/destination and statement-call parameter
+identity, rejects undefined resource argument temporaries, bounds newly registered
+metadata/nodes/type depth, and reserves the expanded frontend envelope. Synthesized
+scope entries retain the source scope's span; empty function cleanup no longer
+uses a generic start-of-file placeholder. Resource/Copy mismatches cannot obtain
+approval. The payload enum remains non-cloneable and its Copy accessor rejects
+leaves and aggregates.
+
+Twenty-four new tests cover exact sufficient/insufficient fuel and storage,
+controlled release failure and no retry, protected-return retention, resource-free
+accounting, canonical Copy conflicts, wrong/foreign owners, wrong scopes and exit
+sets, invalid initialization/origins, inert/reference cleanup targets, loop-edge
+omission/reordering, foreign/reordered plans, trusted-operation pairing, undefined
+temporaries, graph/name bounds, replacement rejection, renderer allocation failure,
+writer failure, and conservation across every fuel stop in the A/B/C transfer
+witness. Matrix tests preserve multiple independently malformed controls.

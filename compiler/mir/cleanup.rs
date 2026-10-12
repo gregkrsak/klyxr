@@ -6,6 +6,7 @@ pub(crate) struct ScopeId(pub(crate) usize);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Scope {
     pub(crate) id: ScopeId,
+    pub(crate) span: Span,
     pub(crate) parent: Option<ScopeId>,
     pub(crate) owners: Vec<LocalId>,
 }
@@ -36,9 +37,18 @@ impl Flow {
         if self.blocks.len() != function.blocks.len() {
             return Err("cleanup block correspondence");
         }
-        let mut entered = vec![false; self.scopes.len()];
+        let mut entered = Vec::new();
+        entered
+            .try_reserve_exact(self.scopes.len())
+            .map_err(|_| "MIR validation allocation failed")?;
+        entered.resize(self.scopes.len(), false);
         for (i, s) in self.scopes.iter().enumerate() {
-            if s.id != ScopeId(i) || s.parent.is_some_and(|p| p.0 >= i) {
+            if s.id != ScopeId(i)
+                || s.parent.is_some_and(|p| p.0 >= i)
+                || s.span.line == 0
+                || s.span.column == 0
+                || s.span.start > s.span.end
+            {
                 return Err("invalid cleanup scope identity or parent");
             }
             for (j, owner) in s.owners.iter().enumerate() {
@@ -50,7 +60,10 @@ impl Flow {
         for (i, b) in self.blocks.iter().enumerate() {
             if let Some((scope, origin)) = b.enter {
                 let was = entered.get_mut(scope.0).ok_or("foreign scope activation")?;
-                if *was || origin.kind != OriginKind::ScopeEntry {
+                if *was
+                    || origin.kind != OriginKind::ScopeEntry
+                    || self.scopes[scope.0].span != origin.span
+                {
                     return Err("duplicate scope entry or invalid origin");
                 }
                 *was = true;

@@ -132,7 +132,7 @@ impl<'a> Machine<'a> {
             frames: Vec::new(),
             tasks: Vec::new(),
             values: Vec::new(),
-            resources: (!executable.cleanup_plans.is_empty()).then(cleanup::State::default),
+            resources: None,
             next_frame: 0,
             steps: 0,
             origin: Origin {
@@ -422,6 +422,9 @@ impl<'a> Machine<'a> {
             return Err(self.integrity("runtime call signature mismatch"));
         }
         let mir = self.executable.function(function)?;
+        if mir.cleanup.is_some() {
+            self.enable_resources()?;
+        }
         let bytes = count
             .checked_mul(size_of::<(Place, Slot)>())
             .and_then(|n| {
@@ -731,7 +734,26 @@ impl<'a> Machine<'a> {
                 self.value(v)?;
             }
             ExprKind::RecordConstruct { record, fields } => {
-                if self.resources.is_some() && !self.executable.program.resources.is_leaf(*record) {
+                if self.resources.is_some()
+                    && !self.executable.program.resources.is_leaf(*record)
+                    && (self
+                        .executable
+                        .cleanup_plans
+                        .get(record.0)
+                        .is_some_and(Option::is_some)
+                        || self
+                            .executable
+                            .program
+                            .record(*record)
+                            .fields
+                            .iter()
+                            .any(|id| {
+                                matches!(
+                                    self.executable.program.field(*id).ty,
+                                    ValueType::Record(_)
+                                )
+                            }))
+                {
                     self.pending_start(frame, *record, fields, depth)?;
                     return Ok(());
                 }
@@ -909,7 +931,7 @@ impl<'a> Machine<'a> {
         if !matches {
             return Err(self.integrity("return result or escaping reference mismatch"));
         }
-        if self.resources.is_some() {
+        if self.executable.function(f.function)?.cleanup.is_some() {
             return self.cleanup_return(id, value);
         }
         self.value(value)?;
@@ -978,6 +1000,16 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     fn start(&mut self, entry: FunctionId) -> Result<(), ExecutionError> {
+        if self
+            .executable
+            .program
+            .resources
+            .operations
+            .iter()
+            .any(|op| op.function == entry)
+        {
+            return Err(self.integrity("trusted operation requires an admitted caller"));
+        }
         self.origin = Origin {
             span: self.executable.program.function(entry).span(),
             kind: OriginKind::FunctionBoundary,
