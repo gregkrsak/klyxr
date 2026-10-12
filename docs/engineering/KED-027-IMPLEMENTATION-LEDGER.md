@@ -229,3 +229,25 @@ omission/reordering, foreign/reordered plans, trusted-operation pairing, undefin
 temporaries, graph/name bounds, replacement rejection, renderer allocation failure,
 writer failure, and conservation across every fuel stop in the A/B/C transfer
 witness. Matrix tests preserve multiple independently malformed controls.
+
+Milestone 7 commit: `c3b38909ab3a1662d0da93f05f26a5b84278d7cc`.
+All four push workflows passed:
+
+| Workflow | Run |
+| --- | --- |
+| build | https://github.com/gregkrsak/klyxr/actions/runs/38305366758 |
+| tests | https://github.com/gregkrsak/klyxr/actions/runs/38305366703 |
+| docs | https://github.com/gregkrsak/klyxr/actions/runs/38305366688 |
+| verify | https://github.com/gregkrsak/klyxr/actions/runs/38305366727 |
+
+Debug/release: 1,653 passed each (1,581 predecessors plus 72 new tests).
+Identity reconciliation against the baseline job log found every predecessor
+passing in each profile, including the compile-fail doctest. Cargo stderr target
+headers can arrive before the preceding stdout tests; reconciliation associates
+complete test groups with the ordered target list rather than arrival timestamps.
+
+Three further conservation controls exercise aggregate pending construction,
+protected aggregate return, complete cleanup at every fuel stop, exact storage
+threshold and sampled lower storage stops, and controlled host failure during
+partial abort. They retain remaining leaves rather than retrying or restoring
+sources. Local formatting and Clippy are advisory only.

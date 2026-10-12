@@ -1124,7 +1124,7 @@ mod aggregate_tests {
             span,
         }
     }
-    fn program(extra: &str, bearing: [bool; 3]) -> hir::Program {
+    pub(super) fn program(extra: &str, bearing: [bool; 3]) -> hir::Program {
         let mut p = hir::resources::fixture_with(extra);
         for (i, resource) in bearing.into_iter().enumerate() {
             p.fields[i].ty = if resource {
@@ -1883,5 +1883,108 @@ mod conservation_tests {
         m.resources.as_mut().unwrap().failure_at = Some(0);
         assert!(m.resume().is_err());
         conserved(&m);
+    }
+
+    fn aggregate() -> CheckedExecutable {
+        super::super::super::prepare_synthetic(
+            super::aggregate_tests::program(
+                "fn make()->Pair{return Pair{last:0,first:0,inert:0};}fn demo(){let a=make();let b=a;}",
+                [true; 3],
+            ),
+            AdmissionLimits::default(),
+        )
+        .unwrap()
+    }
+    #[test]
+    fn aggregate_pending_return_and_cleanup_conserve_at_every_fuel_stop() {
+        let e = aggregate();
+        let mut full = Machine::new(&e, ExecutionLimits::default());
+        full.start(e.entry("demo").unwrap()).unwrap();
+        full.resume().unwrap();
+        conserved(&full);
+        for steps in 1..full.steps {
+            let mut m = Machine::new(
+                &e,
+                ExecutionLimits {
+                    steps,
+                    ..ExecutionLimits::default()
+                },
+            );
+            if m.start(e.entry("demo").unwrap()).is_ok() {
+                assert!(m.resume().is_err());
+                if m.resources.is_some() {
+                    conserved(&m);
+                }
+            }
+        }
+    }
+    #[test]
+    fn aggregate_storage_boundary_and_detachment_stops_conserve() {
+        let e = aggregate();
+        let run = |bytes| {
+            let mut m = Machine::new(
+                &e,
+                ExecutionLimits {
+                    working_storage: bytes,
+                    ..ExecutionLimits::default()
+                },
+            );
+            let result = m.start(e.entry("demo").unwrap()).and_then(|()| m.resume());
+            assert!(m.storage().unwrap() <= bytes);
+            if m.resources.is_some() {
+                conserved(&m);
+            }
+            result
+        };
+        let mut low = 1;
+        let mut high = 16_384;
+        assert!(run(high).is_ok());
+        while low < high {
+            let mid = (low + high) / 2;
+            if run(mid).is_ok() {
+                high = mid;
+            } else {
+                low = mid + 1;
+            }
+        }
+        assert!(run(low).is_ok());
+        assert_eq!(
+            run(low - 1).unwrap_err().kind,
+            ErrorKind::ConfiguredLimit("working storage")
+        );
+        for bytes in (1..low).step_by(16) {
+            assert!(run(bytes).is_err());
+        }
+    }
+    #[test]
+    fn partial_abort_release_failure_retains_remaining_unique_leaves() {
+        let e = super::super::super::prepare_synthetic(
+            super::aggregate_tests::program(
+                "fn demo(){let owner=Pair{last:0,first:0,inert:0};}",
+                [true; 3],
+            ),
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        let s = m.resources.as_mut().unwrap();
+        s.fail_field = Some((hir::RecordId(1), hir::FieldId(1)));
+        s.failure_at = Some(1);
+        assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Host(_)));
+        conserved(&m);
+        assert_eq!(
+            m.resources
+                .as_ref()
+                .unwrap()
+                .events
+                .iter()
+                .filter(|e| matches!(e, Event::Complete(_)))
+                .count(),
+            1
+        );
+        let events = m.resources.as_ref().unwrap().events.clone();
+        assert!(m.resume().is_err());
+        assert_eq!(m.resources.as_ref().unwrap().events, events);
     }
 }
