@@ -933,3 +933,42 @@ evaluation. Detached runtime payloads are reserved together with receiving buffe
 growth. The private CLI reporting boundary preserves renderer host failures and
 uses borrowed static emergency diagnostics without a second String allocation.
 See `docs/BOUNDED_EXECUTION.md` for the full tool contract and host-failure boundary.
+
+## KED-027 deterministic scope cleanup (KD-042)
+
+KD-042 accepts the semantic architecture for ownership-attached cleanup without
+authorizing an implementation. Canonical typed representation must distinguish
+Copy/Move, owner/reference, and resource-bearing/inert properties. A trusted
+resource leaf carries canonical acquisition/release identity; recursive record
+classification produces a bounded shared cleanup plan in reverse declaration
+order. Ordinary Move values and references have no executable cleanup plan.
+
+Lowering must preserve lexical scope identity before structured HIR becomes flat
+MIR control flow. Every covered exit must carry explicit validated cleanup control
+flow or an equivalent auditable operation. Dynamic scope activations must separate
+repeated loop iterations and retain successful-local-initialization order. Runtime
+responsibility follows the actually executed ownership path and Available/Vacant
+payload state, never the ownership checker's conservative `ConditionalMove` join
+classification. Validated duplicate cleanup remains malformed even if a prior
+operation would leave a slot vacant.
+
+Return execution requires a protected result boundary: evaluate and transfer the
+result, clean the callee's remaining scopes and parameters, retire the frame, then
+deliver the result. Loop-body cleanup must precede header reevaluation and static
+slot reuse. Pending construction must retain canonical FieldId membership and the
+actual initialized field set; publication transfers those payloads into one whole
+aggregate owner, while abort for future recoverable failure visits the initialized
+set in reverse canonical declaration order. None of this creates source-visible
+field ownership or rollback.
+
+Cleanup operations and plans participate in opaque authority, HIR/MIR/origin
+correspondence, admission limits, runtime storage accounting, and fuel. Configured
+exhaustion or host release failure stops with prior release effects preserved and
+cannot be reported as successful completion. A private constant-work synthetic
+resource leaf and release-event trace are the first acceptable evidence mechanism;
+they do not create public resource syntax or operating-system I/O.
+
+The current compiler implements none of these additions. A separately authorized
+directive must choose the concrete representation, bind temporary admission,
+specify trusted-operation bounds, preserve existing ownership and resource-free
+execution behavior, and require exact-descendant independent conformance review.

@@ -205,7 +205,8 @@ and termination proof remain unresolved.
 KED-005 establishes the core owned `Copy` / move distinction. KED-006 classifies
 shared references as Copy and mutable references as Move; neither directive
 settles user customization. KED-007 blocks non-Copy write replacement specifically
-because displacement/destruction semantics remain unresolved; it adds no Drop.
+because displaced-value semantics remain unresolved. KD-042 now settles a bounded
+resource-only deterministic cleanup model, not general user-programmable Drop.
 
 Still open:
 
@@ -215,9 +216,11 @@ Still open:
 - automatic or declared Copy behavior for records, enums, tuples, and arrays;
 - partial moves from aggregate fields;
 - ownership of destructured values;
-- destructor / `Drop` semantics;
-- destruction order;
-- scope-exit lowering;
+- whether any constrained user-declared resource-leaf mechanism is eventually
+  safe and useful beyond compiler-known trusted leaves;
+- destruction of non-resource Move values if future representations require work;
+- interaction between cleanup and non-Copy replacement/overwrite;
+- destruction points for resource-bearing expression temporaries;
 - interaction between destruction and panic/unwind;
 - resource-owning standard-library types;
 - ownership representation across FFI boundaries.
@@ -227,8 +230,10 @@ remain separate questions under KD-004, OQ-009, and OQ-024. No runtime destructi
 by the core ownership checker.
 
 KED-013 scopes away iteration-local Move availability at the backedge without
-introducing destruction or resource-release semantics. Records remain non-Copy;
-Copy customization, partial moves, Drop and cleanup/unwind remain open.
+introducing destruction or resource-release semantics. KD-042 later requires
+runtime cleanup for resource-bearing owners on covered scope exits while leaving
+Copy customization, partial moves, arbitrary Drop, temporaries, and cleanup/unwind
+open.
 
 ## OQ-024 — Advanced borrowing, reborrowing, dereference, and escaping references
 
@@ -408,7 +413,8 @@ Still open:
 - definite initialization and uninitialized locals;
 - full MIR-based ownership dataflow and maximally precise path-sensitive loan analysis;
 - short-circuit Boolean lowering / evaluation guarantees and unreachable-code policy;
-- destruction / cleanup edges and exceptional / unwind control flow;
+- generalized cleanup representation beyond KD-042's covered structured exits,
+  resource-bearing expression temporaries, and exceptional / unwind control flow;
 - eventual MIR expression-lowering granularity.
 
 KED-011 adds a distinct acyclic MIR Assign statement for already initialized Copy
@@ -590,3 +596,20 @@ contracts. Native code generation, destruction, source effects/exceptions/I/O,
 concurrency, generalized places, reborrowing, and runtime verified/harness execution
 remain outside this accepted boundary. Earlier statements that execution is open
 now apply to those extensions rather than the frozen KD-041 interpreter.
+
+### KD-042 refinement of OQ-006/OQ-022/OQ-023/OQ-025/OQ-026
+
+KED-027 Draft 1 settles deterministic ownership-attached cleanup for canonically
+resource-bearing values. It fixes unique movable responsibility, structural record
+classification, reverse-order cleanup, covered structured exits, protected return
+results, pending-construction field cleanup, explicit fallible completion, and
+auditable MIR control flow without user-authored destructors. Borrowing and loan
+expiry never own or trigger cleanup. Ordinary non-resource Move destruction is
+inert under this decision.
+
+Still open are implementation, trusted production resource APIs, constrained
+custom resource admission, resource-bearing temporary lifetimes, typed recoverable
+propagation syntax, non-Copy replacement, partial moves, panic/unwind/fatal-outcome
+policy, cancellation, FFI, and broader generalized cleanup/control-flow dataflow.
+KD-042 provides no guarantee across its excluded abrupt outcomes and authorizes
+no compiler or runtime work by freeze alone.

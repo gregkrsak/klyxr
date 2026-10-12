@@ -91,8 +91,10 @@ remain held until the receiving call completes, including nested arguments.
 Availability and loans are separate ID-based state within the same ownership phase.
 Borrowing/cloning/reborrowing/coercion are never implicit. Ordinary owned parameters
 remain immutable. Reference returns, nested references, explicit lifetimes,
-auto-dereference, generalized reference projection beyond KD-039/KD-040, partial borrowing/moves,
-and destruction remain unsupported (KD-021 / OQ-024).
+auto-dereference, generalized reference projection beyond KD-039/KD-040, and partial
+borrowing/moves remain unsupported (KD-021 / OQ-024). KD-042 accepts deterministic
+ownership-attached cleanup semantics for canonically resource-bearing values, but
+the compiler does not yet implement resource leaves, cleanup edges, or runtime release.
 
 KED-007 adds explicit `*reference` for directly named ordinary reference parameters
 and locals. Copy referents (Bool/ranges) may be read through shared or mutable
@@ -674,6 +676,37 @@ Execution is independent of specialized proof and harness evaluation. `check` an
 generation or ordinary contract proof. APIs, limits, origins, and tool reporting
 are documented in `docs/BOUNDED_EXECUTION.md`; excluded language boundaries remain
 unchanged. General execution mechanisms beyond this frozen subset remain open.
+
+
+## KED-027 cleanup decision (KD-042)
+
+Frozen Draft 1 accepts RAII-like deterministic scope cleanup for canonically
+resource-bearing owned values. Resource leaves have one fixed trusted non-fallible
+release operation; records become resource-bearing structurally and clean their
+resource-bearing fields recursively in reverse declaration order without a
+user-authored destructor body. Every resource-bearing value is Move, but ordinary
+Move values remain semantically inert at destruction. A move transfers the unique
+cleanup responsibility; borrowing and loan expiry do not affect it.
+
+Still-live owners clean exactly once on covered structured exits: block fallthrough,
+implicit NoValue completion, value or NoValue return, break, continue, and future
+typed recoverable propagation. Exited inner scopes precede outer scopes; locals
+clean in reverse successful-initialization order before parameters, parameters
+clean in reverse declaration order, and return-result ownership is transferred
+before the callee cleans its remainder. Pending record construction owns each
+successfully initialized resource-bearing field and, on future recoverable failure,
+cleans the actual initialized set in reverse canonical field-declaration order.
+
+Automatic cleanup releases authority only. Fallible flush, commit, publication,
+durability, synchronization, and protocol completion remain explicit. Cleanup must
+be represented through auditable validated MIR control flow, never runtime HIR
+reconstruction or name-based destructor lookup. Range traps, configured stops,
+integrity failures, host/tool failures, process termination, panic/unwind, and task
+cancellation receive no cleanup guarantee from KD-042. The decision adds no partial
+moves, non-Copy replacement, generalized projection, arbitrary destructor code,
+resource API, effects system, heap, FFI, exception model, or temporary-lifetime rule.
+Implementation remains separately unauthorized and must begin with an explicitly
+bounded directive and synthetic-resource evidence.
 
 <!-- END KLYXR_CONTEXT.md -->
 
@@ -2022,6 +2055,96 @@ reborrowing, runtime loans, destruction/cleanup, heap semantics, source effects,
 exceptions, I/O, concurrency, or native code generation. Independent review and
 separate merge authorization remain required.
 
+## KD-042 — Deterministic scope cleanup for owned resources
+
+**Status:** Accepted (KED-027 Draft 1, Issue #60; frozen October 11, 2026 at
+baseline `06fa4ac8491ae297981051b0544299bfe849c7f2`, tree
+`f2e405a4a22e4a27d525950cb47bb9cec904e3b3`).
+
+Klyxr uses RAII-like deterministic scope cleanup for resource-bearing owned
+values. A type is resource-bearing exactly when canonical compiler metadata
+identifies it as a trusted resource leaf or it is a record containing at least
+one resource-bearing field. Structural classification is recursive. Every
+resource-bearing type is Move and cannot be Copy; an ordinary non-resource Move
+type has semantically inert destruction.
+
+A successfully initialized owned resource-bearing value carries exactly one
+cleanup responsibility. Moving the value transfers that responsibility without
+running cleanup at the source. Borrowing neither transfers nor duplicates it,
+and reference last use or loan expiry never determines destruction. A trusted
+resource API may provide an explicit consuming release operation that discharges
+the responsibility early, but there is no generic manual-drop operation.
+
+Each resource leaf has one fixed release operation selected by canonical type
+identity at a trusted runtime, standard-library, or equivalent boundary. It
+accepts no user callback, returns no source-visible result, cannot report a
+recoverable source-level failure, cannot transfer new authority into the program,
+and cannot silently perform fallible completion. Host inability to perform that
+release is a runtime or tool boundary failure, not successful cleanup or completion.
+
+A resource-bearing record is one complete whole owner of its constituent cleanup
+responsibilities. Compiler-synthesized cleanup visits fields recursively in
+reverse canonical declaration order, skips inert fields, and invokes no arbitrary
+record-level destructor body. Whole-owner source semantics remain intact: this
+does not introduce field-sensitive availability, partial moves, or independently
+addressable source-level field obligations.
+
+A cleanup responsibility begins only after successful initialization. Pending
+record construction owns every resource-bearing field value that has completed;
+the complete record is published only after every required field succeeds. If
+future typed recoverable failure exits construction, the actual initialized field
+set cleans in reverse canonical declaration order. That set need not be a
+declaration-order prefix, and cleanup never restores moved sources or implies
+runtime rollback.
+
+Every still-live owned resource-bearing value cleans exactly once when its owning
+lexical scope is exited through ordinary block fallthrough, implicit NoValue
+completion, explicit value or NoValue return, break, continue, or future typed
+recoverable propagation. Break and continue clean only scopes actually exited.
+Loop-carried owners whose scope continues remain live. Owned parameters clean at
+function exit unless already moved or consumed.
+
+Cleanup order is deterministic: exited inner scopes precede outer scopes; within
+one scope, locals clean in reverse successful-initialization order; function
+locals precede parameters; parameters clean in reverse declaration order; and
+record fields clean recursively in reverse declaration order. A value return
+fully evaluates and transfers the result into protected return-result ownership
+before remaining locals and parameters clean. The callee never cleans that result.
+
+Automatic cleanup relinquishes the resource or authority. It never asserts
+successful flush, commit, publication, durable synchronization, or protocol
+completion. Any completion whose success matters remains an explicit fallible
+program operation. Ordinary field syntax and lexical exit dispatch no arbitrary
+user-authored code.
+
+The compiler must represent cleanup through explicit auditable cleanup edges or
+equivalent MIR operations on every covered structured exit. Correspondence
+validation must reject malformed cleanup structure rather than repairing it.
+Execution follows validated MIR; it must not reconstruct lexical cleanup by
+walking HIR or resolve destructors by textual name. The exact instruction shape,
+trusted registration representation, and bounded executor mechanics remain
+implementation choices under these semantic constraints.
+
+KD-042 guarantees no cleanup across range traps, configured preparation/execution
+stops, admission or integrity failures, detected host/tool failures, hostile host
+or process termination, panic/exception unwinding, or task cancellation. It adds
+no user-authored destructor bodies or callbacks, `defer`, `finally`, garbage
+collection, nondeterministic finalization, non-Copy replacement, overwrite
+destruction, partial moves, generalized projection, implicit reborrowing, heap
+model, FFI, operating-system resource syntax, `Result`/propagation syntax,
+effects system, concurrency, cancellation, or production resource API. Resource-
+bearing expression-temporary destruction points require a focused later decision
+before those forms are admitted.
+
+Sarah's architectural review found no specification finding and returned READY
+FOR IMPLEMENTATION-PRESSURE REVIEW. Arnold's independent read-only pressure review
+found no K27-P finding and returned READY TO FREEZE. Freeze does not authorize
+implementation. A later directive must bind canonical metadata, trusted resource
+admission, HIR/MIR representation, cleanup synthesis and correspondence, executor
+behavior, bounds, diagnostics, temporary admission, synthetic evidence, branch/base,
+validation, reporting, and phase structure. Any newly exposed semantic choice
+returns to Greg rather than being decided in code.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -2964,6 +3087,45 @@ growth. The private CLI reporting boundary preserves renderer host failures and
 uses borrowed static emergency diagnostics without a second String allocation.
 See `docs/BOUNDED_EXECUTION.md` for the full tool contract and host-failure boundary.
 
+## KED-027 deterministic scope cleanup (KD-042)
+
+KD-042 accepts the semantic architecture for ownership-attached cleanup without
+authorizing an implementation. Canonical typed representation must distinguish
+Copy/Move, owner/reference, and resource-bearing/inert properties. A trusted
+resource leaf carries canonical acquisition/release identity; recursive record
+classification produces a bounded shared cleanup plan in reverse declaration
+order. Ordinary Move values and references have no executable cleanup plan.
+
+Lowering must preserve lexical scope identity before structured HIR becomes flat
+MIR control flow. Every covered exit must carry explicit validated cleanup control
+flow or an equivalent auditable operation. Dynamic scope activations must separate
+repeated loop iterations and retain successful-local-initialization order. Runtime
+responsibility follows the actually executed ownership path and Available/Vacant
+payload state, never the ownership checker's conservative `ConditionalMove` join
+classification. Validated duplicate cleanup remains malformed even if a prior
+operation would leave a slot vacant.
+
+Return execution requires a protected result boundary: evaluate and transfer the
+result, clean the callee's remaining scopes and parameters, retire the frame, then
+deliver the result. Loop-body cleanup must precede header reevaluation and static
+slot reuse. Pending construction must retain canonical FieldId membership and the
+actual initialized field set; publication transfers those payloads into one whole
+aggregate owner, while abort for future recoverable failure visits the initialized
+set in reverse canonical declaration order. None of this creates source-visible
+field ownership or rollback.
+
+Cleanup operations and plans participate in opaque authority, HIR/MIR/origin
+correspondence, admission limits, runtime storage accounting, and fuel. Configured
+exhaustion or host release failure stops with prior release effects preserved and
+cannot be reported as successful completion. A private constant-work synthetic
+resource leaf and release-event trace are the first acceptable evidence mechanism;
+they do not create public resource syntax or operating-system I/O.
+
+The current compiler implements none of these additions. A separately authorized
+directive must choose the concrete representation, bind temporary admission,
+specify trusted-operation bounds, preserve existing ownership and resource-free
+execution behavior, and require exact-descendant independent conformance review.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -3177,7 +3339,8 @@ and termination proof remain unresolved.
 KED-005 establishes the core owned `Copy` / move distinction. KED-006 classifies
 shared references as Copy and mutable references as Move; neither directive
 settles user customization. KED-007 blocks non-Copy write replacement specifically
-because displacement/destruction semantics remain unresolved; it adds no Drop.
+because displaced-value semantics remain unresolved. KD-042 now settles a bounded
+resource-only deterministic cleanup model, not general user-programmable Drop.
 
 Still open:
 
@@ -3187,9 +3350,11 @@ Still open:
 - automatic or declared Copy behavior for records, enums, tuples, and arrays;
 - partial moves from aggregate fields;
 - ownership of destructured values;
-- destructor / `Drop` semantics;
-- destruction order;
-- scope-exit lowering;
+- whether any constrained user-declared resource-leaf mechanism is eventually
+  safe and useful beyond compiler-known trusted leaves;
+- destruction of non-resource Move values if future representations require work;
+- interaction between cleanup and non-Copy replacement/overwrite;
+- destruction points for resource-bearing expression temporaries;
 - interaction between destruction and panic/unwind;
 - resource-owning standard-library types;
 - ownership representation across FFI boundaries.
@@ -3199,8 +3364,10 @@ remain separate questions under KD-004, OQ-009, and OQ-024. No runtime destructi
 by the core ownership checker.
 
 KED-013 scopes away iteration-local Move availability at the backedge without
-introducing destruction or resource-release semantics. Records remain non-Copy;
-Copy customization, partial moves, Drop and cleanup/unwind remain open.
+introducing destruction or resource-release semantics. KD-042 later requires
+runtime cleanup for resource-bearing owners on covered scope exits while leaving
+Copy customization, partial moves, arbitrary Drop, temporaries, and cleanup/unwind
+open.
 
 ## OQ-024 — Advanced borrowing, reborrowing, dereference, and escaping references
 
@@ -3380,7 +3547,8 @@ Still open:
 - definite initialization and uninitialized locals;
 - full MIR-based ownership dataflow and maximally precise path-sensitive loan analysis;
 - short-circuit Boolean lowering / evaluation guarantees and unreachable-code policy;
-- destruction / cleanup edges and exceptional / unwind control flow;
+- generalized cleanup representation beyond KD-042's covered structured exits,
+  resource-bearing expression temporaries, and exceptional / unwind control flow;
 - eventual MIR expression-lowering granularity.
 
 KED-011 adds a distinct acyclic MIR Assign statement for already initialized Copy
@@ -3562,5 +3730,22 @@ contracts. Native code generation, destruction, source effects/exceptions/I/O,
 concurrency, generalized places, reborrowing, and runtime verified/harness execution
 remain outside this accepted boundary. Earlier statements that execution is open
 now apply to those extensions rather than the frozen KD-041 interpreter.
+
+### KD-042 refinement of OQ-006/OQ-022/OQ-023/OQ-025/OQ-026
+
+KED-027 Draft 1 settles deterministic ownership-attached cleanup for canonically
+resource-bearing values. It fixes unique movable responsibility, structural record
+classification, reverse-order cleanup, covered structured exits, protected return
+results, pending-construction field cleanup, explicit fallible completion, and
+auditable MIR control flow without user-authored destructors. Borrowing and loan
+expiry never own or trigger cleanup. Ordinary non-resource Move destruction is
+inert under this decision.
+
+Still open are implementation, trusted production resource APIs, constrained
+custom resource admission, resource-bearing temporary lifetimes, typed recoverable
+propagation syntax, non-Copy replacement, partial moves, panic/unwind/fatal-outcome
+policy, cancellation, FFI, and broader generalized cleanup/control-flow dataflow.
+KD-042 provides no guarantee across its excluded abrupt outcomes and authorizes
+no compiler or runtime work by freeze alone.
 
 <!-- END OPEN_QUESTIONS.md -->
