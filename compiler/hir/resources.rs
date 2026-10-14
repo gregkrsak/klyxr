@@ -47,11 +47,15 @@ pub(crate) enum PlanError {
     Host(&'static str),
 }
 impl From<&'static str> for PlanError {
-    fn from(message: &'static str) -> Self { Self::Integrity(message) }
+    fn from(message: &'static str) -> Self {
+        Self::Integrity(message)
+    }
 }
 impl PlanError {
     pub(crate) fn message(self) -> &'static str {
-        match self { Self::Integrity(m) | Self::Limit(m) | Self::Host(m) => m }
+        match self {
+            Self::Integrity(m) | Self::Limit(m) | Self::Host(m) => m,
+        }
     }
 }
 #[cfg(test)]
@@ -59,16 +63,24 @@ thread_local! {
     // Number of actual reservation boundaries to permit before detected failure.
     pub(crate) static FAIL_PLAN_ALLOCATION: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
 }
-fn reserve_plan<T>(values: &mut Vec<T>, count: usize, message: &'static str) -> Result<(), PlanError> {
+fn reserve_plan<T>(
+    values: &mut Vec<T>,
+    count: usize,
+    message: &'static str,
+) -> Result<(), PlanError> {
     #[cfg(test)]
     FAIL_PLAN_ALLOCATION.with(|remaining| {
         if let Some(n) = remaining.get() {
-            if n == 0 { return Err(PlanError::Host(message)); }
+            if n == 0 {
+                return Err(PlanError::Host(message));
+            }
             remaining.set(Some(n - 1));
         }
         Ok(())
     })?;
-    values.try_reserve_exact(count).map_err(|_| PlanError::Host(message))
+    values
+        .try_reserve_exact(count)
+        .map_err(|_| PlanError::Host(message))
 }
 impl Catalog {
     pub(crate) fn is_leaf(&self, record: RecordId) -> bool {
@@ -274,16 +286,30 @@ impl Catalog {
         max_depth: usize,
     ) -> Result<Vec<Option<CleanupPlan>>, PlanError> {
         if p.records.len() > 4096 || p.fields.len() > 8192 {
-            return Err(PlanError::Limit("cleanup type graph exceeds bounded capacity"));
+            return Err(PlanError::Limit(
+                "cleanup type graph exceeds bounded capacity",
+            ));
         }
         let mut plans = Vec::new();
-        reserve_plan(&mut plans, p.records.len(), "cleanup plan allocation failed")?;
+        reserve_plan(
+            &mut plans,
+            p.records.len(),
+            "cleanup plan allocation failed",
+        )?;
         plans.resize(p.records.len(), None);
         let mut marks = Vec::new();
-        reserve_plan(&mut marks, p.records.len(), "cleanup graph allocation failed")?;
+        reserve_plan(
+            &mut marks,
+            p.records.len(),
+            "cleanup graph allocation failed",
+        )?;
         marks.resize(p.records.len(), 0u8);
         let mut heights = Vec::new();
-        reserve_plan(&mut heights, p.records.len(), "cleanup graph allocation failed")?;
+        reserve_plan(
+            &mut heights,
+            p.records.len(),
+            "cleanup graph allocation failed",
+        )?;
         heights.resize(p.records.len(), 0usize);
         fn visit(
             c: &Catalog,
@@ -328,7 +354,11 @@ impl Catalog {
                 plans[id.0] = Some(CleanupPlan::Release(l.id, l.release));
             } else {
                 let mut children = Vec::new();
-                reserve_plan(&mut children, r.fields.len(), "cleanup field plan allocation failed")?;
+                reserve_plan(
+                    &mut children,
+                    r.fields.len(),
+                    "cleanup field plan allocation failed",
+                )?;
                 for field in r.fields.iter().rev() {
                     let f = p
                         .fields

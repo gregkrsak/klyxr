@@ -236,11 +236,21 @@ pub struct Origin {
     pub span: Span,
     pub kind: OriginKind,
 }
-pub(crate) fn lower_with_origins(program: &hir::Program) -> Result<(MirProgram, Vec<Vec<Origin>>), hir::resources::PlanError> {
-    let plans = if program.resources.leaves.is_empty() { Vec::new() } else { program.resources.plans(program)? };
+pub(crate) fn lower_with_origins(
+    program: &hir::Program,
+) -> Result<(MirProgram, Vec<Vec<Origin>>), hir::resources::PlanError> {
+    let plans = if program.resources.leaves.is_empty() {
+        Vec::new()
+    } else {
+        program.resources.plans(program)?
+    };
     Ok(lower_internal(program, false, &plans))
 }
-fn lower_internal(program: &hir::Program, legacy_assert: bool, plans: &[Option<hir::resources::CleanupPlan>]) -> (MirProgram, Vec<Vec<Origin>>) {
+fn lower_internal(
+    program: &hir::Program,
+    legacy_assert: bool,
+    plans: &[Option<hir::resources::CleanupPlan>],
+) -> (MirProgram, Vec<Vec<Origin>>) {
     let pairs: Vec<_> = program
         .functions()
         .iter()

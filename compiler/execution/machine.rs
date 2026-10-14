@@ -237,10 +237,13 @@ impl<'a> Machine<'a> {
     // receiving-container operation. The caller takes it only after reservation.
     fn retain_publication(&mut self, value: Value) -> Result<Option<Value>, ExecutionError> {
         if self.resource_bearing(&value) {
-            let state = self.resources.as_mut().ok_or_else(||
-                ExecutionError::integrity("resource publication without runtime state"))?;
+            let state = self.resources.as_mut().ok_or_else(|| {
+                ExecutionError::integrity("resource publication without runtime state")
+            })?;
             if state.detached.is_some() {
-                return Err(ExecutionError::integrity("publication payload already occupied"));
+                return Err(ExecutionError::integrity(
+                    "publication payload already occupied",
+                ));
             }
             state.detached = Some(value);
             Ok(None)
@@ -257,12 +260,15 @@ impl<'a> Machine<'a> {
         // Retained resources already participate in storage(); ordinary payloads
         // remain prospective until publication, preserving predecessor accounting.
         self.reserve(
-            ordinary.as_ref().map_or(0, Value::extra_storage)
+            ordinary
+                .as_ref()
+                .map_or(0, Value::extra_storage)
                 .checked_add(if grow { size_of::<Value>() } else { 0 })
                 .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
         )?;
         if grow {
-            self.values.try_reserve_exact(1)
+            self.values
+                .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("value allocation")))?;
         }
         let value = self.take_publication(ordinary);
@@ -381,7 +387,10 @@ impl<'a> Machine<'a> {
         match destination {
             Destination::Slot(at) => {
                 let ordinary = self.retain_publication(value)?;
-                let (f, i) = self.slot_index_with_payload(at, ordinary.as_ref().map_or(0, Value::extra_storage))?;
+                let (f, i) = self.slot_index_with_payload(
+                    at,
+                    ordinary.as_ref().map_or(0, Value::extra_storage),
+                )?;
                 let value = self.take_publication(ordinary);
                 self.frames[f].slots[i].1 = Slot::Available(value);
             }

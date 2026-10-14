@@ -509,7 +509,8 @@ pub(super) fn program_shape(p: &hir::Program, c: &Context) -> Result<(), Executi
     #[cfg(test)]
     RECORD_WALKS.with(|n| n.set(n.get() + 1));
     p.resources.validate(p).map_err(ExecutionError::from)?;
-    p.validate_record_expressions_without_resources().map_err(|_| bad())?;
+    p.validate_record_expressions_without_resources()
+        .map_err(|_| bad())?;
     Ok(())
 }
 

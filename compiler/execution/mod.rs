@@ -290,7 +290,8 @@ impl CheckedExecutable {
             })?;
         }
         // Same deterministic lowerer, not a second semantic or ownership pipeline.
-        let (expected, origins) = mir::lower_with_origins(&self.program).map_err(ExecutionError::from)?;
+        let (expected, origins) =
+            mir::lower_with_origins(&self.program).map_err(ExecutionError::from)?;
         if self.mir != expected || self.origins != origins {
             return Err(ExecutionError::integrity(
                 "exact HIR/MIR/origin correspondence",
@@ -379,7 +380,14 @@ impl From<hir::resources::PlanError> for ExecutionError {
         use hir::resources::PlanError;
         match error {
             PlanError::Integrity(m) => Self::integrity(m),
-            PlanError::Limit(m) => Self::new(ErrorKind::ConfiguredLimit(if m == "cleanup type graph depth exceeded" { "cleanup type graph depth" } else { m }), START),
+            PlanError::Limit(m) => Self::new(
+                ErrorKind::ConfiguredLimit(if m == "cleanup type graph depth exceeded" {
+                    "cleanup type graph depth"
+                } else {
+                    m
+                }),
+                START,
+            ),
             PlanError::Host(m) => Self::new(ErrorKind::Host(m), START),
         }
     }

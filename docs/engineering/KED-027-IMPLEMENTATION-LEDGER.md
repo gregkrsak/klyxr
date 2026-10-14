@@ -416,3 +416,26 @@ recovery was attempted. Rust executable validation is blocked locally. Python
 README/scaffold checks and diff checks passed. New tests are authored, not yet
 reported as executed; exact-head GitHub evidence will be recorded on PR #63 and
 Issue #60 after the gate. No merge or self-approval is authorized or performed.
+
+### Repair gate 1 and formatter correction
+
+Repair source published as `a2faeca5359a890dc7c9303b633a75427a128b58`
+(tree `8ad9afa770639fa0aac8718a93c5a77c1923d354`). Both push and PR tests,
+docs and verify passed. Debug and release each reconciled 1,667 passing identities,
+including every repair regression, zero failures/ignores/filters and the authority
+doctest. Push test log: job `115927852804`, run `38585943253`.
+
+Push build `38585943159` and PR build `38585952121` compiled successfully,
+then failed formatting. Clippy/Rustdoc were skipped and are not claimed passed.
+All 37 rustfmt hunks were applied exactly from push build job `115927852797`;
+this is GitHub-generated formatting evidence, not local Rust execution.
+No semantic test or witness changed. The next exact head must pass the complete
+eight-run gate; no workflow rerun or runtime repair was used.
+
+Publication note: automatic review initially rejected CLI publication for missing
+trusted destination/authorization evidence. Repository metadata then confirmed
+Greg's public repository, owner and push permission; the entire outgoing diff
+was inspected. The permitted retry failed due to missing CLI HTTPS credentials.
+The connected GitHub integration published the same independently matching tree
+with a guarded, non-forced update of the existing branch. The local unpublished
+commit was synchronized to the published equivalent tree without discarding work.
