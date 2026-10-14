@@ -264,7 +264,7 @@ impl CheckedExecutable {
             self.program
                 .resources
                 .plans(&self.program)
-                .map_err(ExecutionError::integrity)?
+                .map_err(ExecutionError::from)?
         };
         if self.cleanup_plans != plans {
             return Err(ExecutionError::integrity(
@@ -290,7 +290,7 @@ impl CheckedExecutable {
             })?;
         }
         // Same deterministic lowerer, not a second semantic or ownership pipeline.
-        let (expected, origins) = mir::lower_with_origins(&self.program);
+        let (expected, origins) = mir::lower_with_origins(&self.program).map_err(ExecutionError::from)?;
         if self.mir != expected || self.origins != origins {
             return Err(ExecutionError::integrity(
                 "exact HIR/MIR/origin correspondence",
@@ -374,18 +374,28 @@ pub fn prepare_execution(
     }
     seal(program, limits)
 }
+impl From<hir::resources::PlanError> for ExecutionError {
+    fn from(error: hir::resources::PlanError) -> Self {
+        use hir::resources::PlanError;
+        match error {
+            PlanError::Integrity(m) => Self::integrity(m),
+            PlanError::Limit(m) => Self::new(ErrorKind::ConfiguredLimit(if m == "cleanup type graph depth exceeded" { "cleanup type graph depth" } else { m }), START),
+            PlanError::Host(m) => Self::new(ErrorKind::Host(m), START),
+        }
+    }
+}
 fn seal(
     program: hir::Program,
     limits: AdmissionLimits,
 ) -> Result<CheckedExecutable, ExecutionError> {
-    let (mir, origins) = mir::lower_with_origins(&program);
+    let (mir, origins) = mir::lower_with_origins(&program).map_err(ExecutionError::from)?;
     let cleanup_plans = if program.resources.leaves.is_empty() {
         Vec::new()
     } else {
         program
             .resources
             .plans(&program)
-            .map_err(ExecutionError::integrity)?
+            .map_err(ExecutionError::from)?
     };
     let approval = Rc::new(Approval {
         program: program.clone(),

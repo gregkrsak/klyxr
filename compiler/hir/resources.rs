@@ -39,6 +39,37 @@ pub(crate) enum CleanupPlan {
     /// nested records never expand into repeated leaf paths.
     Fields(Vec<(FieldId, RecordId)>),
 }
+/// Detected preparation failures remain distinct from malformed compiler state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PlanError {
+    Integrity(&'static str),
+    Limit(&'static str),
+    Host(&'static str),
+}
+impl From<&'static str> for PlanError {
+    fn from(message: &'static str) -> Self { Self::Integrity(message) }
+}
+impl PlanError {
+    pub(crate) fn message(self) -> &'static str {
+        match self { Self::Integrity(m) | Self::Limit(m) | Self::Host(m) => m }
+    }
+}
+#[cfg(test)]
+thread_local! {
+    // Number of actual reservation boundaries to permit before detected failure.
+    pub(crate) static FAIL_PLAN_ALLOCATION: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+fn reserve_plan<T>(values: &mut Vec<T>, count: usize, message: &'static str) -> Result<(), PlanError> {
+    #[cfg(test)]
+    FAIL_PLAN_ALLOCATION.with(|remaining| {
+        if let Some(n) = remaining.get() {
+            if n == 0 { return Err(PlanError::Host(message)); }
+            remaining.set(Some(n - 1));
+        }
+        Ok(())
+    })?;
+    values.try_reserve_exact(count).map_err(|_| PlanError::Host(message))
+}
 impl Catalog {
     pub(crate) fn is_leaf(&self, record: RecordId) -> bool {
         self.leaves.iter().any(|l| l.record == record)
@@ -54,12 +85,12 @@ impl Catalog {
             _ => false,
         }
     }
-    pub(crate) fn validate(&self, p: &Program) -> Result<(), &'static str> {
+    pub(crate) fn validate(&self, p: &Program) -> Result<(), PlanError> {
         if self.leaves.is_empty() && self.operations.is_empty() {
             return Ok(());
         }
         if self.leaves.len() > 4096 || self.operations.len() > 8192 {
-            return Err("trusted resource catalog exceeds bounded capacity");
+            return Err("trusted resource catalog exceeds bounded capacity".into());
         }
         for (i, leaf) in self.leaves.iter().enumerate() {
             if leaf.id != ResourceId(i)
@@ -68,7 +99,7 @@ impl Catalog {
                     .get(leaf.record.0)
                     .map_or(true, |r| r.id != leaf.record || !r.fields.is_empty())
             {
-                return Err("invalid or duplicate canonical resource leaf");
+                return Err("invalid or duplicate canonical resource leaf".into());
             }
             for (id, expected) in [
                 (leaf.acquire, OperationKind::Acquire(leaf.id)),
@@ -79,7 +110,7 @@ impl Catalog {
                     .get(id.0)
                     .map_or(true, |o| o.id != id || o.kind != expected)
                 {
-                    return Err("trusted acquisition/release pairing mismatch");
+                    return Err("trusted acquisition/release pairing mismatch".into());
                 }
             }
         }
@@ -89,7 +120,7 @@ impl Catalog {
                     .iter()
                     .any(|o| o.function == op.function)
             {
-                return Err("invalid or duplicate trusted operation identity");
+                return Err("invalid or duplicate trusted operation identity".into());
             }
             let (resource, acquire) = match op.kind {
                 OperationKind::Acquire(id) => (id, true),
@@ -101,7 +132,7 @@ impl Catalog {
                 .filter(|l| l.id == resource)
                 .ok_or("foreign trusted resource identity")?;
             if (acquire && leaf.acquire != op.id) || (!acquire && leaf.release != op.id) {
-                return Err("orphan trusted operation");
+                return Err("orphan trusted operation".into());
             }
             let f = p
                 .functions
@@ -112,18 +143,18 @@ impl Catalog {
             if acquire {
                 if !matches!(f.body.as_slice(), [ValueStatement::Return { value: TypedExpr { kind: ExprKind::RecordConstruct { record, fields }, ty: ExprType::Record(ty), .. }, .. }] if *record == leaf.record && *ty == leaf.record && fields.is_empty())
                 {
-                    return Err("trusted acquisition must have the canonical private stub");
+                    return Err("trusted acquisition must have the canonical private stub".into());
                 }
                 if !f.parameters.is_empty() || f.return_type != Some(ValueType::Record(leaf.record))
                 {
-                    return Err("trusted acquisition signature mismatch");
+                    return Err("trusted acquisition signature mismatch".into());
                 }
             } else {
                 if !f.body.is_empty() {
-                    return Err("trusted release cannot dispatch user code");
+                    return Err("trusted release cannot dispatch user code".into());
                 }
                 if f.return_type.is_some() || f.parameters.len() != 1 {
-                    return Err("trusted release signature mismatch");
+                    return Err("trusted release signature mismatch".into());
                 }
                 let a = p
                     .parameters
@@ -131,13 +162,13 @@ impl Catalog {
                     .filter(|a| a.id == f.parameters[0] && a.function == f.id)
                     .ok_or("foreign trusted release parameter")?;
                 if a.ty != ParameterType::Value(ValueType::Record(leaf.record)) {
-                    return Err("trusted release must consume the exact owned leaf");
+                    return Err("trusted release must consume the exact owned leaf".into());
                 }
             }
         }
         // Check the graph even for inert schemas; cycles are never permitted.
         let plans = self.plans(p)?;
-        self.temporaries(p, &plans)
+        self.temporaries(p, &plans).map_err(PlanError::from)
     }
     fn temporaries(&self, p: &Program, plans: &[Option<CleanupPlan>]) -> Result<(), &'static str> {
         fn bearing(e: &TypedExpr, plans: &[Option<CleanupPlan>]) -> bool {
@@ -234,31 +265,25 @@ impl Catalog {
         }
         Ok(())
     }
-    pub(crate) fn plans(&self, p: &Program) -> Result<Vec<Option<CleanupPlan>>, &'static str> {
+    pub(crate) fn plans(&self, p: &Program) -> Result<Vec<Option<CleanupPlan>>, PlanError> {
         self.plans_bounded(p, 32)
     }
     pub(crate) fn plans_bounded(
         &self,
         p: &Program,
         max_depth: usize,
-    ) -> Result<Vec<Option<CleanupPlan>>, &'static str> {
+    ) -> Result<Vec<Option<CleanupPlan>>, PlanError> {
         if p.records.len() > 4096 || p.fields.len() > 8192 {
-            return Err("cleanup type graph exceeds bounded capacity");
+            return Err(PlanError::Limit("cleanup type graph exceeds bounded capacity"));
         }
         let mut plans = Vec::new();
-        plans
-            .try_reserve_exact(p.records.len())
-            .map_err(|_| "cleanup plan allocation failed")?;
+        reserve_plan(&mut plans, p.records.len(), "cleanup plan allocation failed")?;
         plans.resize(p.records.len(), None);
         let mut marks = Vec::new();
-        marks
-            .try_reserve_exact(p.records.len())
-            .map_err(|_| "cleanup graph allocation failed")?;
+        reserve_plan(&mut marks, p.records.len(), "cleanup graph allocation failed")?;
         marks.resize(p.records.len(), 0u8);
         let mut heights = Vec::new();
-        heights
-            .try_reserve_exact(p.records.len())
-            .map_err(|_| "cleanup graph allocation failed")?;
+        reserve_plan(&mut heights, p.records.len(), "cleanup graph allocation failed")?;
         heights.resize(p.records.len(), 0usize);
         fn visit(
             c: &Catalog,
@@ -268,24 +293,24 @@ impl Catalog {
             plans: &mut [Option<CleanupPlan>],
             heights: &mut [usize],
             bounds: (usize, usize),
-        ) -> Result<(), &'static str> {
+        ) -> Result<(), PlanError> {
             let (depth, max_depth) = bounds;
             if depth > max_depth {
-                return Err("cleanup type graph depth exceeded");
+                return Err(PlanError::Limit("cleanup type graph depth exceeded"));
             }
             let mark = marks
                 .get(id.0)
                 .copied()
                 .ok_or("foreign cleanup record identity")?;
             if mark == 1 {
-                return Err("cyclic owned cleanup schema");
+                return Err("cyclic owned cleanup schema".into());
             }
             if mark == 2 {
                 if depth
                     .checked_add(heights[id.0].saturating_sub(1))
                     .map_or(true, |d| d > max_depth)
                 {
-                    return Err("cleanup type graph depth exceeded");
+                    return Err(PlanError::Limit("cleanup type graph depth exceeded"));
                 }
                 return Ok(());
             }
@@ -295,7 +320,7 @@ impl Catalog {
                 .filter(|r| r.id == id)
                 .ok_or("noncanonical cleanup record")?;
             if r.fields.len() > p.fields.len() {
-                return Err("cleanup field membership exceeds canonical table");
+                return Err("cleanup field membership exceeds canonical table".into());
             }
             marks[id.0] = 1;
             let mut height = 1;
@@ -303,9 +328,7 @@ impl Catalog {
                 plans[id.0] = Some(CleanupPlan::Release(l.id, l.release));
             } else {
                 let mut children = Vec::new();
-                children
-                    .try_reserve_exact(r.fields.len())
-                    .map_err(|_| "cleanup field plan allocation failed")?;
+                reserve_plan(&mut children, r.fields.len(), "cleanup field plan allocation failed")?;
                 for field in r.fields.iter().rev() {
                     let f = p
                         .fields
@@ -319,7 +342,7 @@ impl Catalog {
                             children.push((*field, child));
                         }
                     } else if !c.field_type_valid(p, f.ty) {
-                        return Err("unsupported cleanup field type");
+                        return Err("unsupported cleanup field type".into());
                     }
                 }
                 if !children.is_empty() {
@@ -487,7 +510,7 @@ mod tests {
         p.fields[3].ty = ValueType::Record(RecordId(1));
         assert_eq!(
             p.resources.plans_bounded(&p, 2),
-            Err("cleanup type graph depth exceeded")
+            Err(PlanError::Limit("cleanup type graph depth exceeded"))
         );
         assert!(p.resources.plans_bounded(&p, 3).is_ok());
     }

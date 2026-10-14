@@ -214,7 +214,9 @@ impl MirProgram {
 /// functions retain their specialized proof path. Unsupported valid HIR is a
 /// compiler defect, never a new user diagnostic phase.
 pub fn lower(program: &hir::Program) -> MirProgram {
-    lower_internal(program, true).0
+    // Public source HIR cannot contain the private trusted catalog. Synthetic
+    // preparation uses the fallible lower_with_origins entry below.
+    lower_internal(program, true, &[]).0
 }
 
 /// Produced by the same lowering, never reconstructed by the runtime.
@@ -234,16 +236,16 @@ pub struct Origin {
     pub span: Span,
     pub kind: OriginKind,
 }
-pub(crate) fn lower_with_origins(program: &hir::Program) -> (MirProgram, Vec<Vec<Origin>>) {
-    lower_internal(program, false)
+pub(crate) fn lower_with_origins(program: &hir::Program) -> Result<(MirProgram, Vec<Vec<Origin>>), hir::resources::PlanError> {
+    let plans = if program.resources.leaves.is_empty() { Vec::new() } else { program.resources.plans(program)? };
+    Ok(lower_internal(program, false, &plans))
 }
-fn lower_internal(program: &hir::Program, legacy_assert: bool) -> (MirProgram, Vec<Vec<Origin>>) {
+fn lower_internal(program: &hir::Program, legacy_assert: bool, plans: &[Option<hir::resources::CleanupPlan>]) -> (MirProgram, Vec<Vec<Origin>>) {
     let pairs: Vec<_> = program
         .functions()
         .iter()
         .filter_map(|f| f.as_ordinary())
         .map(|f| {
-            let plans = if program.resources.leaves.is_empty() {Vec::new()} else {program.resources.plans(program).expect("validated cleanup schemas")};
             let bearing = |ty| matches!(ty, hir::ValueType::Record(id) if plans.get(id.0).is_some_and(Option::is_some));
             let resource_locals:Vec<_> = program.locals.iter().filter(|l| l.function==f.id && bearing(l.ty)).map(|l|l.id).collect();
             let parameters:Vec<_> = f.parameters.iter().rev().copied().filter(|id| matches!(program.parameter(*id).ty,hir::ParameterType::Value(ty) if bearing(ty))).collect();

@@ -474,7 +474,7 @@ fn typed_only_ownership_invalid_replacement_has_no_execution_authority() {
     .unwrap();
     let typed = crate::types::check(crate::resolve::resolve(&ast).unwrap()).unwrap();
     assert!(crate::ownership::check(&typed).is_err());
-    let (m, o) = mir::lower_with_origins(&typed);
+    let (m, o) = mir::lower_with_origins(&typed).unwrap();
     e.program = typed;
     e.mir = m;
     e.origins = o;

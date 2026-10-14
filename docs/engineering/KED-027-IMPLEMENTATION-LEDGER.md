@@ -371,3 +371,48 @@ The complete source diff and implementation-facing documentation were audited
 before the final documentation/conformance commit. The exact prod commit/tree
 were reconfirmed unchanged. Generated context and local scaffold/asset checks
 passed; their authoritative checks are included in the final workflow gate.
+
+
+## Focused Sarah review repair — K27-MR01 through K27-MR03
+
+Authorized starting head: `78ea9cb8da9ab4c752652b62a9666f0895abfb62`,
+tree `d45edb730653ddb79f677608f816c6da55d35382`; existing PR #63 targets
+`prod` on `ked-027-deterministic-scope-cleanup`. Remote head/tree and clean
+checkout were verified before modification. Sarah's complete independent report
+was read from Greg's saved review; GitHub PR reviews/comments were empty.
+Charter: governance commit `0cc5fa2fa6743d263407c86603c2c2c9feb9810a`,
+blob `15d58be9110a38454e44956f1f6845a2ad2cf4ce`.
+
+- MR01: canonical plans govern live-overwrite rejection; nested inert construction
+  activates pending storage independently of unrelated resources. Three tests
+  cover two loop iterations with/without an outer owner, exact release counts,
+  no inert initialization metadata, and retained live-overwrite rejection.
+- MR02: value-stack and destination-slot publication retain resource ownership in
+  the already-reserved detached slot before every fallible receiving reservation.
+  Two tests cover full later-argument value storage and new-slot growth, transferred
+  sources, unique retained leaves, no cleanup on stop, and terminal resume refusal.
+  Existing pending/protected/current publication and call-entry paths were audited:
+  payloads remain retained until their receiving allocation succeeds.
+- MR03: typed plan errors distinguish malformed state, graph/depth bounds, and
+  detected host allocation failures. All actual plan reservation boundaries use
+  one fallible helper with thread-local test injection. Five tests cover initial
+  construction, later lowering after schema validation, sealing with no artifact,
+  revalidation after prior success, and independent malformed/limit controls.
+  Bounded record validation checks the catalog through the typed path before the
+  unchanged record-expression checks. The public source-only legacy lowerer
+  remains infallible over resource-free HIR; private synthetic cleanup lowering
+  uses the fallible origin-producing entry point, computing plans once per program.
+
+Expected gate: 1,581 predecessor identities + 76 original KD-042 identities +
+10 repair identities = 1,667 per profile. Inventory, duplicate/outcome checks,
+namespace restrictions, authority doctest, and affine cross-check remain intact.
+
+Local platform evidence: default PATH has no Cargo/Rust binaries. The existing
+installation at `/workspace/scratch/14316a87a750/rust-1.80.0/bin` was located
+without modifying it. `rustc -vV` and `rustfmt --version` fail because
+`librustc_driver-198d7b2c3cb4a0cb.so` cannot be read; `cargo -vV` segfaults.
+No reinstallation, permission restoration, artifact repair, or repeated runtime
+recovery was attempted. Rust executable validation is blocked locally. Python
+README/scaffold checks and diff checks passed. New tests are authored, not yet
+reported as executed; exact-head GitHub evidence will be recorded on PR #63 and
+Issue #60 after the gate. No merge or self-approval is authorized or performed.

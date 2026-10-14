@@ -1663,5 +1663,5 @@ retry, rollback or successful completion. Host bookkeeping disposal is not clean
 During K27-I01, local source edits and static checks are advisory. The four GitHub
 Actions workflows supply build, debug/release, doctest, Rustdoc, CLI and repository
 conformance evidence. The tests workflow reconciles all 1,581 baseline identities
-and 76 new KD-042 identities separately in each profile. See the
+and 86 new KD-042 identities (76 original plus 10 repair regressions) separately in each profile. See the
 [implementation ledger](../docs/engineering/KED-027-IMPLEMENTATION-LEDGER.md).

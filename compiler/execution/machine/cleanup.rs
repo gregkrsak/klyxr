@@ -17,7 +17,7 @@ pub(super) struct State {
     next_identity: u64,
     next_activation: u64,
     protected: Option<Value>,
-    detached: Option<Value>,
+    pub(super) detached: Option<Value>,
     current: Option<Value>,
     pub(super) failure_at: Option<u64>,
     pub(super) terminal: bool,
@@ -230,10 +230,7 @@ impl<'a> Machine<'a> {
         {
             return Err(self.integrity("owner slot reused before activation cleanup"));
         }
-        if matches!(
-            self.slot(at),
-            Ok(Value::Leaf { .. } | Value::Aggregate { .. })
-        ) {
+        if self.slot(at).is_ok_and(|value| self.resource_bearing(value)) {
             return Err(self.integrity("live resource overwritten at initialization"));
         }
         Ok(())
@@ -560,6 +557,7 @@ impl<'a> Machine<'a> {
         fields: &'a [hir::RecordFieldInit],
         depth: usize,
     ) -> Result<(), ExecutionError> {
+        self.enable_resources()?;
         self.charge()?;
         let grow = self.resources.as_ref().unwrap().pending.len()
             == self.resources.as_ref().unwrap().pending.capacity();
@@ -1846,6 +1844,60 @@ mod conservation_tests {
         assert!(owned.windows(2).all(|ids| ids[0] != ids[1]));
     }
     #[test]
+    fn later_argument_publication_stop_retains_detached_leaf_exactly_once() {
+        let e = super::super::super::prepare_synthetic(
+            hir::resources::fixture_with("fn take(flag:bool,item:Leaf){}fn demo(){let item=acquire();take(true,item);}"),
+            AdmissionLimits::default()).unwrap();
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        loop {
+            let task = m.tasks.pop().unwrap();
+            if matches!(&task.action, Action::Eval(hir::TypedExpr { kind: ExprKind::Local(_), .. }, _)) {
+                assert_eq!(m.values.len(), 1);
+                assert_eq!(m.values.capacity(), 1);
+                assert_eq!(m.values[0], Value::Public(RuntimeValue::Bool(true)));
+                let storage = m.storage().unwrap();
+                m.limits.working_storage = storage;
+                m.tasks.push(task);
+                assert_eq!(m.resume().unwrap_err().kind, ErrorKind::ConfiguredLimit("working storage"));
+                assert!(matches!(m.frames[0].slots[0].1, Slot::Transferred));
+                assert!(matches!(m.resources.as_ref().unwrap().detached, Some(Value::Leaf { identity: 0, .. })));
+                assert!(!m.resources.as_ref().unwrap().events.contains(&Event::Complete(0)));
+                conserved(&m);
+                assert!(m.storage().unwrap() <= storage);
+                let events = format!("{:?}", m.resources.as_ref().unwrap().events);
+                assert!(m.resume().is_err());
+                assert_eq!(format!("{:?}", m.resources.as_ref().unwrap().events), events);
+                conserved(&m);
+                break;
+            }
+            m.step(task).unwrap();
+        }
+    }
+    #[test]
+    fn destination_slot_growth_failure_retains_transferred_owner() {
+        let e = super::super::super::prepare_synthetic(
+            hir::resources::fixture_with("fn demo(){let item=acquire();let receiver=item;}"),
+            AdmissionLimits::default()).unwrap();
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        loop {
+            let task = m.tasks.pop().unwrap();
+            if matches!(task.action, Action::Commit(_)) { m.step(task).unwrap(); break; }
+            m.step(task).unwrap();
+        }
+        let source = Location { frame: 0, place: Place::Local(hir::LocalId(0)) };
+        let destination = Location { frame: 0, place: Place::Local(hir::LocalId(1)) };
+        assert_eq!(m.frames[0].slots.len(), m.frames[0].slots.capacity());
+        let storage = m.storage().unwrap();
+        m.limits.working_storage = storage;
+        let value = m.rvalue(source).unwrap();
+        assert_eq!(m.publish(Destination::Slot(destination), value).unwrap_err().kind, ErrorKind::ConfiguredLimit("working storage"));
+        assert!(matches!(m.frames[0].slots[0].1, Slot::Transferred));
+        assert!(matches!(m.resources.as_ref().unwrap().detached, Some(Value::Leaf { identity: 0, .. })));
+        conserved(&m);
+    }
+    #[test]
     fn every_cleanup_fuel_stop_conserves_acquired_leaf_responsibilities() {
         let e = super::super::super::prepare_synthetic(
             hir::resources::fixture_with("fn demo(){let a=acquire();let b=acquire();let c=a;}"),
@@ -1993,5 +2045,145 @@ mod conservation_tests {
             format!("{:?}", m.resources.as_ref().unwrap().events),
             events
         );
+    }
+}
+
+#[cfg(test)]
+mod repair_classification_tests {
+    use super::*;
+    fn inert_nested(guard: bool) -> hir::Program {
+        let extra = format!("record Scalar{{item:R}} record Nest{{inner:R}} fn demo(){{{}let mut once=true;let mut again=true;while again{{let value=Nest{{inner:0}};if once{{once=false;}}else{{again=false;}}}}}}", if guard { "let guard=acquire();" } else { "" });
+        let mut p = super::aggregate_tests::program(&extra, [false; 3]);
+        let scalar = p.records.iter().find(|r| r.name == "Scalar").unwrap().id;
+        let nest = p.records.iter().find(|r| r.name == "Nest").unwrap().id;
+        let inner = p.record(nest).fields[0];
+        let item = p.record(scalar).fields[0];
+        p.fields[inner.0].ty = ValueType::Record(scalar);
+        for f in &mut p.functions {
+            let hir::Function::Ordinary(f) = f else { continue };
+            for statement in &mut f.body {
+                let hir::ValueStatement::While { body, .. } = statement else { continue };
+                let hir::ValueStatement::Let { initializer, .. } = &mut body[0] else { panic!() };
+                let hir::ExprKind::RecordConstruct { fields, .. } = &mut initializer.kind else { panic!() };
+                let value = &mut fields[0].value;
+                let leaf = value.clone();
+                value.kind = hir::ExprKind::RecordConstruct { record: scalar, fields: vec![hir::RecordFieldInit { field: item, value: leaf, span: value.span }] };
+                value.ty = ExprType::Record(scalar);
+            }
+        }
+        p
+    }
+    fn repeated_inert(guard: bool) {
+        let e = super::super::super::prepare_synthetic(inert_nested(guard), AdmissionLimits::default()).unwrap();
+        assert!(e.cleanup_plans[2].is_none() && e.cleanup_plans[3].is_none());
+        let local = e.program.locals.iter().find(|l| l.name == "value").unwrap().id;
+        for f in e.mir.functions() {
+            if let Some(flow) = &f.cleanup {
+                assert!(flow.blocks.iter().flat_map(|b| &b.initialize).all(|i| i.local != local));
+            }
+        }
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        let mut initializations = 0;
+        while let Some(task) = m.tasks.pop() {
+            if let Action::Commit(Destination::Slot(at)) = &task.action {
+                if at.place == Place::Local(local) {
+                    initializations += 1;
+                    if guard {
+                        assert!(m.frames.iter().flat_map(|f| &f.slots).any(|(_, s)| matches!(s, Slot::Available(Value::Leaf { identity: 0, .. }))));
+                        assert!(!m.resources.as_ref().unwrap().events.contains(&Event::Complete(0)));
+                    }
+                }
+            }
+            m.step(task).unwrap();
+        }
+        assert_eq!(initializations, 2);
+        assert_eq!(m.resume().unwrap(), ExecutionResult::NoValue);
+        let completes = m.resources.as_ref().unwrap().events.iter().filter(|e| matches!(e, Event::Complete(_))).count();
+        assert_eq!(completes, usize::from(guard));
+    }
+    #[test]
+    fn inert_nested_record_reinitializes_without_unrelated_resource() { repeated_inert(false); }
+    #[test]
+    fn inert_nested_record_reinitializes_with_live_outer_resource() { repeated_inert(true); }
+    #[test]
+    fn live_canonical_resource_still_rejects_reinitialization() {
+        let e = super::super::super::prepare_synthetic(hir::resources::fixture_with("fn demo(){let owner=acquire();}"), AdmissionLimits::default()).unwrap();
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        loop {
+            let task = m.tasks.pop().unwrap();
+            if matches!(task.action, Action::Commit(_)) {
+                m.step(task).unwrap();
+                break;
+            }
+            m.step(task).unwrap();
+        }
+        let at = Location { frame: 0, place: Place::Local(hir::LocalId(0)) };
+        assert!(m.cleanup_reinitialization(at).is_err());
+        // Independently exercise the live-payload check without initialization history.
+        m.resources.as_mut().unwrap().frames[0].scopes[0].initialized.clear();
+        assert_eq!(m.cleanup_reinitialization(at).unwrap_err().kind, ErrorKind::Integrity("live resource overwritten at initialization"));
+        assert!(matches!(m.slot(at).unwrap(), Value::Leaf { identity: 0, .. }));
+    }
+}
+#[cfg(test)]
+mod repair_plan_failure_tests {
+    use super::*;
+    use hir::resources::{FAIL_PLAN_ALLOCATION, PlanError};
+    struct Reset;
+    impl Drop for Reset { fn drop(&mut self) { FAIL_PLAN_ALLOCATION.with(|n| n.set(None)); } }
+    fn failing<T>(after: usize, operation: impl FnOnce() -> T) -> T {
+        FAIL_PLAN_ALLOCATION.with(|n| n.set(Some(after)));
+        let _reset = Reset;
+        operation()
+    }
+    fn program() -> hir::Program { hir::resources::fixture_with("fn demo(){let owner=acquire();}") }
+    #[test]
+    fn initial_plan_reservation_failures_are_host_without_artifact() {
+        for after in 0..4 {
+            let p = program();
+            let result = failing(after, || super::super::super::prepare_synthetic(p, AdmissionLimits::default()));
+            assert!(matches!(result.err().unwrap().kind, ErrorKind::Host(_)));
+        }
+    }
+    #[test]
+    fn later_lowering_plan_failure_after_valid_schema_is_host() {
+        let p = program();
+        p.resources.validate(&p).unwrap();
+        let result = failing(0, || mir::lower_with_origins(&p));
+        let error = ExecutionError::from(result.unwrap_err());
+        assert_eq!(error.kind, ErrorKind::Host("cleanup plan allocation failed"));
+    }
+    #[test]
+    fn later_sealing_plan_failure_publishes_no_executable() {
+        let p = program();
+        p.resources.validate(&p).unwrap();
+        for after in 0..8 {
+            let result = failing(after, || super::super::super::seal(p.clone(), AdmissionLimits::default()));
+            assert!(matches!(result.err().unwrap().kind, ErrorKind::Host(_)));
+        }
+    }
+    #[test]
+    fn validated_executable_rechecks_every_fallible_plan_attempt_as_host() {
+        let e = super::super::super::prepare_synthetic(program(), AdmissionLimits::default()).unwrap();
+        e.validate().unwrap();
+        // Shape plans, catalog plans, correspondence plans, and lowering plans.
+        for after in 0..16 {
+            assert!(matches!(failing(after, || e.validate()).unwrap_err().kind, ErrorKind::Host(_)));
+        }
+        e.validate().unwrap();
+    }
+    #[test]
+    fn malformed_plan_and_configured_graph_limits_remain_distinct() {
+        let mut p = program();
+        p.fields[0].ty = ValueType::Record(hir::RecordId(1));
+        assert_eq!(ExecutionError::from(p.resources.plans(&p).unwrap_err()).kind, ErrorKind::Integrity("cyclic owned cleanup schema"));
+        let p = program();
+        assert_eq!(ExecutionError::from(p.resources.plans_bounded(&p, 1).unwrap_err()).kind, ErrorKind::ConfiguredLimit("cleanup type graph depth"));
+        let mut large = p.clone();
+        large.records.resize(4097, p.records[0].clone());
+        assert_eq!(large.resources.plans(&large).unwrap_err(), PlanError::Limit("cleanup type graph exceeds bounded capacity"));
+        assert!(matches!(ExecutionError::from(large.resources.plans(&large).unwrap_err()).kind, ErrorKind::ConfiguredLimit(_)));
     }
 }

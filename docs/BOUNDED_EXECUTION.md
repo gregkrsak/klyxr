@@ -179,7 +179,16 @@ table/node bounds and identifier cap and reserves its expanded frontend envelope
 Cleanup State, activation/history buffers, events, pending fields, protected/current/
 detached payloads and work-list capacities participate in checked prospective
 working-storage accounting. State is reserved before lazy activation. Detachment
-and receiving-container growth are counted together. Error traces and reporting
+and receiving-container growth are counted together. Resource publication first
+retains the owner in the reserved detached slot; receiving-buffer or slot
+reservation failure leaves that payload retained without restoring its source.
+Inert nested-record construction uses canonical field structure independently of
+whether unrelated resources have activated runtime state. Reinitialization tests
+canonical cleanup responsibility rather than the aggregate representation tag.
+Cleanup-plan reservation errors remain typed as Host, Integrity, or configured
+Limit through bounded shape validation, lowering, sealing, and revalidation.
+Later validation never assumes that an earlier successful allocation makes the
+next plan-construction attempt infallible. Error traces and reporting
 retain the existing separate bounded diagnostic contract.
 
 In addition to KD-041 charges, fuel is charged before scope entry/exit and owner
@@ -190,7 +199,7 @@ completion exactly once. Configured exhaustion or controlled host release failur
 retains prior effects and all uncompleted payloads, cannot retry, and cannot publish
 ordinary success. Disposal of host interpreter state is not a release effect.
 
-The 76 new KD-042 tests cover canonical/malformed authority, structured exits,
+The 86 new KD-042 tests (76 original and 10 focused repair regressions) cover canonical/malformed authority, structured exits,
 transfers/returns, aggregates/pending abort, exact fuel/storage thresholds, terminal
 failure/reporting and unique-leaf conservation. GitHub debug and release profiles
 also reconcile the 1,581 predecessor identities and each run the 1,800-case affine

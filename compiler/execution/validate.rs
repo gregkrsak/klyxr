@@ -484,13 +484,7 @@ pub(super) fn program_shape(p: &hir::Program, c: &Context) -> Result<(), Executi
     if !p.resources.leaves.is_empty() {
         p.resources
             .plans_bounded(p, c.limits.traversal_depth)
-            .map_err(|m| {
-                if m == "cleanup type graph depth exceeded" {
-                    ExecutionError::from(ResourceFailure::limit("cleanup type graph depth", START))
-                } else {
-                    ExecutionError::integrity(m)
-                }
-            })?;
+            .map_err(ExecutionError::from)?;
         let n = c
             .resource_nodes
             .get()
@@ -514,7 +508,8 @@ pub(super) fn program_shape(p: &hir::Program, c: &Context) -> Result<(), Executi
     }
     #[cfg(test)]
     RECORD_WALKS.with(|n| n.set(n.get() + 1));
-    p.validate_record_expressions().map_err(|_| bad())?;
+    p.resources.validate(p).map_err(ExecutionError::from)?;
+    p.validate_record_expressions_without_resources().map_err(|_| bad())?;
     Ok(())
 }
 

@@ -50,14 +50,14 @@ expected = {r["id"]: r["outcome"] for r in baseline["identities"]}
 assert len(expected) == 1581
 assert all(actual.get(k) == v for k, v in expected.items()), "missing/changed predecessor"
 new = sorted(set(actual) - set(expected))
-assert len(new) == 76, f"expected 76 KD-042 tests, found {len(new)}"
+assert len(new) == 86, f"expected 86 KD-042 tests, found {len(new)}"
 assert all(k.startswith(("lib.rs::hir::resources::", "lib.rs::mir::cleanup::", "lib.rs::execution::machine::cleanup::")) for k in new), "unclassified new test"
-assert len(actual) == sum(summaries) == 1657
+assert len(actual) == sum(summaries) == 1667
 affine = "lib.rs::verify::tests::affine_proofs_match_exhaustive_execution_on_small_domains"
 assert actual.get(affine) == "ok", "missing 1,800-case affine cross-check"
 doctests = [k for k in actual if k.startswith("doctest:")]
 assert len(doctests) == 1 and "CheckedExecutable - compile fail" in doctests[0]
-print("KED-027 reconciliation: 1,581 predecessors + 76 new = 1,657 passed")
+print("KED-027 reconciliation: 1,581 predecessors + 86 new = 1,667 passed")
 print("compile-fail doctest: passed; affine cross-check: 1,800 cases passed")
 print("failed/ignored/filtered: 0/0/0")
 categories = {}

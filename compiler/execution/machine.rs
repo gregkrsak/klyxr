@@ -229,21 +229,43 @@ impl<'a> Machine<'a> {
         });
         Ok(())
     }
+    fn resource_bearing(&self, value: &Value) -> bool {
+        matches!(value, Value::Leaf { record, .. } | Value::Aggregate { record, .. }
+            if self.executable.cleanup_plans.get(record.0).is_some_and(Option::is_some))
+    }
+    // Hold ownership in an already reserved machine slot before any fallible
+    // receiving-container operation. The caller takes it only after reservation.
+    fn retain_publication(&mut self, value: Value) -> Result<Option<Value>, ExecutionError> {
+        if self.resource_bearing(&value) {
+            let state = self.resources.as_mut().ok_or_else(||
+                ExecutionError::integrity("resource publication without runtime state"))?;
+            if state.detached.is_some() {
+                return Err(ExecutionError::integrity("publication payload already occupied"));
+            }
+            state.detached = Some(value);
+            Ok(None)
+        } else {
+            Ok(Some(value))
+        }
+    }
+    fn take_publication(&mut self, ordinary: Option<Value>) -> Value {
+        ordinary.unwrap_or_else(|| self.resources.as_mut().unwrap().detached.take().unwrap())
+    }
     fn value(&mut self, value: Value) -> Result<(), ExecutionError> {
+        let ordinary = self.retain_publication(value)?;
         let grow = self.values.len() == self.values.capacity();
-        // A detached payload is absent from storage(); reserve it together with
-        // its receiving buffer, before either growth or publication.
+        // Retained resources already participate in storage(); ordinary payloads
+        // remain prospective until publication, preserving predecessor accounting.
         self.reserve(
-            value
-                .extra_storage()
+            ordinary.as_ref().map_or(0, Value::extra_storage)
                 .checked_add(if grow { size_of::<Value>() } else { 0 })
                 .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
         )?;
         if grow {
-            self.values
-                .try_reserve_exact(1)
+            self.values.try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("value allocation")))?;
         }
+        let value = self.take_publication(ordinary);
         self.values.push(value);
         Ok(())
     }
@@ -358,7 +380,9 @@ impl<'a> Machine<'a> {
     fn publish(&mut self, destination: Destination, value: Value) -> Result<(), ExecutionError> {
         match destination {
             Destination::Slot(at) => {
-                let (f, i) = self.slot_index_with_payload(at, value.extra_storage())?;
+                let ordinary = self.retain_publication(value)?;
+                let (f, i) = self.slot_index_with_payload(at, ordinary.as_ref().map_or(0, Value::extra_storage))?;
+                let value = self.take_publication(ordinary);
                 self.frames[f].slots[i].1 = Slot::Available(value);
             }
             Destination::Field(at, record, field) => {
@@ -734,8 +758,7 @@ impl<'a> Machine<'a> {
                 self.value(v)?;
             }
             ExprKind::RecordConstruct { record, fields } => {
-                if self.resources.is_some()
-                    && !self.executable.program.resources.is_leaf(*record)
+                if !self.executable.program.resources.is_leaf(*record)
                     && (self
                         .executable
                         .cleanup_plans

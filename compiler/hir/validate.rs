@@ -9,10 +9,14 @@ impl Program {
         self.resources.validate(self).map_err(|message| {
             Box::new(Diagnostic::semantic(
                 crate::bounded::START,
-                message,
+                message.message(),
                 "canonical trusted resource schema must remain valid",
             ))
         })?;
+        self.validate_record_expressions_without_resources()
+    }
+    // Bounded admission has already checked the catalog with typed failure propagation.
+    pub(crate) fn validate_record_expressions_without_resources(&self) -> Result {
         self.validate_record_tables()?;
         for function in &self.functions {
             match function {

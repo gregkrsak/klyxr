@@ -117,7 +117,7 @@ mod tests {
         let p = hir::resources::fixture();
         p.validate_record_expressions().unwrap();
         crate::ownership::check(&p).unwrap();
-        lower(&p)
+        lower_with_origins(&p).unwrap().0
     }
     #[test]
     fn lexical_scope_activation_and_parameter_cleanup_survive_lowering() {
