@@ -580,12 +580,23 @@ impl<'a> Machine<'a> {
                     self.eval(id, value, 1)?;
                 }
                 Statement::ReplaceOwned {
-                    local, record, owning_scope, cleanup_plan, value, origin, ..
+                    local,
+                    record,
+                    owning_scope,
+                    cleanup_plan,
+                    value,
+                    origin,
+                    ..
                 } => {
                     self.origin = *origin;
                     let replacement = self.replacement_start(
-                        Location { frame: id, place: Place::Local(*local) },
-                        *record, *owning_scope, *cleanup_plan,
+                        Location {
+                            frame: id,
+                            place: Place::Local(*local),
+                        },
+                        *record,
+                        *owning_scope,
+                        *cleanup_plan,
                     )?;
                     self.task(id, *origin, None, Action::ReplaceCommit(replacement))?;
                     self.eval(id, value, 1)?;
@@ -1076,8 +1087,12 @@ impl<'a> Machine<'a> {
                 return Err(error);
             }
         }
-        if !self.frames.is_empty() || self.values.len() != 1
-            || self.resources.as_ref().is_some_and(|s| !s.replacements.is_empty())
+        if !self.frames.is_empty()
+            || self.values.len() != 1
+            || self
+                .resources
+                .as_ref()
+                .is_some_and(|s| !s.replacements.is_empty())
         {
             return Err(self.integrity("incomplete execution state"));
         }

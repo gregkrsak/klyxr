@@ -68,7 +68,11 @@ impl State {
         n = n
             .checked_add(self.pending.capacity().checked_mul(size_of::<Pending>())?)?
             .checked_add(self.work.capacity().checked_mul(size_of::<Value>())?)?
-            .checked_add(self.replacements.capacity().checked_mul(size_of::<replacement::Prepared>())?)?;
+            .checked_add(
+                self.replacements
+                    .capacity()
+                    .checked_mul(size_of::<replacement::Prepared>())?,
+            )?;
         for r in &self.replacements {
             n = n.checked_add(r.payload_storage()?)?;
         }

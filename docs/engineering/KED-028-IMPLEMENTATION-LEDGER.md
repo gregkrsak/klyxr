@@ -194,3 +194,12 @@ repeated inert execution, distinct-source transfer, repeated leaf replacement,
 every fuel cut with identity conservation, exact sufficient fuel and trusted
 release Host failure retaining N separately. Aggregate/recursive and full boundary
 batteries remain the next gate after validation.
+
+Vertical-slice commit `137556365cff34347039c1cd154fbeed884117c3`, tree
+`9ecce8663a071cda81ec327f6cc57d914c118b09`: compilation and debug tests passed,
+including the identity-sensitive A/B/C event sequence and all fuel-cut conservation
+controls. Build https://github.com/gregkrsak/klyxr/actions/runs/38790373840 reported
+only formatting differences, applied from GitHub Rustfmt output. Other runs:
+tests https://github.com/gregkrsak/klyxr/actions/runs/38790373495,
+docs https://github.com/gregkrsak/klyxr/actions/runs/38790373820,
+verify https://github.com/gregkrsak/klyxr/actions/runs/38790373805.
