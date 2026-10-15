@@ -525,6 +525,7 @@ impl<'a> Machine<'a> {
                 | Statement::CopyReferenceFieldAssign { span, .. }
                 | Statement::CopyFieldAssign { span, .. }
                 | Statement::Assign { span, .. }
+                | Statement::ReplaceOwned { span, .. }
                 | Statement::Let { span, .. }
                 | Statement::DerefAssign { span, .. } => *span,
             };
@@ -575,6 +576,9 @@ impl<'a> Machine<'a> {
                         })),
                     )?;
                     self.eval(id, value, 1)?;
+                }
+                Statement::ReplaceOwned { .. } => {
+                    return Err(self.integrity("replacement execution awaits validated generation machinery"));
                 }
                 Statement::CopyFieldAssign {
                     owner,

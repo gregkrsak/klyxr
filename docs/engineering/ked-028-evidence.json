@@ -6,6 +6,9 @@
     "lib.rs::execution::machine::cleanup::bounds_and_artifact_tests::ordinary_noncopy_replacement_remains_rejected": "lib.rs::execution::machine::cleanup::bounds_and_artifact_tests::ordinary_inert_replacement_is_accepted"
   },
   "additions": [
+    "lib.rs::execution::machine::cleanup::replacement_authority_tests::canonical_replacement_uses_declaring_scope_and_fixed_plan",
+    "lib.rs::execution::machine::cleanup::replacement_authority_tests::independent_replacement_authority_mutations_reject",
+    "lib.rs::execution::machine::cleanup::replacement_authority_tests::replacement_result_boundary_does_not_admit_argument_temporary",
     "lib.rs::ownership::tests::replacement_failure_restores_complete_prepared_state",
     "tests/owned_replacement.rs::branches_preserve_target_and_conservative_source_joins",
     "tests/owned_replacement.rs::exact_nominal_type_and_reference_boundaries",

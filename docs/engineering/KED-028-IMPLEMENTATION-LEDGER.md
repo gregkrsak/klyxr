@@ -89,3 +89,28 @@ than retaining it as a live loan at replacement commit. Its intended live-loan
 witness now reads a Copy field non-consumingly on the RHS and uses the handle
 later. The original fixture remains as a separate moved-handle rejection test.
 No accepted ownership contract was relaxed. No later architectural layer added.
+
+Milestone 1 repair commit: `4da4fb30801c75a7d2549222f87a96d37ca1c389`, tree
+`0d794d917c649b4416cd725c0a7efe7dbce3df64`. All four workflows passed:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38788670378),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38788670419),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38788674432),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38788670442).
+Both debug and release: 1,680 passing identities, comprising the exact 1,667
+predecessors with explicit corrections and thirteen additions; no failed,
+ignored or filtered tests. Both affine checks and authority doctests passed.
+
+## Milestone 2 — explicit MIR replacement authority
+
+Compound ReplaceOwned operations retain canonical local/record identity,
+declaring lexical scope, fixed canonical cleanup-plan reference (or inert), full
+RHS, replacement origin and span. Structured lowering binds an outer target to
+its owning scope, even inside a branch. Exact opaque correspondence prevents
+missing, duplicated, reordered, wrong-target/type/scope/plan/origin artifacts from
+executing. Existing admission bounds scope and owner metadata. Only the complete
+replacement RHS result gains a resource lifetime boundary; argument temporaries
+remain rejected. No second ownership engine is introduced.
+
+The executor explicitly refuses ReplaceOwned pending the next validated runtime
+layer. This intermediate milestone does not claim executable replacement support.
+Generation machinery and runtime evidence follow only after its four CI gates.
