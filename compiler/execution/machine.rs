@@ -75,6 +75,7 @@ enum Slot {
     Vacant,
     Transferred,
     Cleaned,
+    Replacing,
 }
 #[derive(Debug)]
 struct Frame {
@@ -99,6 +100,7 @@ enum Action<'a> {
     Record(hir::RecordId, &'a [hir::RecordFieldInit]),
     Invoke(FunctionId, usize),
     Commit(Destination),
+    ReplaceCommit(u64),
     Select(BasicBlockId, BasicBlockId),
     Return,
     DropNoValue,
@@ -577,9 +579,16 @@ impl<'a> Machine<'a> {
                     )?;
                     self.eval(id, value, 1)?;
                 }
-                Statement::ReplaceOwned { .. } => {
-                    return Err(self
-                        .integrity("replacement execution awaits validated generation machinery"));
+                Statement::ReplaceOwned {
+                    local, record, owning_scope, cleanup_plan, value, origin, ..
+                } => {
+                    self.origin = *origin;
+                    let replacement = self.replacement_start(
+                        Location { frame: id, place: Place::Local(*local) },
+                        *record, *owning_scope, *cleanup_plan,
+                    )?;
+                    self.task(id, *origin, None, Action::ReplaceCommit(replacement))?;
+                    self.eval(id, value, 1)?;
                 }
                 Statement::CopyFieldAssign {
                     owner,
@@ -1013,6 +1022,7 @@ impl<'a> Machine<'a> {
                     self.cleanup_initialized(at)?;
                 }
             }
+            Action::ReplaceCommit(id) => self.replacement_commit(id)?,
             Action::Select(yes, no) => {
                 let v = self.pop()?;
                 let b = self.boolean(v)?;
@@ -1066,7 +1076,9 @@ impl<'a> Machine<'a> {
                 return Err(error);
             }
         }
-        if !self.frames.is_empty() || self.values.len() != 1 {
+        if !self.frames.is_empty() || self.values.len() != 1
+            || self.resources.as_ref().is_some_and(|s| !s.replacements.is_empty())
+        {
             return Err(self.integrity("incomplete execution state"));
         }
         match self.pop()? {

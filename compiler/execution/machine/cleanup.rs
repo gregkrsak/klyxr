@@ -2,6 +2,7 @@
 use super::*;
 use crate::hir::resources::OperationKind;
 use crate::mir::cleanup::ScopeId;
+mod replacement;
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Event {
     Acquire(u64),
@@ -17,6 +18,8 @@ pub(super) struct State {
     next_identity: u64,
     next_activation: u64,
     next_generation: u64,
+    pub(super) replacements: Vec<replacement::Prepared>,
+    next_replacement: u64,
     protected: Option<Value>,
     pub(super) detached: Option<Value>,
     current: Option<Value>,
@@ -64,7 +67,11 @@ impl State {
             )?;
         n = n
             .checked_add(self.pending.capacity().checked_mul(size_of::<Pending>())?)?
-            .checked_add(self.work.capacity().checked_mul(size_of::<Value>())?)?;
+            .checked_add(self.work.capacity().checked_mul(size_of::<Value>())?)?
+            .checked_add(self.replacements.capacity().checked_mul(size_of::<replacement::Prepared>())?)?;
+        for r in &self.replacements {
+            n = n.checked_add(r.payload_storage()?)?;
+        }
         for p in &self.pending {
             n = n.checked_add(
                 p.initialized
@@ -556,6 +563,8 @@ impl<'a> Machine<'a> {
                         frame: id,
                         place: Place::Local(generation.local),
                     })?;
+                } else {
+                    self.charge()?;
                 }
                 self.resources.as_mut().unwrap().frames[r]
                     .scopes
@@ -1898,6 +1907,11 @@ mod conservation_tests {
         }
         for p in &s.pending {
             for (_, v) in &p.initialized {
+                leaves(v, &mut owned);
+            }
+        }
+        for r in &s.replacements {
+            for v in [&r.protected, &r.displaced].into_iter().flatten() {
                 leaves(v, &mut owned);
             }
         }

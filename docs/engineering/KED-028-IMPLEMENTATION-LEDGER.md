@@ -163,3 +163,34 @@ and reported Rustfmt differences, applied from CI output. Other milestone runs:
 tests https://github.com/gregkrsak/klyxr/actions/runs/38789765184,
 docs https://github.com/gregkrsak/klyxr/actions/runs/38789765162,
 verify https://github.com/gregkrsak/klyxr/actions/runs/38789765094.
+
+Generation formatting commit `2089b209c1f39de04e6e6aa9432a3877d3ed266e`, tree
+`01ee9ff91c8532a3873c69c3e9938b3a7e90f469`: all four passed:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38789899836),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38789899824),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38789899834),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38789899688).
+Both complete test profiles and exact inventory reconciliation passed.
+
+## Milestone 4 — protected replacement vertical slice
+
+A bounded stack of prepared replacement contexts is allocated before RHS work.
+Old ownership stays in its slot while RHS evaluation runs. The complete new value
+moves infallibly from its existing holder into separate protected storage before
+fallible generation reservation or displacement. Detached old ownership is retained
+explicitly, then transferred into the existing canonical cleanup cursors. Successful
+cleanup discharges the old generation. Publication, slot association and reserved
+history append form one allocation-free transition in the target's owning activation.
+Ordinary continuation remains inaccessible on any terminal failure.
+
+Inert public records use the same protocol without executable cleanup. Copy writes
+retain their original route. Protected replacement results do not reuse return,
+construction or cleanup scratch holders. All context/history capacities and both
+payloads count simultaneously toward storage; progress and skipped discharged
+history entries charge fuel. Resume and completion reject unfinished replacement.
+
+First runtime evidence covers exact A/B/C acquisition and release identities,
+repeated inert execution, distinct-source transfer, repeated leaf replacement,
+every fuel cut with identity conservation, exact sufficient fuel and trusted
+release Host failure retaining N separately. Aggregate/recursive and full boundary
+batteries remain the next gate after validation.
