@@ -71,3 +71,21 @@ and reference boundaries, branches, iteration-local exits and nested-loop target
 New identities require explicit manifest membership; counts alone cannot pass CI.
 
 Milestone validation is pending. No PR, acceptance, issue closure or merge.
+
+### First milestone CI and repair
+
+Commit `bf3b3686ad66fcba5174e54642bf24681765184f`, tree
+`feb1857c91492db115ea4f9e80e8cca3fa91469a`:
+build https://github.com/gregkrsak/klyxr/actions/runs/38788406841 (formatting failed;
+workspace/all-target compilation passed), tests
+https://github.com/gregkrsak/klyxr/actions/runs/38788407172 (one new fixture failed),
+docs https://github.com/gregkrsak/klyxr/actions/runs/38788406871 (passed), verify
+https://github.com/gregkrsak/klyxr/actions/runs/38788406935 (passed).
+
+Applied the GitHub Rustfmt diffs as text, without local Rust execution.
+`later_exclusive_handle_blocks_commit` originally passed the exclusive handle by
+value and then used it again; KD-021 correctly rejected the moved handle, rather
+than retaining it as a live loan at replacement commit. Its intended live-loan
+witness now reads a Copy field non-consumingly on the RHS and uses the handle
+later. The original fixture remains as a separate moved-handle rejection test.
+No accepted ownership contract was relaxed. No later architectural layer added.

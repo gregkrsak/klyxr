@@ -158,8 +158,7 @@ impl Program {
                     if !matches!(
                         target.ty,
                         ValueType::Bool | ValueType::Range(_) | ValueType::Record(_)
-                    )
-                        || value.ty != ExprType::from(target.ty)
+                    ) || value.ty != ExprType::from(target.ty)
                     {
                         return Err(invalid());
                     }

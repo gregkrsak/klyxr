@@ -17,7 +17,8 @@
     "tests/owned_replacement.rs::later_shared_handle_blocks_commit",
     "tests/owned_replacement.rs::moved_and_conditionally_unavailable_targets_reject",
     "tests/owned_replacement.rs::repeated_and_distinct_source_replacement",
-    "tests/owned_replacement.rs::target_consumption_rejects_at_every_rhs_depth"
+    "tests/owned_replacement.rs::target_consumption_rejects_at_every_rhs_depth",
+    "tests/owned_replacement.rs::transferred_exclusive_handle_remains_moved"
   ],
   "outcome_corrections": {
     "tests/iteration_local_moves.rs::iteration_local_replacement": "Preserve identity; reject-to-accept because frozen section 12 explicitly permits iteration-local replacement."

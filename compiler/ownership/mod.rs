@@ -9,7 +9,8 @@ use crate::{
     diagnostics::Diagnostic,
     hir::{
         BorrowKind, ExprKind, ExprType, FieldId, FunctionId, LocalId, ParameterId, ParameterType,
-        Place, Program, RecordId, ReferentType, TypedExpr, ValueFunction, ValueStatement, ValueType,
+        Place, Program, RecordId, ReferentType, TypedExpr, ValueFunction, ValueStatement,
+        ValueType,
     },
     lexer::Span,
 };
@@ -775,12 +776,7 @@ impl<'a> Checker<'a> {
         self.expire();
         Ok(Flow::Fallthrough)
     }
-    fn replace_owned(
-        &mut self,
-        local: LocalId,
-        value: &TypedExpr,
-        span: Span,
-    ) -> OwnershipResult {
+    fn replace_owned(&mut self, local: LocalId, value: &TypedExpr, span: Span) -> OwnershipResult {
         let before = self.clone();
         let result = (|| {
             let place = Place::Local(local);
