@@ -220,7 +220,10 @@ fn same_spelling_selects_distinct_canonical_records_and_fields() {
             let hir::ExprKind::CopyReferenceFieldRead { record, field, .. } = value.kind else {
                 panic!()
             };
-            assert_eq!(value.ty, hir::ExprType::Range(p.field(field).ty));
+            assert_eq!(
+                value.ty,
+                hir::ExprType::Range(p.field(field).range_type().unwrap())
+            );
             (record, field)
         })
         .collect::<Vec<_>>();

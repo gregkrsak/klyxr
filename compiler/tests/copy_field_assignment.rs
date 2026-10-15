@@ -226,7 +226,10 @@ fn ast_hir_mir_identity_and_each_source_span_survive() {
     assert_eq!(p.local(*owner).ty, hir::ValueType::Record(*record));
     assert_eq!(p.field(*field).name, "health");
     assert_eq!(p.field(*field).record, *record);
-    assert_eq!(value.ty, hir::ExprType::Range(p.field(*field).ty));
+    assert_eq!(
+        value.ty,
+        hir::ExprType::Range(p.field(*field).range_type().unwrap())
+    );
     let m = mir::lower(&p);
     let f = m.functions().last().unwrap();
     f.validate().unwrap();
@@ -326,8 +329,14 @@ fn final_conflict_diagnostic(borrow: &str, finish: &str, field: &str, kind: &str
     assert_eq!(p.local(*owner).name, "working");
     assert_eq!(p.record(*record).name, "Battery");
     assert_eq!(p.field(*selected).name, field);
-    assert_eq!(value.ty, hir::ExprType::Range(p.field(*selected).ty));
-    assert_eq!(p.range(p.field(*selected).ty).name, "Percent");
+    assert_eq!(
+        value.ty,
+        hir::ExprType::Range(p.field(*selected).range_type().unwrap())
+    );
+    assert_eq!(
+        p.range(p.field(*selected).range_type().unwrap()).name,
+        "Percent"
+    );
     let FrontendError::Ownership(errors) = compile_source(&s).unwrap_err() else {
         panic!()
     };

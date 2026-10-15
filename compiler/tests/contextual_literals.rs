@@ -105,7 +105,10 @@ fn first_middle_final_calls_and_fields_preserve_written_order() {
             e.value.kind,
             hir::ExprKind::FormedRangeLiteral(80)
         ));
-        assert_eq!(e.value.ty, hir::ExprType::Range(p.field(e.field).ty));
+        assert_eq!(
+            e.value.ty,
+            hir::ExprType::Range(p.field(e.field).range_type().unwrap())
+        );
     }
     assert_ne!(fields[0].value.ty, fields[1].value.ty);
 }

@@ -522,7 +522,10 @@ fn ordinary_records_have_canonical_ids_and_no_anonymous_locals_or_harness_bindin
         panic!()
     };
     assert_eq!(owner, hir::Place::Local(p.locals()[0].id));
-    assert_eq!(value.ty, hir::ExprType::Range(p.field(field).ty));
+    assert_eq!(
+        value.ty,
+        hir::ExprType::Range(p.field(field).range_type().unwrap())
+    );
     assert_eq!(p.record(record).fields[0], field);
 }
 #[test]

@@ -795,7 +795,9 @@ impl<'a> Checker<'a> {
                 let root = self.metadata(place).0;
                 let record = self.program.record(record);
                 let field = self.program.field(field);
-                let range = self.program.range(field.ty);
+                let range = self
+                    .program
+                    .range(field.range_type().expect("Copy-field is range"));
                 let kind = match loan.kind {
                     BorrowKind::Shared => "shared",
                     BorrowKind::Mutable => "exclusive",
@@ -871,12 +873,15 @@ impl<'a> Checker<'a> {
                 .filter(|f| f.id == field && f.record == record)
                 .filter(|_| self.program.record(record).fields.contains(&field))
                 .ok_or_else(|| self.provenance_error(span))?;
-            if value.ty != ExprType::Range(declaration.ty)
+            let range = declaration
+                .range_type()
+                .ok_or_else(|| self.provenance_error(span))?;
+            if value.ty != ExprType::Range(range)
                 || self
                     .program
                     .ranges()
-                    .get(declaration.ty.0)
-                    .filter(|r| r.id == declaration.ty && r.min <= r.max)
+                    .get(range.0)
+                    .filter(|r| r.id == range && r.min <= r.max)
                     .is_none()
             {
                 return Err(self.provenance_error(span));

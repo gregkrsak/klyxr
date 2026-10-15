@@ -2,6 +2,7 @@ use super::*;
 use crate::hir::{BinaryOp, BorrowKind, ExprKind, ExprType, Place, ReferentType, TypedExpr};
 use crate::mir::{BasicBlockId, OriginKind, Statement, Terminator};
 use std::mem::size_of;
+mod cleanup;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Location {
@@ -10,6 +11,15 @@ struct Location {
 }
 #[derive(Debug, PartialEq, Eq)]
 enum Value {
+    Leaf {
+        resource: hir::resources::ResourceId,
+        record: hir::RecordId,
+        identity: u64,
+    },
+    Aggregate {
+        record: hir::RecordId,
+        fields: Vec<(hir::FieldId, Value)>,
+    },
     Public(RuntimeValue),
     Raw(i64),
     Reference {
@@ -40,6 +50,16 @@ impl Value {
     }
     fn extra_storage(&self) -> usize {
         match self {
+            Self::Aggregate { fields, .. } => fields
+                .iter()
+                .try_fold(
+                    fields
+                        .capacity()
+                        .checked_mul(size_of::<(hir::FieldId, Value)>())
+                        .unwrap_or(usize::MAX),
+                    |sum, (_, v)| sum.checked_add(v.extra_storage()),
+                )
+                .unwrap_or(usize::MAX),
             Self::Public(RuntimeValue::Record { fields, .. }) => fields
                 .capacity()
                 .checked_mul(size_of::<(hir::FieldId, RangeValue)>())
@@ -53,6 +73,8 @@ enum Slot {
     Uninitialized,
     Available(Value),
     Vacant,
+    Transferred,
+    Cleaned,
 }
 #[derive(Debug)]
 struct Frame {
@@ -80,6 +102,8 @@ enum Action<'a> {
     Select(BasicBlockId, BasicBlockId),
     Return,
     DropNoValue,
+    PendingNext(u64, &'a [hir::RecordFieldInit], usize, usize),
+    PendingField(u64, hir::FieldId),
 }
 struct Task<'a> {
     frame: u64,
@@ -98,6 +122,7 @@ pub(super) struct Machine<'a> {
     steps: u64,
     origin: Origin,
     expression: Option<Span>,
+    resources: Option<cleanup::State>,
 }
 impl<'a> Machine<'a> {
     pub fn new(executable: &'a CheckedExecutable, limits: ExecutionLimits) -> Self {
@@ -107,6 +132,7 @@ impl<'a> Machine<'a> {
             frames: Vec::new(),
             tasks: Vec::new(),
             values: Vec::new(),
+            resources: None,
             next_frame: 0,
             steps: 0,
             origin: Origin {
@@ -167,6 +193,9 @@ impl<'a> Machine<'a> {
         for v in &self.values {
             n = n.checked_add(v.extra_storage())?;
         }
+        if let Some(s) = &self.resources {
+            n = n.checked_add(s.storage()?)?;
+        }
         Some(n)
     }
     fn reserve(&self, bytes: usize) -> Result<(), ExecutionError> {
@@ -200,13 +229,40 @@ impl<'a> Machine<'a> {
         });
         Ok(())
     }
+    fn resource_bearing(&self, value: &Value) -> bool {
+        matches!(value, Value::Leaf { record, .. } | Value::Aggregate { record, .. }
+            if self.executable.cleanup_plans.get(record.0).is_some_and(Option::is_some))
+    }
+    // Hold ownership in an already reserved machine slot before any fallible
+    // receiving-container operation. The caller takes it only after reservation.
+    fn retain_publication(&mut self, value: Value) -> Result<Option<Value>, ExecutionError> {
+        if self.resource_bearing(&value) {
+            let state = self.resources.as_mut().ok_or_else(|| {
+                ExecutionError::integrity("resource publication without runtime state")
+            })?;
+            if state.detached.is_some() {
+                return Err(ExecutionError::integrity(
+                    "publication payload already occupied",
+                ));
+            }
+            state.detached = Some(value);
+            Ok(None)
+        } else {
+            Ok(Some(value))
+        }
+    }
+    fn take_publication(&mut self, ordinary: Option<Value>) -> Value {
+        ordinary.unwrap_or_else(|| self.resources.as_mut().unwrap().detached.take().unwrap())
+    }
     fn value(&mut self, value: Value) -> Result<(), ExecutionError> {
+        let ordinary = self.retain_publication(value)?;
         let grow = self.values.len() == self.values.capacity();
-        // A detached payload is absent from storage(); reserve it together with
-        // its receiving buffer, before either growth or publication.
+        // Retained resources already participate in storage(); ordinary payloads
+        // remain prospective until publication, preserving predecessor accounting.
         self.reserve(
-            value
-                .extra_storage()
+            ordinary
+                .as_ref()
+                .map_or(0, Value::extra_storage)
                 .checked_add(if grow { size_of::<Value>() } else { 0 })
                 .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
         )?;
@@ -215,6 +271,7 @@ impl<'a> Machine<'a> {
                 .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("value allocation")))?;
         }
+        let value = self.take_publication(ordinary);
         self.values.push(value);
         Ok(())
     }
@@ -273,7 +330,15 @@ impl<'a> Machine<'a> {
             return Ok(v);
         }
         let (f, i) = self.slot_index(at)?;
-        match std::mem::replace(&mut self.frames[f].slots[i].1, Slot::Vacant) {
+        let vacant = if matches!(
+            self.frames[f].slots[i].1,
+            Slot::Available(Value::Leaf { .. } | Value::Aggregate { .. })
+        ) {
+            Slot::Transferred
+        } else {
+            Slot::Vacant
+        };
+        match std::mem::replace(&mut self.frames[f].slots[i].1, vacant) {
             Slot::Available(v) => Ok(v),
             _ => Err(self.integrity("unavailable Move source")),
         }
@@ -307,13 +372,26 @@ impl<'a> Machine<'a> {
                 .find(|(f, _)| *f == field)
                 .map(|(_, v)| Value::Public(RuntimeValue::Range(v.clone())))
                 .ok_or_else(|| self.integrity("runtime record field missing")),
+            Value::Aggregate { record: r, fields } if *r == record => {
+                match fields.iter().find(|(id, _)| *id == field).map(|(_, v)| v) {
+                    Some(Value::Public(RuntimeValue::Range(v))) => {
+                        Ok(Value::Public(RuntimeValue::Range(v.clone())))
+                    }
+                    _ => Err(self.integrity("Copy-field is not an owned range")),
+                }
+            }
             _ => Err(self.integrity("runtime record identity mismatch")),
         }
     }
     fn publish(&mut self, destination: Destination, value: Value) -> Result<(), ExecutionError> {
         match destination {
             Destination::Slot(at) => {
-                let (f, i) = self.slot_index_with_payload(at, value.extra_storage())?;
+                let ordinary = self.retain_publication(value)?;
+                let (f, i) = self.slot_index_with_payload(
+                    at,
+                    ordinary.as_ref().map_or(0, Value::extra_storage),
+                )?;
+                let value = self.take_publication(ordinary);
                 self.frames[f].slots[i].1 = Slot::Available(value);
             }
             Destination::Field(at, record, field) => {
@@ -321,6 +399,23 @@ impl<'a> Machine<'a> {
                     return Err(self.integrity("field RHS is not a range"));
                 };
                 let (f, i) = self.slot_index(at)?;
+                if let Slot::Available(Value::Aggregate { record: r, fields }) =
+                    &mut self.frames[f].slots[i].1
+                {
+                    if *r != record {
+                        return Err(self.integrity("field owner nominal mismatch"));
+                    }
+                    let Some((_, Value::Public(RuntimeValue::Range(old)))) =
+                        fields.iter_mut().find(|(id, _)| *id == field)
+                    else {
+                        return Err(self.integrity("Copy-field destination is not a range"));
+                    };
+                    if old.ty != value.ty {
+                        return Err(self.integrity("field range nominal mismatch"));
+                    }
+                    *old = value;
+                    return Ok(());
+                }
                 let Slot::Available(Value::Public(RuntimeValue::Record { record: r, fields })) =
                     &mut self.frames[f].slots[i].1
                 else {
@@ -360,6 +455,9 @@ impl<'a> Machine<'a> {
             return Err(self.integrity("runtime call signature mismatch"));
         }
         let mir = self.executable.function(function)?;
+        if mir.cleanup.is_some() {
+            self.enable_resources()?;
+        }
         let bytes = count
             .checked_mul(size_of::<(Place, Slot)>())
             .and_then(|n| {
@@ -397,6 +495,7 @@ impl<'a> Machine<'a> {
             slots,
             call_site: self.expression.unwrap_or(self.origin.span),
         });
+        self.cleanup_frame(id)?;
         Ok(id)
     }
     fn eval(&mut self, frame: u64, e: &'a TypedExpr, depth: usize) -> Result<(), ExecutionError> {
@@ -415,6 +514,7 @@ impl<'a> Machine<'a> {
     }
     fn drive(&mut self, id: u64) -> Result<(), ExecutionError> {
         let index = self.frame_index(id)?;
+        self.cleanup_enter_block(id)?;
         let frame = &self.frames[index];
         let f = self.executable.function(frame.function)?;
         let block = f.block(frame.block);
@@ -458,6 +558,7 @@ impl<'a> Machine<'a> {
                         frame: id,
                         place: Place::Local(*local),
                     };
+                    self.cleanup_reinitialization(at)?;
                     let (f, i) = self.slot_index(at)?;
                     self.frames[f].slots[i].1 = Slot::Uninitialized;
                     self.task(id, self.origin, None, Action::Commit(Destination::Slot(at)))?;
@@ -542,6 +643,8 @@ impl<'a> Machine<'a> {
             self.charge()?;
             match block.terminator() {
                 Terminator::Goto { target } => {
+                    self.cleanup_exit(id)?;
+                    self.cleanup_next_block(id)?;
                     self.frames[index].block = *target;
                     self.frames[index].statement = 0;
                     self.task(id, origin, None, Action::Drive)?;
@@ -664,6 +767,28 @@ impl<'a> Machine<'a> {
                 self.value(v)?;
             }
             ExprKind::RecordConstruct { record, fields } => {
+                if !self.executable.program.resources.is_leaf(*record)
+                    && (self
+                        .executable
+                        .cleanup_plans
+                        .get(record.0)
+                        .is_some_and(Option::is_some)
+                        || self
+                            .executable
+                            .program
+                            .record(*record)
+                            .fields
+                            .iter()
+                            .any(|id| {
+                                matches!(
+                                    self.executable.program.field(*id).ty,
+                                    ValueType::Record(_)
+                                )
+                            }))
+                {
+                    self.pending_start(frame, *record, fields, depth)?;
+                    return Ok(());
+                }
                 self.task(
                     frame,
                     self.origin,
@@ -823,6 +948,10 @@ impl<'a> Machine<'a> {
             .ok_or_else(|| self.integrity("return function"))?
             .return_type;
         let matches = match (&value, declared) {
+            (
+                Value::Leaf { record, .. } | Value::Aggregate { record, .. },
+                Some(ValueType::Record(t)),
+            ) => *record == t,
             (Value::Completion, None) => true,
             (Value::Public(RuntimeValue::Bool(_)), Some(ValueType::Bool)) => true,
             (Value::Public(RuntimeValue::Range(v)), Some(ValueType::Range(t))) => v.ty == t,
@@ -834,13 +963,17 @@ impl<'a> Machine<'a> {
         if !matches {
             return Err(self.integrity("return result or escaping reference mismatch"));
         }
-        // Publish the completed result before retiring its storage; no cleanup
-        // hooks, loans, snapshots or source-level destruction are involved.
+        if self.executable.function(f.function)?.cleanup.is_some() {
+            return self.cleanup_return(id, value);
+        }
         self.value(value)?;
         self.frames.pop();
         Ok(())
     }
     fn step(&mut self, task: Task<'a>) -> Result<(), ExecutionError> {
+        if self.resources.as_ref().is_some_and(|s| s.terminal) {
+            return Err(self.integrity("resource execution is terminal"));
+        }
         self.origin = task.origin;
         self.expression = task.expression;
         match task.action {
@@ -863,21 +996,32 @@ impl<'a> Machine<'a> {
             }
             Action::Record(r, f) => self.finish_record(r, f)?,
             Action::Invoke(f, n) => {
-                let frame = self.enter(f, n)?;
-                self.task(frame, self.origin, None, Action::Drive)?;
+                if !self.trusted_invoke(f, n)? {
+                    let frame = self.enter(f, n)?;
+                    self.task(frame, self.origin, None, Action::Drive)?;
+                }
             }
             Action::Commit(d) => {
                 let v = self.pop()?;
                 self.publish(d, v)?;
+                if let Destination::Slot(at) = d {
+                    self.cleanup_initialized(at)?;
+                }
             }
             Action::Select(yes, no) => {
                 let v = self.pop()?;
                 let b = self.boolean(v)?;
                 let index = self.frame_index(task.frame)?;
+                self.cleanup_exit(task.frame)?;
+                self.cleanup_next_block(task.frame)?;
                 self.frames[index].block = if b { yes } else { no };
                 self.frames[index].statement = 0;
                 self.task(task.frame, task.origin, None, Action::Drive)?;
             }
+            Action::PendingNext(id, fields, index, depth) => {
+                self.pending_next(task.frame, id, fields, index, depth)?
+            }
+            Action::PendingField(id, field) => self.pending_field(id, field)?,
             Action::Return => self.finish_return(task.frame)?,
             Action::DropNoValue => {
                 if self.pop()? != Value::Completion {
@@ -888,6 +1032,16 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     fn start(&mut self, entry: FunctionId) -> Result<(), ExecutionError> {
+        if self
+            .executable
+            .program
+            .resources
+            .operations
+            .iter()
+            .any(|op| op.function == entry)
+        {
+            return Err(self.integrity("trusted operation requires an admitted caller"));
+        }
         self.origin = Origin {
             span: self.executable.program.function(entry).span(),
             kind: OriginKind::FunctionBoundary,
@@ -896,8 +1050,16 @@ impl<'a> Machine<'a> {
         self.task(frame, self.origin, None, Action::Drive)
     }
     fn resume(&mut self) -> Result<ExecutionResult, ExecutionError> {
+        if self.resources.as_ref().is_some_and(|s| s.terminal) {
+            return Err(self.integrity("resource execution is terminal"));
+        }
         while let Some(task) = self.tasks.pop() {
-            self.step(task)?;
+            if let Err(error) = self.step(task) {
+                if let Some(state) = &mut self.resources {
+                    state.terminal = true;
+                }
+                return Err(error);
+            }
         }
         if !self.frames.is_empty() || self.values.len() != 1 {
             return Err(self.integrity("incomplete execution state"));
@@ -926,7 +1088,7 @@ mod tests {
             fields.push((
                 *id,
                 RangeValue {
-                    ty: e.program.fields()[id.0].ty,
+                    ty: e.program.fields()[id.0].range_type().unwrap(),
                     value: 80,
                 },
             ));

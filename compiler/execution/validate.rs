@@ -66,8 +66,9 @@ fn field(
         .get(field.0)
         .filter(|f| f.id == field && f.record == record && r.fields.contains(&field))
         .ok_or_else(bad)?;
-    ty(p, ExprType::Range(f.ty))?;
-    Ok(f.ty)
+    let range = f.range_type().ok_or_else(bad)?;
+    ty(p, ExprType::Range(range))?;
+    Ok(range)
 }
 pub(super) fn expression(
     p: &hir::Program,
@@ -80,6 +81,9 @@ pub(super) fn expression(
 ) -> Result<(), ExecutionError> {
     if depth > c.limits.traversal_depth {
         return Err(ResourceFailure::limit("admission expression depth", e.span).into());
+    }
+    if !p.resources.leaves.is_empty() {
+        c.resource_node(e.span)?;
     }
     ty(p, e.ty)?;
     match &e.kind {
@@ -170,7 +174,18 @@ pub(super) fn expression(
             }
             for (i, item) in fields.iter().enumerate() {
                 if fields[..i].iter().any(|a| a.field == item.field)
-                    || item.value.ty != ExprType::Range(field(p, *record, item.field)?)
+                    || item.value.ty
+                        != ExprType::from(
+                            p.fields
+                                .get(item.field.0)
+                                .filter(|f| {
+                                    f.id == item.field
+                                        && f.record == *record
+                                        && r.fields.contains(&item.field)
+                                })
+                                .ok_or_else(bad)?
+                                .ty,
+                        )
                 {
                     return Err(bad());
                 }
@@ -271,7 +286,7 @@ pub(super) fn expression(
             let f = p
                 .fields()
                 .get(a.field.0)
-                .filter(|f| f.id == a.field && f.ty == a.ty)
+                .filter(|f| f.id == a.field && f.range_type() == Some(a.ty))
                 .ok_or_else(bad)?;
             field(p, f.record, a.field)?;
         }
@@ -289,11 +304,17 @@ fn statements(
         return Err(ResourceFailure::limit("admission statement depth", START).into());
     }
     for s in body {
+        if !p.resources.leaves.is_empty() {
+            c.resource_node(START)?;
+        }
         match s {
             ValueStatement::Let {
                 local, initializer, ..
             } => {
-                place(p, f, Place::Local(*local))?;
+                let expected = ExprType::from(place(p, f, Place::Local(*local))?);
+                if initializer.ty != expected {
+                    return Err(bad());
+                }
                 expression(p, f, initializer, c, 1, true, true)?;
             }
             ValueStatement::Assign { local, value, .. } => {
@@ -359,7 +380,10 @@ fn statements(
                 if callee.return_type.is_some() || arguments.len() != callee.parameters.len() {
                     return Err(bad());
                 }
-                for a in arguments {
+                for (a, parameter) in arguments.iter().zip(&callee.parameters) {
+                    if a.ty != ExprType::from(place(p, *function, Place::Parameter(*parameter))?) {
+                        return Err(bad());
+                    }
                     expression(p, f, a, c, 1, true, false)?;
                 }
             }
@@ -371,6 +395,30 @@ fn statements(
     Ok(())
 }
 pub(super) fn program_shape(p: &hir::Program, c: &Context) -> Result<(), ExecutionError> {
+    if !p.resources.leaves.is_empty()
+        && (p
+            .records
+            .iter()
+            .any(|r| r.name.len() > c.limits.identifier_bytes)
+            || p.fields
+                .iter()
+                .any(|f| f.name.len() > c.limits.identifier_bytes)
+            || p.functions
+                .iter()
+                .any(|f| f.name().len() > c.limits.identifier_bytes)
+            || p.locals
+                .iter()
+                .any(|l| l.name.len() > c.limits.identifier_bytes)
+            || p.parameters
+                .iter()
+                .any(|p| p.name.len() > c.limits.identifier_bytes))
+    {
+        return Err(ResourceFailure::limit("resource identifier bytes", START).into());
+    }
+    if p.resources.leaves.len() > c.limits.tokens || p.resources.operations.len() > c.limits.tokens
+    {
+        return Err(bad());
+    }
     if p.functions().len() > c.limits.tokens
         || p.locals().len() > c.limits.tokens
         || p.parameters().len() > c.limits.tokens
@@ -433,9 +481,36 @@ pub(super) fn program_shape(p: &hir::Program, c: &Context) -> Result<(), Executi
             }
         }
     }
+    if !p.resources.leaves.is_empty() {
+        p.resources
+            .plans_bounded(p, c.limits.traversal_depth)
+            .map_err(ExecutionError::from)?;
+        let n = c
+            .resource_nodes
+            .get()
+            .checked_add(
+                p.functions.len()
+                    + p.fields.len()
+                    + p.records.len()
+                    + p.locals.len()
+                    + p.parameters.len()
+                    + p.ranges.len()
+                    + p.resources.leaves.len()
+                    + p.resources.operations.len(),
+            )
+            .ok_or_else(|| {
+                ExecutionError::from(ResourceFailure::limit(
+                    "resource admission accounting",
+                    START,
+                ))
+            })?;
+        c.reserve_frontend(n, 0)?;
+    }
     #[cfg(test)]
     RECORD_WALKS.with(|n| n.set(n.get() + 1));
-    p.validate_record_expressions().map_err(|_| bad())?;
+    p.resources.validate(p).map_err(ExecutionError::from)?;
+    p.validate_record_expressions_without_resources()
+        .map_err(|_| bad())?;
     Ok(())
 }
 
@@ -444,6 +519,7 @@ pub(super) fn mir_shape(
     m: &mir::MirProgram,
     c: &Context,
 ) -> Result<(), ExecutionError> {
+    c.resource_nodes.set(0);
     if m.functions().len() > c.limits.tokens {
         return Err(bad());
     }
@@ -456,6 +532,26 @@ pub(super) fn mir_shape(
             .ok_or_else(bad)?;
         if f.blocks().len() > c.limits.tokens.checked_mul(4).ok_or_else(bad)? {
             return Err(bad());
+        }
+        if let Some(flow) = &f.cleanup {
+            if flow.scopes.len() > c.limits.tokens
+                || flow.blocks.len() > c.limits.tokens.saturating_mul(4)
+                || flow.parameters.len() > c.limits.tokens
+            {
+                return Err(bad());
+            }
+            for scope in &flow.scopes {
+                if scope.owners.len() > c.limits.tokens {
+                    return Err(bad());
+                }
+            }
+            for block in &flow.blocks {
+                if block.initialize.len() > c.limits.tokens
+                    || block.exit.len() > c.limits.traversal_depth
+                {
+                    return Err(bad());
+                }
+            }
         }
         for (_, b) in f.blocks() {
             if b.statements().len() > c.limits.tokens {

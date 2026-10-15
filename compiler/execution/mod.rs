@@ -118,6 +118,8 @@ pub enum ErrorKind {
     ConfiguredLimit(&'static str),
     Integrity(&'static str),
     Host(&'static str),
+    /// Private synthetic construction control, not a recoverable source error.
+    SyntheticConstructionFailure,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CallTrace {
@@ -191,6 +193,7 @@ pub struct CheckedExecutable {
     mir_approval: Rc<Approval>,
     origin_approval: Rc<Approval>,
     limits: AdmissionLimits,
+    cleanup_plans: Vec<Option<hir::resources::CleanupPlan>>,
 }
 impl CheckedExecutable {
     pub fn entry(&self, name: &str) -> Result<FunctionId, ExecutionError> {
@@ -255,6 +258,19 @@ impl CheckedExecutable {
         // Admission already bounds this private immutable representation. Check
         // shape before any recursive comparison/re-lowering, including injections.
         validate::program_shape(&self.program, &c)?;
+        let plans = if self.program.resources.leaves.is_empty() {
+            Vec::new()
+        } else {
+            self.program
+                .resources
+                .plans(&self.program)
+                .map_err(ExecutionError::from)?
+        };
+        if self.cleanup_plans != plans {
+            return Err(ExecutionError::integrity(
+                "canonical cleanup plan correspondence",
+            ));
+        }
         if self.program != self.approval.program {
             return Err(ExecutionError::integrity(
                 "frontend ownership approval mismatch",
@@ -274,7 +290,8 @@ impl CheckedExecutable {
             })?;
         }
         // Same deterministic lowerer, not a second semantic or ownership pipeline.
-        let (expected, origins) = mir::lower_with_origins(&self.program);
+        let (expected, origins) =
+            mir::lower_with_origins(&self.program).map_err(ExecutionError::from)?;
         if self.mir != expected || self.origins != origins {
             return Err(ExecutionError::integrity(
                 "exact HIR/MIR/origin correspondence",
@@ -356,7 +373,38 @@ pub fn prepare_execution(
     if let Some(e) = context.failure.get() {
         return Err(e.into());
     }
-    let (mir, origins) = mir::lower_with_origins(&program);
+    seal(program, limits)
+}
+impl From<hir::resources::PlanError> for ExecutionError {
+    fn from(error: hir::resources::PlanError) -> Self {
+        use hir::resources::PlanError;
+        match error {
+            PlanError::Integrity(m) => Self::integrity(m),
+            PlanError::Limit(m) => Self::new(
+                ErrorKind::ConfiguredLimit(if m == "cleanup type graph depth exceeded" {
+                    "cleanup type graph depth"
+                } else {
+                    m
+                }),
+                START,
+            ),
+            PlanError::Host(m) => Self::new(ErrorKind::Host(m), START),
+        }
+    }
+}
+fn seal(
+    program: hir::Program,
+    limits: AdmissionLimits,
+) -> Result<CheckedExecutable, ExecutionError> {
+    let (mir, origins) = mir::lower_with_origins(&program).map_err(ExecutionError::from)?;
+    let cleanup_plans = if program.resources.leaves.is_empty() {
+        Vec::new()
+    } else {
+        program
+            .resources
+            .plans(&program)
+            .map_err(ExecutionError::from)?
+    };
     let approval = Rc::new(Approval {
         program: program.clone(),
     });
@@ -368,6 +416,7 @@ pub fn prepare_execution(
         origin_approval: approval.clone(),
         approval,
         limits,
+        cleanup_plans,
     };
     executable.validate()?;
     Ok(executable)
@@ -461,9 +510,44 @@ pub fn execute(
             f.span,
         ));
     }
+    if let Some(ValueType::Record(id)) = f.return_type {
+        if executable
+            .cleanup_plans
+            .get(id.0)
+            .is_some_and(Option::is_some)
+        {
+            return Err(ExecutionError::integrity(
+                "live resource result cannot cross public boundary",
+            ));
+        }
+    }
     machine::Machine::new(executable, limits).run(entry)
 }
 
 #[cfg(test)]
 mod tests;
 mod validate;
+
+#[cfg(test)]
+fn prepare_synthetic(
+    program: hir::Program,
+    limits: AdmissionLimits,
+) -> Result<CheckedExecutable, ExecutionError> {
+    limits.validate()?;
+    let context = Context::new(limits);
+    context.reserve_frontend(
+        program.functions.len()
+            + program.fields.len()
+            + program.locals.len()
+            + program.parameters.len()
+            + 16,
+        0,
+    )?;
+    validate::program_shape(&program, &context)?;
+    crate::ownership::check_bounded(&program, &context)
+        .map_err(|e| frontend("ownership", e, &context))?;
+    if let Some(e) = context.failure.get() {
+        return Err(e.into());
+    }
+    seal(program, limits)
+}

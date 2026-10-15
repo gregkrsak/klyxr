@@ -288,7 +288,10 @@ fn distinct_operation_canonical_ids_and_all_spans() {
     assert_eq!(*reference, hir::Place::Parameter(f.parameters[0]));
     assert_eq!(p.field(*field).name, "health");
     assert_eq!(p.field(*field).record, *record);
-    assert_eq!(value.ty, hir::ExprType::Range(p.field(*field).ty));
+    assert_eq!(
+        value.ty,
+        hir::ExprType::Range(p.field(*field).range_type().unwrap())
+    );
     assert_eq!((reference_span, fs, ss), (owner_span, field_span, span));
     let m = mir::lower(&p);
     let mf = m.functions().last().unwrap();

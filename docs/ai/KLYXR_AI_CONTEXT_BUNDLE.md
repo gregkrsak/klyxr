@@ -92,9 +92,11 @@ Availability and loans are separate ID-based state within the same ownership pha
 Borrowing/cloning/reborrowing/coercion are never implicit. Ordinary owned parameters
 remain immutable. Reference returns, nested references, explicit lifetimes,
 auto-dereference, generalized reference projection beyond KD-039/KD-040, and partial
-borrowing/moves remain unsupported (KD-021 / OQ-024). KD-042 accepts deterministic
-ownership-attached cleanup semantics for canonically resource-bearing values, but
-the compiler does not yet implement resource leaves, cleanup edges, or runtime release.
+borrowing/moves remain unsupported (KD-021 / OQ-024). KED-027 implements KD-042's
+deterministic ownership-attached cleanup through private synthetic resource leaves,
+explicit lexical MIR metadata and bounded runtime release. Public source records
+still have named-range fields; no resource registration or production resource API
+is exposed.
 
 KED-007 adds explicit `*reference` for directly named ordinary reference parameters
 and locals. Copy referents (Bool/ranges) may be read through shared or mutable
@@ -705,8 +707,21 @@ integrity failures, host/tool failures, process termination, panic/unwind, and t
 cancellation receive no cleanup guarantee from KD-042. The decision adds no partial
 moves, non-Copy replacement, generalized projection, arbitrary destructor code,
 resource API, effects system, heap, FFI, exception model, or temporary-lifetime rule.
-Implementation remains separately unauthorized and must begin with an explicitly
-bounded directive and synthetic-resource evidence.
+The authorized KED-027 implementation supplies private canonical acquisition and
+release descriptors, non-cloneable resource payloads, bounded shared cleanup plans,
+explicit MIR scope entries/initializations/exits and protected return ownership.
+Runtime activations retain actual successful initialization order; transferred
+slots have explicit provenance distinct from vacancy. Pending construction tracks
+exact field membership and a private bounded failure facility demonstrates abort
+order without admitting source-level recoverable propagation. Cleanup stops retain
+earlier effects and remaining owned payloads and cannot retry or publish success.
+Undefined resource argument temporaries reject at canonical admission. Every
+private fixture repeats canonical validation, ownership, lowering, correspondence
+and opaque approval. Source syntax and ordinary resource-free accounting remain
+unchanged. Implementation evidence and the exact predecessor inventory are in
+`docs/engineering/KED-027-IMPLEMENTATION-LEDGER.md`; during K27-I01 only GitHub
+Actions supplies authoritative executable evidence. Acceptance remains Greg's
+decision and merge remains a human action.
 
 <!-- END KLYXR_CONTEXT.md -->
 
@@ -3102,18 +3117,28 @@ See `docs/BOUNDED_EXECUTION.md` for the full tool contract and host-failure boun
 
 ## KED-027 deterministic scope cleanup (KD-042)
 
-KD-042 accepts the semantic architecture for ownership-attached cleanup without
-authorizing an implementation. Canonical typed representation must distinguish
+KED-027 implements the frozen KD-042 architecture through a private synthetic
+resource facility. Canonical typed representation distinguishes
 Copy/Move, owner/reference, and resource-bearing/inert properties. A trusted
 resource leaf carries canonical acquisition/release identity; recursive record
 classification produces a bounded shared cleanup plan in reverse declaration
 order. Ordinary Move values and references have no executable cleanup plan.
 
-Lowering must preserve lexical scope identity before structured HIR becomes flat
-MIR control flow. Every covered exit must carry explicit validated cleanup control
-flow or an equivalent auditable operation. Dynamic scope activations must separate
+`hir::resources` uses canonical ResourceId/OperationId and FunctionId descriptors;
+names never classify or dispatch resources. `Field` holds structural ValueType,
+while source resolution continues to require named-range fields. Plans share
+child RecordId references rather than expanding nested trees. Catalog validation
+rejects cycles, foreign fields, unsupported pairings and noncanonical operation
+bodies. A trusted acquire stub and owned release parameter cannot become arbitrary
+callbacks.
+
+`mir::cleanup` preserves lexical scope identity before structured HIR becomes flat
+MIR control flow. Function cleanup Flow contains scopes, owner initialization
+sites, exact exit sets, parameter order, protected-result metadata and origins.
+Deterministic HIR/MIR/origin correspondence binds the complete artifact to opaque
+approval. Dynamic scope activations separate
 repeated loop iterations and retain successful-local-initialization order. Runtime
-responsibility follows the actually executed ownership path and Available/Vacant
+responsibility follows the actually executed ownership path and live/transferred
 payload state, never the ownership checker's conservative `ConditionalMove` join
 classification. Validated duplicate cleanup remains malformed even if a prior
 operation would leave a slot vacant.
@@ -3134,10 +3159,36 @@ cannot be reported as successful completion. A private constant-work synthetic
 resource leaf and release-event trace are the first acceptable evidence mechanism;
 they do not create public resource syntax or operating-system I/O.
 
-The current compiler implements none of these additions. A separately authorized
-directive must choose the concrete representation, bind temporary admission,
-specify trusted-operation bounds, preserve existing ownership and resource-free
-execution behavior, and require exact-descendant independent conformance review.
+`execution::machine::cleanup` owns the lazy private runtime state. Non-cloneable
+Leaf/Aggregate payloads retain fresh acquisition identities through moves. Scope
+histories provide order but own no duplicate payload. Transferred and Cleaned slot
+states distinguish valid discharge from malformed vacancy. Protected outgoing,
+detached, current-cleanup and work-list payloads remain accounted and retained on
+terminal stops. Fixed trusted operations record Acquire/Attempt/Complete/Failure;
+frame retirement is recorded only after successful cleanup. Release has no user
+callback or operating-system handle.
+
+PendingNext/PendingField continuations evaluate and commit fields in written
+order. Exact initialized membership and full canonical field-set completion gate
+publication. A private synthetic field-failure control aborts nested pending
+containers inside-out through shared reverse-declaration plans, then stops the
+tool. It neither rolls back moved sources nor unwinds ordinary scopes. Resource
+temporaries are admitted only at existing local, return or pending-field boundaries;
+unnamed resource call arguments reject. Public resource results reject before
+acquisition. There is no new source failure system or resource syntax.
+
+Admission bounds metadata, expression counts and type depth before recursive
+authority checks and reserves the expanded frontend envelope. Runtime charges
+scope operations, owner inspections, field traversal, construction and fixed
+release. Prospective storage includes simultaneous detached payload and receiving
+buffer growth. Lazy activation reserves State before publication. Resource-free
+functions receive no cleanup Flow; an unused private catalog preserves the prior
+fuel/storage path. Existing single ownership analysis, borrowing, replacement,
+loop-carried Move restrictions and specialized verifier isolation remain unchanged.
+
+Private malformed-artifact and conservation controls run through the canonical
+approval boundary. The implementation ledger records milestone SHA/run evidence,
+failures and repairs, predecessor identity reconciliation and final review status.
 
 <!-- END ARCHITECTURE.md -->
 

@@ -12,8 +12,9 @@ jobs:
 
       - name: Show Rust toolchain
         run: |
-          rustc --version
-          cargo --version
+          rustc -vV
+          cargo -vV
+          rustdoc -V
 
       - name: Check compiler workspace
         run: cargo check --locked --workspace --all-targets
@@ -26,3 +27,6 @@ jobs:
 
       - name: Validate README assets
         run: python scripts/verify-readme.py
+
+      - name: Check Rustdoc without warnings
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --no-deps

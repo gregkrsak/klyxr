@@ -292,7 +292,7 @@ pub fn resolve(ast: &ast::Program) -> Result<ResolvedProgram, Vec<Diagnostic>> {
                 id: field,
                 record: id,
                 name: declaration.name.clone(),
-                ty,
+                ty: hir::ValueType::Range(ty),
                 span: declaration.span,
             });
             fields.push(field);
@@ -515,7 +515,9 @@ impl Resolver {
         Ok(hir::FieldAccess {
             parameter: *parameter,
             field: *field,
-            ty: declaration.ty,
+            ty: declaration
+                .range_type()
+                .expect("resolved source fields are ranges"),
             span: access.span,
         })
     }

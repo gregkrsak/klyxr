@@ -33,7 +33,7 @@ fn declarations_and_all_function_references_have_canonical_identities() {
     {
         let field = program.field(record.fields[0]);
         assert_eq!(field.record, record.id);
-        assert_eq!(field.ty, percent);
+        assert_eq!(field.range_type(), Some(percent));
         assert_eq!(function.state_type, record.id);
         let state = program.parameter(function.state_param);
         assert_eq!(state.function, function.id);

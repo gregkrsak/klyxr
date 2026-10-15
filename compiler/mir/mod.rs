@@ -1,10 +1,11 @@
 //! Deterministic control-flow lowering of checked ordinary HIR. No execution or proof.
 use crate::hir::{self, FunctionId, LocalId, Place, TypedExpr, ValueStatement};
 use crate::lexer::Span;
+pub(crate) mod cleanup;
 
 /// Compilation-local CFG identity, unrelated to source declaration identities.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct BasicBlockId(usize);
+pub struct BasicBlockId(pub(crate) usize);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
@@ -77,6 +78,7 @@ impl BasicBlock {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MirFunction {
+    pub(crate) cleanup: Option<cleanup::Flow>,
     function: FunctionId,
     entry: BasicBlockId,
     blocks: Vec<BasicBlock>,
@@ -181,6 +183,9 @@ impl MirFunction {
                 Terminator::Goto { .. } | Terminator::ReturnNoValue => {}
             }
         }
+        if let Some(flow) = &self.cleanup {
+            flow.validate(self)?;
+        }
         let mut marks = Vec::new();
         marks
             .try_reserve_exact(self.blocks.len())
@@ -209,12 +214,17 @@ impl MirProgram {
 /// functions retain their specialized proof path. Unsupported valid HIR is a
 /// compiler defect, never a new user diagnostic phase.
 pub fn lower(program: &hir::Program) -> MirProgram {
-    lower_internal(program, true).0
+    // Public source HIR cannot contain the private trusted catalog. Synthetic
+    // preparation uses the fallible lower_with_origins entry below.
+    lower_internal(program, true, &[]).0
 }
 
 /// Produced by the same lowering, never reconstructed by the runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OriginKind {
+    ScopeEntry,
+    OwnerInitialization,
+    ScopeExit,
     Statement,
     Initializer,
     If,
@@ -226,22 +236,34 @@ pub struct Origin {
     pub span: Span,
     pub kind: OriginKind,
 }
-pub(crate) fn lower_with_origins(program: &hir::Program) -> (MirProgram, Vec<Vec<Origin>>) {
-    lower_internal(program, false)
+pub(crate) fn lower_with_origins(
+    program: &hir::Program,
+) -> Result<(MirProgram, Vec<Vec<Origin>>), hir::resources::PlanError> {
+    let plans = if program.resources.leaves.is_empty() {
+        Vec::new()
+    } else {
+        program.resources.plans(program)?
+    };
+    Ok(lower_internal(program, false, &plans))
 }
-fn lower_internal(program: &hir::Program, legacy_assert: bool) -> (MirProgram, Vec<Vec<Origin>>) {
+fn lower_internal(
+    program: &hir::Program,
+    legacy_assert: bool,
+    plans: &[Option<hir::resources::CleanupPlan>],
+) -> (MirProgram, Vec<Vec<Origin>>) {
     let pairs: Vec<_> = program
         .functions()
         .iter()
         .filter_map(|f| f.as_ordinary())
         .map(|f| {
-            let mut builder = Builder {
-                blocks: Vec::new(),
-                loop_targets: Vec::new(),
-                origins: Vec::new(),
-            };
+            let bearing = |ty| matches!(ty, hir::ValueType::Record(id) if plans.get(id.0).is_some_and(Option::is_some));
+            let resource_locals:Vec<_> = program.locals.iter().filter(|l| l.function==f.id && bearing(l.ty)).map(|l|l.id).collect();
+            let parameters:Vec<_> = f.parameters.iter().rev().copied().filter(|id| matches!(program.parameter(*id).ty,hir::ParameterType::Value(ty) if bearing(ty))).collect();
+            let protected_return=f.return_type.is_some_and(bearing);
+            let cleanup=(!resource_locals.is_empty() || !parameters.is_empty() || protected_return).then_some(cleanup::Flow {parameters,protected_return,..cleanup::Flow::default()});
+            let mut builder = Builder {blocks:Vec::new(),loop_targets:Vec::new(),origins:Vec::new(),cleanup,resource_locals,active_scopes:Vec::new()};
             let entry = builder.reserve();
-            if let Some((tail, statements)) = builder.body(entry, &f.body) {
+            if let Some((tail, statements)) = builder.body(entry, &f.body, f.span) {
                 assert!(
                     f.return_type.is_none(),
                     "value functions have no closing-brace fallthrough"
@@ -257,6 +279,7 @@ fn lower_internal(program: &hir::Program, legacy_assert: bool) -> (MirProgram, V
                 );
             }
             let function = MirFunction {
+                cleanup: builder.cleanup,
                 function: f.id,
                 entry,
                 blocks: builder
@@ -281,9 +304,28 @@ fn lower_internal(program: &hir::Program, legacy_assert: bool) -> (MirProgram, V
     let (functions, origins) = pairs.into_iter().unzip();
     (MirProgram { functions }, origins)
 }
+fn value_statement_span(statement: &ValueStatement) -> Span {
+    match statement {
+        ValueStatement::ReturnNoValue { span }
+        | ValueStatement::Break { span }
+        | ValueStatement::Continue { span }
+        | ValueStatement::CallNoValue { span, .. }
+        | ValueStatement::Let { span, .. }
+        | ValueStatement::Return { span, .. }
+        | ValueStatement::Assign { span, .. }
+        | ValueStatement::DerefAssign { span, .. }
+        | ValueStatement::CopyFieldAssign { span, .. }
+        | ValueStatement::CopyReferenceFieldAssign { span, .. }
+        | ValueStatement::If { span, .. }
+        | ValueStatement::While { span, .. } => *span,
+    }
+}
 struct Builder {
     blocks: Vec<Option<BasicBlock>>,
-    loop_targets: Vec<(BasicBlockId, BasicBlockId)>,
+    loop_targets: Vec<(BasicBlockId, BasicBlockId, usize)>,
+    cleanup: Option<cleanup::Flow>,
+    active_scopes: Vec<cleanup::ScopeId>,
+    resource_locals: Vec<LocalId>,
     origins: Vec<Option<Origin>>,
 }
 impl Builder {
@@ -291,6 +333,9 @@ impl Builder {
         let id = BasicBlockId(self.blocks.len());
         self.blocks.push(None);
         self.origins.push(None);
+        if let Some(flow) = &mut self.cleanup {
+            flow.blocks.push(cleanup::Block::default());
+        }
         id
     }
     fn finish(
@@ -343,6 +388,7 @@ impl Builder {
             self.initialize(then_target, Vec::new(), local, then_value, span, join);
             self.initialize(else_target, Vec::new(), local, else_value, span, join);
         } else {
+            self.initialization(current, statements.len(), local, span);
             statements.push(Statement::Let {
                 local,
                 initializer: value.clone(),
@@ -357,6 +403,83 @@ impl Builder {
         }
     }
     fn body(
+        &mut self,
+        current: BasicBlockId,
+        body: &[ValueStatement],
+        scope_span: Span,
+    ) -> Option<(BasicBlockId, Vec<Statement>)> {
+        let scope = self.cleanup.as_mut().map(|flow| {
+            let id = cleanup::ScopeId(flow.scopes.len());
+            flow.scopes.push(cleanup::Scope {
+                id,
+                span: scope_span,
+                parent: self.active_scopes.last().copied(),
+                owners: Vec::new(),
+            });
+            let span = scope_span;
+            flow.blocks[current.0].enter = Some((
+                id,
+                Origin {
+                    span,
+                    kind: OriginKind::ScopeEntry,
+                },
+            ));
+            self.active_scopes.push(id);
+            id
+        });
+        let result = self.body_inner(current, body);
+        if let Some(scope) = scope {
+            if let Some((tail, _)) = &result {
+                let flow = self.cleanup.as_mut().unwrap();
+                flow.blocks[tail.0].exit.push(scope);
+                flow.blocks[tail.0].exit_origin = Some(Origin {
+                    span: body.last().map(value_statement_span).unwrap_or(scope_span),
+                    kind: OriginKind::ScopeExit,
+                });
+            }
+            assert_eq!(self.active_scopes.pop(), Some(scope));
+        }
+        result
+    }
+    fn exiting(&mut self, current: BasicBlockId, depth: usize, span: Span) {
+        if let Some(flow) = &mut self.cleanup {
+            flow.blocks[current.0].exit =
+                self.active_scopes[depth..].iter().rev().copied().collect();
+            flow.blocks[current.0].exit_origin = Some(Origin {
+                span,
+                kind: OriginKind::ScopeExit,
+            });
+        }
+    }
+    fn initialization(
+        &mut self,
+        current: BasicBlockId,
+        statement: usize,
+        local: LocalId,
+        span: Span,
+    ) {
+        if !self.resource_locals.contains(&local) {
+            return;
+        }
+        if let Some(flow) = &mut self.cleanup {
+            let scope = *self.active_scopes.last().expect("lexical initialization");
+            if !flow.scopes[scope.0].owners.contains(&local) {
+                flow.scopes[scope.0].owners.push(local);
+            }
+            flow.blocks[current.0]
+                .initialize
+                .push(cleanup::Initialization {
+                    statement,
+                    local,
+                    scope,
+                    origin: Origin {
+                        span,
+                        kind: OriginKind::OwnerInitialization,
+                    },
+                });
+        }
+    }
+    fn body_inner(
         &mut self,
         mut current: BasicBlockId,
         body: &[ValueStatement],
@@ -383,6 +506,7 @@ impl Builder {
             };
             match statement {
                 ValueStatement::ReturnNoValue { .. } => {
+                    self.exiting(current, 0, span);
                     self.finish(current, statements, Terminator::ReturnNoValue, origin);
                     return None;
                 }
@@ -398,12 +522,16 @@ impl Builder {
                     });
                 }
                 ValueStatement::Break { .. } => {
-                    let target = self.loop_targets.last().expect("checked innermost loop").1;
+                    let (_, target, depth) =
+                        *self.loop_targets.last().expect("checked innermost loop");
+                    self.exiting(current, depth, span);
                     self.finish(current, statements, Terminator::Goto { target }, origin);
                     return None;
                 }
                 ValueStatement::Continue { .. } => {
-                    let target = self.loop_targets.last().expect("checked innermost loop").0;
+                    let (target, _, depth) =
+                        *self.loop_targets.last().expect("checked innermost loop");
+                    self.exiting(current, depth, span);
                     self.finish(current, statements, Terminator::Goto { target }, origin);
                     return None;
                 }
@@ -424,6 +552,7 @@ impl Builder {
                         );
                         current = join;
                     } else {
+                        self.initialization(current, statements.len(), *local, *span);
                         statements.push(Statement::Let {
                             local: *local,
                             initializer: initializer.clone(),
@@ -511,11 +640,15 @@ impl Builder {
                         },
                         origin,
                     );
-                    self.loop_targets.push((header, exit));
-                    if let Some((end, body)) = self.body(body_target, body) {
+                    self.loop_targets
+                        .push((header, exit, self.active_scopes.len()));
+                    if let Some((end, body)) = self.body(body_target, body, span) {
                         self.finish(end, body, Terminator::Goto { target: header }, origin);
                     }
-                    assert_eq!(self.loop_targets.pop(), Some((header, exit)));
+                    assert_eq!(
+                        self.loop_targets.pop().map(|(h, e, _)| (h, e)),
+                        Some((header, exit))
+                    );
                     current = exit;
                 }
                 ValueStatement::If {
@@ -549,7 +682,7 @@ impl Builder {
                         },
                         origin,
                     );
-                    if let Some((end, body)) = self.body(then_target, then_body) {
+                    if let Some((end, body)) = self.body(then_target, then_body, span) {
                         self.finish(
                             end,
                             body,
@@ -560,7 +693,7 @@ impl Builder {
                         );
                     }
                     if let Some(target) = else_target {
-                        if let Some((end, body)) = self.body(target, else_body) {
+                        if let Some((end, body)) = self.body(target, else_body, span) {
                             self.finish(
                                 end,
                                 body,
@@ -575,6 +708,7 @@ impl Builder {
                     current = join;
                 }
                 ValueStatement::Return { value, .. } => {
+                    self.exiting(current, 0, span);
                     self.finish(
                         current,
                         statements,
@@ -972,6 +1106,7 @@ mod tests {
                 },
             ] {
                 let m = MirFunction {
+                    cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
                     blocks: vec![BasicBlock {
@@ -998,6 +1133,7 @@ mod tests {
                 },
             ] {
                 let m = MirFunction {
+                    cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
                     blocks: vec![
@@ -1042,6 +1178,7 @@ mod tests {
                 hir::ExprKind::FieldAccess(access)
             };
             let m = MirFunction {
+                cleanup: None,
                 function: f.id,
                 entry: BasicBlockId(0),
                 blocks: vec![BasicBlock {
@@ -1114,6 +1251,7 @@ mod multiple_field_tests {
                 ];
                 for statement in statements {
                     let m = MirFunction {
+                        cleanup: None,
                         function: f.id,
                         entry: BasicBlockId(0),
                         blocks: vec![BasicBlock {
@@ -1127,6 +1265,7 @@ mod multiple_field_tests {
                     );
                 }
                 let m = MirFunction {
+                    cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
                     blocks: vec![BasicBlock {
@@ -1140,6 +1279,7 @@ mod multiple_field_tests {
                 );
                 e.ty = hir::ExprType::Bool;
                 let m = MirFunction {
+                    cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
                     blocks: vec![
@@ -1189,6 +1329,7 @@ mod multiple_field_tests {
                     hir::ExprKind::FieldAccess(access)
                 };
                 let m = MirFunction {
+                    cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
                     blocks: vec![BasicBlock {
@@ -1231,6 +1372,7 @@ mod multiple_field_tests {
                     arguments[0].ty = hir::ExprType::Bool;
                 }
                 let m = MirFunction {
+                    cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
                     blocks: vec![BasicBlock {
@@ -1255,6 +1397,7 @@ mod multiple_field_tests {
             span: value.span,
         };
         let m = MirFunction {
+            cleanup: None,
             function: f.id,
             entry: BasicBlockId(0),
             blocks: vec![BasicBlock {
@@ -1343,6 +1486,7 @@ mod multiple_field_tests {
                     },
                 ] {
                     let m = MirFunction {
+                        cleanup: None,
                         function: f.id,
                         entry: BasicBlockId(0),
                         blocks: vec![BasicBlock {
@@ -1353,6 +1497,7 @@ mod multiple_field_tests {
                     assert_eq!(m.validate(), Err(error));
                 }
                 let m = MirFunction {
+                    cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
                     blocks: vec![BasicBlock {
@@ -1363,6 +1508,7 @@ mod multiple_field_tests {
                 assert_eq!(m.validate(), Err(error));
                 if e.ty == hir::ExprType::Bool {
                     let m = MirFunction {
+                        cleanup: None,
                         function: f.id,
                         entry: BasicBlockId(0),
                         blocks: vec![
@@ -1506,7 +1652,10 @@ mod multiple_field_tests {
         );
         assert_eq!(record, p.records()[0].id);
         assert_eq!(field, p.records()[0].fields[0]);
-        assert_eq!(value.ty, hir::ExprType::Range(p.field(field).ty));
+        assert_eq!(
+            value.ty,
+            hir::ExprType::Range(p.field(field).range_type().unwrap())
+        );
         assert_eq!(m, lower(&p));
     }
     #[test]
@@ -1703,5 +1852,11 @@ impl MirFunction {
 impl BasicBlock {
     pub(crate) fn test_terminator_mut(&mut self) -> &mut Terminator {
         &mut self.terminator
+    }
+}
+#[cfg(test)]
+impl BasicBlock {
+    pub(crate) fn test_statements_mut(&mut self) -> &mut Vec<Statement> {
+        &mut self.statements
     }
 }

@@ -6,7 +6,7 @@ use std::{
 
 #[cfg(test)]
 thread_local! {
-    static FAIL_ALLOCATION: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    pub(super) static FAIL_ALLOCATION: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Inject failure at the actual renderer growth boundary, isolated to this test
@@ -118,7 +118,7 @@ pub(super) fn result(
                 let (_, v) = found
                     .next()
                     .ok_or_else(|| ExecutionError::integrity("render field missing"))?;
-                if found.next().is_some() || v.ty != f.ty {
+                if found.next().is_some() || Some(v.ty) != f.range_type() {
                     return Err(ExecutionError::integrity("render field nominal mismatch"));
                 }
                 if i != 0 {
@@ -167,6 +167,12 @@ pub(super) fn error(
         }
         ErrorKind::Integrity(n) => {
             let _ = write!(out, "execution integrity failure: {n}");
+        }
+        ErrorKind::SyntheticConstructionFailure => {
+            let _ = write!(
+                out,
+                "private synthetic construction stopped after pending cleanup"
+            );
         }
         ErrorKind::Host(n) => {
             let _ = write!(out, "detected host/tool failure: {n}");
