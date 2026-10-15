@@ -247,3 +247,30 @@ verify https://github.com/gregkrsak/klyxr/actions/runs/38790992870.
 Two additional controls independently verify prepared-entry restoration after a
 successful unrelated RHS transfer followed by final-loan rejection, and rejection
 of a Copy assignment retagged as Move replacement. No later runtime layer added.
+
+Milestone 5 completed at `c206d6d82ebad46afa8a8d4212f0d08b8e2d3506`, tree
+`99edfab9e3079eb2448dac53efac31dfa282baa0`. All four passed:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38791182338),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38791182324),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38791182249),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38791182273).
+Both complete profiles reconciled 1,667 predecessor identities (the four explicit
+renames and separately documented outcome correction) plus 38 new identities:
+1,705 passing tests in each profile, including the authority doctest and both
+1,800-case affine executions. No failed, ignored or filtered tests.
+
+## Final documentation and public CLI gate
+
+Canonical context, language decisions, architecture and open questions describe
+the frozen extension without assigning a new KD number. Historical sections remain
+historical and their narrow supersession is explicit. The compiler README and
+bounded-execution contract document eligibility, phase fuel, simultaneous storage,
+terminal states and non-goals. The context bundle is regenerated reproducibly.
+The public example produces Reading.value = Percent(59) after source transfer and
+last-use RHS borrowing. A CLI regression checks that exact result and preserves
+`check`/`verify`'s no-ordinary-contract-proof reporting.
+
+Local non-Rust checks: diff whitespace validation, README asset verification,
+scaffold verification and context generation passed. All compilation, formatting,
+Clippy, tests, Rustdoc, doctest and CLI execution evidence is from GitHub Actions.
+Final completed-branch and independent PR gates remain required before handoff.

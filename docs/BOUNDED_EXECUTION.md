@@ -205,3 +205,45 @@ failure/reporting and unique-leaf conservation. GitHub debug and release profile
 also reconcile the 1,581 predecessor identities and each run the 1,800-case affine
 cross-check. See `docs/engineering/KED-027-IMPLEMENTATION-LEDGER.md` for executed
 evidence; no local executable conformance is claimed during K27-I01.
+
+## KED-028 replacement protocol and accounting
+
+Eligible direct mutable Move locals execute an explicit compound ReplaceOwned MIR
+operation. Only the complete RHS result gains a new resource boundary; call arguments
+still receive their existing independent temporary checks. The target remains
+available during RHS execution, including lawful Copy-field mutations through an
+exclusive borrow. Traps preserve those prefix effects without displaced cleanup
+or replacement publication.
+
+Prepared context storage is reserved before RHS work. The complete result transfers
+infallibly from an existing accounted holder into separate replacement protection.
+History capacity is reserved before detachment. The old owner then enters an explicit
+displaced state and existing canonical cleanup cursors. Old-generation discharge
+requires completed cleanup; an attempt or vacant slot is insufficient. Only after
+successful discharge do slot installation, current-generation association and reserved
+history append occur together without allocation or a failure boundary between them.
+Registration uses the target's declaring activation, including replacement inside
+an inner branch. Protected returns and pending construction remain separate holders.
+
+In addition to ordinary statement/expression/call costs, replacement charges one
+unit at prepared entry, one before result protection, and one at each protected,
+prepared, detached and discharged phase boundary. Existing cleanup work charges
+remain; each skipped discharged history entry charges one unit at scope exit.
+Copy-assignment accounting is unchanged. Generation histories and slot associations,
+context stacks, protected/displaced payload backing storage, existing cleanup cursors,
+value/task capacity and events all count toward checked prospective storage. Checked
+monotonic identities prevent generation or activation reuse. Repeated replacement
+history is retained until activation exit; it is bounded by storage and charged work.
+
+Configured stops and detected Host failures retain all unfinished responsibilities
+and completed release prefixes, refuse resume and never fabricate rollback or
+successful continuation. Publication/registration is indivisible; every actual
+fallible cut is tested through fuel/storage exhaustion and private Host probes.
+The probes are test facilities, not production callbacks or recoverable source errors.
+No cleanup guarantee is added for KD-042's excluded abrupt outcomes.
+
+The exact 1,667-test predecessor inventory, four designated identity migrations,
+one separately justified iteration-local outcome correction and every new identity
+are reconciled in each complete debug/release profile. Both profile executions of
+the 1,800-case affine check and the authority compile-fail doctest remain required.
+See [the KED-028 ledger](engineering/KED-028-IMPLEMENTATION-LEDGER.md).

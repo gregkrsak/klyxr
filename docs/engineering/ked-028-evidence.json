@@ -32,6 +32,7 @@
     "lib.rs::execution::machine::cleanup::replacement_authority_tests::replacement_result_boundary_does_not_admit_argument_temporary",
     "lib.rs::ownership::tests::replacement_failure_restores_complete_prepared_state",
     "lib.rs::ownership::tests::replacement_final_loan_failure_rolls_back_successful_rhs_transfer",
+    "tests/execution_cli.rs::owned_replacement_example_runs_without_claiming_contract_proof",
     "tests/owned_replacement.rs::branches_preserve_target_and_conservative_source_joins",
     "tests/owned_replacement.rs::exact_nominal_type_and_reference_boundaries",
     "tests/owned_replacement.rs::final_shared_and_exclusive_borrow_uses",

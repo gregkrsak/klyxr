@@ -709,3 +709,22 @@ unchanged. Implementation evidence and the exact predecessor inventory are in
 `docs/engineering/KED-027-IMPLEMENTATION-LEDGER.md`; during K27-I01 only GitHub
 Actions supplies authoritative executable evidence. Acceptance remains Greg's
 decision and merge remains a human action.
+
+## KED-028 current replacement extension
+
+Frozen Issue #64 Draft 1 adds deterministic whole-owner replacement through existing
+assignment syntax for available mutable owned Move locals. Exact record identity,
+prepared checker rollback, target continuity, final loan expiry and relative loop
+boundaries are authoritative. RHS results are protected before displaced cleanup;
+new generations register in the target's owning activation. Old generations never
+clean a newer occupant. Public records demonstrate inert replacement; private
+synthetic resources demonstrate fixed canonical cleanup and identity conservation.
+
+Earlier sections retain their historical restrictions; this narrowly refines their
+direct-local replacement exclusion. References, projections, self-consuming
+transforms, unavailable slots, loop-carried Move mutation, arbitrary temporaries,
+user destructors and production resource APIs remain excluded. No new KD number
+is assigned. See LANGUAGE_DECISIONS.md and the KED-028 implementation ledger for
+scope and GitHub-executed evidence. Local Rust validation was unavailable because
+of confirmed Work-runtime corruption. Acceptance remains Greg's decision and only
+a human may merge.
