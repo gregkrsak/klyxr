@@ -133,3 +133,25 @@ Rustfmt differences. Applied those CI-produced formatting changes as text.
 Other runs: tests https://github.com/gregkrsak/klyxr/actions/runs/38789306768,
 docs https://github.com/gregkrsak/klyxr/actions/runs/38789306792,
 verify https://github.com/gregkrsak/klyxr/actions/runs/38789306763.
+
+Milestone 2 formatting commit `e9a1fe23290a129693796295f8acdd736683f404`, tree
+`2d5837215e0e60f4d62b18c7649c32cb07a0fc14`: all four passed:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38789460451),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38789460403),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38789460449),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38789460499).
+The complete debug/release jobs passed exact inventory reconciliation.
+
+## Milestone 3 — generation foundation
+
+Dynamic activation histories now identify each initialization generation, with a
+separate frame/local-to-current-generation association. Histories own no payload.
+Before cleanup, the live entry must match the slot association; a stale entry
+cannot release the current occupant. Global checked generation sequences and
+activation identities distinguish repeated dynamic instances of one LocalId.
+Association/history capacity growth is reserved together and counted in storage.
+Existing initialization and cleanup fuel charges remain unchanged.
+
+New controls inspect repeated loop activations and inject a stale generation
+while verifying exact resource-identity conservation. Replacement execution remains
+disabled until this foundation passes all four workflows.

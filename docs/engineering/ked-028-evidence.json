@@ -6,6 +6,8 @@
     "lib.rs::execution::machine::cleanup::bounds_and_artifact_tests::ordinary_noncopy_replacement_remains_rejected": "lib.rs::execution::machine::cleanup::bounds_and_artifact_tests::ordinary_inert_replacement_is_accepted"
   },
   "additions": [
+    "lib.rs::execution::machine::cleanup::generation_tests::repeated_local_id_has_distinct_activation_and_generation",
+    "lib.rs::execution::machine::cleanup::generation_tests::stale_history_cannot_release_a_live_slot",
     "lib.rs::execution::machine::cleanup::replacement_authority_tests::canonical_replacement_uses_declaring_scope_and_fixed_plan",
     "lib.rs::execution::machine::cleanup::replacement_authority_tests::independent_replacement_authority_mutations_reject",
     "lib.rs::execution::machine::cleanup::replacement_authority_tests::replacement_result_boundary_does_not_admit_argument_temporary",
