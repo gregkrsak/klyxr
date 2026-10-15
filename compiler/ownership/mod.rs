@@ -9,8 +9,7 @@ use crate::{
     diagnostics::Diagnostic,
     hir::{
         BorrowKind, ExprKind, ExprType, FieldId, FunctionId, LocalId, ParameterId, ParameterType,
-        Place, Program, RecordId, ReferentType, TypedExpr, ValueFunction, ValueStatement,
-        ValueType,
+        Place, Program, RecordId, ReferentType, TypedExpr, ValueFunction, ValueStatement, ValueType,
     },
     lexer::Span,
 };
@@ -538,6 +537,8 @@ struct Checker<'a> {
     // Scoped ONLY to an actual return operand, not Transfer::Return (which also
     // labels non-terminal conditions). Nested argument evaluation inherits it.
     terminal_return: bool,
+    // Operation-local continuity restriction, never a synthetic loan.
+    replacement_target: Option<Place>,
 }
 impl<'a> Checker<'a> {
     fn new(program: &'a Program, function: &'a ValueFunction) -> Self {
@@ -555,6 +556,7 @@ impl<'a> Checker<'a> {
             recurrent: Vec::new(),
             targets: Vec::new(),
             terminal_return: false,
+            replacement_target: None,
         };
         if checker.initializers.invalid.is_some() {
             return checker;
@@ -734,7 +736,8 @@ impl<'a> Checker<'a> {
             ValueStatement::Assign { local, value, span } => {
                 let place = Place::Local(*local);
                 if ownership_kind(self.program.local(*local).ty) != OwnershipKind::Copy {
-                    return Err(self.diagnostic(*span, format!("cannot replace non-Copy owned local `{}`", self.metadata(place).0), "replacement would displace an owned value; displacement/destruction semantics are not yet defined; KED-011 permits only Copy-safe direct local reassignment", None));
+                    self.replace_owned(*local, value, *span)?;
+                    return Ok(Flow::Fallthrough);
                 }
                 // The RHS sees the old value. Unlike write-through, direct
                 // assignment does not hold a target loan during RHS evaluation.
@@ -771,6 +774,45 @@ impl<'a> Checker<'a> {
         }
         self.expire();
         Ok(Flow::Fallthrough)
+    }
+    fn replace_owned(
+        &mut self,
+        local: LocalId,
+        value: &TypedExpr,
+        span: Span,
+    ) -> OwnershipResult {
+        let before = self.clone();
+        let result = (|| {
+            let place = Place::Local(local);
+            let declaration = self.program.local(local);
+            if !declaration.mutable
+                || !matches!(declaration.ty, ValueType::Record(_))
+                || value.ty != ExprType::from(declaration.ty)
+            {
+                return Err(self.provenance_error(span));
+            }
+            self.available(place, span)?;
+            if self
+                .loop_scope
+                .as_ref()
+                .is_some_and(|scope| scope.header_places.contains(&place))
+            {
+                return Err(self.diagnostic(span, format!("cannot replace pre-existing non-Copy local `{}` in while loop", declaration.name), "only an iteration-local owner may be replaced; a later return, break or continue does not relax the current loop header boundary", None));
+            }
+            self.replacement_target = Some(place);
+            self.expression(value, Transfer::Local(local))?;
+            self.expire();
+            self.available(place, span)?;
+            if let Some(loan) = self.conflict(place, Some(BorrowKind::Mutable)) {
+                return Err(self.diagnostic(span, format!("cannot replace `{}` while it is borrowed", declaration.name), "replacement displaces this whole owner and requires all shared and exclusive target loans to have ended", Some(loan.span)));
+            }
+            self.replacement_target = before.replacement_target;
+            Ok(())
+        })();
+        if result.is_err() {
+            *self = before;
+        }
+        result
     }
     // Snapshot the prepared operation entry, not the broader statement-list entry.
     // No target reservation: all lawful RHS effects commit only on success.
@@ -1840,6 +1882,9 @@ impl<'a> Checker<'a> {
         span: Span,
         transfer: Transfer,
     ) -> OwnershipResult<Option<LoanId>> {
+        if self.replacement_target == Some(place) {
+            return Err(self.diagnostic(span, format!("cannot consume replacement target `{}` inside its own RHS", self.metadata(place).0), "the displaced whole owner must remain available throughout RHS evaluation; self-consuming transformations require a future take/swap facility", None));
+        }
         if matches!(
             self.metadata(place).1,
             ValueType::SharedRef(_) | ValueType::MutableRef(_)
@@ -1986,7 +2031,7 @@ mod tests {
         types::check(resolve::resolve(&ast).unwrap()).unwrap()
     }
     #[test]
-    fn non_copy_assignment_rejects_before_consuming_either_owner() {
+    fn replacement_transfers_rhs_and_preserves_target_availability() {
         let source = "type Percent = range 0..100; record Ticket { value: Percent } fn f(first: Ticket, second: Ticket) -> Ticket { let mut current = first; current = second; return current; }";
         let program =
             types::check(resolve::resolve(&parse_source(source).unwrap()).unwrap()).unwrap();
@@ -1995,21 +2040,33 @@ mod tests {
         checker
             .statements(&function.body[..1], function.id)
             .unwrap();
-        let before = checker.states.clone();
-        let error = checker
+        checker
             .statements(&function.body[1..2], function.id)
-            .unwrap_err();
-        assert!(error.message.contains("cannot replace non-Copy"));
-        assert_eq!(before, checker.states);
+            .unwrap();
         assert_eq!(
             checker.states[&Place::Local(program.locals()[0].id)],
             State::Available
         );
-        assert_eq!(
+        assert!(matches!(
             checker.states[&Place::Parameter(function.parameters[1])],
-            State::Available
-        );
+            State::Moved { .. }
+        ));
+        assert_eq!(checker.replacement_target, None);
         assert!(checker.loans.is_empty());
+    }
+
+    #[test]
+    fn replacement_failure_restores_complete_prepared_state() {
+        let p = typed("fn receive(a: Ticket,v: &bool,b: Ticket) -> Ticket { return a; } fn f(first: Ticket,other: Ticket,flag: bool) -> Ticket { let mut target=first; target=receive(other,&flag,target); return target; }");
+        let f = p.functions().last().unwrap().as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..1], f.id).unwrap();
+        let ValueStatement::Assign { local, value, span } = &f.body[1] else {
+            panic!()
+        };
+        let before = c.clone();
+        assert!(c.replace_owned(*local, value, *span).is_err());
+        assert_atomic(&c, &before);
     }
 
     #[test]
@@ -2941,6 +2998,7 @@ mod tests {
         assert_eq!(actual.remaining, before.remaining);
         assert_eq!(actual.next_loan, before.next_loan);
         assert_eq!(actual.terminal_return, before.terminal_return);
+        assert_eq!(actual.replacement_target, before.replacement_target);
         assert_eq!(actual.recurrent, before.recurrent);
         assert_eq!(actual.targets.len(), before.targets.len());
         for (actual, before) in actual.targets.iter().zip(&before.targets) {

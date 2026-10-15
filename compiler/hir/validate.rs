@@ -141,8 +141,31 @@ impl Program {
                 ValueStatement::Let { initializer, .. } => {
                     self.record_expression(function, initializer, true, true)?
                 }
+                ValueStatement::Assign { local, value, span } => {
+                    self.record_expression(function, value, true, false)?;
+                    let invalid = || {
+                        Box::new(Diagnostic::semantic(
+                            *span,
+                            "assignment requires a canonical mutable owned local and exact RHS type",
+                            "Copy assignment and owned Move replacement preserve canonical target identity",
+                        ))
+                    };
+                    let target = self
+                        .locals
+                        .get(local.0)
+                        .filter(|l| l.id == *local && l.function == function && l.mutable)
+                        .ok_or_else(invalid)?;
+                    if !matches!(
+                        target.ty,
+                        ValueType::Bool | ValueType::Range(_) | ValueType::Record(_)
+                    )
+                        || value.ty != ExprType::from(target.ty)
+                    {
+                        return Err(invalid());
+                    }
+                    self.record_expression(function, value, true, false)?;
+                }
                 ValueStatement::Return { value, .. }
-                | ValueStatement::Assign { value, .. }
                 | ValueStatement::DerefAssign { value, .. } => {
                     self.record_expression(function, value, true, false)?
                 }

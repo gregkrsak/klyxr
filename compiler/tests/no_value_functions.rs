@@ -620,12 +620,8 @@ fn implicit_value_tail_still_rejected() {
     );
 }
 #[test]
-fn noncopy_replacement_still_rejected() {
-    bad(
-        "fn f(a: Ticket,b: Ticket) { let mut owned = a; owned = b; }",
-        "Ownership",
-        "cannot replace non-Copy",
-    );
+fn owned_replacement_before_implicit_completion() {
+    good("fn f(a: Ticket,b: Ticket) { let mut owned = a; owned = b; }");
 }
 #[test]
 fn bare_return_branch_scope() {

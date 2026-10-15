@@ -1677,12 +1677,9 @@ mod bounds_and_artifact_tests {
         }
     }
     #[test]
-    fn ordinary_noncopy_replacement_remains_rejected() {
+    fn ordinary_inert_replacement_is_accepted() {
         let source="type R=range 0..1;record Leaf{data:R}fn acquire()->Leaf{return Leaf{data:0};}fn demo(){let mut a=acquire();let b=acquire();a=b;}";
-        assert!(matches!(
-            crate::compile_source(source),
-            Err(crate::FrontendError::Ownership(_))
-        ));
+        crate::compile_source(source).unwrap();
     }
 }
 #[cfg(test)]

@@ -222,7 +222,7 @@ reject!(
 reject!(surviving_sibling_loan_is_not_lost, "fn f(flag: bool) -> bool { let mut value = false; let view = &value; if flag { return false; } else { let access = &mut value; } return *view; }", "Ownership", "shared borrow is active");
 reject!(constant_return_does_not_prune_bad_sibling, "fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { if true { return ticket; } else { let moved = ticket; } } return fresh(); }", "Ownership", "pre-existing non-Copy");
 reject!(constant_recurrence_not_pruned, "fn f(flag: bool) -> bool { let mut value = false; let view = &value; while false { if flag { value = true; return false; } return *view; } return value; }", "Ownership", "while it is borrowed");
-reject!(noncopy_replacement_still_forbidden, "fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { let mut owned = fresh(); owned = ticket; return owned; } return fresh(); }", "Ownership", "cannot replace");
+reject!(noncopy_replacement_still_forbidden, "fn f(flag: bool, ticket: Ticket) -> Ticket { while flag { let mut owned = fresh(); owned = ticket; return owned; } return fresh(); }", "Ownership", "pre-existing non-Copy");
 reject!(
     returned_branch_local_does_not_escape,
     "fn f(flag: bool) -> bool { if flag { let inside = false; return inside; } return inside; }",

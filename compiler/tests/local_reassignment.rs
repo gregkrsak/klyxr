@@ -93,11 +93,9 @@ reject!(
     "cannot reassign reference local `view`"
 );
 reject!(mutable_reference_local, "fn f(a: Percent, b: Percent) -> bool { let mut first = a; let mut second = b; let access = &mut first; access = &mut second; return true; }", "Type", "cannot reassign reference local `access`");
-reject!(
-    non_copy_record_replacement,
-    "fn f(a: Ticket, b: Ticket) -> Ticket { let mut current = a; current = b; return current; }",
-    "Ownership",
-    "displacement/destruction semantics"
+accept!(
+    owned_record_replacement,
+    "fn f(a: Ticket, b: Ticket) -> Ticket { let mut current = a; current = b; return current; }"
 );
 reject!(
     nominal_range_mismatch,

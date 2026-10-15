@@ -156,7 +156,7 @@ reject!(
 );
 accept!(fresh_non_copy_call_result, "fn fresh() -> Ticket { return fresh(); } fn f(flag: bool) -> bool { while flag { let made = fresh(); } return true; }");
 reject!(nested_branch_move, "fn consume(ticket: Ticket) -> bool { return true; } fn f(flag: bool, ticket: Ticket) -> bool { while flag { if flag { let done = consume(ticket); } } return true; }", "Ownership", "pre-existing non-Copy value");
-reject!(record_replacement_inside_loop, "fn f(flag: bool, first: Ticket, second: Ticket) -> Ticket { let mut current = first; while flag { current = second; } return current; }", "Ownership", "cannot replace non-Copy");
+reject!(record_replacement_inside_loop, "fn f(flag: bool, first: Ticket, second: Ticket) -> Ticket { let mut current = first; while flag { current = second; } return current; }", "Ownership", "cannot replace pre-existing non-Copy");
 accept!(reference_in_conditional_value_leaf, "fn f(flag: bool, view: &Percent, a: Percent) -> Percent { while flag { let chosen = if flag { a } else { *view }; } return a; }");
 accept!(
     constant_false_does_not_relax_loop_restrictions,

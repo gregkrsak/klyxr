@@ -1,0 +1,25 @@
+{
+  "migrations": {
+    "tests/local_reassignment.rs::non_copy_record_replacement": "tests/local_reassignment.rs::owned_record_replacement",
+    "tests/no_value_functions.rs::noncopy_replacement_still_rejected": "tests/no_value_functions.rs::owned_replacement_before_implicit_completion",
+    "lib.rs::ownership::tests::non_copy_assignment_rejects_before_consuming_either_owner": "lib.rs::ownership::tests::replacement_transfers_rhs_and_preserves_target_availability",
+    "lib.rs::execution::machine::cleanup::bounds_and_artifact_tests::ordinary_noncopy_replacement_remains_rejected": "lib.rs::execution::machine::cleanup::bounds_and_artifact_tests::ordinary_inert_replacement_is_accepted"
+  },
+  "additions": [
+    "lib.rs::ownership::tests::replacement_failure_restores_complete_prepared_state",
+    "tests/owned_replacement.rs::branches_preserve_target_and_conservative_source_joins",
+    "tests/owned_replacement.rs::exact_nominal_type_and_reference_boundaries",
+    "tests/owned_replacement.rs::final_shared_and_exclusive_borrow_uses",
+    "tests/owned_replacement.rs::header_source_is_not_authorized_by_following_return",
+    "tests/owned_replacement.rs::header_target_and_outer_iteration_target_reject",
+    "tests/owned_replacement.rs::iteration_local_repeated_replacement_and_exits",
+    "tests/owned_replacement.rs::later_exclusive_handle_blocks_commit",
+    "tests/owned_replacement.rs::later_shared_handle_blocks_commit",
+    "tests/owned_replacement.rs::moved_and_conditionally_unavailable_targets_reject",
+    "tests/owned_replacement.rs::repeated_and_distinct_source_replacement",
+    "tests/owned_replacement.rs::target_consumption_rejects_at_every_rhs_depth"
+  ],
+  "outcome_corrections": {
+    "tests/iteration_local_moves.rs::iteration_local_replacement": "Preserve identity; reject-to-accept because frozen section 12 explicitly permits iteration-local replacement."
+  }
+}
