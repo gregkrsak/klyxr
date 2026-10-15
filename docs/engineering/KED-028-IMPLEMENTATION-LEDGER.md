@@ -114,3 +114,14 @@ remain rejected. No second ownership engine is introduced.
 The executor explicitly refuses ReplaceOwned pending the next validated runtime
 layer. This intermediate milestone does not claim executable replacement support.
 Generation machinery and runtime evidence follow only after its four CI gates.
+
+Milestone 2 first commit `230e82a2c2f5dee8d7ee1c62c0546ad6422ba2f3`, tree
+`572aeb3436fde0b89dc8d8a3c54d64be809a0921`: build
+https://github.com/gregkrsak/klyxr/actions/runs/38789163988 and tests
+https://github.com/gregkrsak/klyxr/actions/runs/38789163790 failed compilation of
+an existing exhaustive MIR inspection in `tests/conditionals.rs`. The new variant
+requires an explicit arm. The repair rejects ReplaceOwned in that Copy-only
+fixture, preserving and strengthening its existing assertion. Docs
+https://github.com/gregkrsak/klyxr/actions/runs/38789163922 and verify
+https://github.com/gregkrsak/klyxr/actions/runs/38789163867 passed.
+No later layer started.

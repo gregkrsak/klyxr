@@ -349,6 +349,7 @@ fn nested_and_sequential_mir_is_deterministic_acyclic_and_has_only_one_return() 
     for (_, b) in f.blocks() {
         for s in b.statements() {
             match s {
+                mir::Statement::ReplaceOwned { .. } => panic!("Copy-only fixture has no replacement"),
                 mir::Statement::Let { .. }
                 | mir::Statement::DerefAssign { .. }
                 | mir::Statement::CopyFieldAssign { .. }
