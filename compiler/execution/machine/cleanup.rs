@@ -80,7 +80,11 @@ impl State {
         }
         for f in &self.frames {
             n = n.checked_add(f.scopes.capacity().checked_mul(size_of::<Activation>())?)?;
-            n = n.checked_add(f.generations.capacity().checked_mul(size_of::<(hir::LocalId, u64)>())?)?;
+            n = n.checked_add(
+                f.generations
+                    .capacity()
+                    .checked_mul(size_of::<(hir::LocalId, u64)>())?,
+            )?;
             for a in &f.scopes {
                 n = n.checked_add(
                     a.initialized
@@ -237,7 +241,11 @@ impl<'a> Machine<'a> {
         if self.resources.as_ref().unwrap().frames[r]
             .scopes
             .iter()
-            .any(|s| s.initialized.iter().any(|g| at.place == Place::Local(g.local)))
+            .any(|s| {
+                s.initialized
+                    .iter()
+                    .any(|g| at.place == Place::Local(g.local))
+            })
         {
             return Err(self.integrity("owner slot reused before activation cleanup"));
         }
@@ -287,11 +295,19 @@ impl<'a> Machine<'a> {
         let map_grow = !association.iter().any(|(local, _)| *local == init.local)
             && association.len() == association.capacity();
         let identity = self.resources.as_ref().unwrap().next_generation;
-        let next = identity.checked_add(1).ok_or_else(|| self.integrity("generation identity exhausted"))?;
+        let next = identity
+            .checked_add(1)
+            .ok_or_else(|| self.integrity("generation identity exhausted"))?;
         self.origin = init.origin;
         self.charge()?;
-        self.reserve((if grow { size_of::<Generation>() } else { 0 })
-            + if map_grow { size_of::<(hir::LocalId, u64)>() } else { 0 })?;
+        self.reserve(
+            (if grow { size_of::<Generation>() } else { 0 })
+                + if map_grow {
+                    size_of::<(hir::LocalId, u64)>()
+                } else {
+                    0
+                },
+        )?;
         if grow {
             self.resources.as_mut().unwrap().frames[r]
                 .scopes
@@ -302,13 +318,18 @@ impl<'a> Machine<'a> {
                 .map_err(|_| self.failure(ErrorKind::Host("initialization history allocation")))?;
         }
         if map_grow {
-            self.resources.as_mut().unwrap().frames[r].generations.try_reserve_exact(1)
+            self.resources.as_mut().unwrap().frames[r]
+                .generations
+                .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("generation association allocation")))?;
         }
         let s = self.resources.as_mut().unwrap();
         s.next_generation = next;
         let associations = &mut s.frames[r].generations;
-        if let Some((_, current)) = associations.iter_mut().find(|(local, _)| *local == init.local) {
+        if let Some((_, current)) = associations
+            .iter_mut()
+            .find(|(local, _)| *local == init.local)
+        {
             *current = identity;
         } else {
             associations.push((init.local, identity));
@@ -318,7 +339,11 @@ impl<'a> Machine<'a> {
             .last_mut()
             .unwrap()
             .initialized
-            .push(Generation { local: init.local, identity, discharged: false });
+            .push(Generation {
+                local: init.local,
+                identity,
+                discharged: false,
+            });
         Ok(())
     }
     fn release_leaf(&mut self, value: Value) -> Result<(), ExecutionError> {
@@ -519,8 +544,11 @@ impl<'a> Machine<'a> {
                     break;
                 };
                 if !generation.discharged {
-                    let current = self.resources.as_ref().unwrap().frames[r].generations.iter()
-                        .find(|(local, _)| *local == generation.local).map(|(_, identity)| *identity);
+                    let current = self.resources.as_ref().unwrap().frames[r]
+                        .generations
+                        .iter()
+                        .find(|(local, _)| *local == generation.local)
+                        .map(|(_, identity)| *identity);
                     if current != Some(generation.identity) {
                         return Err(self.integrity("stale generation cannot clean current slot"));
                     }
@@ -2488,7 +2516,10 @@ mod generation_tests {
                 for f in &s.frames {
                     for a in &f.scopes {
                         for g in &a.initialized {
-                            assert_eq!(f.generations.iter().find(|(l, _)| *l == g.local).unwrap().1, g.identity);
+                            assert_eq!(
+                                f.generations.iter().find(|(l, _)| *l == g.local).unwrap().1,
+                                g.identity
+                            );
                             identities.insert((a.identity, g.identity));
                         }
                     }
@@ -2507,11 +2538,22 @@ mod generation_tests {
             let task = m.tasks.pop().unwrap();
             let commit = matches!(task.action, Action::Commit(_));
             m.step(task).unwrap();
-            if commit { break; }
+            if commit {
+                break;
+            }
         }
         m.resources.as_mut().unwrap().frames[0].scopes[0].initialized[0].identity = u64::MAX;
-        assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Integrity("stale generation cannot clean current slot")));
-        assert!(!m.resources.as_ref().unwrap().events.iter().any(|e| matches!(e, Event::Complete(_))));
+        assert!(matches!(
+            m.resume().unwrap_err().kind,
+            ErrorKind::Integrity("stale generation cannot clean current slot")
+        ));
+        assert!(!m
+            .resources
+            .as_ref()
+            .unwrap()
+            .events
+            .iter()
+            .any(|e| matches!(e, Event::Complete(_))));
         conservation_tests::conserved(&m);
     }
 }

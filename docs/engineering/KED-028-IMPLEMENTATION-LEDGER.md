@@ -155,3 +155,11 @@ Existing initialization and cleanup fuel charges remain unchanged.
 New controls inspect repeated loop activations and inject a stale generation
 while verifying exact resource-identity conservation. Replacement execution remains
 disabled until this foundation passes all four workflows.
+
+Generation foundation commit `8070752722794f315a17ceb7adc0fa8f52bebe1c`, tree
+`3163553a4ab322b631485f1825eba48fa191e987`: build
+https://github.com/gregkrsak/klyxr/actions/runs/38789765099 compiled successfully
+and reported Rustfmt differences, applied from CI output. Other milestone runs:
+tests https://github.com/gregkrsak/klyxr/actions/runs/38789765184,
+docs https://github.com/gregkrsak/klyxr/actions/runs/38789765162,
+verify https://github.com/gregkrsak/klyxr/actions/runs/38789765094.
