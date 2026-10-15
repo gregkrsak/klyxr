@@ -578,7 +578,8 @@ impl<'a> Machine<'a> {
                     self.eval(id, value, 1)?;
                 }
                 Statement::ReplaceOwned { .. } => {
-                    return Err(self.integrity("replacement execution awaits validated generation machinery"));
+                    return Err(self
+                        .integrity("replacement execution awaits validated generation machinery"));
                 }
                 Statement::CopyFieldAssign {
                     owner,

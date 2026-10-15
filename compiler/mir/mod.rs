@@ -184,14 +184,22 @@ impl MirFunction {
                     }
                     Statement::Let { initializer, .. } => expression_valid(initializer)?,
                     Statement::ReplaceOwned {
-                        local, record, owning_scope, cleanup_plan, value, origin, span,
+                        local,
+                        record,
+                        owning_scope,
+                        cleanup_plan,
+                        value,
+                        origin,
+                        span,
                     } => {
                         if value.ty != hir::ExprType::Record(*record)
                             || cleanup_plan.is_some_and(|id| id != *record)
                             || origin.kind != OriginKind::Replacement
                             || origin.span != *span
                             || !self.cleanup.as_ref().is_some_and(|flow| {
-                                flow.scopes.get(*owning_scope).is_some_and(|s| s.owners.contains(local))
+                                flow.scopes
+                                    .get(*owning_scope)
+                                    .is_some_and(|s| s.owners.contains(local))
                             })
                         {
                             return Err("malformed owned replacement authority");
@@ -281,7 +289,11 @@ fn lower_internal(
     fn replacements(body: &[ValueStatement]) -> bool {
         body.iter().any(|s| match s {
             ValueStatement::Assign { value, .. } => matches!(value.ty, hir::ExprType::Record(_)),
-            ValueStatement::If { then_body, else_body, .. } => replacements(then_body) || replacements(else_body),
+            ValueStatement::If {
+                then_body,
+                else_body,
+                ..
+            } => replacements(then_body) || replacements(else_body),
             ValueStatement::While { body, .. } => replacements(body),
             _ => false,
         })
@@ -640,15 +652,26 @@ impl Builder {
                 }
                 ValueStatement::Assign { local, value, span } => {
                     if let hir::ExprType::Record(record) = value.ty {
-                        let owning_scope = self.cleanup.as_ref().unwrap().scopes.iter()
-                            .find(|s| s.owners.contains(local)).expect("declared replacement target").id.0;
+                        let owning_scope = self
+                            .cleanup
+                            .as_ref()
+                            .unwrap()
+                            .scopes
+                            .iter()
+                            .find(|s| s.owners.contains(local))
+                            .expect("declared replacement target")
+                            .id
+                            .0;
                         statements.push(Statement::ReplaceOwned {
                             local: *local,
                             record,
                             owning_scope,
                             cleanup_plan: self.resource_locals.contains(local).then_some(record),
                             value: value.clone(),
-                            origin: Origin { span: *span, kind: OriginKind::Replacement },
+                            origin: Origin {
+                                span: *span,
+                                kind: OriginKind::Replacement,
+                            },
                             span: *span,
                         });
                     } else {

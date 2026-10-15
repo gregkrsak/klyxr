@@ -2333,7 +2333,9 @@ mod replacement_authority_tests {
     use super::*;
     fn artifact() -> CheckedExecutable {
         super::super::super::prepare_synthetic(
-            hir::resources::fixture_with("fn demo(){let mut a=acquire();if true{let inner=acquire();a=acquire();}}"),
+            hir::resources::fixture_with(
+                "fn demo(){let mut a=acquire();if true{let inner=acquire();a=acquire();}}",
+            ),
             AdmissionLimits::default(),
         )
         .unwrap()
@@ -2343,12 +2345,27 @@ mod replacement_authority_tests {
         let e = artifact();
         e.validate().unwrap();
         let f = e.mir.functions().last().unwrap();
-        let operations: Vec<_> = f.blocks().flat_map(|(_, b)| b.statements()).filter_map(|s| {
-            if let Statement::ReplaceOwned { owning_scope, cleanup_plan, origin, .. } = s {
-                Some((*owning_scope, *cleanup_plan, origin.kind))
-            } else { None }
-        }).collect();
-        assert_eq!(operations, vec![(0, Some(hir::RecordId(0)), OriginKind::Replacement)]);
+        let operations: Vec<_> = f
+            .blocks()
+            .flat_map(|(_, b)| b.statements())
+            .filter_map(|s| {
+                if let Statement::ReplaceOwned {
+                    owning_scope,
+                    cleanup_plan,
+                    origin,
+                    ..
+                } = s
+                {
+                    Some((*owning_scope, *cleanup_plan, origin.kind))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(
+            operations,
+            vec![(0, Some(hir::RecordId(0)), OriginKind::Replacement)]
+        );
     }
     #[test]
     fn independent_replacement_authority_mutations_reject() {
@@ -2356,16 +2373,39 @@ mod replacement_authority_tests {
             let mut e = artifact();
             e.validate().unwrap();
             let f = e.mir.test_functions_mut().last_mut().unwrap();
-            let b = f.test_blocks_mut().iter_mut().find(|b| b.statements().iter().any(|s| matches!(s, Statement::ReplaceOwned { .. }))).unwrap();
+            let b = f
+                .test_blocks_mut()
+                .iter_mut()
+                .find(|b| {
+                    b.statements()
+                        .iter()
+                        .any(|s| matches!(s, Statement::ReplaceOwned { .. }))
+                })
+                .unwrap();
             let operations = b.test_statements_mut();
-            let index = operations.iter().position(|s| matches!(s, Statement::ReplaceOwned { .. })).unwrap();
+            let index = operations
+                .iter()
+                .position(|s| matches!(s, Statement::ReplaceOwned { .. }))
+                .unwrap();
             let copy = operations[index].clone();
             match fault {
-                0 => { operations.remove(index); }
+                0 => {
+                    operations.remove(index);
+                }
                 1 => operations.insert(index, copy),
                 2 => operations.swap(0, index),
                 _ => {
-                    let Statement::ReplaceOwned { local, record, owning_scope, cleanup_plan, origin, .. } = &mut operations[index] else { panic!() };
+                    let Statement::ReplaceOwned {
+                        local,
+                        record,
+                        owning_scope,
+                        cleanup_plan,
+                        origin,
+                        ..
+                    } = &mut operations[index]
+                    else {
+                        panic!()
+                    };
                     match fault {
                         3 => *local = hir::LocalId(999),
                         4 => *record = hir::RecordId(1),
@@ -2382,7 +2422,9 @@ mod replacement_authority_tests {
     }
     #[test]
     fn replacement_result_boundary_does_not_admit_argument_temporary() {
-        let p = hir::resources::fixture_with("fn pass(x:Leaf)->Leaf{return x;}fn demo(){let mut a=acquire();a=pass(acquire());}");
+        let p = hir::resources::fixture_with(
+            "fn pass(x:Leaf)->Leaf{return x;}fn demo(){let mut a=acquire();a=pass(acquire());}",
+        );
         assert!(super::super::super::prepare_synthetic(p, AdmissionLimits::default()).is_err());
         artifact().validate().unwrap();
     }

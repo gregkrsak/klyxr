@@ -125,3 +125,11 @@ fixture, preserving and strengthening its existing assertion. Docs
 https://github.com/gregkrsak/klyxr/actions/runs/38789163922 and verify
 https://github.com/gregkrsak/klyxr/actions/runs/38789163867 passed.
 No later layer started.
+
+MIR exhaustive-match repair: `cf2ecd9173edb0a1c9f2aac3606515cff65208e7`, tree
+`96e6c53c6dd284f0a011401258670a1400875ec9`. Compilation and debug tests passed;
+build https://github.com/gregkrsak/klyxr/actions/runs/38789306742 reported only
+Rustfmt differences. Applied those CI-produced formatting changes as text.
+Other runs: tests https://github.com/gregkrsak/klyxr/actions/runs/38789306768,
+docs https://github.com/gregkrsak/klyxr/actions/runs/38789306792,
+verify https://github.com/gregkrsak/klyxr/actions/runs/38789306763.
