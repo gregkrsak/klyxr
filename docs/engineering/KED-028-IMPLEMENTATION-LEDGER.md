@@ -203,3 +203,36 @@ only formatting differences, applied from GitHub Rustfmt output. Other runs:
 tests https://github.com/gregkrsak/klyxr/actions/runs/38790373495,
 docs https://github.com/gregkrsak/klyxr/actions/runs/38790373820,
 verify https://github.com/gregkrsak/klyxr/actions/runs/38790373805.
+
+Vertical-slice formatting commit `b6db8ea45d49e60f00958ec22a676b3c824b48b5`, tree
+`ebe0788c44996ecd14ec5b1e6d0f447b3363256c`: all four passed:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38790503395),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38790503411),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38790503299),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38790503367).
+Both complete debug/release profiles and identity reconciliation passed.
+
+## Milestone 5 — aggregate, recursive and terminal conformance
+
+Private tests exercise reversed written aggregate construction versus canonical
+reverse-field cleanup, nested aggregates, recursive RHS replacement contexts,
+protected returns, branch owning-activation ordering, later locals, covered
+structured exits, repeated dynamic iterations, later moves and explicit release.
+The existing private aggregate fixture builder now transforms assignment RHSs as
+well as initializers and returns; no source field-type facility is added.
+
+Identity-multiset conservation runs at every recursive task and every fuel cut of
+aggregate, nested and recursive witnesses. A test-only prospective-storage meter
+records the maximum combined reservation. Every byte budget below the measured
+successful requirement must stop, and the exact sufficient budget must succeed.
+Each stopped state must conserve all acquired leaf identities.
+
+Test-only Host probes at RHS/protection/preparation/detachment/discharge boundaries
+model detected reservation/progress failures. The normal executor charges the
+same phase work; these probes create no production API. Per-leaf release Host
+failures cover all eight nested-aggregate identities and preserve completed prefixes.
+All terminal cuts refuse resume and never restore a moved RHS source. Publication
+and generation registration are an indivisible allocation-free transition after
+all fallible checks; there is no invented failure cut between those writes.
+RHS field-mutation prefix effects survive a later range trap while the old target
+remains in place and no new result is published.

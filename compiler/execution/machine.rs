@@ -125,6 +125,8 @@ pub(super) struct Machine<'a> {
     origin: Origin,
     expression: Option<Span>,
     resources: Option<cleanup::State>,
+    #[cfg(test)]
+    max_storage: std::cell::Cell<usize>,
 }
 impl<'a> Machine<'a> {
     pub fn new(executable: &'a CheckedExecutable, limits: ExecutionLimits) -> Self {
@@ -135,6 +137,8 @@ impl<'a> Machine<'a> {
             tasks: Vec::new(),
             values: Vec::new(),
             resources: None,
+            #[cfg(test)]
+            max_storage: std::cell::Cell::new(0),
             next_frame: 0,
             steps: 0,
             origin: Origin {
@@ -201,10 +205,12 @@ impl<'a> Machine<'a> {
         Some(n)
     }
     fn reserve(&self, bytes: usize) -> Result<(), ExecutionError> {
-        if self
-            .storage()
-            .and_then(|n| n.checked_add(bytes))
-            .map_or(true, |n| n > self.limits.working_storage)
+        let wanted = self.storage().and_then(|n| n.checked_add(bytes));
+        #[cfg(test)]
+        if let Some(n) = wanted {
+            self.max_storage.set(self.max_storage.get().max(n));
+        }
+        if wanted.map_or(true, |n| n > self.limits.working_storage)
         {
             return Err(self.failure(ErrorKind::ConfiguredLimit("working storage")));
         }

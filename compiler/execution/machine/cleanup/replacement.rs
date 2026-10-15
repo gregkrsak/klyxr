@@ -37,6 +37,14 @@ fn record(value: &Value) -> Option<hir::RecordId> {
     }
 }
 impl<'a> Machine<'a> {
+    fn replacement_charge(&mut self, _phase: Phase) -> Result<(), ExecutionError> {
+        self.charge()?;
+        #[cfg(test)]
+        if self.resources.as_ref().is_some_and(|s| s.fail_replacement == Some(_phase)) {
+            return Err(self.failure(ErrorKind::Host("synthetic replacement reservation/progress")));
+        }
+        Ok(())
+    }
     pub(in crate::execution::machine) fn replacement_start(
         &mut self,
         at: Location,
@@ -44,7 +52,7 @@ impl<'a> Machine<'a> {
         scope: usize,
         plan: Option<hir::RecordId>,
     ) -> Result<u64, ExecutionError> {
-        self.charge()?;
+        self.replacement_charge(Phase::Rhs)?;
         if record(self.slot(at)?) != Some(ty)
             || plan
                 != self
@@ -132,6 +140,7 @@ impl<'a> Machine<'a> {
         let old_generation = context.old_generation;
         // No fallible operation between taking N from the value stack and
         // protecting it in the already-reserved context.
+        self.replacement_charge(Phase::Rhs)?;
         let value = self.pop()?;
         self.resources
             .as_mut()
@@ -147,7 +156,7 @@ impl<'a> Machine<'a> {
             .last_mut()
             .unwrap()
             .phase = Phase::Protected;
-        self.charge()?;
+        self.replacement_charge(Phase::Protected)?;
         if record(
             self.resources
                 .as_ref()
@@ -218,7 +227,7 @@ impl<'a> Machine<'a> {
             .last_mut()
             .unwrap()
             .phase = Phase::Prepared;
-        self.charge()?;
+        self.replacement_charge(Phase::Prepared)?;
         let (f, slot) = self.slot_index(at)?;
         let Slot::Available(displaced) =
             std::mem::replace(&mut self.frames[f].slots[slot].1, Slot::Replacing)
@@ -234,7 +243,7 @@ impl<'a> Machine<'a> {
             .unwrap();
         context.displaced = Some(displaced);
         context.phase = Phase::Detached;
-        self.charge()?;
+        self.replacement_charge(Phase::Detached)?;
         // Cleanup has its own retained cursors; protected N remains independent
         // from returns, pending aggregates, detached publication and work buffers.
         let displaced = self
@@ -260,7 +269,7 @@ impl<'a> Machine<'a> {
             .last_mut()
             .unwrap()
             .phase = Phase::Discharged;
-        self.charge()?;
+        self.replacement_charge(Phase::Discharged)?;
         self.reserve(0)?;
         // All storage and fallible validation precedes publication. Slot install,
         // association update and history append are one allocation-free transition.
@@ -417,6 +426,187 @@ mod tests {
             Some(Value::Leaf { identity: 1, .. })
         ));
         super::super::conservation_tests::conserved(&m);
+        assert!(m.resume().is_err());
+    }
+}
+
+#[cfg(test)]
+mod conformance_tests {
+    use super::*;
+    use super::super::{aggregate_tests, conservation_tests};
+    fn artifact(body: &str) -> CheckedExecutable {
+        crate::execution::prepare_synthetic(hir::resources::fixture_with(body), AdmissionLimits::default()).unwrap()
+    }
+    fn run(e: &CheckedExecutable) -> Machine<'_> {
+        let mut m = Machine::new(e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        assert_eq!(m.resume().unwrap(), ExecutionResult::NoValue);
+        conservation_tests::conserved(&m);
+        m
+    }
+    fn completed(m: &Machine<'_>) -> Vec<u64> {
+        m.resources.as_ref().unwrap().events.iter().filter_map(|e| if let Event::Complete(id)=e {Some(*id)}else{None}).collect()
+    }
+    fn aggregate() -> CheckedExecutable {
+        let p = aggregate_tests::program("fn demo(){let mut a=Pair{last:0,first:0,inert:0};a=Pair{first:0,inert:0,last:0};}", [true,false,true]);
+        crate::execution::prepare_synthetic(p, AdmissionLimits::default()).unwrap()
+    }
+    fn nested() -> CheckedExecutable {
+        let mut p = aggregate_tests::program("record Outer{left:R,right:R}fn make()->Pair{return Pair{last:0,first:0,inert:0};}fn demo(){let mut a=Outer{right:0,left:0};a=Outer{left:0,right:0};}", [true,false,true]);
+        for field in &mut p.fields[3..] { field.ty = ValueType::Record(hir::RecordId(1)); }
+        let make = p.functions.iter().find(|f| f.name()=="make").unwrap().id();
+        for f in &mut p.functions {
+            if let hir::Function::Ordinary(f) = f {
+                for s in &mut f.body {
+                    let value = match s {
+                        hir::ValueStatement::Let{initializer,..} => initializer,
+                        hir::ValueStatement::Assign{value,..} => value,
+                        _ => continue,
+                    };
+                    if let hir::ExprKind::RecordConstruct{record,fields} = &mut value.kind {
+                        if *record == hir::RecordId(2) {
+                            for field in fields {
+                                field.value.kind = hir::ExprKind::Call{function:make,arguments:Vec::new()};
+                                field.value.ty = hir::ExprType::Record(hir::RecordId(1));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        crate::execution::prepare_synthetic(p, AdmissionLimits::default()).unwrap()
+    }
+    fn recursive() -> CheckedExecutable {
+        artifact("type N=range 0..3;fn make(n:N)->Leaf{let mut a=acquire();if n==0{return a;}a=make(n-1);return a;}fn demo(){let mut root=acquire();root=make(3);}")
+    }
+    fn all_fuel_cuts(e: &CheckedExecutable) {
+        let full = run(e);
+        for fuel in 1..full.steps {
+            let mut m = Machine::new(e, ExecutionLimits{steps:fuel,..ExecutionLimits::default()});
+            if m.start(e.entry("demo").unwrap()).is_ok() {
+                assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::ConfiguredLimit("steps")));
+                if m.resources.is_some() { conservation_tests::conserved(&m); }
+                assert!(m.resume().is_err());
+            }
+        }
+        let mut exact = Machine::new(e, ExecutionLimits{steps:full.steps,..ExecutionLimits::default()});
+        exact.start(e.entry("demo").unwrap()).unwrap();
+        assert_eq!(exact.resume().unwrap(), ExecutionResult::NoValue);
+        conservation_tests::conserved(&exact);
+    }
+    #[test]
+    fn aggregate_displacement_uses_reverse_canonical_field_order() {
+        assert_eq!(completed(&run(&aggregate())), vec![0,1,3,2]);
+        assert_eq!(completed(&run(&nested())), vec![0,1,2,3,6,7,4,5]);
+    }
+    #[test]
+    fn recursive_rhs_keeps_outer_contexts_and_protected_returns_distinct() {
+        let e = recursive();
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        let mut depth = 0;
+        while let Some(task) = m.tasks.pop() {
+            m.step(task).unwrap();
+            conservation_tests::conserved(&m);
+            depth = depth.max(m.resources.as_ref().unwrap().replacements.len());
+        }
+        assert!(depth >= 4);
+        assert_eq!(completed(&m), vec![3,2,1,0,4]);
+    }
+    #[test]
+    fn aggregate_nested_and_recursive_rhs_conserve_at_every_fuel_cut() {
+        for e in [aggregate(),nested(),recursive()] { all_fuel_cuts(&e); }
+    }
+    #[test]
+    fn every_byte_storage_cut_preserves_all_acquired_identities() {
+        for e in [aggregate(), recursive()] {
+            let full = run(&e);
+            let required = full.max_storage.get();
+            for budget in 1..=required {
+                let mut m = Machine::new(&e, ExecutionLimits{working_storage:budget,..ExecutionLimits::default()});
+                let result = m.start(e.entry("demo").unwrap()).and_then(|_| m.resume());
+                if budget == required { assert_eq!(result.unwrap(), ExecutionResult::NoValue); }
+                else { assert!(matches!(result.unwrap_err().kind, ErrorKind::ConfiguredLimit("working storage")), "budget {budget}"); }
+                if m.resources.is_some() { conservation_tests::conserved(&m); }
+            }
+        }
+    }
+    #[test]
+    fn host_failure_at_each_prepared_phase_retains_old_and_new_owners() {
+        for phase in [Phase::Rhs,Phase::Protected,Phase::Prepared,Phase::Detached,Phase::Discharged] {
+            let e = artifact("fn demo(){let mut a=acquire();let b=acquire();a=b;}");
+            let mut m = Machine::new(&e, ExecutionLimits::default());
+            m.start(e.entry("demo").unwrap()).unwrap();
+            m.resources.as_mut().unwrap().fail_replacement = Some(phase);
+            assert_eq!(m.resume().unwrap_err().kind, ErrorKind::Host("synthetic replacement reservation/progress"));
+            conservation_tests::conserved(&m);
+            assert!(m.resume().is_err());
+            if phase != Phase::Rhs {
+                assert!(matches!(m.frames[0].slots.iter().find(|(p,_)| *p==Place::Local(hir::LocalId(1))).unwrap().1, Slot::Transferred));
+            }
+            assert_eq!(completed(&m), if phase == Phase::Discharged { vec![0] } else { vec![] });
+        }
+    }
+    #[test]
+    fn every_nested_release_host_failure_retains_exact_remaining_leaves() {
+        for identity in 0..8 {
+            let e = nested();
+            let mut m = Machine::new(&e, ExecutionLimits::default());
+            m.start(e.entry("demo").unwrap()).unwrap();
+            m.resources.as_mut().unwrap().failure_at = Some(identity);
+            assert_eq!(m.resume().unwrap_err().kind, ErrorKind::Host("synthetic trusted release"));
+            conservation_tests::conserved(&m);
+            assert!(!completed(&m).contains(&identity));
+            assert!(m.resume().is_err());
+        }
+    }
+    #[test]
+    fn branch_replacement_registers_in_target_owning_activation() {
+        for (body, expected) in [
+            ("fn demo(){let mut a=acquire();let b=acquire();if true{let inner=acquire();a=acquire();}}", vec![0,2,3,1]),
+            ("fn demo(){let mut a=acquire();let b=acquire();if false{let inner=acquire();a=acquire();}}", vec![1,0]),
+            ("fn demo(){let mut a=acquire();let b=acquire();if false{a=acquire();}else{a=acquire();}let later=acquire();}", vec![0,3,2,1]),
+        ] { assert_eq!(completed(&run(&artifact(body))),expected); }
+    }
+    #[test]
+    fn fallthrough_break_continue_and_bare_return_clean_only_final_generation() {
+        for exit in ["", "break;", "continue;", "return;"] {
+            let e = artifact(&format!("fn demo(){{let mut flag=true;while flag{{let mut a=acquire();let b=acquire();a=acquire();flag=false;{exit}}}}}"));
+            assert_eq!(completed(&run(&e)),vec![0,2,1]);
+        }
+    }
+    #[test]
+    fn value_return_moves_new_generation_before_cleaning_remainder() {
+        let e = artifact("fn make()->Leaf{while true{let mut a=acquire();let b=acquire();a=acquire();return a;}return acquire();}fn demo(){let result=make();}");
+        assert_eq!(completed(&run(&e)),vec![0,1,2]);
+    }
+    #[test]
+    fn repeated_iteration_activations_and_replacements_preserve_order() {
+        let e = artifact("type N=range 0..3;fn start()->N{return 3;}fn demo(){let mut n=start();while !(n==0){let mut a=acquire();let b=acquire();a=acquire();a=acquire();n=n-1;continue;}}");
+        assert_eq!(completed(&run(&e)),vec![0,2,3,1,4,6,7,5,8,10,11,9]);
+    }
+    #[test]
+    fn later_move_and_explicit_release_never_repeat_displaced_cleanup() {
+        for suffix in ["let moved=a;", "release(a);", "let moved=a;release(moved);"] {
+            let e = artifact(&format!("fn demo(){{let mut a=acquire();a=acquire();{suffix}}}"));
+            assert_eq!(completed(&run(&e)),vec![0,1]);
+        }
+    }
+    #[test]
+    fn target_explicit_consumption_inside_rhs_remains_forbidden() {
+        let source = "type R=range 0..1;record Leaf{data:R}fn acquire()->Leaf{return Leaf{data:0};}fn release(x:Leaf){}fn consume(x:Leaf)->Leaf{release(x);return acquire();}fn demo(){let mut a=acquire();a=consume(a);}";
+        let error = crate::compile_source(source).unwrap_err();
+        assert!(matches!(error, crate::FrontendError::Ownership(_)));
+        assert!(error.to_string().contains("inside its own RHS"));
+    }
+    #[test]
+    fn rhs_prefix_mutation_survives_trap_without_displacement_or_publication() {
+        let e = crate::execution::prepare_execution("type P=range 0..3;record R{x:P}fn next(v:&mut R)->R{v.x=2;return R{x:v.x-3};}fn demo(){let mut a=R{x:0};a=next(&mut a);}", AdmissionLimits::default()).unwrap();
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::RangeTrap{computed:-1,..}));
+        assert!(matches!(m.slot(Location{frame:0,place:Place::Local(hir::LocalId(0))}).unwrap(), Value::Public(RuntimeValue::Record{fields,..}) if fields[0].1.value==2));
+        assert!(m.resources.as_ref().unwrap().replacements[0].protected.is_none());
         assert!(m.resume().is_err());
     }
 }

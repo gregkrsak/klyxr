@@ -20,6 +20,8 @@ pub(super) struct State {
     next_generation: u64,
     pub(super) replacements: Vec<replacement::Prepared>,
     next_replacement: u64,
+    #[cfg(test)]
+    fail_replacement: Option<replacement::Phase>,
     protected: Option<Value>,
     pub(super) detached: Option<Value>,
     current: Option<Value>,
@@ -1237,7 +1239,8 @@ mod aggregate_tests {
                         hir::ValueStatement::Let { initializer, .. } => {
                             expression(initializer, bearing)
                         }
-                        hir::ValueStatement::Return { value, .. } => expression(value, bearing),
+                        hir::ValueStatement::Return { value, .. }
+                        | hir::ValueStatement::Assign { value, .. } => expression(value, bearing),
                         _ => {}
                     }
                 }
@@ -2451,7 +2454,7 @@ mod replacement_authority_tests {
     }
     #[test]
     fn independent_replacement_authority_mutations_reject() {
-        for fault in 0..9 {
+        for fault in 0..11 {
             let mut e = artifact();
             e.validate().unwrap();
             let f = e.mir.test_functions_mut().last_mut().unwrap();
@@ -2476,6 +2479,10 @@ mod replacement_authority_tests {
                 }
                 1 => operations.insert(index, copy),
                 2 => operations.swap(0, index),
+                10 => {
+                    let Statement::ReplaceOwned { local, value, span, .. } = copy else { panic!() };
+                    operations[index] = Statement::Assign { local, value, span };
+                }
                 _ => {
                     let Statement::ReplaceOwned {
                         local,
@@ -2495,6 +2502,7 @@ mod replacement_authority_tests {
                         6 => *cleanup_plan = None,
                         7 => origin.kind = OriginKind::Statement,
                         8 => origin.span.line += 1,
+                        9 => *cleanup_plan = Some(hir::RecordId(1)),
                         _ => unreachable!(),
                     }
                 }
