@@ -40,8 +40,14 @@ impl<'a> Machine<'a> {
     fn replacement_charge(&mut self, _phase: Phase) -> Result<(), ExecutionError> {
         self.charge()?;
         #[cfg(test)]
-        if self.resources.as_ref().is_some_and(|s| s.fail_replacement == Some(_phase)) {
-            return Err(self.failure(ErrorKind::Host("synthetic replacement reservation/progress")));
+        if self
+            .resources
+            .as_ref()
+            .is_some_and(|s| s.fail_replacement == Some(_phase))
+        {
+            return Err(self.failure(ErrorKind::Host(
+                "synthetic replacement reservation/progress",
+            )));
         }
         Ok(())
     }
@@ -432,10 +438,14 @@ mod tests {
 
 #[cfg(test)]
 mod conformance_tests {
-    use super::*;
     use super::super::{aggregate_tests, conservation_tests};
+    use super::*;
     fn artifact(body: &str) -> CheckedExecutable {
-        crate::execution::prepare_synthetic(hir::resources::fixture_with(body), AdmissionLimits::default()).unwrap()
+        crate::execution::prepare_synthetic(
+            hir::resources::fixture_with(body),
+            AdmissionLimits::default(),
+        )
+        .unwrap()
     }
     fn run(e: &CheckedExecutable) -> Machine<'_> {
         let mut m = Machine::new(e, ExecutionLimits::default());
@@ -445,28 +455,53 @@ mod conformance_tests {
         m
     }
     fn completed(m: &Machine<'_>) -> Vec<u64> {
-        m.resources.as_ref().unwrap().events.iter().filter_map(|e| if let Event::Complete(id)=e {Some(*id)}else{None}).collect()
+        m.resources
+            .as_ref()
+            .unwrap()
+            .events
+            .iter()
+            .filter_map(|e| {
+                if let Event::Complete(id) = e {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
     fn aggregate() -> CheckedExecutable {
-        let p = aggregate_tests::program("fn demo(){let mut a=Pair{last:0,first:0,inert:0};a=Pair{first:0,inert:0,last:0};}", [true,false,true]);
+        let p = aggregate_tests::program(
+            "fn demo(){let mut a=Pair{last:0,first:0,inert:0};a=Pair{first:0,inert:0,last:0};}",
+            [true, false, true],
+        );
         crate::execution::prepare_synthetic(p, AdmissionLimits::default()).unwrap()
     }
     fn nested() -> CheckedExecutable {
         let mut p = aggregate_tests::program("record Outer{left:R,right:R}fn make()->Pair{return Pair{last:0,first:0,inert:0};}fn demo(){let mut a=Outer{right:0,left:0};a=Outer{left:0,right:0};}", [true,false,true]);
-        for field in &mut p.fields[3..] { field.ty = ValueType::Record(hir::RecordId(1)); }
-        let make = p.functions.iter().find(|f| f.name()=="make").unwrap().id();
+        for field in &mut p.fields[3..] {
+            field.ty = ValueType::Record(hir::RecordId(1));
+        }
+        let make = p
+            .functions
+            .iter()
+            .find(|f| f.name() == "make")
+            .unwrap()
+            .id();
         for f in &mut p.functions {
             if let hir::Function::Ordinary(f) = f {
                 for s in &mut f.body {
                     let value = match s {
-                        hir::ValueStatement::Let{initializer,..} => initializer,
-                        hir::ValueStatement::Assign{value,..} => value,
+                        hir::ValueStatement::Let { initializer, .. } => initializer,
+                        hir::ValueStatement::Assign { value, .. } => value,
                         _ => continue,
                     };
-                    if let hir::ExprKind::RecordConstruct{record,fields} = &mut value.kind {
+                    if let hir::ExprKind::RecordConstruct { record, fields } = &mut value.kind {
                         if *record == hir::RecordId(2) {
                             for field in fields {
-                                field.value.kind = hir::ExprKind::Call{function:make,arguments:Vec::new()};
+                                field.value.kind = hir::ExprKind::Call {
+                                    function: make,
+                                    arguments: Vec::new(),
+                                };
                                 field.value.ty = hir::ExprType::Record(hir::RecordId(1));
                             }
                         }
@@ -482,22 +517,39 @@ mod conformance_tests {
     fn all_fuel_cuts(e: &CheckedExecutable) {
         let full = run(e);
         for fuel in 1..full.steps {
-            let mut m = Machine::new(e, ExecutionLimits{steps:fuel,..ExecutionLimits::default()});
+            let mut m = Machine::new(
+                e,
+                ExecutionLimits {
+                    steps: fuel,
+                    ..ExecutionLimits::default()
+                },
+            );
             if m.start(e.entry("demo").unwrap()).is_ok() {
-                assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::ConfiguredLimit("steps")));
-                if m.resources.is_some() { conservation_tests::conserved(&m); }
+                assert!(matches!(
+                    m.resume().unwrap_err().kind,
+                    ErrorKind::ConfiguredLimit("steps")
+                ));
+                if m.resources.is_some() {
+                    conservation_tests::conserved(&m);
+                }
                 assert!(m.resume().is_err());
             }
         }
-        let mut exact = Machine::new(e, ExecutionLimits{steps:full.steps,..ExecutionLimits::default()});
+        let mut exact = Machine::new(
+            e,
+            ExecutionLimits {
+                steps: full.steps,
+                ..ExecutionLimits::default()
+            },
+        );
         exact.start(e.entry("demo").unwrap()).unwrap();
         assert_eq!(exact.resume().unwrap(), ExecutionResult::NoValue);
         conservation_tests::conserved(&exact);
     }
     #[test]
     fn aggregate_displacement_uses_reverse_canonical_field_order() {
-        assert_eq!(completed(&run(&aggregate())), vec![0,1,3,2]);
-        assert_eq!(completed(&run(&nested())), vec![0,1,2,3,6,7,4,5]);
+        assert_eq!(completed(&run(&aggregate())), vec![0, 1, 3, 2]);
+        assert_eq!(completed(&run(&nested())), vec![0, 1, 2, 3, 6, 7, 4, 5]);
     }
     #[test]
     fn recursive_rhs_keeps_outer_contexts_and_protected_returns_distinct() {
@@ -511,11 +563,13 @@ mod conformance_tests {
             depth = depth.max(m.resources.as_ref().unwrap().replacements.len());
         }
         assert!(depth >= 4);
-        assert_eq!(completed(&m), vec![3,2,1,0,4]);
+        assert_eq!(completed(&m), vec![3, 2, 1, 0, 4]);
     }
     #[test]
     fn aggregate_nested_and_recursive_rhs_conserve_at_every_fuel_cut() {
-        for e in [aggregate(),nested(),recursive()] { all_fuel_cuts(&e); }
+        for e in [aggregate(), nested(), recursive()] {
+            all_fuel_cuts(&e);
+        }
     }
     #[test]
     fn every_byte_storage_cut_preserves_all_acquired_identities() {
@@ -523,28 +577,69 @@ mod conformance_tests {
             let full = run(&e);
             let required = full.max_storage.get();
             for budget in 1..=required {
-                let mut m = Machine::new(&e, ExecutionLimits{working_storage:budget,..ExecutionLimits::default()});
+                let mut m = Machine::new(
+                    &e,
+                    ExecutionLimits {
+                        working_storage: budget,
+                        ..ExecutionLimits::default()
+                    },
+                );
                 let result = m.start(e.entry("demo").unwrap()).and_then(|_| m.resume());
-                if budget == required { assert_eq!(result.unwrap(), ExecutionResult::NoValue); }
-                else { assert!(matches!(result.unwrap_err().kind, ErrorKind::ConfiguredLimit("working storage")), "budget {budget}"); }
-                if m.resources.is_some() { conservation_tests::conserved(&m); }
+                if budget == required {
+                    assert_eq!(result.unwrap(), ExecutionResult::NoValue);
+                } else {
+                    assert!(
+                        matches!(
+                            result.unwrap_err().kind,
+                            ErrorKind::ConfiguredLimit("working storage")
+                        ),
+                        "budget {budget}"
+                    );
+                }
+                if m.resources.is_some() {
+                    conservation_tests::conserved(&m);
+                }
             }
         }
     }
     #[test]
     fn host_failure_at_each_prepared_phase_retains_old_and_new_owners() {
-        for phase in [Phase::Rhs,Phase::Protected,Phase::Prepared,Phase::Detached,Phase::Discharged] {
+        for phase in [
+            Phase::Rhs,
+            Phase::Protected,
+            Phase::Prepared,
+            Phase::Detached,
+            Phase::Discharged,
+        ] {
             let e = artifact("fn demo(){let mut a=acquire();let b=acquire();a=b;}");
             let mut m = Machine::new(&e, ExecutionLimits::default());
             m.start(e.entry("demo").unwrap()).unwrap();
             m.resources.as_mut().unwrap().fail_replacement = Some(phase);
-            assert_eq!(m.resume().unwrap_err().kind, ErrorKind::Host("synthetic replacement reservation/progress"));
+            assert_eq!(
+                m.resume().unwrap_err().kind,
+                ErrorKind::Host("synthetic replacement reservation/progress")
+            );
             conservation_tests::conserved(&m);
             assert!(m.resume().is_err());
             if phase != Phase::Rhs {
-                assert!(matches!(m.frames[0].slots.iter().find(|(p,_)| *p==Place::Local(hir::LocalId(1))).unwrap().1, Slot::Transferred));
+                assert!(matches!(
+                    m.frames[0]
+                        .slots
+                        .iter()
+                        .find(|(p, _)| *p == Place::Local(hir::LocalId(1)))
+                        .unwrap()
+                        .1,
+                    Slot::Transferred
+                ));
             }
-            assert_eq!(completed(&m), if phase == Phase::Discharged { vec![0] } else { vec![] });
+            assert_eq!(
+                completed(&m),
+                if phase == Phase::Discharged {
+                    vec![0]
+                } else {
+                    vec![]
+                }
+            );
         }
     }
     #[test]
@@ -554,7 +649,10 @@ mod conformance_tests {
             let mut m = Machine::new(&e, ExecutionLimits::default());
             m.start(e.entry("demo").unwrap()).unwrap();
             m.resources.as_mut().unwrap().failure_at = Some(identity);
-            assert_eq!(m.resume().unwrap_err().kind, ErrorKind::Host("synthetic trusted release"));
+            assert_eq!(
+                m.resume().unwrap_err().kind,
+                ErrorKind::Host("synthetic trusted release")
+            );
             conservation_tests::conserved(&m);
             assert!(!completed(&m).contains(&identity));
             assert!(m.resume().is_err());
@@ -572,24 +670,29 @@ mod conformance_tests {
     fn fallthrough_break_continue_and_bare_return_clean_only_final_generation() {
         for exit in ["", "break;", "continue;", "return;"] {
             let e = artifact(&format!("fn demo(){{let mut flag=true;while flag{{let mut a=acquire();let b=acquire();a=acquire();flag=false;{exit}}}}}"));
-            assert_eq!(completed(&run(&e)),vec![0,2,1]);
+            assert_eq!(completed(&run(&e)), vec![0, 2, 1]);
         }
     }
     #[test]
     fn value_return_moves_new_generation_before_cleaning_remainder() {
         let e = artifact("fn make()->Leaf{while true{let mut a=acquire();let b=acquire();a=acquire();return a;}return acquire();}fn demo(){let result=make();}");
-        assert_eq!(completed(&run(&e)),vec![0,1,2]);
+        assert_eq!(completed(&run(&e)), vec![0, 1, 2]);
     }
     #[test]
     fn repeated_iteration_activations_and_replacements_preserve_order() {
         let e = artifact("type N=range 0..3;fn start()->N{return 3;}fn demo(){let mut n=start();while !(n==0){let mut a=acquire();let b=acquire();a=acquire();a=acquire();n=n-1;continue;}}");
-        assert_eq!(completed(&run(&e)),vec![0,2,3,1,4,6,7,5,8,10,11,9]);
+        assert_eq!(
+            completed(&run(&e)),
+            vec![0, 2, 3, 1, 4, 6, 7, 5, 8, 10, 11, 9]
+        );
     }
     #[test]
     fn later_move_and_explicit_release_never_repeat_displaced_cleanup() {
         for suffix in ["let moved=a;", "release(a);", "let moved=a;release(moved);"] {
-            let e = artifact(&format!("fn demo(){{let mut a=acquire();a=acquire();{suffix}}}"));
-            assert_eq!(completed(&run(&e)),vec![0,1]);
+            let e = artifact(&format!(
+                "fn demo(){{let mut a=acquire();a=acquire();{suffix}}}"
+            ));
+            assert_eq!(completed(&run(&e)), vec![0, 1]);
         }
     }
     #[test]
@@ -604,9 +707,47 @@ mod conformance_tests {
         let e = crate::execution::prepare_execution("type P=range 0..3;record R{x:P}fn next(v:&mut R)->R{v.x=2;return R{x:v.x-3};}fn demo(){let mut a=R{x:0};a=next(&mut a);}", AdmissionLimits::default()).unwrap();
         let mut m = Machine::new(&e, ExecutionLimits::default());
         m.start(e.entry("demo").unwrap()).unwrap();
-        assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::RangeTrap{computed:-1,..}));
-        assert!(matches!(m.slot(Location{frame:0,place:Place::Local(hir::LocalId(0))}).unwrap(), Value::Public(RuntimeValue::Record{fields,..}) if fields[0].1.value==2));
-        assert!(m.resources.as_ref().unwrap().replacements[0].protected.is_none());
+        assert!(matches!(
+            m.resume().unwrap_err().kind,
+            ErrorKind::RangeTrap { computed: -1, .. }
+        ));
+        assert!(
+            matches!(m.slot(Location{frame:0,place:Place::Local(hir::LocalId(0))}).unwrap(), Value::Public(RuntimeValue::Record{fields,..}) if fields[0].1.value==2)
+        );
+        assert!(m.resources.as_ref().unwrap().replacements[0]
+            .protected
+            .is_none());
         assert!(m.resume().is_err());
+    }
+}
+
+#[cfg(test)]
+mod classification_controls {
+    use super::*;
+    #[test]
+    fn copy_assignment_cannot_be_retagged_as_owned_replacement() {
+        let mut e = crate::execution::prepare_execution(
+            "type P=range 0..1;record R{x:P}fn demo(){let mut x=false;x=true;}",
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        e.validate().unwrap();
+        let s = &mut e.mir.test_functions_mut()[0].test_blocks_mut()[0].test_statements_mut()[1];
+        let Statement::Assign { local, value, span } = s.clone() else {
+            panic!()
+        };
+        *s = Statement::ReplaceOwned {
+            local,
+            record: hir::RecordId(0),
+            owning_scope: 0,
+            cleanup_plan: None,
+            value,
+            origin: Origin {
+                span,
+                kind: OriginKind::Replacement,
+            },
+            span,
+        };
+        assert!(e.validate().is_err());
     }
 }

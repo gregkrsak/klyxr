@@ -8,6 +8,7 @@
   "additions": [
     "lib.rs::execution::machine::cleanup::generation_tests::repeated_local_id_has_distinct_activation_and_generation",
     "lib.rs::execution::machine::cleanup::generation_tests::stale_history_cannot_release_a_live_slot",
+    "lib.rs::execution::machine::cleanup::replacement::classification_controls::copy_assignment_cannot_be_retagged_as_owned_replacement",
     "lib.rs::execution::machine::cleanup::replacement::conformance_tests::aggregate_displacement_uses_reverse_canonical_field_order",
     "lib.rs::execution::machine::cleanup::replacement::conformance_tests::aggregate_nested_and_recursive_rhs_conserve_at_every_fuel_cut",
     "lib.rs::execution::machine::cleanup::replacement::conformance_tests::branch_replacement_registers_in_target_owning_activation",
@@ -30,6 +31,7 @@
     "lib.rs::execution::machine::cleanup::replacement_authority_tests::independent_replacement_authority_mutations_reject",
     "lib.rs::execution::machine::cleanup::replacement_authority_tests::replacement_result_boundary_does_not_admit_argument_temporary",
     "lib.rs::ownership::tests::replacement_failure_restores_complete_prepared_state",
+    "lib.rs::ownership::tests::replacement_final_loan_failure_rolls_back_successful_rhs_transfer",
     "tests/owned_replacement.rs::branches_preserve_target_and_conservative_source_joins",
     "tests/owned_replacement.rs::exact_nominal_type_and_reference_boundaries",
     "tests/owned_replacement.rs::final_shared_and_exclusive_borrow_uses",

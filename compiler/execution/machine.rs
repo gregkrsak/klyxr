@@ -210,8 +210,7 @@ impl<'a> Machine<'a> {
         if let Some(n) = wanted {
             self.max_storage.set(self.max_storage.get().max(n));
         }
-        if wanted.map_or(true, |n| n > self.limits.working_storage)
-        {
+        if wanted.map_or(true, |n| n > self.limits.working_storage) {
             return Err(self.failure(ErrorKind::ConfiguredLimit("working storage")));
         }
         Ok(())

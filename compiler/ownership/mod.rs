@@ -2066,6 +2066,27 @@ mod tests {
     }
 
     #[test]
+    fn replacement_final_loan_failure_rolls_back_successful_rhs_transfer() {
+        let p = typed("fn receive(a: Ticket,v: &Ticket) -> Ticket { return a; } fn inspect(v: &Ticket) {} fn f(first: Ticket,other: Ticket) -> Ticket { let mut target=first; let view=&target; target=receive(other,view); inspect(view); return target; }");
+        let f = p.functions().last().unwrap().as_ordinary().unwrap();
+        let mut c = Checker::new(&p, f);
+        c.statements(&f.body[..2], f.id).unwrap();
+        let ValueStatement::Assign { local, value, span } = &f.body[2] else {
+            panic!()
+        };
+        let before = c.clone();
+        let mut prefix = c.clone();
+        prefix.expression(value, Transfer::Local(*local)).unwrap();
+        assert_ne!(prefix.states, before.states);
+        assert!(c
+            .replace_owned(*local, value, *span)
+            .unwrap_err()
+            .message
+            .contains("while it is borrowed"));
+        assert_atomic(&c, &before);
+    }
+
+    #[test]
     fn classification_uses_canonical_value_types_not_aggregate_fields_or_names() {
         let mut program = compile_source(DECLARATIONS).unwrap();
         for range in &mut program.ranges {

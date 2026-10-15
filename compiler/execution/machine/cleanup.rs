@@ -2480,7 +2480,12 @@ mod replacement_authority_tests {
                 1 => operations.insert(index, copy),
                 2 => operations.swap(0, index),
                 10 => {
-                    let Statement::ReplaceOwned { local, value, span, .. } = copy else { panic!() };
+                    let Statement::ReplaceOwned {
+                        local, value, span, ..
+                    } = copy
+                    else {
+                        panic!()
+                    };
                     operations[index] = Statement::Assign { local, value, span };
                 }
                 _ => {

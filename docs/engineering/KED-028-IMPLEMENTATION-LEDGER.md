@@ -236,3 +236,14 @@ and generation registration are an indivisible allocation-free transition after
 all fallible checks; there is no invented failure cut between those writes.
 RHS field-mutation prefix effects survive a later range trap while the old target
 remains in place and no new result is published.
+
+Conformance commit `0257405611a711308a3cbb779234ef55c0229bc2`, tree
+`af05aa105607b8dd7d8e1bc088d873d271a7691d`: compilation and the full debug profile
+passed. Build https://github.com/gregkrsak/klyxr/actions/runs/38790992946 reported
+formatting differences, applied from CI output. Other runs:
+tests https://github.com/gregkrsak/klyxr/actions/runs/38790992862,
+docs https://github.com/gregkrsak/klyxr/actions/runs/38790992731,
+verify https://github.com/gregkrsak/klyxr/actions/runs/38790992870.
+Two additional controls independently verify prepared-entry restoration after a
+successful unrelated RHS transfer followed by final-loan rejection, and rejection
+of a Copy assignment retagged as Move replacement. No later runtime layer added.
