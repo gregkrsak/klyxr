@@ -20,6 +20,14 @@ struct Collector<'a> {
     function: FunctionId,
     ordinal: usize,
     sites: Vec<CallSite>,
+    checking: bool,
+    violation: Option<CallSite>,
+    failure: Option<crate::hir::resources::PlanError>,
+}
+
+#[cfg(test)]
+thread_local! {
+    pub(crate) static FAIL_ALLOCATION: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 impl Collector<'_> {
@@ -32,13 +40,28 @@ impl Collector<'_> {
             .as_ordinary()
             .expect("typed ordinary callee");
         if contract.effects.set() != EffectSet::EMPTY {
-            self.sites.push(CallSite {
+            let site=CallSite {
                 ordinal,
                 function: self.function,
                 callee,
                 effects: contract.effects.set(),
                 origin,
-            });
+            };
+            if self.checking {
+                let declared=self.program.function(self.function).as_ordinary().unwrap().effects.set();
+                if !site.effects.is_subset(declared) && self.violation.is_none(){self.violation=Some(site);}
+            } else {
+                #[cfg(test)]
+                if FAIL_ALLOCATION.with(std::cell::Cell::get) {
+                    self.failure=Some(crate::hir::resources::PlanError::Host("direct effect site allocation"));
+                    return;
+                }
+                if self.sites.try_reserve_exact(1).is_err(){
+                    self.failure=Some(crate::hir::resources::PlanError::Host("direct effect site allocation"));
+                    return;
+                }
+                self.sites.push(site);
+            }
         }
         for argument in arguments {
             self.expression(argument);
@@ -46,6 +69,7 @@ impl Collector<'_> {
     }
 
     fn expression(&mut self, expression: &TypedExpr) {
+        if self.failure.is_some() || self.violation.is_some(){return;}
         match &expression.kind {
             ExprKind::Call {
                 function,
@@ -78,6 +102,7 @@ impl Collector<'_> {
 
     fn statements(&mut self, statements: &[ValueStatement]) {
         for statement in statements {
+            if self.failure.is_some() || self.violation.is_some(){break;}
             match statement {
                 ValueStatement::CallNoValue {
                     function,
@@ -116,23 +141,27 @@ impl Collector<'_> {
 
 /// The existing parser/type structural-reachability rules remain authoritative.
 /// In particular both short-circuit operands and terminal branch arms contribute.
-pub(crate) fn sites(program: &Program, function: &ValueFunction) -> Vec<CallSite> {
+pub(crate) fn sites(program: &Program, function: &ValueFunction) -> Result<Vec<CallSite>,crate::hir::resources::PlanError> {
     let mut collector = Collector {
         program,
         function: function.id,
         ordinal: 0,
         sites: Vec::new(),
+        checking:false,
+        violation:None,
+        failure:None,
     };
     collector.statements(&function.body);
-    collector.sites
+    match collector.failure {Some(error)=>Err(error),None=>Ok(collector.sites)}
 }
 
 pub(crate) fn check(program: &Program) -> Result<(), Vec<Diagnostic>> {
     for function in program.functions().iter().filter_map(|f| f.as_ordinary()) {
-        for site in sites(program, function) {
-            if site.effects.is_subset(function.effects.set()) {
-                continue;
-            }
+        // Checking needs only the first illegal edge, not a retained site table.
+        // MIR retention below uses fallible allocation and typed Host failures.
+        let mut collector=Collector{program,function:function.id,ordinal:0,sites:Vec::new(),checking:true,violation:None,failure:None};
+        collector.statements(&function.body);
+        if let Some(site)=collector.violation {
             let callee = program
                 .function(site.callee)
                 .as_ordinary()
@@ -154,4 +183,21 @@ pub(crate) fn check(program: &Program) -> Result<(), Vec<Diagnostic>> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn retained_direct_site_allocation_failure_is_host_and_publishes_no_executable() {
+        use crate::execution::{self,AdmissionLimits,ErrorKind};
+        struct Restore;
+        impl Drop for Restore{fn drop(&mut self){super::FAIL_ALLOCATION.with(|f|f.set(false));}}
+        let _restore=Restore;
+        super::FAIL_ALLOCATION.with(|f|f.set(true));
+        let source="fn leaf() effects io {} fn demo() effects io {leaf();}";
+        // The checking traversal retains no table and grants no execution authority.
+        assert!(crate::compile_source(source).is_ok());
+        let error=execution::prepare_execution(source,AdmissionLimits::default()).err().unwrap();
+        assert_eq!(error.kind,ErrorKind::Host("direct effect site allocation"));
+    }
 }

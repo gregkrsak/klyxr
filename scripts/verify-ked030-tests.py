@@ -65,4 +65,20 @@ def reconcile(actual, baseline, migrations, additions):
     print("failed/ignored/filtered: 0/0/0")
 
 manifest = json.loads((root / "docs/engineering/ked-030-evidence.json").read_text())
+predecessors = {r["id"] for r in baseline["identities"]}
+assert len(manifest["additions"]) == len(set(manifest["additions"])), "duplicate addition"
+for adaptation in manifest["fixture_adaptations"]:
+    identities = adaptation.get("affected_identities", [adaptation.get("id")])
+    assert identities and set(identities) <= predecessors, "foreign fixture adaptation"
+    assert adaptation["reason"], "fixture adaptation requires justification"
+domains = manifest["evidence_domains"]
+primitive = domains["primitive_only_predecessors"]
+assert len(primitive) == len(set(primitive)) and set(primitive) <= predecessors
+prefixes = ("lib.rs::execution::machine::cleanup::",
+            "lib.rs::execution::machine::temporaries::",
+            "lib.rs::execution::temporary_authority_tests::")
+assert set(primitive) == {identity for identity in predecessors if identity.startswith(prefixes)}
+assert domains["reason"], "private domain classifications require justification"
+assert manifest["contract_corrections"] == [], "no predecessor contract change authorized"
 reconcile(actual, baseline, manifest["migrations"], manifest["additions"])
+print(f"private fixture domains: {len(primitive)} predecessor identities explicitly primitive/protocol")

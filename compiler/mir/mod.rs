@@ -284,7 +284,7 @@ impl MirProgram {
 pub fn lower(program: &hir::Program) -> MirProgram {
     // Public source HIR cannot contain the private trusted catalog. Synthetic
     // preparation uses the fallible lower_with_origins entry below.
-    lower_internal(program, true, &[], Vec::new()).0
+    lower_internal(program, true, &[], Vec::new()).expect("MIR metadata allocation failed").0
 }
 
 /// Attach only the successful checker's immutable cleanup realization evidence.
@@ -368,14 +368,14 @@ pub(crate) fn lower_with_origins(
             .map_err(|_| hir::resources::PlanError::Host("temporary function allocation"))?;
         flows.push(temporaries::Flow::lower(program, &function.body, &plans)?);
     }
-    Ok(lower_internal(program, false, &plans, flows))
+    lower_internal(program, false, &plans, flows)
 }
 fn lower_internal(
     program: &hir::Program,
     legacy_assert: bool,
     plans: &[Option<hir::resources::CleanupPlan>],
     flows: Vec<Option<temporaries::Flow>>,
-) -> (MirProgram, Vec<Vec<Origin>>) {
+) -> Result<(MirProgram, Vec<Vec<Origin>>),hir::resources::PlanError> {
     fn replacements(body: &[ValueStatement]) -> bool {
         body.iter().any(|s| match s {
             ValueStatement::Assign { value, .. } => matches!(value.ty, hir::ExprType::Record(_)),
@@ -419,7 +419,7 @@ fn lower_internal(
             }
             let function = MirFunction {
                 cleanup_effect_sites: Vec::new(),
-                direct_effects: crate::effects::calls::sites(program, f),
+                direct_effects: crate::effects::calls::sites(program, f)?,
                 effects: f.effects.clone(),
                 temporaries: builder.temporaries,
                 cleanup: builder.cleanup,
@@ -434,18 +434,18 @@ fn lower_internal(
             if legacy_assert {
                 debug_assert_eq!(function.validate(), Ok(()));
             }
-            (
+            Ok((
                 function,
                 builder
                     .origins
                     .into_iter()
                     .map(|o| o.expect("lowering origin finished"))
                     .collect::<Vec<_>>(),
-            )
+            ))
         })
-        .collect();
+        .collect::<Result<_,hir::resources::PlanError>>()?;
     let (functions, origins) = pairs.into_iter().unzip();
-    (MirProgram { functions }, origins)
+    Ok((MirProgram { functions }, origins))
 }
 fn value_statement_span(statement: &ValueStatement) -> Span {
     match statement {

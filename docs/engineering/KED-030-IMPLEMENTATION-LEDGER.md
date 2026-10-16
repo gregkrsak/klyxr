@@ -374,3 +374,36 @@ one remaining new trap-fixture syntax error: local type annotations are not
 supported. A typed `zero()` result now supplies the same range context for the
 mutable local. All other unit controls passed; release was skipped. The trap,
 no-unwind and conservation assertions are retained unchanged.
+
+Milestone 7 trap-fixture correction `79237e75e7b88f9a165277401ff00174dae7cda9`,
+tree `085cfb73cd65605b92fbca60a1d51646ac01ed51`, passed all four workflows:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38974357887),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38974357743),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38974357780),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38974357744).
+All steps and relevant logs were inspected. Each profile reconciled 1,743
+predecessors plus 40 additions = 1,783 passing identities, both affine checks and
+the authority doctest. No predecessor identity or outcome changed.
+
+## Milestone 8 — Final authority and failure matrix
+
+The checking traversal now retains only its first illegal call edge without a
+site-table allocation. Retained MIR direct-effect sites allocate fallibly; bounded
+preparation propagates allocation failure as Host with no executable. The legacy
+inspection-only infallible MIR entry retains its existing infallible API.
+
+Approved abort authority additionally binds the exact in-progress field's MIR site
+and origin in every ancestor, and requires no active field at the triggering
+container. Independent mutations and a missing active-field witness reject before
+any release attempt. A recursive scenario distinguishes the same function and
+construction site at two dynamic frame identities and stack depths.
+
+Six additional identities cover all eight effects at the same cleanup site; real
+empty-summary resource cleanup alongside inert Move and reference controls; every
+ordinary pending-construction fuel stop without implicit abort cleanup; identical
+recursive sites in different frames; diagnostic admission/rendering exact neighbors;
+and detected retained direct-site allocation failure. The full identity reconciler
+now also audits fixture adaptation identities, explicit primitive-domain inventory,
+and the absence of predecessor contract corrections.
+
+These controls are authored and await this milestone's authoritative CI gate.

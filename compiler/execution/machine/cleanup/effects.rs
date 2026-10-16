@@ -373,7 +373,7 @@ fn approved_abort_rejects_independent_template_and_domain_mutations() {
     use crate::execution::domain::Domain;
     let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
     let request = abort_request(&p, "build", 1, 1, 0);
-    for mutation in 0..12 {
+    for mutation in 0..14 {
         let mut e = approved(p.clone(), vec![request]).unwrap();
         let Domain::Abort(templates) = &mut e.domain else {
             unreachable!()
@@ -396,6 +396,8 @@ fn approved_abort_rejects_independent_template_and_domain_mutations() {
             9 => t.request.function = FunctionId(usize::MAX),
             10 => templates.push(templates[0].clone()),
             11 => templates.clear(),
+            12 => t.before_site=crate::mir::temporaries::SiteId(usize::MAX),
+            13 => t.before_origin.span.start+=1,
             _ => unreachable!(),
         }
         assert!(
@@ -517,6 +519,20 @@ fn approved_nested_abort_admits_and_binds_every_affected_frame_before_release() 
     super::conservation_tests::conserved(&m);
     let e = approved(p, vec![outer, inner]).unwrap();
     assert_eq!(completed(&abort_run(&e)), vec![1, 2, 0]);
+    let mut m=Machine::new(&e,ExecutionLimits::default());
+    m.start(e.entry("demo").unwrap()).unwrap();
+    loop {
+        let task=m.tasks.pop().unwrap();
+        if matches!(&task.action,Action::PendingNext(id,fields,index,_) if *id==1 && fields.get(*index).is_some_and(|f|f.field==hir::FieldId(1))) {
+            m.tasks.push(task);break;
+        }
+        m.step(task).unwrap();
+    }
+    m.resources.as_mut().unwrap().pending[0].child_activation=None;
+    m.resources.as_mut().unwrap().fail_field=Some((hir::RecordId(1),hir::FieldId(1)));
+    assert_eq!(m.resume().unwrap_err().kind,ErrorKind::Integrity("private abort ancestor has no in-progress field"));
+    assert!(!events(&m).iter().any(|e|matches!(e,Event::Attempt(_))));
+    super::conservation_tests::conserved(&m);
 }
 
 #[test]
@@ -616,4 +632,78 @@ fn approved_abort_release_failure_keeps_its_observable_prefix_and_stops() {
     let before = format!("{:?}", events(&m));
     assert!(m.resume().is_err());
     assert_eq!(format!("{:?}", events(&m)), before);
+}
+
+#[test]
+fn every_cleanup_atom_requires_its_contract_at_the_same_realization() {
+    for effect in Effect::ALL {
+        let p=hir::resources::fixture_effects("fn demo(){let owner=acquire();}",EffectSet::EMPTY,set(effect));
+        let error=crate::execution::prepare_ordinary_synthetic(p,AdmissionLimits::default()).err().unwrap();
+        assert!(matches!(error.kind,ErrorKind::Frontend{phase:"effects",..}));
+        assert!(error.to_string().contains(effect.name()));
+        let p=hir::resources::fixture_effects(&format!("fn demo() effects {}{{let owner=acquire();}}",effect.name()),EffectSet::EMPTY,set(effect));
+        let e=crate::execution::prepare_ordinary_synthetic(p,AdmissionLimits::default()).unwrap();
+        assert_eq!(completed(&run(&e)),vec![0]);
+    }
+}
+
+#[test]
+fn empty_cleanup_summary_preserves_owner_but_does_not_own_references_or_inert_moves() {
+    let p=hir::resources::fixture_effects("fn inspect(x:&Leaf){}fn demo() effects io{let owner=acquire();inspect(&owner);let inert=Pair{last:0,first:0,inert:0};let moved=inert;}",set(Effect::Io),EffectSet::EMPTY);
+    let e=crate::execution::prepare_ordinary_synthetic(p,AdmissionLimits::default()).unwrap();
+    assert!(e.cleanup_effects.is_empty());
+    assert!(e.approval.cleanup_sites.is_empty());
+    assert!(e.cleanup_plans[0].is_some());
+    assert!(e.cleanup_plans[1].is_none());
+    assert_eq!(events(&run(&e)),vec![&Event::Acquire(0),&Event::Attempt(0),&Event::Complete(0)]);
+}
+
+#[test]
+fn ordinary_pending_limits_keep_payloads_without_adding_abort_cleanup() {
+    let p=aggregate("fn build()->Pair effects io{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
+    let e=crate::execution::prepare_ordinary_synthetic(p,AdmissionLimits::default()).unwrap();
+    let full=run(&e);
+    let mut pending_stops=0;
+    for steps in 1..full.steps {
+        let mut m=Machine::new(&e,ExecutionLimits{steps,..ExecutionLimits::default()});
+        if m.start(e.entry("demo").unwrap()).is_err(){continue;}
+        assert!(matches!(m.resume().unwrap_err().kind,ErrorKind::ConfiguredLimit("steps")));
+        if let Some(s)=&m.resources {
+            if !s.pending.is_empty() {
+                pending_stops+=1;
+                assert!(!s.events.iter().any(|e|matches!(e,Event::Attempt(_)|Event::Complete(_))));
+            }
+            super::conservation_tests::conserved(&m);
+            let before=format!("{:?}",s.events);
+            assert!(m.resume().is_err());
+            assert_eq!(format!("{:?}",m.resources.as_ref().unwrap().events),before);
+        }
+    }
+    assert!(pending_stops>10);
+}
+
+#[test]
+fn recursive_abort_templates_distinguish_identical_sites_in_distinct_frames() {
+    let mut p=aggregate("fn recurse(n:R)->Leaf effects io,filesystem{let pending=Pair{last:0,first:0,inert:0};return acquire();}fn select(n:R)->Leaf effects io,filesystem{let chosen=if n==0{acquire()}else{recurse(n-1)};return chosen;}fn demo() effects io,filesystem{let result=recurse(1);}");
+    let select=p.functions().iter().find(|f|f.name()=="select").unwrap().id();
+    let hir::Function::Ordinary(recurse)=p.functions.iter_mut().find(|f|f.name()=="recurse").unwrap() else{unreachable!()};
+    let parameter=recurse.parameters[0];
+    let hir::ValueStatement::Let{initializer,..}=&mut recurse.body[0] else{unreachable!()};
+    let hir::ExprKind::RecordConstruct{fields,..}=&mut initializer.kind else{unreachable!()};
+    let value=&mut fields.iter_mut().find(|f|f.field==hir::FieldId(0)).unwrap().value;
+    value.kind=hir::ExprKind::Call{function:select,arguments:vec![hir::TypedExpr{kind:hir::ExprKind::Parameter(parameter),ty:hir::ExprType::Range(hir::RangeTypeId(0)),span:value.span}]};
+    let mut outer=abort_request(&p,"recurse",1,1,0);outer.before=hir::FieldId(0);
+    let inner=abort_request(&p,"recurse",3,3,1);
+    assert_eq!(outer.function,inner.function);
+    assert_eq!(outer.site,inner.site);
+    let e=approved(p.clone(),vec![outer,inner]).unwrap();
+    assert_eq!(completed(&abort_run(&e)),vec![1,2,0]);
+    let mut wrong=inner;wrong.frame=1;wrong.depth=1;
+    let e=approved(p,vec![outer,wrong]).unwrap();
+    let mut m=Machine::new(&e,ExecutionLimits::default());
+    m.start(e.entry("demo").unwrap()).unwrap();
+    m.resources.as_mut().unwrap().fail_field=Some((hir::RecordId(1),hir::FieldId(1)));
+    assert!(matches!(m.resume().unwrap_err().kind,ErrorKind::Integrity(_)));
+    assert!(!events(&m).iter().any(|e|matches!(e,Event::Attempt(_))));
+    super::conservation_tests::conserved(&m);
 }
