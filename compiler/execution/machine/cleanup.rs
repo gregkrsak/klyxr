@@ -985,7 +985,12 @@ impl<'a> Machine<'a> {
         }
         Ok(())
     }
-    fn pending_abort(&mut self, _frame: u64, _id: u64, _field: hir::FieldId) -> Result<(), ExecutionError> {
+    fn pending_abort(
+        &mut self,
+        _frame: u64,
+        _id: u64,
+        _field: hir::FieldId,
+    ) -> Result<(), ExecutionError> {
         if !self.executable.domain.permits_abort() {
             return Err(self.integrity("ordinary execution has no synthetic abort authority"));
         }
@@ -1000,9 +1005,9 @@ impl<'a> Machine<'a> {
             let record = pending.record;
             #[cfg(test)]
             if let crate::execution::domain::Domain::Abort(templates) = &self.executable.domain {
-                let template=&templates[self.resources.as_ref().unwrap().pending.len()-1];
-                self.origin=template.origin;
-                self.expression=Some(template.failure);
+                let template = &templates[self.resources.as_ref().unwrap().pending.len() - 1];
+                self.origin = template.origin;
+                self.expression = Some(template.failure);
             }
             if let Some(hir::resources::CleanupPlan::Fields(plan)) = self
                 .executable
@@ -1042,21 +1047,51 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     #[cfg(test)]
-    fn validate_pending_abort(&self, templates:&[crate::execution::domain::Abort],frame:u64,id:u64,field:hir::FieldId)->Result<(),ExecutionError> {
-        let pending=&self.resources.as_ref().unwrap().pending;
-        if templates.len()!=pending.len() || templates.last().map_or(true,|t|t.request.frame!=frame || t.request.pending!=id || t.request.before!=field) {
+    fn validate_pending_abort(
+        &self,
+        templates: &[crate::execution::domain::Abort],
+        frame: u64,
+        id: u64,
+        field: hir::FieldId,
+    ) -> Result<(), ExecutionError> {
+        let pending = &self.resources.as_ref().unwrap().pending;
+        if templates.len() != pending.len()
+            || templates.last().map_or(true, |t| {
+                t.request.frame != frame || t.request.pending != id || t.request.before != field
+            })
+        {
             return Err(self.integrity("private abort complete pending stack or trigger mismatch"));
         }
         // Validate every container before the first attempted release. This loop
         // is bounded by the sealed scenario; no ownership or effect inference.
-        for (template,pending) in templates.iter().zip(pending) {
-            let request=template.request;
-            let actual=self.frames.get(request.depth).filter(|f|f.id==request.frame&&f.function==request.function).ok_or_else(||self.integrity("private abort exact frame binding"))?;
-            if pending.frame!=actual.id || pending.id!=request.pending || pending.record!=template.record || pending.complete || pending.initialized.len()!=template.initialized.len() || !pending.initialized.iter().map(|(id,_)|id).eq(template.initialized.iter()) {
-                return Err(self.integrity("private abort construction or initialized membership binding"));
+        for (template, pending) in templates.iter().zip(pending) {
+            let request = template.request;
+            let actual = self
+                .frames
+                .get(request.depth)
+                .filter(|f| f.id == request.frame && f.function == request.function)
+                .ok_or_else(|| self.integrity("private abort exact frame binding"))?;
+            if pending.frame != actual.id
+                || pending.id != request.pending
+                || pending.record != template.record
+                || pending.complete
+                || pending.initialized.len() != template.initialized.len()
+                || !pending
+                    .initialized
+                    .iter()
+                    .map(|(id, _)| id)
+                    .eq(template.initialized.iter())
+            {
+                return Err(
+                    self.integrity("private abort construction or initialized membership binding")
+                );
             }
-            let (activation,site)=pending.temporary_site.ok_or_else(||self.integrity("private abort missing construction site"))?;
-            if site!=request.site || self.temporary_site_origin(activation,site,pending.frame)?!=template.origin {
+            let (activation, site) = pending
+                .temporary_site
+                .ok_or_else(|| self.integrity("private abort missing construction site"))?;
+            if site != request.site
+                || self.temporary_site_origin(activation, site, pending.frame)? != template.origin
+            {
                 return Err(self.integrity("private abort exact origin binding"));
             }
         }

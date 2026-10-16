@@ -131,7 +131,9 @@ impl<'a> Machine<'a> {
     #[cfg(test)]
     pub(super) fn inject_temporary_leaf(&mut self, activation: u64) -> Result<u64, ExecutionError> {
         if !self.executable.domain.primitive() {
-            return Err(self.integrity("temporary injection requires sealed primitive evidence domain"));
+            return Err(
+                self.integrity("temporary injection requires sealed primitive evidence domain")
+            );
         }
         let i = self.temporary_index(activation).unwrap();
         let f = &self.temporaries.as_ref().unwrap().frames[i];

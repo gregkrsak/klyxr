@@ -349,3 +349,17 @@ mutations, nested cross-frame completeness, ordinary pending traps, refused
 ordinary temporary injection, exact work/storage neighbors, detected allocation
 failure, and an approved release Attempt/Failure prefix are authored controls.
 They await authoritative CI; no local Rust executable evidence is claimed.
+
+Milestone 7 first push `cdcdd35b3bbfa02c6c63961454024f1775ffd0ad`, tree
+`d3900c23fd62424102ed8e78124d10c1da74bc20`, passed all-target compilation,
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38974063260) and
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38974063111).
+[Build](https://github.com/gregkrsak/klyxr/actions/runs/38974063170) failed
+formatting. [Tests](https://github.com/gregkrsak/klyxr/actions/runs/38974063148)
+reported two new-fixture defects: the trap used unsupported `+` syntax, and the
+refused-injection test assumed a resource state had been allocated before any
+resource operation. The trap now uses supported subtraction below its range;
+the latter asserts resource state is still absent, directly proving refusal
+preceded allocation/acquisition. Neither correction changes the expected semantic
+outcome or any predecessor assertion. The reviewed CI formatting diff is applied.
+The failed debug job did not run the release profile. No later layer was started.

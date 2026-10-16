@@ -3,9 +3,9 @@
 // Keep immediate origins and the wide trap value inline: exhaustion reporting
 // must not require an additional allocation merely to return the error itself.
 #![allow(clippy::result_large_err)]
+mod domain;
 mod machine;
 mod render;
-mod domain;
 
 pub use crate::bounded::{AdmissionLimits, ResourceFailure, ResourceKind};
 use crate::{
@@ -265,7 +265,9 @@ impl CheckedExecutable {
         validate::program_shape(&self.program, &c)?;
         self.domain.shape(self.limits)?;
         if self.domain != self.approval.domain {
-            return Err(ExecutionError::integrity("private execution domain correspondence"));
+            return Err(ExecutionError::integrity(
+                "private execution domain correspondence",
+            ));
         }
         if !self.approval.cleanup_sites.is_empty() {
             let holders = self.program.locals.len() + self.program.parameters.len();
@@ -453,7 +455,14 @@ fn seal_in_domain(
         .resources
         .summaries(&program, &cleanup_plans)
         .map_err(ExecutionError::from)?;
-    let domain = domain::Domain::admit(&program, &mir, &cleanup_plans, &cleanup_effects, limits, request)?;
+    let domain = domain::Domain::admit(
+        &program,
+        &mir,
+        &cleanup_plans,
+        &cleanup_effects,
+        limits,
+        request,
+    )?;
     let approval = Rc::new(Approval {
         program: program.clone(),
         cleanup_sites,
@@ -756,7 +765,8 @@ mod effect_authority_tests {
     #[test]
     fn pass_through_both_path_transfer_and_return_protection_do_not_charge_cleanup() {
         let source = "fn pass(x:Leaf)->Leaf{return x;} fn branches(x:Leaf,flag:bool)->Leaf{if flag{return x;}else{return x;}} fn make()->Leaf effects io{return acquire();} fn mixed(x:Leaf,flag:bool)->Leaf effects io,filesystem{if flag{return x;}let other=acquire();return other;} fn consume(x:Leaf) effects filesystem{} fn both(x:Leaf,flag:bool) effects filesystem{if flag{consume(x);}else{consume(x);}} fn maybe(x:Leaf,flag:bool) effects filesystem{if flag{consume(x);}} fn demo() effects io,filesystem{let a=acquire();let b=pass(a);let c=branches(b,false);let d=mixed(c,true);let e=make();both(acquire(),true);maybe(acquire(),false);}";
-        let e = prepare_ordinary_synthetic(cleanup_fixture(source), AdmissionLimits::default()).unwrap();
+        let e = prepare_ordinary_synthetic(cleanup_fixture(source), AdmissionLimits::default())
+            .unwrap();
         for name in ["pass", "branches", "make", "both"] {
             let id = e
                 .program
@@ -791,7 +801,8 @@ mod effect_authority_tests {
     #[test]
     fn short_circuit_cleanup_custody_keeps_skip_alternatives_separate_from_usability() {
         let source = "fn take(x:Leaf)->bool effects filesystem{return true;} fn skipped(x:Leaf) effects filesystem{let seen=false&&take(x);} fn direct(x:Leaf) effects filesystem{let seen=take(x);} fn demo() effects io,filesystem{skipped(acquire());direct(acquire());}";
-        let e = prepare_ordinary_synthetic(cleanup_fixture(source), AdmissionLimits::default()).unwrap();
+        let e = prepare_ordinary_synthetic(cleanup_fixture(source), AdmissionLimits::default())
+            .unwrap();
         let find = |name| {
             e.program
                 .functions()
