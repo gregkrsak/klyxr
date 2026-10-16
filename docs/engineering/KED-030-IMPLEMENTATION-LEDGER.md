@@ -308,3 +308,44 @@ source files. [Docs](https://github.com/gregkrsak/klyxr/actions/runs/38973362798
 and [verify](https://github.com/gregkrsak/klyxr/actions/runs/38973362811) passed.
 [Tests](https://github.com/gregkrsak/klyxr/actions/runs/38973362797) was still
 running the optimized profile at correction publication. No later layer was added.
+
+Milestone 6 formatting correction `ec63b307422a5009f34905353c62825cd6e845ce`,
+tree `650fd68cb804f3a35e078c46fd54023d49b8fe83`, passed
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38973468097),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38973468135),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38973468098), and
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38973468089).
+All job steps and relevant logs were inspected: 1,743 unchanged predecessor
+identities plus 32 additions = 1,775 in each complete profile, both affine
+checks and doctests, formatting, Clippy/Rustdoc, CLI/docs and byte reproducibility.
+The earlier first push also finished both complete profiles successfully.
+
+## Milestone 7 — Sealed private execution domains
+
+Only Ordinary exists in production. Test builds additionally seal Primitive or
+Approved Abort before opaque approval, retaining an independent immutable domain
+copy. Existing state-injection fixtures use Primitive; every predecessor identity
+covered by that helper family is explicitly listed in the evidence manifest.
+Their protocol assertions and outcomes remain unchanged. New effectful ordinary
+conformance fixtures use a separate constructor through the same successful
+ownership, complete-call-contract, and cleanup-subset pipeline.
+
+Approved abort templates derive complete cleanup unions from the canonical
+written prefix of initialized construction members, and require each containing
+function's declaration before approval. Templates bind function, MIR construction
+site, record/plan, creation/failure origins, exact monotonic frame and pending
+identities, and call-stack depth. They cover the entire affected pending stack.
+Execution validates every frame, pending instance, initialized membership and
+origin before the first attempted release; it does not rerun ownership or effects.
+Canonical reverse-declaration cleanup then preserves the existing inner-to-outer
+container order. No callbacks, source continuation, rollback, retry or unwind is
+introduced. Ordinary stops never use this authority.
+
+Metadata count, membership, scratch derivation and both retained copies fit an
+additive reservation alongside the ownership/frontend envelope. Canonical
+validation re-derives summaries from already validated plans and contracts.
+Independent domain/template mutations, runtime frame/pending/membership/origin
+mutations, nested cross-frame completeness, ordinary pending traps, refused
+ordinary temporary injection, exact work/storage neighbors, detected allocation
+failure, and an approved release Attempt/Failure prefix are authored controls.
+They await authoritative CI; no local Rust executable evidence is claimed.

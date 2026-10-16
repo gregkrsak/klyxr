@@ -9,7 +9,7 @@ fn set(effect: Effect) -> EffectSet {
     set
 }
 fn artifact(source: &str) -> CheckedExecutable {
-    crate::execution::prepare_synthetic(
+    crate::execution::prepare_ordinary_synthetic(
         hir::resources::fixture_effects(source, set(Effect::Io), set(Effect::Filesystem)),
         AdmissionLimits::default(),
     )
@@ -221,4 +221,227 @@ fn effectful_release_failure_preserves_attempt_failure_and_never_started_suffix(
     let before = format!("{:?}", events(&m));
     assert!(m.resume().is_err());
     assert_eq!(format!("{:?}", events(&m)), before);
+}
+
+
+// These constructors still pass the complete ordinary ownership/effect pipeline.
+// Only the fixed operation catalog and the private scenario differ.
+fn aggregate(source:&str)->hir::Program {
+    let mut p=super::aggregate_tests::program(source,[true,false,true]);
+    for (i,effect) in [(0,Effect::Io),(1,Effect::Filesystem)] {
+        let hir::Function::Ordinary(f)=&mut p.functions[i] else{unreachable!()};
+        f.effects=crate::effects::Declaration::synthetic(set(effect),f.span);
+        p.resources.operations[i].effects=set(effect);
+    }
+    p.resources.leaves[0].cleanup_effects=set(Effect::Filesystem);
+    p
+}
+fn abort_request(p:&hir::Program,name:&str,frame:u64,depth:usize,pending:u64)->crate::execution::domain::AbortRequest {
+    let function=p.functions().iter().find(|f|f.name()==name).unwrap().id();
+    let (mir,_)=crate::mir::lower_with_origins(p).unwrap();
+    let flow=mir.functions().iter().find(|f|f.function()==function).unwrap().temporaries.as_ref().unwrap();
+    let site=flow.sites.iter().find(|s|s.plan==Some(hir::RecordId(1))&&s.children.len()==3).unwrap().id;
+    crate::execution::domain::AbortRequest{function,site,before:hir::FieldId(1),frame,depth,pending}
+}
+fn approved(p:hir::Program,requests:Vec<crate::execution::domain::AbortRequest>)->Result<CheckedExecutable,ExecutionError> {
+    crate::execution::prepare_in_domain(p,AdmissionLimits::default(),crate::execution::domain::Request::Abort(requests))
+}
+fn abort_run(e:&CheckedExecutable)->Machine<'_> {
+    let mut m=Machine::new(e,ExecutionLimits::default());
+    m.start(e.entry("demo").unwrap()).unwrap();
+    m.resources.as_mut().unwrap().fail_field=Some((hir::RecordId(1),hir::FieldId(1)));
+    assert_eq!(m.resume().unwrap_err().kind,ErrorKind::SyntheticConstructionFailure);
+    super::conservation_tests::conserved(&m);
+    m
+}
+
+#[test]
+fn ordinary_approved_abort_and_primitive_protocol_have_separate_sealed_authority() {
+    use crate::execution::{prepare_ordinary_synthetic,prepare_synthetic};
+    let p=aggregate("fn build()->Pair effects io{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
+    let ordinary=prepare_ordinary_synthetic(p.clone(),AdmissionLimits::default()).unwrap();
+    assert!(matches!(ordinary.domain,crate::execution::domain::Domain::Ordinary));
+    assert_eq!(completed(&run(&ordinary)),vec![0,1]);
+    let mut m=Machine::new(&ordinary,ExecutionLimits::default());
+    m.start(ordinary.entry("demo").unwrap()).unwrap();
+    m.resources.as_mut().unwrap().fail_field=Some((hir::RecordId(1),hir::FieldId(1)));
+    assert_eq!(m.resume().unwrap_err().kind,ErrorKind::Integrity("ordinary execution has no synthetic abort authority"));
+    assert_eq!(events(&m),vec![&Event::Acquire(0),&Event::Acquire(1)]);
+    super::conservation_tests::conserved(&m);
+    let request=abort_request(&p,"build",1,1,0);
+    assert!(matches!(approved(p.clone(),vec![request]).err().unwrap().kind,ErrorKind::Frontend{phase:"effects",..}));
+    let primitive=prepare_synthetic(p,AdmissionLimits::default()).unwrap();
+    assert!(matches!(primitive.domain,crate::execution::domain::Domain::Primitive));
+    assert_eq!(completed(&abort_run(&primitive)),vec![0,1]);
+    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
+    let request=abort_request(&p,"build",1,1,0);
+    let e=approved(p,vec![request]).unwrap();
+    let mut m=abort_run(&e);
+    assert_eq!(completed(&m),vec![0,1]);
+    assert!(m.resources.as_ref().unwrap().pending.is_empty());
+    let before=format!("{:?}",events(&m));
+    assert!(m.resume().is_err());
+    assert_eq!(format!("{:?}",events(&m)),before);
+}
+
+#[test]
+fn ordinary_trap_during_pending_construction_adds_no_cleanup_edge() {
+    let p=aggregate("fn boom()->R{let mut n:R=1;n=n+1;return n;}fn build()->Pair effects io{return Pair{last:0,first:0,inert:boom()};}fn demo() effects io,filesystem{let result=build();}");
+    let e=crate::execution::prepare_ordinary_synthetic(p,AdmissionLimits::default()).unwrap();
+    let build=e.program.functions().iter().find(|f|f.name()=="build").unwrap().id();
+    assert!(!e.approval.cleanup_sites.iter().any(|s|s.function==build));
+    let mut m=Machine::new(&e,ExecutionLimits::default());
+    m.start(e.entry("demo").unwrap()).unwrap();
+    assert!(matches!(m.resume().unwrap_err().kind,ErrorKind::RangeTrap{..}));
+    assert_eq!(events(&m),vec![&Event::Acquire(0),&Event::Acquire(1)]);
+    assert_eq!(m.resources.as_ref().unwrap().pending[0].initialized.len(),2);
+    super::conservation_tests::conserved(&m);
+    assert!(m.resume().is_err());
+    assert_eq!(events(&m),vec![&Event::Acquire(0),&Event::Acquire(1)]);
+}
+
+#[test]
+fn approved_abort_rejects_independent_template_and_domain_mutations() {
+    use crate::execution::domain::Domain;
+    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
+    let request=abort_request(&p,"build",1,1,0);
+    for mutation in 0..12 {
+        let mut e=approved(p.clone(),vec![request]).unwrap();
+        let Domain::Abort(templates)=&mut e.domain else{unreachable!()};
+        let t=&mut templates[0];
+        match mutation {
+            0=>t.record=hir::RecordId(0),
+            1=>t.effects=EffectSet::EMPTY,
+            2=>{t.effects.insert(Effect::Network);},
+            3=>t.origin.span.start+=1,
+            4=>t.failure.start+=1,
+            5=>{t.initialized.pop();},
+            6=>t.initialized.swap(0,1),
+            7=>t.initialized.push(hir::FieldId(0)),
+            8=>t.request.site=crate::mir::temporaries::SiteId(usize::MAX),
+            9=>t.request.function=FunctionId(usize::MAX),
+            10=>templates.push(templates[0].clone()),
+            11=>templates.clear(),
+            _=>unreachable!(),
+        }
+        assert!(e.domain.validate(&e).is_err(),"independent canonical validator mutation {mutation}");
+        assert!(e.validate().is_err(),"sealed correspondence mutation {mutation}");
+    }
+    let mut e=crate::execution::prepare_ordinary_synthetic(p,AdmissionLimits::default()).unwrap();
+    e.domain=Domain::Primitive;
+    assert!(e.validate().is_err());
+}
+
+#[test]
+fn approved_abort_binds_actual_frame_pending_membership_and_origin_before_attempt() {
+    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
+    let request=abort_request(&p,"build",1,1,0);
+    for mutation in 0..7 {
+        let e=approved(p.clone(),vec![request]).unwrap();
+        let mut m=Machine::new(&e,ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        loop {
+            let task=m.tasks.pop().unwrap();
+            let stop=matches!(&task.action,Action::PendingNext(_,fields,index,_) if fields.get(*index).is_some_and(|f|f.field==hir::FieldId(1)));
+            if stop {m.tasks.push(task);break;}
+            m.step(task).unwrap();
+        }
+        let pending=&mut m.resources.as_mut().unwrap().pending[0];
+        match mutation {
+            0=>pending.id+=1,
+            1=>pending.frame=0,
+            2=>pending.record=hir::RecordId(0),
+            3=>pending.initialized.swap(0,1),
+            4=>pending.temporary_site=None,
+            5=>pending.temporary_site.as_mut().unwrap().0+=1,
+            6=>pending.complete=true,
+            _=>unreachable!(),
+        }
+        m.resources.as_mut().unwrap().fail_field=Some((hir::RecordId(1),hir::FieldId(1)));
+        assert!(matches!(m.resume().unwrap_err().kind,ErrorKind::Integrity(_)),"mutation {mutation}");
+        assert!(!events(&m).iter().any(|e|matches!(e,Event::Attempt(_))));
+    }
+}
+
+#[test]
+fn ordinary_temporary_injection_is_rejected_before_acquisition() {
+    let e=artifact("fn take(x:Leaf) effects filesystem{}fn demo() effects io,filesystem{take(acquire());}");
+    let mut m=Machine::new(&e,ExecutionLimits::default());
+    m.start(e.entry("demo").unwrap()).unwrap();
+    assert!(matches!(m.inject_temporary_leaf(0).unwrap_err().kind,ErrorKind::Integrity(_)));
+    assert!(events(&m).is_empty());
+    assert_eq!(completed(&run(&e)),vec![0]);
+}
+
+#[test]
+fn approved_nested_abort_admits_and_binds_every_affected_frame_before_release() {
+    let mut p=aggregate("fn inner()->Leaf effects io,filesystem{let pending=Pair{last:0,first:0,inert:0};return acquire();}fn outer()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=outer();}");
+    let inner=p.functions().iter().find(|f|f.name()=="inner").unwrap().id();
+    let hir::Function::Ordinary(outer)=p.functions.iter_mut().find(|f|f.name()=="outer").unwrap() else{unreachable!()};
+    let hir::ValueStatement::Return{value,..}=&mut outer.body[0] else{unreachable!()};
+    let hir::ExprKind::RecordConstruct{fields,..}=&mut value.kind else{unreachable!()};
+    let value=&mut fields.iter_mut().find(|f|f.field==hir::FieldId(0)).unwrap().value;
+    value.kind=hir::ExprKind::Call{function:inner,arguments:Vec::new()};
+    let mut outer=abort_request(&p,"outer",1,1,0);
+    outer.before=hir::FieldId(0);
+    let inner=abort_request(&p,"inner",2,2,1);
+    assert!(approved(p.clone(),vec![inner,outer]).is_err());
+    assert!(approved(p.clone(),vec![outer,outer]).is_err());
+    let missing=approved(p.clone(),vec![inner]).unwrap();
+    let mut m=Machine::new(&missing,ExecutionLimits::default());
+    m.start(missing.entry("demo").unwrap()).unwrap();
+    m.resources.as_mut().unwrap().fail_field=Some((hir::RecordId(1),hir::FieldId(1)));
+    assert!(matches!(m.resume().unwrap_err().kind,ErrorKind::Integrity(_)));
+    assert_eq!(events(&m),vec![&Event::Acquire(0),&Event::Acquire(1),&Event::Acquire(2)]);
+    super::conservation_tests::conserved(&m);
+    let e=approved(p,vec![outer,inner]).unwrap();
+    assert_eq!(completed(&abort_run(&e)),vec![1,2,0]);
+}
+
+#[test]
+fn private_abort_metadata_has_exact_admission_neighbors_and_typed_host_failure() {
+    use crate::execution::{domain,prepare_in_domain};
+    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
+    let request=abort_request(&p,"build",1,1,0);
+    for work in [false,true] {
+        let prepare=|bound| {
+            let mut limits=AdmissionLimits::default();
+            if work {limits.frontend_work=bound;}else{limits.working_storage=bound as usize;}
+            prepare_in_domain(p.clone(),limits,domain::Request::Abort(vec![request]))
+        };
+        let(mut low,mut high)=(1,if work{AdmissionLimits::default().frontend_work}else{AdmissionLimits::default().working_storage as u64});
+        assert!(prepare(high).is_ok());
+        while low<high {let middle=low+(high-low)/2;if prepare(middle).is_ok(){high=middle;}else{low=middle+1;}}
+        assert!(prepare(low).is_ok());
+        assert!(matches!(prepare(low-1).err().unwrap().kind,ErrorKind::ConfiguredLimit(_)));
+    }
+    let mut bad=request;bad.depth=AdmissionLimits::default().traversal_depth;
+    assert!(matches!(approved(p.clone(),vec![bad]).err().unwrap().kind,ErrorKind::Integrity(_)));
+    assert!(approved(p.clone(),Vec::new()).is_err());
+    assert!(matches!(approved(p.clone(),vec![request;AdmissionLimits::default().traversal_depth+1]).err().unwrap().kind,ErrorKind::ConfiguredLimit(_)));
+    struct Restore;
+    impl Drop for Restore {fn drop(&mut self){domain::FAIL_ALLOCATION.with(|f|f.set(false));}}
+    let _restore=Restore;
+    domain::FAIL_ALLOCATION.with(|f|f.set(true));
+    assert_eq!(approved(p,vec![request]).err().unwrap().kind,ErrorKind::Host("private abort authority allocation"));
+}
+
+#[test]
+fn approved_abort_release_failure_keeps_its_observable_prefix_and_stops() {
+    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
+    let request=abort_request(&p,"build",1,1,0);
+    let e=approved(p,vec![request]).unwrap();
+    let mut m=Machine::new(&e,ExecutionLimits::default());
+    m.start(e.entry("demo").unwrap()).unwrap();
+    m.resources.as_mut().unwrap().fail_field=Some((hir::RecordId(1),hir::FieldId(1)));
+    m.resources.as_mut().unwrap().failure_at=Some(0);
+    let error=m.resume().unwrap_err();
+    assert_eq!(error.kind,ErrorKind::Host("synthetic trusted release"));
+    let crate::execution::domain::Domain::Abort(templates)=&e.domain else{unreachable!()};
+    assert_eq!(error.origin,templates[0].origin.span);
+    assert_eq!(events(&m),vec![&Event::Acquire(0),&Event::Acquire(1),&Event::Attempt(0),&Event::Failure(0)]);
+    super::conservation_tests::conserved(&m);
+    let before=format!("{:?}",events(&m));
+    assert!(m.resume().is_err());
+    assert_eq!(format!("{:?}",events(&m)),before);
 }

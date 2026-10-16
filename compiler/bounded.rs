@@ -145,6 +145,14 @@ impl Context {
         nodes: usize,
         holders: usize,
     ) -> Result<(), ResourceFailure> {
+        self.reserve_cleanup_effects_extra(nodes, holders, 0)
+    }
+    pub(crate) fn reserve_cleanup_effects_extra(
+        &self,
+        nodes: usize,
+        holders: usize,
+        retained: usize,
+    ) -> Result<(), ResourceFailure> {
         let n = nodes.max(self.envelope_nodes.get()).max(1);
         let entries = n.checked_mul(holders);
         let factor = self.limits.traversal_depth.checked_mul(16);
@@ -154,7 +162,8 @@ impl Context {
                     .and_then(|d| d.checked_add(16))
                     .and_then(|d| e.checked_mul(d))
             })
-            .and_then(|e| e.checked_mul(256));
+            .and_then(|e| e.checked_mul(256))
+            .and_then(|e| e.checked_add(retained));
         let base = factor
             .and_then(|d| d.checked_add(32))
             .and_then(|d| d.checked_mul(n))
