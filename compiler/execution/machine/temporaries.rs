@@ -925,31 +925,50 @@ mod tests {
                 m.start(e.entry("demo").unwrap()).unwrap();
                 let activation = pause_region(&mut m, |d| match case {
                     0 => matches!(d, Transfer::Assign(_)),
-                    1 => matches!(d, Transfer::Field(_,_,_)),
-                    2 => matches!(d, Transfer::ReferenceField(_,_,_)),
+                    1 => matches!(d, Transfer::Field(_, _, _)),
+                    2 => matches!(d, Transfer::ReferenceField(_, _, _)),
                     _ => matches!(d, Transfer::Dereference(_)),
                 });
                 let u = m.inject_temporary_leaf(activation);
                 if stop {
                     m.resources.as_mut().unwrap().failure_at = Some(u);
                     assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Host(_)));
-                    assert!(matches!(m.temporaries.as_ref().unwrap().frames.last().unwrap().protected, Some(Value::Public(RuntimeValue::Range(RangeValue {value:2,..})))));
+                    assert!(matches!(
+                        m.temporaries
+                            .as_ref()
+                            .unwrap()
+                            .frames
+                            .last()
+                            .unwrap()
+                            .protected,
+                        Some(Value::Public(RuntimeValue::Range(RangeValue {
+                            value: 2,
+                            ..
+                        })))
+                    ));
                 } else {
                     loop {
                         let task = m.tasks.pop().unwrap();
                         let commit = matches!(task.action, Action::Commit(_));
                         m.step(task).unwrap();
-                        if commit { break; }
+                        if commit {
+                            break;
+                        }
                     }
                 }
                 let value = match &m.frames[0].slots[0].1 {
                     Slot::Available(Value::Public(RuntimeValue::Range(v))) => v.value,
-                    Slot::Available(Value::Public(RuntimeValue::Record {fields,..})) => fields[0].1.value,
+                    Slot::Available(Value::Public(RuntimeValue::Record { fields, .. })) => {
+                        fields[0].1.value
+                    }
                     _ => panic!("assignment target {case}"),
                 };
-                assert_eq!(value, if stop {0} else {2}, "case {case}");
+                assert_eq!(value, if stop { 0 } else { 2 }, "case {case}");
                 conserved(&m);
-                if !stop { m.resume().unwrap(); conserved(&m); }
+                if !stop {
+                    m.resume().unwrap();
+                    conserved(&m);
+                }
             }
         }
     }
@@ -963,8 +982,26 @@ mod tests {
         let u = m.inject_temporary_leaf(activation);
         m.resources.as_mut().unwrap().failure_at = Some(u);
         assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Host(_)));
-        assert!(matches!(m.temporaries.as_ref().unwrap().frames.last().unwrap().protected, Some(Value::Public(RuntimeValue::Bool(true)))));
-        assert_eq!(m.resources.as_ref().unwrap().events.iter().filter(|e| matches!(e, Release::Acquire(_))).count(), 2);
+        assert!(matches!(
+            m.temporaries
+                .as_ref()
+                .unwrap()
+                .frames
+                .last()
+                .unwrap()
+                .protected,
+            Some(Value::Public(RuntimeValue::Bool(true)))
+        ));
+        assert_eq!(
+            m.resources
+                .as_ref()
+                .unwrap()
+                .events
+                .iter()
+                .filter(|e| matches!(e, Release::Acquire(_)))
+                .count(),
+            2
+        );
         assert_eq!(completed(&m), vec![1]);
         assert!(m.frames[0].slots.is_empty());
         conserved(&m);
@@ -980,7 +1017,10 @@ mod tests {
                 let task = m.tasks.pop().unwrap();
                 if matches!(task.action, Action::Select(_, _)) {
                     assert!(m.temporaries.as_ref().unwrap().is_empty());
-                    assert_eq!(m.values.last(), Some(&Value::Public(RuntimeValue::Bool(flag))));
+                    assert_eq!(
+                        m.values.last(),
+                        Some(&Value::Public(RuntimeValue::Bool(flag)))
+                    );
                     assert_eq!(completed(&m), vec![0]);
                     m.step(task).unwrap();
                     break;
@@ -988,7 +1028,7 @@ mod tests {
                 m.step(task).unwrap();
             }
             m.resume().unwrap();
-            assert_eq!(completed(&m), if flag { vec![0,1] } else { vec![0] });
+            assert_eq!(completed(&m), if flag { vec![0, 1] } else { vec![0] });
             conserved(&m);
         }
     }
@@ -1000,13 +1040,28 @@ mod tests {
             let mut m = Machine::new(&e, ExecutionLimits::default());
             m.start(e.entry("demo").unwrap()).unwrap();
             m.resume().unwrap();
-            assert_eq!(completed(&m), vec![0,1]);
-            let flow = e.mir.functions().last().unwrap().temporaries.as_ref().unwrap();
+            assert_eq!(completed(&m), vec![0, 1]);
+            let flow = e
+                .mir
+                .functions()
+                .last()
+                .unwrap()
+                .temporaries
+                .as_ref()
+                .unwrap();
             let root = &flow.sites[flow.regions[0].roots[0].0];
-            let omitted = root.children[if flag {2} else {1}];
+            let omitted = root.children[if flag { 2 } else { 1 }];
             let events = &m.temporaries.as_ref().unwrap().events;
-            assert_eq!(events.iter().filter(|e| matches!(e, Event::Begin(_,0,_,_))).count(), 1);
-            assert!(!events.iter().any(|e| matches!(e, Event::Register(_,site) if *site == omitted)));
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|e| matches!(e, Event::Begin(_, 0, _, _)))
+                    .count(),
+                1
+            );
+            assert!(!events
+                .iter()
+                .any(|e| matches!(e, Event::Register(_,site) if *site == omitted)));
             conserved(&m);
         }
     }
@@ -1017,8 +1072,21 @@ mod tests {
         let mut m = Machine::new(&e, ExecutionLimits::default());
         m.start(e.entry("demo").unwrap()).unwrap();
         m.resume().unwrap();
-        assert_eq!(completed(&m), vec![1,0,3,2]);
-        let activations: Vec<_> = m.temporaries.as_ref().unwrap().events.iter().filter_map(|e| if let Event::Begin(id,0,RegionId(0),_) = e { Some(*id) } else { None }).collect();
+        assert_eq!(completed(&m), vec![1, 0, 3, 2]);
+        let activations: Vec<_> = m
+            .temporaries
+            .as_ref()
+            .unwrap()
+            .events
+            .iter()
+            .filter_map(|e| {
+                if let Event::Begin(id, 0, RegionId(0), _) = e {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect();
         assert_eq!(activations.len(), 2);
         assert_ne!(activations[0], activations[1]);
         conserved(&m);
@@ -1033,21 +1101,54 @@ mod tests {
     #[test]
     fn source_borrow_discard_and_recurring_condition_exclusions_remain() {
         let prefix = "type R=range 0..1;record Leaf{data:R}fn acquire()->Leaf{return Leaf{data:0};}fn ready(r:Leaf)->bool{return true;}fn inspect(r:&Leaf)->bool{return true;}";
-        for body in ["inspect(&acquire());", "let view=&acquire();", "return &acquire();"] {
-            assert!(matches!(crate::compile_source(&format!("{prefix}fn demo(){{{body}}}")), Err(crate::FrontendError::Parse(_))));
+        for body in [
+            "inspect(&acquire());",
+            "let view=&acquire();",
+            "return &acquire();",
+        ] {
+            assert!(matches!(
+                crate::compile_source(&format!("{prefix}fn demo(){{{body}}}")),
+                Err(crate::FrontendError::Parse(_))
+            ));
         }
         for body in ["acquire();", "ready(acquire());"] {
-            assert!(matches!(crate::compile_source(&format!("{prefix}fn demo(){{{body}}}")), Err(crate::FrontendError::Type(_))));
+            assert!(matches!(
+                crate::compile_source(&format!("{prefix}fn demo(){{{body}}}")),
+                Err(crate::FrontendError::Type(_))
+            ));
         }
         for condition in ["ready(acquire())", "true && ready(acquire())"] {
-            assert!(matches!(crate::compile_source(&format!("{prefix}fn demo(){{while {condition}{{}}}}")), Err(crate::FrontendError::Ownership(_))));
+            assert!(matches!(
+                crate::compile_source(&format!("{prefix}fn demo(){{while {condition}{{}}}}")),
+                Err(crate::FrontendError::Ownership(_))
+            ));
         }
-        assert!(matches!(crate::compile_source(&format!("{prefix}fn demo(){{let r=acquire();while inspect(&r){{}}}}")), Err(crate::FrontendError::Ownership(_))));
+        assert!(matches!(
+            crate::compile_source(&format!(
+                "{prefix}fn demo(){{let r=acquire();while inspect(&r){{}}}}"
+            )),
+            Err(crate::FrontendError::Ownership(_))
+        ));
         let mut p = hir::resources::fixture_with("fn demo(){release(acquire());}");
-        let hir::Function::Ordinary(f) = p.functions.last_mut().unwrap() else { panic!() };
-        let hir::ValueStatement::CallNoValue {function,arguments,..} = &mut f.body[0] else { panic!() };
+        let hir::Function::Ordinary(f) = p.functions.last_mut().unwrap() else {
+            panic!()
+        };
+        let hir::ValueStatement::CallNoValue {
+            function,
+            arguments,
+            ..
+        } = &mut f.body[0]
+        else {
+            panic!()
+        };
         *function = FunctionId(0);
         arguments.clear();
-        assert!(matches!(crate::execution::prepare_synthetic(p, AdmissionLimits::default()).err().unwrap().kind, ErrorKind::Integrity(_)));
+        assert!(matches!(
+            crate::execution::prepare_synthetic(p, AdmissionLimits::default())
+                .err()
+                .unwrap()
+                .kind,
+            ErrorKind::Integrity(_)
+        ));
     }
 }

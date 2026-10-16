@@ -2803,7 +2803,15 @@ mod temporary_aggregate_tests {
             let task = m.tasks.pop().unwrap();
             if let Action::SiteEval(_, _, activation, site) = &task.action {
                 let function = m.frames[m.frame_index(task.frame).unwrap()].function;
-                let destination = m.executable.function(function).unwrap().temporaries.as_ref().unwrap().sites[site.0].destination;
+                let destination = m
+                    .executable
+                    .function(function)
+                    .unwrap()
+                    .temporaries
+                    .as_ref()
+                    .unwrap()
+                    .sites[site.0]
+                    .destination;
                 if destination == Transfer::Pending(hir::RecordId(1), hir::FieldId(1)) {
                     let u = m.inject_temporary_leaf(*activation);
                     m.resources.as_mut().unwrap().failure_at = Some(u);
@@ -2826,29 +2834,60 @@ mod temporary_aggregate_tests {
         m.start(e.entry("demo").unwrap()).unwrap();
         loop {
             let task = m.tasks.pop().unwrap();
-            if matches!(task.action, Action::Invoke(_,3)) { break; }
+            if matches!(task.action, Action::Invoke(_, 3)) {
+                break;
+            }
             m.step(task).unwrap();
             conservation_tests::conserved(&m);
         }
-        let Value::Temporary(id) = &m.values[0] else { panic!() };
+        let Value::Temporary(id) = &m.values[0] else {
+            panic!()
+        };
         let activation = id.activation;
         assert!(m.values.iter().all(|v| matches!(v, Value::Temporary(_))));
         m.values.clear();
         m.temporary_retire(activation).unwrap();
         m.temporary_end(activation).unwrap();
-        let ids: Vec<_> = m.resources.as_ref().unwrap().events.iter().filter_map(|e| if let Event::Complete(id) = e { Some(*id) } else { None }).collect();
+        let ids: Vec<_> = m
+            .resources
+            .as_ref()
+            .unwrap()
+            .events
+            .iter()
+            .filter_map(|e| {
+                if let Event::Complete(id) = e {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect();
         // B, then G's last-declared/first-declared leaves, then A.
-        assert_eq!(ids, vec![3,1,2,0]);
+        assert_eq!(ids, vec![3, 1, 2, 0]);
         conservation_tests::conserved(&m);
     }
 
     #[test]
     fn middle_pending_field_keeps_moved_source_membership_after_child_stop() {
-        let mut p = aggregate_tests::program("fn demo(){let source=acquire();let owner=Pair{last:0,inert:0,first:0};}", [true;3]);
-        let hir::Function::Ordinary(f) = p.functions.last_mut().unwrap() else { panic!() };
-        let hir::ValueStatement::Let {initializer,..} = &mut f.body[1] else { panic!() };
-        let ExprKind::RecordConstruct {fields,..} = &mut initializer.kind else { panic!() };
-        fields.iter_mut().find(|f| f.field == hir::FieldId(1)).unwrap().value.kind = ExprKind::Local(hir::LocalId(0));
+        let mut p = aggregate_tests::program(
+            "fn demo(){let source=acquire();let owner=Pair{last:0,inert:0,first:0};}",
+            [true; 3],
+        );
+        let hir::Function::Ordinary(f) = p.functions.last_mut().unwrap() else {
+            panic!()
+        };
+        let hir::ValueStatement::Let { initializer, .. } = &mut f.body[1] else {
+            panic!()
+        };
+        let ExprKind::RecordConstruct { fields, .. } = &mut initializer.kind else {
+            panic!()
+        };
+        fields
+            .iter_mut()
+            .find(|f| f.field == hir::FieldId(1))
+            .unwrap()
+            .value
+            .kind = ExprKind::Local(hir::LocalId(0));
         let e = crate::execution::prepare_synthetic(p, AdmissionLimits::default()).unwrap();
         let mut m = Machine::new(&e, ExecutionLimits::default());
         m.start(e.entry("demo").unwrap()).unwrap();
@@ -2858,13 +2897,23 @@ mod temporary_aggregate_tests {
         let pending = &m.resources.as_ref().unwrap().pending[0];
         assert!(!pending.complete);
         assert_eq!(pending.initialized.len(), 2);
-        assert!(matches!(pending.initialized.iter().find(|(f,_)| *f == hir::FieldId(1)).unwrap().1, Value::Leaf {identity:0,..}));
+        assert!(matches!(
+            pending
+                .initialized
+                .iter()
+                .find(|(f, _)| *f == hir::FieldId(1))
+                .unwrap()
+                .1,
+            Value::Leaf { identity: 0, .. }
+        ));
         conservation_tests::conserved(&m);
     }
 
     #[test]
     fn nested_pending_last_written_middle_field_cannot_publish_before_retirement() {
-        let p = aggregate_tests::nested("record Wrap{x:R,last:R}fn demo(){let owner=Wrap{last:0,x:0};}");
+        let p = aggregate_tests::nested(
+            "record Wrap{x:R,last:R}fn demo(){let owner=Wrap{last:0,x:0};}",
+        );
         let e = crate::execution::prepare_synthetic(p, AdmissionLimits::default()).unwrap();
         let mut m = Machine::new(&e, ExecutionLimits::default());
         m.start(e.entry("demo").unwrap()).unwrap();

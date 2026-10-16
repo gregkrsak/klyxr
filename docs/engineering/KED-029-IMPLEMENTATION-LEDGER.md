@@ -222,3 +222,14 @@ rejections, source value-discard typing and private forged resource-discard
 metadata are checked separately. Nine new test identities enumerate these
 matrices. Validation pending; Host allocation, admission and final artifact
 pressure remain before documentation and complete implementation conformance.
+
+Control-flow/aggregate evidence commit `948c9862d87032d5433a44bbe3071498322ceb67`,
+tree `3de77804616b002c445a98cff7d689d1f5f7a538`: compilation and complete debug
+and release profiles passed, each reconciling 1,706 predecessors plus 28 additions
+= 1,734 passing identities. Both affine checks and authority doctests passed.
+Build https://github.com/gregkrsak/klyxr/actions/runs/38850141141 reported only
+formatting differences, applied from the complete GitHub Rustfmt output. Other
+runs: tests https://github.com/gregkrsak/klyxr/actions/runs/38850141257,
+docs https://github.com/gregkrsak/klyxr/actions/runs/38850141181,
+verify https://github.com/gregkrsak/klyxr/actions/runs/38850141160.
+No later layer added before the four-workflow formatting repair gate passes.
