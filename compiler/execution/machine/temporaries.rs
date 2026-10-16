@@ -98,6 +98,19 @@ impl State {
 }
 
 impl<'a> Machine<'a> {
+    #[cfg(test)]
+    pub(super) fn inject_temporary_leaf(&mut self, activation: u64) -> u64 {
+        let i = self.temporary_index(activation).unwrap();
+        let f = &self.temporaries.as_ref().unwrap().frames[i];
+        let flow = self.executable.function(f.function).unwrap().temporaries.as_ref().unwrap();
+        let site = flow.sites.iter().find(|s| s.region == f.region && s.plan.is_some_and(|r| self.executable.program.resources.is_leaf(r))).unwrap().id;
+        let function = self.executable.program.resources.operations.iter().find(|o| matches!(o.kind, hir::resources::OperationKind::Acquire(_))).unwrap().function;
+        self.trusted_invoke(function, 0).unwrap();
+        let identity = match self.values.last().unwrap() { Value::Leaf { identity, .. } => *identity, _ => panic!() };
+        self.temporary_register(activation, site).unwrap();
+        assert!(matches!(self.values.pop(), Some(Value::Temporary(_))));
+        identity
+    }
     fn temporary_event_reserve(&mut self) -> Result<(), ExecutionError> {
         let s = self.temporaries.as_ref().unwrap();
         if s.events.len() == s.events.capacity() {
@@ -472,25 +485,35 @@ impl<'a> Machine<'a> {
     pub(super) fn temporary_finish(&mut self, activation: u64) -> Result<(), ExecutionError> {
         let i = self.temporary_index(activation)?;
         let f = &self.temporaries.as_ref().unwrap().frames[i];
-        let destination = self
-            .executable
-            .function(f.function)?
-            .temporaries
-            .as_ref()
-            .unwrap()
-            .regions[f.region.0]
-            .destination;
+        let frame = f.frame;
+        let destination = self.executable.function(f.function)?.temporaries.as_ref().unwrap().regions[f.region.0].destination;
+        if matches!(destination, Transfer::NoValue(_)) {
+            // Completion is a control marker, never a dummy owned result.
+            if self.values.last() != Some(&Value::Completion) { return Err(self.integrity("NoValue temporary completion mismatch")); }
+            self.temporary_retire(activation)?;
+            return self.temporary_end(activation);
+        }
+        if let Transfer::Replacement(local) = destination { self.replacement_accepts_result(frame, local)?; }
+        if destination == Transfer::Return && (self.staged_return.is_some() || self.resources.as_ref().unwrap().protected.is_some()) {
+            return Err(self.integrity("protected return already occupied"));
+        }
         let value = self.pop_to(Some(destination))?;
-        self.temporaries.as_mut().unwrap().frames[i].protected = Some(value);
+        match destination {
+            Transfer::Return => {
+                self.resources.as_mut().unwrap().protected = Some(value);
+                self.staged_return = Some(frame);
+            }
+            Transfer::Replacement(_) => self.replacement_stage_result(value),
+            _ => self.temporaries.as_mut().unwrap().frames[i].protected = Some(value),
+        }
         self.reserve(0)?;
         self.temporary_retire(activation)?;
-        // The popped result leaves a reserved operand entry for destination staging.
         self.reserve(0)?;
-        let value = self.temporaries.as_mut().unwrap().frames[i]
-            .protected
-            .take()
-            .unwrap();
-        self.values.push(value);
+        if !matches!(destination, Transfer::Return | Transfer::Replacement(_)) {
+            // Reserved destination staging receives R only after retirement.
+            let value = self.temporaries.as_mut().unwrap().frames[i].protected.take().unwrap();
+            self.values.push(value);
+        }
         self.temporary_end(activation)
     }
     pub(super) fn temporary_end(&mut self, activation: u64) -> Result<(), ExecutionError> {
@@ -512,5 +535,185 @@ impl<'a> Machine<'a> {
         }
         s.frames.pop();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::execution::machine::cleanup::{conservation_tests::conserved, Event as Release};
+
+    fn artifact(source: &str) -> CheckedExecutable {
+        crate::execution::prepare_synthetic(hir::resources::fixture_with(source), AdmissionLimits::default()).unwrap()
+    }
+    fn pause_region(m: &mut Machine<'_>, predicate: impl Fn(Transfer) -> bool) -> u64 {
+        loop {
+            let task = m.tasks.pop().unwrap();
+            m.step(task).unwrap();
+            if let Some(s) = &m.temporaries {
+                if let Some(f) = s.frames.last() {
+                    let destination = m.executable.function(f.function).unwrap().temporaries.as_ref().unwrap().regions[f.region.0].destination;
+                    if f.phase == Phase::Active && predicate(destination) { return f.id; }
+                }
+            }
+        }
+    }
+    fn completed(m: &Machine<'_>) -> Vec<u64> {
+        m.resources.as_ref().unwrap().events.iter().filter_map(|e| if let Release::Complete(id) = e { Some(*id) } else { None }).collect()
+    }
+
+    #[test]
+    fn private_remaining_abc_frame_cleans_exact_identities_cba() {
+        let e = artifact("fn take(a:Leaf,b:Leaf,c:Leaf){}fn demo(){take(acquire(),acquire(),acquire());}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        loop {
+            let t = m.tasks.pop().unwrap();
+            if matches!(t.action, Action::Invoke(_, 3)) { break; }
+            m.step(t).unwrap();
+            conserved(&m);
+        }
+        // Private primitive oracle: no source value-discard or altered call executes.
+        assert!(m.values.iter().all(|v| matches!(v, Value::Temporary(_))));
+        m.values.clear();
+        let activation = m.temporaries.as_ref().unwrap().frames.last().unwrap().id;
+        m.temporary_retire(activation).unwrap();
+        m.temporary_end(activation).unwrap();
+        assert_eq!(completed(&m), vec![2, 1, 0]);
+        let owners: Vec<_> = m.temporaries.as_ref().unwrap().events.iter().filter_map(|e| if let Event::Cleanup(id) = e { Some(id.ordinal) } else { None }).collect();
+        assert_eq!(owners, vec![2, 1, 0]);
+        assert!(!m.resources.as_ref().unwrap().events.iter().any(|e| matches!(e, Release::Retire(_))));
+        conserved(&m);
+    }
+
+    #[test]
+    fn local_ur_failure_keeps_result_protected_and_local_unpublished() {
+        let e = artifact("fn demo(){let r=acquire();}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        let activation = pause_region(&mut m, |d| matches!(d, Transfer::Local(_)));
+        let u = m.inject_temporary_leaf(activation);
+        m.resources.as_mut().unwrap().failure_at = Some(u);
+        assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Host(_)));
+        assert!(matches!(m.frames[0].slots[0].1, Slot::Uninitialized));
+        let f = m.temporaries.as_ref().unwrap().frames.last().unwrap();
+        assert!(matches!(f.protected, Some(Value::Leaf {identity:1,..})));
+        assert_eq!(completed(&m), Vec::<u64>::new());
+        conserved(&m);
+        assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Integrity(_)));
+    }
+
+    #[test]
+    fn local_ur_success_retires_u_before_publishing_r() {
+        let e = artifact("fn demo(){let r=acquire();}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        let activation = pause_region(&mut m, |d| matches!(d, Transfer::Local(_)));
+        m.inject_temporary_leaf(activation);
+        m.resume().unwrap();
+        assert_eq!(completed(&m), vec![0, 1]);
+        conserved(&m);
+    }
+
+    #[test]
+    fn return_result_uses_return_protection_before_operand_cleanup_stop() {
+        let e = artifact("fn make()->Leaf{return acquire();}fn demo(){let r=make();}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        let activation = pause_region(&mut m, |d| d == Transfer::Return);
+        let u = m.inject_temporary_leaf(activation);
+        m.resources.as_mut().unwrap().failure_at = Some(u);
+        assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Host(_)));
+        assert!(matches!(m.resources.as_ref().unwrap().protected, Some(Value::Leaf {identity:1,..})));
+        assert_eq!(m.staged_return, Some(1));
+        assert_eq!(m.frames.len(), 2);
+        assert!(matches!(m.frames[0].slots[0].1, Slot::Uninitialized));
+        assert!(m.temporaries.as_ref().unwrap().frames.last().unwrap().protected.is_none());
+        conserved(&m);
+    }
+
+    #[test]
+    fn replacement_result_is_protected_before_u_stop_and_old_displacement() {
+        let e = artifact("fn demo(){let mut a=acquire();a=acquire();}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        let activation = pause_region(&mut m, |d| matches!(d, Transfer::Replacement(_)));
+        let u = m.inject_temporary_leaf(activation);
+        m.resources.as_mut().unwrap().failure_at = Some(u);
+        assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Host(_)));
+        assert!(matches!(m.frames[0].slots[0].1, Slot::Available(Value::Leaf {identity:0,..})));
+        assert!(m.temporaries.as_ref().unwrap().frames.last().unwrap().protected.is_none());
+        assert!(matches!(m.resources.as_ref().unwrap().replacements.last().unwrap().protected, Some(Value::Leaf {identity:2,..})));
+        assert_eq!(completed(&m), Vec::<u64>::new());
+        conserved(&m);
+    }
+
+    #[test]
+    fn assignment_cleanup_stop_preserves_rhs_prefix_and_prevents_pending_write() {
+        let e = artifact("type N=range 0..3;record Cell{x:N}fn next(c:&mut Cell,r:Leaf)->N{c.x=1;return 2;}fn demo(){let mut c=Cell{x:0};c.x=next(&mut c,acquire());}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        let activation = pause_region(&mut m, |d| matches!(d, Transfer::Field(_,_,_)));
+        let u = m.inject_temporary_leaf(activation);
+        m.resources.as_mut().unwrap().failure_at = Some(u);
+        assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Host(_)));
+        let Slot::Available(Value::Public(RuntimeValue::Record {fields,..})) = &m.frames[0].slots[0].1 else { panic!() };
+        assert_eq!(fields[0].1.value, 1);
+        assert!(matches!(m.temporaries.as_ref().unwrap().frames.last().unwrap().protected, Some(Value::Public(RuntimeValue::Range(RangeValue {value:2,..})))));
+        assert_eq!(completed(&m), vec![1]);
+        conserved(&m);
+    }
+
+    #[test]
+    fn later_argument_trap_retains_earlier_owner_without_call_entry() {
+        let e = artifact("type N=range 0..1;fn zero()->N{return 0;}fn trap()->N{return zero()-1;}fn take(a:Leaf,n:N,b:Leaf){}fn demo(){take(acquire(),trap(),acquire());}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::RangeTrap {..}));
+        assert_eq!(completed(&m), Vec::<u64>::new());
+        let s = m.resources.as_ref().unwrap();
+        assert_eq!(s.events.iter().filter(|e| matches!(e, Release::Acquire(_))).count(), 1);
+        assert_eq!(m.temporaries.as_ref().unwrap().frames[0].owners.iter().filter(|o| o.value.is_some()).count(), 1);
+        conserved(&m);
+    }
+
+    #[test]
+    fn every_call_fuel_cut_retains_partial_parameters_and_refuses_resume() {
+        let e = artifact("fn take(a:Leaf,b:Leaf,c:Leaf){let body=acquire();}fn demo(){take(acquire(),acquire(),acquire());}");
+        let mut full = Machine::new(&e, ExecutionLimits::default());
+        full.start(e.entry("demo").unwrap()).unwrap();
+        full.resume().unwrap();
+        let mut partial = 0;
+        for steps in 1..full.steps {
+            let mut m = Machine::new(&e, ExecutionLimits {steps,..ExecutionLimits::default()});
+            let result = m.start(e.entry("demo").unwrap()).and_then(|_| m.resume());
+            assert_eq!(result.unwrap_err().kind, ErrorKind::ConfiguredLimit("steps"));
+            if m.resources.is_some() {
+                conserved(&m);
+                if m.frames.len() == 2 && matches!(m.frames[1].slots.len(), 1 | 2) {
+                    partial += 1;
+                    assert_eq!(m.resources.as_ref().unwrap().events.iter().filter(|e| matches!(e, Release::Acquire(_))).count(), 3);
+                }
+                assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Integrity(_)));
+            }
+        }
+        assert!(partial >= 2);
+        conserved(&full);
+    }
+
+    #[test]
+    fn every_argument_storage_cut_conserves_and_exact_peak_succeeds() {
+        let e = artifact("fn pass(x:Leaf)->Leaf{return x;}fn take(a:Leaf,b:Leaf){}fn demo(){take(pass(acquire()),acquire());}");
+        let mut full = Machine::new(&e, ExecutionLimits::default());
+        full.start(e.entry("demo").unwrap()).unwrap();
+        full.resume().unwrap();
+        let peak = full.max_storage.get();
+        for working_storage in 1..=peak {
+            let mut m = Machine::new(&e, ExecutionLimits {working_storage,..ExecutionLimits::default()});
+            let result = m.start(e.entry("demo").unwrap()).and_then(|_| m.resume());
+            if working_storage == peak { assert_eq!(result.unwrap(), ExecutionResult::NoValue); }
+            else { assert_eq!(result.unwrap_err().kind, ErrorKind::ConfiguredLimit("working storage")); }
+            if m.resources.is_some() { conserved(&m); }
+        }
     }
 }

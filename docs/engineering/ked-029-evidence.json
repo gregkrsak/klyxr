@@ -10,6 +10,15 @@
     "lib.rs::execution::temporary_authority_tests::source_evaluation_ordinals_include_resource_free_predecessors",
     "lib.rs::execution::machine::cleanup::expression_temporary_tests::direct_argument_transfers_to_callee_without_caller_cleanup",
     "lib.rs::execution::machine::cleanup::expression_temporary_tests::three_arguments_preserve_written_acquisition_and_parameter_cleanup",
-    "lib.rs::execution::machine::cleanup::expression_temporary_tests::nested_pass_through_keeps_one_leaf_through_return_and_outer_entry"
+    "lib.rs::execution::machine::cleanup::expression_temporary_tests::nested_pass_through_keeps_one_leaf_through_return_and_outer_entry",
+    "lib.rs::execution::machine::temporaries::tests::private_remaining_abc_frame_cleans_exact_identities_cba",
+    "lib.rs::execution::machine::temporaries::tests::local_ur_failure_keeps_result_protected_and_local_unpublished",
+    "lib.rs::execution::machine::temporaries::tests::local_ur_success_retires_u_before_publishing_r",
+    "lib.rs::execution::machine::temporaries::tests::return_result_uses_return_protection_before_operand_cleanup_stop",
+    "lib.rs::execution::machine::temporaries::tests::replacement_result_is_protected_before_u_stop_and_old_displacement",
+    "lib.rs::execution::machine::temporaries::tests::assignment_cleanup_stop_preserves_rhs_prefix_and_prevents_pending_write",
+    "lib.rs::execution::machine::temporaries::tests::later_argument_trap_retains_earlier_owner_without_call_entry",
+    "lib.rs::execution::machine::temporaries::tests::every_call_fuel_cut_retains_partial_parameters_and_refuses_resume",
+    "lib.rs::execution::machine::temporaries::tests::every_argument_storage_cut_conserves_and_exact_peak_succeeds"
   ]
 }

@@ -147,7 +147,7 @@ pub(super) struct State {
     next_replacement: u64,
     #[cfg(test)]
     fail_replacement: Option<replacement::Phase>,
-    protected: Option<Value>,
+    pub(super) protected: Option<Value>,
     pub(super) detached: Option<Value>,
     current: Option<Value>,
     pub(super) failure_at: Option<u64>,
@@ -715,6 +715,9 @@ impl<'a> Machine<'a> {
             return Err(self.integrity("protected return already occupied"));
         }
         self.resources.as_mut().unwrap().protected = Some(value);
+        self.cleanup_return_protected(id)
+    }
+    pub(super) fn cleanup_return_protected(&mut self, id: u64) -> Result<(), ExecutionError> {
         self.reserve(0)?;
         self.cleanup_exit(id)?;
         let r = self.resource_frame_index(id)?;
@@ -738,6 +741,15 @@ impl<'a> Machine<'a> {
         self.event(Event::Retire(id))?;
         self.frames.pop();
         self.resources.as_mut().unwrap().frames.remove(r);
+        self.deliver_protected_value()
+    }
+    pub(super) fn deliver_protected_return(&mut self, id: u64) -> Result<(), ExecutionError> {
+        if self.frames.last().map(|f| f.id) != Some(id) { return Err(self.integrity("protected return frame mismatch")); }
+        self.deliver_protected_value()?;
+        self.frames.pop();
+        Ok(())
+    }
+    fn deliver_protected_value(&mut self) -> Result<(), ExecutionError> {
         let grow = self.values.len() == self.values.capacity();
         self.reserve(if grow { size_of::<Value>() } else { 0 })?;
         if grow {
@@ -2028,7 +2040,7 @@ mod copy_and_reporting_tests {
     }
 }
 #[cfg(test)]
-mod conservation_tests {
+pub(super) mod conservation_tests {
     use super::*;
     fn leaves(value: &Value, ids: &mut Vec<u64>) {
         match value {
@@ -2041,7 +2053,7 @@ mod conservation_tests {
             _ => {}
         }
     }
-    pub(super) fn conserved(m: &Machine<'_>) {
+    pub(in crate::execution::machine) fn conserved(m: &Machine<'_>) {
         let s = m.resources.as_ref().unwrap();
         let mut acquired = Vec::new();
         let mut completed = Vec::new();

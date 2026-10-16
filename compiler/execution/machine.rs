@@ -139,6 +139,7 @@ pub(super) struct Machine<'a> {
     resources: Option<cleanup::State>,
     temporaries: Option<temporaries::State>,
     site: Option<(u64, crate::mir::temporaries::SiteId)>,
+    staged_return: Option<u64>,
     #[cfg(test)]
     max_storage: std::cell::Cell<usize>,
 }
@@ -153,6 +154,7 @@ impl<'a> Machine<'a> {
             resources: None,
             temporaries: None,
             site: None,
+            staged_return: None,
             #[cfg(test)]
             max_storage: std::cell::Cell::new(0),
             next_frame: 0,
@@ -1022,7 +1024,10 @@ impl<'a> Machine<'a> {
         }))
     }
     fn finish_return(&mut self, id: u64) -> Result<(), ExecutionError> {
-        let value = self.pop()?;
+        let staged = self.staged_return == Some(id);
+        let ordinary = if staged { None } else { Some(self.pop()?) };
+        let value = ordinary.as_ref().or_else(|| self.resources.as_ref().and_then(|s| s.protected.as_ref()))
+            .ok_or_else(|| self.integrity("missing protected return result"))?;
         let f = self
             .frames
             .last()
@@ -1035,7 +1040,7 @@ impl<'a> Machine<'a> {
             .as_ordinary()
             .ok_or_else(|| self.integrity("return function"))?
             .return_type;
-        let matches = match (&value, declared) {
+        let matches = match (value, declared) {
             (
                 Value::Leaf { record, .. } | Value::Aggregate { record, .. },
                 Some(ValueType::Record(t)),
@@ -1051,6 +1056,16 @@ impl<'a> Machine<'a> {
         if !matches {
             return Err(self.integrity("return result or escaping reference mismatch"));
         }
+        if staged {
+            if self.executable.function(f.function)?.cleanup.is_some() {
+                self.cleanup_return_protected(id)?;
+            } else {
+                self.deliver_protected_return(id)?;
+            }
+            self.staged_return = None;
+            return Ok(());
+        }
+        let value = ordinary.unwrap();
         if self.executable.function(f.function)?.cleanup.is_some() {
             return self.cleanup_return(id, value);
         }
@@ -1167,6 +1182,7 @@ impl<'a> Machine<'a> {
             }
         }
         if !self.frames.is_empty()
+            || self.staged_return.is_some()
             || self.temporaries.as_ref().is_some_and(|s| !s.is_empty())
             || self.values.len() != 1
             || self

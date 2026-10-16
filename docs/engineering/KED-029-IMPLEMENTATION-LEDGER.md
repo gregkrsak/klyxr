@@ -150,3 +150,36 @@ https://github.com/gregkrsak/klyxr/actions/runs/38848759628. Both affine checks
 and authority doctests passed. Destination-specific return/replacement protection
 integration and controlled leftover-owner evidence remain required before the
 implementation can be considered complete. No later layer added while build red.
+
+Milestone 3 completed at `18ef6029962634bbb8f894f65cc929cb563bc9e9`, tree
+`69f3eabd162449414a21290115dc09da2faeee71`. All four passed:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38848976816),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38848976858),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38848976741),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38848976736).
+Complete debug/release profiles each reconciled 1,716 identities; both affine
+checks and authority doctests passed.
+
+## Milestone 4 — call cuts and destination protection
+
+Return operands enter the existing protected-return holder before temporary
+retirement. Replacement RHS results enter the existing prepared replacement
+holder before retirement or displacement. Their downstream operations consume
+these already protected results without a second pop or duplicate payload.
+NoValue completion stays a control marker and creates no dummy result owner.
+
+Private boundary fixtures use the existing trusted acquisition and canonical
+temporary registration to seed leftover U before source RHS evaluation. They
+demonstrate unpublished local R retention, exact success neighbors, protected
+return/replacement custody, and preserved RHS prefix mutation without the final
+assignment write. Private A/B/C retirement is explicitly a primitive oracle,
+not execution of a discarded value expression or changed source call.
+
+Every fuel cut of a three-argument entry (including partial parameter publication)
+must conserve identities and refuse resume; an exact sufficient neighbor succeeds.
+Every byte storage cut of nested argument/return custody must conserve identities,
+with the observed exact prospective peak sufficient. Later-argument range failure
+retains the earlier acquired owner without callee entry or fabricated unwind.
+Nine new test identities are enumerated in the evidence manifest. Validation
+pending. Remaining assignments, pending-field stop, structured-condition, bounds,
+Host-allocation and artifact batteries remain required before final conformance.
