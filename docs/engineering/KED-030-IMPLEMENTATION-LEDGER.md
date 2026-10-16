@@ -299,3 +299,12 @@ or are protected returns. Private leftover injection is protocol evidence and
 will receive an explicit separate sealed domain in milestone 7.
 
 These six tests are authored; authoritative CI evidence is pending.
+
+Milestone 6 first push `85b4a5aa12664447383845585f50a146d16a605f`, tree
+`939d6bf2dac69499569c63fe4519527b3afef5c6`, passed all-target compilation
+and the debug suite. [Build](https://github.com/gregkrsak/klyxr/actions/runs/38973362869)
+failed only formatting; its reviewed diff is applied to the two new test-related
+source files. [Docs](https://github.com/gregkrsak/klyxr/actions/runs/38973362798)
+and [verify](https://github.com/gregkrsak/klyxr/actions/runs/38973362811) passed.
+[Tests](https://github.com/gregkrsak/klyxr/actions/runs/38973362797) was still
+running the optimized profile at correction publication. No later layer was added.
