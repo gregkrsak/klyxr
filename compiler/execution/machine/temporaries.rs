@@ -1497,4 +1497,38 @@ mod tests {
             ErrorKind::Integrity(_)
         ));
     }
+
+    #[test]
+    fn every_ur_fuel_cut_retains_unpublished_result_and_completed_prefix() {
+        let e = artifact("fn demo(){let r=acquire();}");
+        let seeded = || {
+            let mut m = Machine::new(&e, ExecutionLimits::default());
+            m.start(e.entry("demo").unwrap()).unwrap();
+            let activation = pause_region(&mut m, |d| matches!(d, Transfer::Local(_)));
+            m.inject_temporary_leaf(activation);
+            m
+        };
+        let mut full = seeded();
+        let start = full.steps;
+        full.resume().unwrap();
+        let mut protected_stops = 0;
+        for steps in start..=full.steps {
+            let mut m = seeded();
+            m.limits.steps = steps;
+            let result = m.resume();
+            if steps == full.steps { assert_eq!(result.unwrap(), ExecutionResult::NoValue); }
+            else {
+                assert_eq!(result.unwrap_err().kind, ErrorKind::ConfiguredLimit("steps"));
+                if let Some(f) = m.temporaries.as_ref().unwrap().frames.last() {
+                    if f.phase == Phase::Retiring && matches!(f.protected, Some(Value::Leaf {identity:1,..})) && !completed(&m).contains(&0) {
+                        protected_stops += 1;
+                        assert!(matches!(m.frames[0].slots[0].1, Slot::Uninitialized));
+                    }
+                }
+                assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Integrity(_)));
+            }
+            conserved(&m);
+        }
+        assert!(protected_stops > 0);
+    }
 }

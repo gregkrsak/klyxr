@@ -569,7 +569,7 @@ mod temporary_authority_tests {
 
     #[test]
     fn each_independent_temporary_authority_mutation_is_rejected() {
-        for fault in 0..26 {
+        for fault in 0..37 {
             let mut e = artifact();
             let f = e.mir.test_functions_mut().last_mut().unwrap();
             if fault == 0 {
@@ -607,6 +607,17 @@ mod temporary_authority_tests {
                     23 => flow.regions[0].evaluation = Some(1),
                     24 => flow.sites[0].origin.span.line = 0,
                     25 => flow.sites[0].plan = None,
+                    26 => flow.sites[0].cleanup.span = flow.sites[1].cleanup.span,
+                    27 => flow.sites[0].transfer.span = flow.sites[1].transfer.span,
+                    28 => flow.regions[0].publication.span = flow.regions[1].publication.span,
+                    29 => flow.points[0].region = RegionId(1),
+                    30 => flow.regions[1].parent = Some(RegionId(0)),
+                    31 => flow.points[0].site = Some(SiteId(999)),
+                    32 => flow.sites[0].ty = hir::ExprType::Bool,
+                    33 => flow.regions[0].roots[0] = SiteId(999),
+                    34 => flow.regions[0].retirement.kind = mir::OriginKind::Statement,
+                    35 => flow.regions[0].publication.kind = mir::OriginKind::Statement,
+                    36 => flow.sites[0].children.push(SiteId(1)),
                     _ => unreachable!(),
                 }
             }

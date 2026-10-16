@@ -286,3 +286,27 @@ runs: tests https://github.com/gregkrsak/klyxr/actions/runs/38851327325,
 docs https://github.com/gregkrsak/klyxr/actions/runs/38851327345,
 verify https://github.com/gregkrsak/klyxr/actions/runs/38851327393.
 No documentation/final layer begins before this four-workflow repair gate passes.
+
+Milestone 6 completed at `59491c960327b87d43c5c73f792b720f35203cf2`, tree
+`f347b20e4860741e70a361dc2baf1e2bced0472f`. All four passed:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38851658653),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38851658648),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38851658660),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38851658680).
+Both complete profiles reconciled 1,741 passing identities; both affine checks
+and authority doctests passed.
+
+## Milestone 7 — remaining cleanup-stop pressure
+
+The U/R fixture now checks every configured fuel cut after private U seeding,
+requiring unpublished protected R across stopped retirement, exact conservation,
+refused resume and an exact sufficient neighbor. The private A/G/B primitive
+injects trusted-release failure independently at every leaf in canonical retirement
+order, verifies completed prefixes and identifies the failed cleanup holder and
+unvisited temporary A. Two new identities are explicit in the manifest.
+
+The existing independent artifact matrix expands from 26 to 37 single-fault
+mutations, adding well-formed foreign cleanup/transfer/publication origins,
+foreign source sites and regions, wrong type, missing retirement/publication
+origins and unrelated child registration. All original cases remain intact.
+Validation pending; documentation and final branch/PR gates remain ahead.

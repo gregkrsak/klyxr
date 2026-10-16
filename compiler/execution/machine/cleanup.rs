@@ -3015,4 +3015,33 @@ mod temporary_aggregate_tests {
         assert!(matches!(m.frames[0].slots[0].1, Slot::Uninitialized));
         conservation_tests::conserved(&m);
     }
+
+    #[test]
+    fn each_remaining_aggregate_leaf_failure_retains_other_temporary_owners() {
+        let p = aggregate_tests::program("fn pass(a:Leaf,g:Pair,b:Leaf)->Leaf{return a;}fn demo(){let r=pass(acquire(),Pair{last:0,first:0,inert:0},acquire());}", [true,false,true]);
+        let e = crate::execution::prepare_synthetic(p, AdmissionLimits::default()).unwrap();
+        let order = [3,1,2,0];
+        for (position, failure) in order.iter().enumerate() {
+            let mut m = Machine::new(&e, ExecutionLimits::default());
+            m.start(e.entry("demo").unwrap()).unwrap();
+            loop {
+                let task = m.tasks.pop().unwrap();
+                if matches!(task.action, Action::Invoke(_,3)) { break; }
+                m.step(task).unwrap();
+            }
+            let Value::Temporary(id) = &m.values[0] else { panic!() };
+            let activation = id.activation;
+            m.values.clear();
+            m.resources.as_mut().unwrap().failure_at = Some(*failure);
+            assert!(matches!(m.temporary_retire(activation).unwrap_err().kind, ErrorKind::Host(_)));
+            let completed: Vec<_> = m.resources.as_ref().unwrap().events.iter().filter_map(|e| if let Event::Complete(id) = e { Some(*id) } else { None }).collect();
+            assert_eq!(completed, order[..position]);
+            assert!(m.resources.as_ref().unwrap().terminal);
+            assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Integrity(_)));
+            let holders = conservation_tests::holders(&m);
+            assert!(holders.iter().any(|(id,label)| id == failure && label == "cleanup-current"));
+            if *failure != 0 { assert!(holders.iter().any(|(id,label)| *id == 0 && label.starts_with("temporary:"))); }
+            conservation_tests::conserved(&m);
+        }
+    }
 }

@@ -35,6 +35,8 @@
     "lib.rs::execution::machine::temporaries::tests::malformed_runtime_custody_never_uses_vacancy_or_borrowable_temporary_places",
     "lib.rs::execution::machine::temporaries::tests::forged_resource_leaf_construction_cannot_manufacture_an_acquisition",
     "lib.rs::execution::temporary_authority_tests::each_temporary_authority_allocation_failure_preserves_host_classification",
-    "lib.rs::execution::temporary_authority_tests::exact_admission_work_and_storage_neighbors_keep_typed_limits"
+    "lib.rs::execution::temporary_authority_tests::exact_admission_work_and_storage_neighbors_keep_typed_limits",
+    "lib.rs::execution::machine::temporaries::tests::every_ur_fuel_cut_retains_unpublished_result_and_completed_prefix",
+    "lib.rs::execution::machine::cleanup::temporary_aggregate_tests::each_remaining_aggregate_leaf_failure_retains_other_temporary_owners"
   ]
 }
