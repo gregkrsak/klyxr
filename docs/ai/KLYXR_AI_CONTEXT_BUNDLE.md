@@ -723,9 +723,9 @@ unchanged. Implementation evidence and the exact predecessor inventory are in
 Actions supplies authoritative executable evidence. Acceptance remains Greg's
 decision and merge remains a human action.
 
-## KED-028 current replacement extension
+## KD-043 owned Move replacement
 
-Frozen Issue #64 Draft 1 adds deterministic whole-owner replacement through existing
+Accepted KED-028 Draft 1 adds deterministic whole-owner replacement through existing
 assignment syntax for available mutable owned Move locals. Exact record identity,
 prepared checker rollback, target continuity, final loan expiry and relative loop
 boundaries are authoritative. RHS results are protected before displaced cleanup;
@@ -736,15 +736,15 @@ synthetic resources demonstrate fixed canonical cleanup and identity conservatio
 Earlier sections retain their historical restrictions; this narrowly refines their
 direct-local replacement exclusion. References, projections, self-consuming
 transforms, unavailable slots, loop-carried Move mutation, arbitrary temporaries,
-user destructors and production resource APIs remain excluded. No new KD number
-is assigned. See LANGUAGE_DECISIONS.md and the KED-028 implementation ledger for
-scope and GitHub-executed evidence. Local Rust validation was unavailable because
-of confirmed Work-runtime corruption. Acceptance remains Greg's decision and only
-a human may merge.
+user destructors and production resource APIs remain excluded. See
+LANGUAGE_DECISIONS.md and the KED-028 implementation ledger for scope and
+GitHub-executed evidence. Greg accepted and human-merged PR #65 as commit
+`72c34593e79e7763ce16f0e18ad99595959a2454`, tree
+`2b9339fbe21f705cb8c5722ff681c34680870490`.
 
-## KED-029 expression temporary extension
+## KD-044 expression temporary ownership
 
-Frozen Issue #66 Draft 2 gives admitted resource-bearing expression intermediates
+Accepted KED-029 Draft 2 gives admitted resource-bearing expression intermediates
 explicit bounded ownership. Caller expressions share their source evaluation
 region; callee statements and returns have their own regions. Record fields use
 child regions, transferring into pending construction before child retirement.
@@ -758,11 +758,13 @@ transfer is the specified immediate-transfer exception. Static regions/sites and
 dynamic activations/owners are distinct; temporary handles are neither LocalIds nor
 borrowable places. Resource-free evaluations omit empty temporary machinery.
 
-This refines earlier temporary exclusions only within frozen KED-029. Temporary
+This refines earlier temporary exclusions only within KD-044. Temporary
 borrowing, value-returning call statements, new recurring-while Move/reference
 eligibility, unwind, rollback, custom destructors and public resource APIs remain
 excluded. See the KED-029 implementation ledger for GitHub-executed evidence.
-Implementation acceptance remains Greg's decision; only a human may merge.
+Greg accepted and human-merged PR #67 as commit
+`5ce5dc5895efab7ba29a7cbc8e980ce58a7b24ab`, tree
+`e95fb9e69d7554719d86d9662cf22cbf5151b84b`.
 
 <!-- END KLYXR_CONTEXT.md -->
 
@@ -2214,11 +2216,11 @@ behavior, bounds, diagnostics, temporary admission, synthetic evidence, branch/b
 validation, reporting, and phase structure. Any newly exposed semantic choice
 returns to Greg rather than being decided in code.
 
-## KED-028 — Deterministic replacement of owned Move locals
+## KD-043 — Deterministic replacement of owned Move locals
 
-**Status:** Frozen Draft 1 language decision, Issue #64, freeze comment 6195981810;
-implementation authorized separately by Greg. Implementation acceptance and human
-merge remain separate. No new KD number has been assigned.
+**Status:** Accepted from KED-028 Draft 1, Issue #64; human-merged October 15,
+2026 as commit `72c34593e79e7763ce16f0e18ad99595959a2454`, tree
+`2b9339fbe21f705cb8c5722ff681c34680870490`.
 
 An available, directly named mutable owned non-reference Move local may receive an
 exact canonical record value through the existing assignment statement. Parameters,
@@ -2239,7 +2241,7 @@ activation. A/B/C ordering is acquisition A, B, C; release displaced A; at scope
 release current C, then B. History owns no duplicate payload.
 
 Iteration-local owners may be replaced repeatedly. A target or moved RHS source
-present at the current loop header remains protected by KD-028's relative boundary,
+present at the current loop header remains protected by KD-043's relative boundary,
 including nested loops and paths followed by return, break or continue. The complete
 replacement-result root is one additional resource lifetime boundary; unnamed
 resource arguments and arbitrary expression temporaries remain excluded.
@@ -2255,11 +2257,14 @@ recoverable propagation, generalized place/dataflow engine or verifier expansion
 Earlier KD sections retain their historical boundaries; this decision narrowly
 extends KD-026 and KD-042 and refines OQ-022/OQ-023/OQ-025/OQ-026.
 
-## KED-029 — deterministic resource-bearing expression temporaries
+## KD-044 — Deterministic resource-bearing expression temporaries
 
-Status: frozen Draft 2 decision, Issue #66; implementation acceptance is separate.
-No new KD number is assigned. This narrowly refines KD-042 and KED-028 temporary
-boundaries while preserving KD-041 argument order and KD-034 statement restrictions.
+**Status:** Accepted from KED-029 Draft 2, Issue #66; human-merged October 16,
+2026 as commit `5ce5dc5895efab7ba29a7cbc8e980ce58a7b24ab`, tree
+`e95fb9e69d7554719d86d9662cf22cbf5151b84b`.
+
+This narrowly refines KD-042 and KD-043 temporary boundaries while preserving
+KD-041 argument order and KD-034 statement restrictions.
 
 Every admitted resource-bearing expression intermediate has one explicit bounded
 machine owner. Ordering history owns no payload. Static source regions and sites
@@ -2275,7 +2280,7 @@ sibling owners clean in reverse successful creation order. Cleanup inside comple
 aggregates remains reverse canonical field-declaration order. Local initialization
 protects the result, retires other temporaries, publishes and registers the local,
 then continues. Existing assignments similarly protect, retire and perform their
-pending write. Returns and KED-028 replacements use their protected holders before
+pending write. Returns and KD-043 replacements use their protected holders before
 operand retirement. Conditions protect their Bool and retire before branch selection.
 
 Temporary borrowing and escape remain rejected at every representation layer.
@@ -2284,8 +2289,8 @@ conditions gain no Move/reference eligibility. Value-returning call statements
 remain rejected. Vacancy never establishes valid transfer or cleanup. Terminal
 stops retain actual unfinished responsibilities and completed prefixes; no unwind,
 rollback, retry, arbitrary destructor, public resource API, ownership inference or
-second ownership checker is added. See the KED-029 ledger for implementation and
-independent-review status. OQ-022/OQ-023/OQ-025/OQ-026 retain their broader questions.
+second ownership checker is added. See the KED-029 implementation ledger and
+accepted exact-head review for evidence. OQ-022/OQ-023/OQ-025/OQ-026 retain their broader questions.
 
 <!-- END LANGUAGE_DECISIONS.md -->
 
@@ -3304,7 +3309,7 @@ Private malformed-artifact and conservation controls run through the canonical
 approval boundary. The implementation ledger records milestone SHA/run evidence,
 failures and repairs, predecessor identity reconciliation and final review status.
 
-## KED-028 owned replacement
+## KD-043 owned replacement
 
 Canonical typed Assign metadata distinguishes Copy writes from owned record
 replacement without names. HIR publication checks target/function membership,
@@ -3338,7 +3343,7 @@ The executor consumes MIR authority and does not reconstruct ownership or HIR sc
 Public resource APIs and all frozen non-goals remain excluded. Evidence and precise
 CI identities are recorded in `docs/engineering/KED-028-IMPLEMENTATION-LEDGER.md`.
 
-## KED-029 temporary custody and authority
+## KD-044 temporary custody and authority
 
 Fallible canonical MIR metadata binds source evaluation ordinals, regions, sites,
 canonical types/plans, destinations and creation/transfer/cleanup/retirement origins.
@@ -3982,15 +3987,16 @@ expiry never own or trigger cleanup. Ordinary non-resource Move destruction is
 inert under this decision.
 
 Still open are implementation, trusted production resource APIs, constrained
-custom resource admission, resource-bearing temporary lifetimes, typed recoverable
+custom resource admission, resource-bearing temporary lifetimes beyond KD-044's
+admitted regions and destinations, typed recoverable
 propagation syntax, non-Copy replacement, partial moves, panic/unwind/fatal-outcome
 policy, cancellation, FFI, and broader generalized cleanup/control-flow dataflow.
 KD-042 provides no guarantee across its excluded abrupt outcomes and authorizes
 no compiler or runtime work by freeze alone.
 
-### KED-028 refinement of OQ-022/OQ-023/OQ-025/OQ-026
+### KD-043 refinement of OQ-022/OQ-023/OQ-025/OQ-026
 
-Frozen Draft 1 settles exact-typed whole-value replacement only for available,
+Accepted KED-028 Draft 1 settles exact-typed whole-value replacement only for available,
 directly named mutable owned non-reference Move locals. It fixes protected RHS
 ownership, displaced canonical cleanup and new-generation ordering in the target's
 owning activation. Iteration-local replacement is permitted; pre-existing loop
@@ -4003,15 +4009,15 @@ APIs and generalized cyclic ownership/dataflow remain unresolved or excluded.
 The specialized verifier and proof counts are unchanged. Historical statements
 that non-Copy replacement is open now apply to those broader facilities.
 
-### KED-029 refinement of expression-temporary questions
+### KD-044 refinement of expression-temporary questions
 
-Frozen Draft 2 settles bounded ownership, region retirement and destination custody
+Accepted KED-029 Draft 2 settles bounded ownership, region retirement and destination custody
 for admitted resource-bearing expression intermediates. This narrows the historical
 arbitrary-temporary exclusions above, without settling temporary borrowing, lifetime
 extension, value-returning call statements, recurring-while Move/reference activity,
 public resource admission, arbitrary destructors, recoverable propagation, unwind,
 rollback or generalized ownership/dataflow. Existing aggregate field order and
-KED-028 replacement remain authoritative. Independent acceptance of the implementation
-is separate from the frozen decision; no new verifier proof claim is made.
+KD-043 replacement remain authoritative. The accepted implementation introduces no
+new verifier proof claim.
 
 <!-- END OPEN_QUESTIONS.md -->

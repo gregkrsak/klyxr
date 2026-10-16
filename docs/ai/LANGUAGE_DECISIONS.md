@@ -1353,11 +1353,11 @@ behavior, bounds, diagnostics, temporary admission, synthetic evidence, branch/b
 validation, reporting, and phase structure. Any newly exposed semantic choice
 returns to Greg rather than being decided in code.
 
-## KED-028 — Deterministic replacement of owned Move locals
+## KD-043 — Deterministic replacement of owned Move locals
 
-**Status:** Frozen Draft 1 language decision, Issue #64, freeze comment 6195981810;
-implementation authorized separately by Greg. Implementation acceptance and human
-merge remain separate. No new KD number has been assigned.
+**Status:** Accepted from KED-028 Draft 1, Issue #64; human-merged October 15,
+2026 as commit `72c34593e79e7763ce16f0e18ad99595959a2454`, tree
+`2b9339fbe21f705cb8c5722ff681c34680870490`.
 
 An available, directly named mutable owned non-reference Move local may receive an
 exact canonical record value through the existing assignment statement. Parameters,
@@ -1378,7 +1378,7 @@ activation. A/B/C ordering is acquisition A, B, C; release displaced A; at scope
 release current C, then B. History owns no duplicate payload.
 
 Iteration-local owners may be replaced repeatedly. A target or moved RHS source
-present at the current loop header remains protected by KD-028's relative boundary,
+present at the current loop header remains protected by KD-043's relative boundary,
 including nested loops and paths followed by return, break or continue. The complete
 replacement-result root is one additional resource lifetime boundary; unnamed
 resource arguments and arbitrary expression temporaries remain excluded.
@@ -1394,11 +1394,14 @@ recoverable propagation, generalized place/dataflow engine or verifier expansion
 Earlier KD sections retain their historical boundaries; this decision narrowly
 extends KD-026 and KD-042 and refines OQ-022/OQ-023/OQ-025/OQ-026.
 
-## KED-029 — deterministic resource-bearing expression temporaries
+## KD-044 — Deterministic resource-bearing expression temporaries
 
-Status: frozen Draft 2 decision, Issue #66; implementation acceptance is separate.
-No new KD number is assigned. This narrowly refines KD-042 and KED-028 temporary
-boundaries while preserving KD-041 argument order and KD-034 statement restrictions.
+**Status:** Accepted from KED-029 Draft 2, Issue #66; human-merged October 16,
+2026 as commit `5ce5dc5895efab7ba29a7cbc8e980ce58a7b24ab`, tree
+`e95fb9e69d7554719d86d9662cf22cbf5151b84b`.
+
+This narrowly refines KD-042 and KD-043 temporary boundaries while preserving
+KD-041 argument order and KD-034 statement restrictions.
 
 Every admitted resource-bearing expression intermediate has one explicit bounded
 machine owner. Ordering history owns no payload. Static source regions and sites
@@ -1414,7 +1417,7 @@ sibling owners clean in reverse successful creation order. Cleanup inside comple
 aggregates remains reverse canonical field-declaration order. Local initialization
 protects the result, retires other temporaries, publishes and registers the local,
 then continues. Existing assignments similarly protect, retire and perform their
-pending write. Returns and KED-028 replacements use their protected holders before
+pending write. Returns and KD-043 replacements use their protected holders before
 operand retirement. Conditions protect their Bool and retire before branch selection.
 
 Temporary borrowing and escape remain rejected at every representation layer.
@@ -1423,5 +1426,5 @@ conditions gain no Move/reference eligibility. Value-returning call statements
 remain rejected. Vacancy never establishes valid transfer or cleanup. Terminal
 stops retain actual unfinished responsibilities and completed prefixes; no unwind,
 rollback, retry, arbitrary destructor, public resource API, ownership inference or
-second ownership checker is added. See the KED-029 ledger for implementation and
-independent-review status. OQ-022/OQ-023/OQ-025/OQ-026 retain their broader questions.
+second ownership checker is added. See the KED-029 implementation ledger and
+accepted exact-head review for evidence. OQ-022/OQ-023/OQ-025/OQ-026 retain their broader questions.

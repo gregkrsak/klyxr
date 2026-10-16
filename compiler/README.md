@@ -10,8 +10,9 @@ KED-026 Draft 3 additionally provides bounded ordinary MIR interpretation throug
 `run`. The KED-004 through KED-025 sections below describe the frontend boundaries
 introduced by those decisions; their historical execution exclusions are refined
 by KD-041. KED-027 adds private synthetic deterministic cleanup under KD-042;
-it exposes no production resource API. KED-028 adds narrow owned Move local
-replacement; its current section refines historical replacement exclusions below.
+it exposes no production resource API. KD-043 adds narrow owned Move local
+replacement, and KD-044 gives admitted resource-bearing expression temporaries
+explicit bounded ownership; their sections refine historical exclusions below.
 No ordinary contract proof or native code
 generation is implied.
 See [bounded execution](../docs/BOUNDED_EXECUTION.md).
@@ -1668,9 +1669,9 @@ conformance evidence. The tests workflow reconciles all 1,581 baseline identitie
 and 86 new KD-042 identities (76 original plus 10 repair regressions) separately in each profile. See the
 [implementation ledger](../docs/engineering/KED-027-IMPLEMENTATION-LEDGER.md).
 
-## KED-028 owned Move replacement
+## KD-043 owned Move replacement
 
-Frozen Issue #64 Draft 1 permits exact-typed whole-value replacement of an available
+Accepted KED-028 Draft 1 permits exact-typed whole-value replacement of an available
 mutable owned record local:
 
 ```klyxr
@@ -1703,12 +1704,13 @@ resource API, user destructor, take/swap, partial move, recoverable propagation,
 general ownership solver or verifier extension. See the [KED-028 implementation
 ledger](../docs/engineering/KED-028-IMPLEMENTATION-LEDGER.md) and [bounded execution
 contract](../docs/BOUNDED_EXECUTION.md) for GitHub-executed evidence and terminal
-failure accounting. Local Rust validation was unavailable because of confirmed
-Work-runtime corruption; implementation acceptance and human merge remain separate.
+failure accounting. Greg accepted and human-merged PR #65 as commit
+`72c34593e79e7763ce16f0e18ad99595959a2454`, tree
+`2b9339fbe21f705cb8c5722ff681c34680870490`.
 
-## KED-029 expression temporaries
+## KD-044 expression temporaries
 
-The frozen Draft 2 extension gives admitted resource-bearing intermediates explicit
+The accepted KED-029 Draft 2 extension gives admitted resource-bearing intermediates explicit
 bounded machine custody. Canonical source regions survive conditional-initializer
 CFG splits. Owned arguments preserve left-to-right evaluation and transfer once to
 callee parameters; remaining siblings clean in reverse creation order. Aggregates
@@ -1723,4 +1725,6 @@ The existing ownership checker, exact correspondence and opaque execution approv
 remain the authority boundary. See the [KED-029 implementation ledger](../docs/engineering/KED-029-IMPLEMENTATION-LEDGER.md)
 and [bounded execution contract](../docs/BOUNDED_EXECUTION.md). GitHub Actions provides
 compilation and executable evidence; local Rust validation was unavailable because
-of confirmed Work-runtime corruption. Greg alone may accept; only a human may merge.
+of confirmed Work-runtime corruption. Greg accepted and human-merged PR #67 as
+commit `5ce5dc5895efab7ba29a7cbc8e980ce58a7b24ab`, tree
+`e95fb9e69d7554719d86d9662cf22cbf5151b84b`.

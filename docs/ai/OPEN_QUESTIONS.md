@@ -608,15 +608,16 @@ expiry never own or trigger cleanup. Ordinary non-resource Move destruction is
 inert under this decision.
 
 Still open are implementation, trusted production resource APIs, constrained
-custom resource admission, resource-bearing temporary lifetimes, typed recoverable
+custom resource admission, resource-bearing temporary lifetimes beyond KD-044's
+admitted regions and destinations, typed recoverable
 propagation syntax, non-Copy replacement, partial moves, panic/unwind/fatal-outcome
 policy, cancellation, FFI, and broader generalized cleanup/control-flow dataflow.
 KD-042 provides no guarantee across its excluded abrupt outcomes and authorizes
 no compiler or runtime work by freeze alone.
 
-### KED-028 refinement of OQ-022/OQ-023/OQ-025/OQ-026
+### KD-043 refinement of OQ-022/OQ-023/OQ-025/OQ-026
 
-Frozen Draft 1 settles exact-typed whole-value replacement only for available,
+Accepted KED-028 Draft 1 settles exact-typed whole-value replacement only for available,
 directly named mutable owned non-reference Move locals. It fixes protected RHS
 ownership, displaced canonical cleanup and new-generation ordering in the target's
 owning activation. Iteration-local replacement is permitted; pre-existing loop
@@ -629,13 +630,13 @@ APIs and generalized cyclic ownership/dataflow remain unresolved or excluded.
 The specialized verifier and proof counts are unchanged. Historical statements
 that non-Copy replacement is open now apply to those broader facilities.
 
-### KED-029 refinement of expression-temporary questions
+### KD-044 refinement of expression-temporary questions
 
-Frozen Draft 2 settles bounded ownership, region retirement and destination custody
+Accepted KED-029 Draft 2 settles bounded ownership, region retirement and destination custody
 for admitted resource-bearing expression intermediates. This narrows the historical
 arbitrary-temporary exclusions above, without settling temporary borrowing, lifetime
 extension, value-returning call statements, recurring-while Move/reference activity,
 public resource admission, arbitrary destructors, recoverable propagation, unwind,
 rollback or generalized ownership/dataflow. Existing aggregate field order and
-KED-028 replacement remain authoritative. Independent acceptance of the implementation
-is separate from the frozen decision; no new verifier proof claim is made.
+KD-043 replacement remain authoritative. The accepted implementation introduces no
+new verifier proof claim.

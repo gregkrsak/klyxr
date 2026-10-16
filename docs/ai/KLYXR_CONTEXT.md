@@ -710,9 +710,9 @@ unchanged. Implementation evidence and the exact predecessor inventory are in
 Actions supplies authoritative executable evidence. Acceptance remains Greg's
 decision and merge remains a human action.
 
-## KED-028 current replacement extension
+## KD-043 owned Move replacement
 
-Frozen Issue #64 Draft 1 adds deterministic whole-owner replacement through existing
+Accepted KED-028 Draft 1 adds deterministic whole-owner replacement through existing
 assignment syntax for available mutable owned Move locals. Exact record identity,
 prepared checker rollback, target continuity, final loan expiry and relative loop
 boundaries are authoritative. RHS results are protected before displaced cleanup;
@@ -723,15 +723,15 @@ synthetic resources demonstrate fixed canonical cleanup and identity conservatio
 Earlier sections retain their historical restrictions; this narrowly refines their
 direct-local replacement exclusion. References, projections, self-consuming
 transforms, unavailable slots, loop-carried Move mutation, arbitrary temporaries,
-user destructors and production resource APIs remain excluded. No new KD number
-is assigned. See LANGUAGE_DECISIONS.md and the KED-028 implementation ledger for
-scope and GitHub-executed evidence. Local Rust validation was unavailable because
-of confirmed Work-runtime corruption. Acceptance remains Greg's decision and only
-a human may merge.
+user destructors and production resource APIs remain excluded. See
+LANGUAGE_DECISIONS.md and the KED-028 implementation ledger for scope and
+GitHub-executed evidence. Greg accepted and human-merged PR #65 as commit
+`72c34593e79e7763ce16f0e18ad99595959a2454`, tree
+`2b9339fbe21f705cb8c5722ff681c34680870490`.
 
-## KED-029 expression temporary extension
+## KD-044 expression temporary ownership
 
-Frozen Issue #66 Draft 2 gives admitted resource-bearing expression intermediates
+Accepted KED-029 Draft 2 gives admitted resource-bearing expression intermediates
 explicit bounded ownership. Caller expressions share their source evaluation
 region; callee statements and returns have their own regions. Record fields use
 child regions, transferring into pending construction before child retirement.
@@ -745,8 +745,10 @@ transfer is the specified immediate-transfer exception. Static regions/sites and
 dynamic activations/owners are distinct; temporary handles are neither LocalIds nor
 borrowable places. Resource-free evaluations omit empty temporary machinery.
 
-This refines earlier temporary exclusions only within frozen KED-029. Temporary
+This refines earlier temporary exclusions only within KD-044. Temporary
 borrowing, value-returning call statements, new recurring-while Move/reference
 eligibility, unwind, rollback, custom destructors and public resource APIs remain
 excluded. See the KED-029 implementation ledger for GitHub-executed evidence.
-Implementation acceptance remains Greg's decision; only a human may merge.
+Greg accepted and human-merged PR #67 as commit
+`5ce5dc5895efab7ba29a7cbc8e980ce58a7b24ab`, tree
+`e95fb9e69d7554719d86d9662cf22cbf5151b84b`.
