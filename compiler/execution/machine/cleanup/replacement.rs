@@ -129,13 +129,31 @@ impl<'a> Machine<'a> {
         });
         Ok(id)
     }
-    pub(in crate::execution::machine) fn replacement_accepts_result(&self, frame: u64, local: hir::LocalId) -> Result<(), ExecutionError> {
-        self.resources.as_ref().and_then(|s| s.replacements.last())
-            .filter(|r| r.at.frame == frame && r.at.place == Place::Local(local) && r.phase == Phase::Rhs && r.protected.is_none())
-            .map(|_| ()).ok_or_else(|| self.integrity("replacement result protection mismatch"))
+    pub(in crate::execution::machine) fn replacement_accepts_result(
+        &self,
+        frame: u64,
+        local: hir::LocalId,
+    ) -> Result<(), ExecutionError> {
+        self.resources
+            .as_ref()
+            .and_then(|s| s.replacements.last())
+            .filter(|r| {
+                r.at.frame == frame
+                    && r.at.place == Place::Local(local)
+                    && r.phase == Phase::Rhs
+                    && r.protected.is_none()
+            })
+            .map(|_| ())
+            .ok_or_else(|| self.integrity("replacement result protection mismatch"))
     }
     pub(in crate::execution::machine) fn replacement_stage_result(&mut self, value: Value) {
-        self.resources.as_mut().unwrap().replacements.last_mut().unwrap().protected = Some(value);
+        self.resources
+            .as_mut()
+            .unwrap()
+            .replacements
+            .last_mut()
+            .unwrap()
+            .protected = Some(value);
     }
     pub(in crate::execution::machine) fn replacement_commit(
         &mut self,
@@ -155,7 +173,16 @@ impl<'a> Machine<'a> {
         // No fallible operation between taking N from the value stack and
         // protecting it in the already-reserved context.
         self.replacement_charge(Phase::Rhs)?;
-        if self.resources.as_ref().unwrap().replacements.last().unwrap().protected.is_none() {
+        if self
+            .resources
+            .as_ref()
+            .unwrap()
+            .replacements
+            .last()
+            .unwrap()
+            .protected
+            .is_none()
+        {
             let value = self.pop()?;
             self.replacement_stage_result(value);
         }

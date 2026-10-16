@@ -1026,7 +1026,9 @@ impl<'a> Machine<'a> {
     fn finish_return(&mut self, id: u64) -> Result<(), ExecutionError> {
         let staged = self.staged_return == Some(id);
         let ordinary = if staged { None } else { Some(self.pop()?) };
-        let value = ordinary.as_ref().or_else(|| self.resources.as_ref().and_then(|s| s.protected.as_ref()))
+        let value = ordinary
+            .as_ref()
+            .or_else(|| self.resources.as_ref().and_then(|s| s.protected.as_ref()))
             .ok_or_else(|| self.integrity("missing protected return result"))?;
         let f = self
             .frames

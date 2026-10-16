@@ -744,7 +744,9 @@ impl<'a> Machine<'a> {
         self.deliver_protected_value()
     }
     pub(super) fn deliver_protected_return(&mut self, id: u64) -> Result<(), ExecutionError> {
-        if self.frames.last().map(|f| f.id) != Some(id) { return Err(self.integrity("protected return frame mismatch")); }
+        if self.frames.last().map(|f| f.id) != Some(id) {
+            return Err(self.integrity("protected return frame mismatch"));
+        }
         self.deliver_protected_value()?;
         self.frames.pop();
         Ok(())

@@ -183,3 +183,14 @@ retains the earlier acquired owner without callee entry or fabricated unwind.
 Nine new test identities are enumerated in the evidence manifest. Validation
 pending. Remaining assignments, pending-field stop, structured-condition, bounds,
 Host-allocation and artifact batteries remain required before final conformance.
+
+Destination/call-cut commit `eb060edf062069a9f466808bfe466d5bb1a5eabf`, tree
+`27f57115cd3dc80dbb4df0d847f93cef38f6d8d9`: compilation and complete debug
+and release profiles passed. Each reconciled 1,706 predecessors plus 19 additions
+= 1,725 passing identities, including both affine checks and authority doctests.
+Build https://github.com/gregkrsak/klyxr/actions/runs/38849550815 reported
+formatting differences, applied verbatim from CI output. Other runs: tests
+https://github.com/gregkrsak/klyxr/actions/runs/38849550748, docs
+https://github.com/gregkrsak/klyxr/actions/runs/38849550785, verify
+https://github.com/gregkrsak/klyxr/actions/runs/38849550885. No later layer added
+before this milestone's four gates pass.
