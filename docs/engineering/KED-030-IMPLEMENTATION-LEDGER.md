@@ -157,3 +157,36 @@ preparation call layout and new test layout. [Tests 38969904096](https://github.
 passed debug test execution/reconciliation; release was still running when this
 format-only correction was prepared. [Docs](https://github.com/gregkrsak/klyxr/actions/runs/38969904112)
 and [verify](https://github.com/gregkrsak/klyxr/actions/runs/38969904118) passed.
+
+## Milestone 3 completed
+
+Commit `6d43af6e9028d189a4fcd4d0d8bf112118232a84`, tree
+`36056a9dc25f70b7c8bfe01aad4a811a92b09540`, passed all four workflows:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38970021292),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38970021243),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38970021125),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38970021253).
+Job 117205821633 reconciled 1,743 predecessors plus 14 additions = 1,757 passing
+identities in each profile, both affine controls and the authority doctest passed.
+All job steps/conclusions and relevant logs were inspected before milestone 4.
+
+## Milestone 4 — Registered contracts and derived summaries
+
+Each registered operation stores its complete contract, checked for exact equality
+with the bound ordinary declaration. A leaf's cached cleanup summary equals its
+fixed release operation's complete contract. Acquire and release contracts remain
+independent. Stub bodies are shape controls, not effect authorities.
+
+Nonempty summaries are derived through shared canonical plans with memoization,
+checked record/release identities and bounded recursion. Executable summary copies
+must equal that derivation. Canonical plan validation precedes summary derivation;
+it already validates fields, cycles, shared graph heights and configured depth.
+An empty summary vector denotes all-empty sets only; the existing resource plans
+remain present and continue controlling real cleanup. It does not classify values
+as inert. All-empty predecessor and resource-free paths allocate no summary cache.
+
+Five new identities cover all atoms, distinct-child contract unions, release strict supersets, independent
+operation/function/leaf/binding mutations, aggregate unions, empty-summary plans,
+and independent cached-summary mutations through actual execution approval.
+These new tests await milestone GitHub execution. Ownership-produced realization
+checking and private execution-domain authority remain pending.

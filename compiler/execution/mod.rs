@@ -194,6 +194,7 @@ pub struct CheckedExecutable {
     origin_approval: Rc<Approval>,
     limits: AdmissionLimits,
     cleanup_plans: Vec<Option<hir::resources::CleanupPlan>>,
+    cleanup_effects: Vec<crate::effects::EffectSet>,
 }
 impl CheckedExecutable {
     pub fn entry(&self, name: &str) -> Result<FunctionId, ExecutionError> {
@@ -269,6 +270,16 @@ impl CheckedExecutable {
         if self.cleanup_plans != plans {
             return Err(ExecutionError::integrity(
                 "canonical cleanup plan correspondence",
+            ));
+        }
+        let summaries = self
+            .program
+            .resources
+            .summaries(&self.program, &plans)
+            .map_err(ExecutionError::from)?;
+        if self.cleanup_effects != summaries {
+            return Err(ExecutionError::integrity(
+                "canonical cleanup effect summary correspondence",
             ));
         }
         if self.program != self.approval.program {
@@ -409,6 +420,10 @@ fn seal(
     let approval = Rc::new(Approval {
         program: program.clone(),
     });
+    let cleanup_effects = program
+        .resources
+        .summaries(&program, &cleanup_plans)
+        .map_err(ExecutionError::from)?;
     let executable = CheckedExecutable {
         program,
         mir,
@@ -418,6 +433,7 @@ fn seal(
         approval,
         limits,
         cleanup_plans,
+        cleanup_effects,
     };
     executable.validate()?;
     Ok(executable)
@@ -558,6 +574,37 @@ fn prepare_synthetic(
 mod effect_authority_tests {
     use super::*;
     use crate::effects::{Effect, EffectSet};
+
+    #[test]
+    fn cached_cleanup_effect_summaries_are_bound_to_canonical_derivation() {
+        for mutation in 0..5 {
+            let mut acquire = EffectSet::EMPTY;
+            acquire.insert(Effect::Io);
+            let mut release = EffectSet::EMPTY;
+            release.insert(Effect::Filesystem);
+            release.insert(Effect::Blocking);
+            let p = hir::resources::fixture_effects(
+                "record Plain{x:R} fn demo() effects io,filesystem,blocking {let x=acquire();}",
+                acquire,
+                release,
+            );
+            let mut e = prepare_synthetic(p, AdmissionLimits::default()).unwrap();
+            assert_eq!(e.cleanup_effects, vec![release, release, EffectSet::EMPTY]);
+            assert!(e.validate().is_ok());
+            match mutation {
+                0 => e.cleanup_effects[0] = EffectSet::EMPTY,
+                1 => {
+                    e.cleanup_effects[1].insert(Effect::Clock);
+                }
+                2 => {
+                    e.cleanup_effects.pop();
+                }
+                3 => e.cleanup_effects.push(release),
+                _ => e.cleanup_effects.swap(0, 2),
+            }
+            assert!(e.validate().is_err(), "mutation {mutation}");
+        }
+    }
 
     #[test]
     fn direct_effect_sites_reject_independent_authority_mutations() {

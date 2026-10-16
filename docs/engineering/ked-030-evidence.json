@@ -14,7 +14,12 @@
     "tests/effects.rs::structural_unions_keep_terminal_short_circuit_and_loop_calls",
     "tests/effects.rs::recursive_contract_diagnostics_terminate_at_an_honest_declaration_edge",
     "tests/effects.rs::unsafe_membership_cannot_authorize_reusing_a_moved_owner",
-    "lib.rs::execution::effect_authority_tests::direct_effect_sites_reject_independent_authority_mutations"
+    "lib.rs::execution::effect_authority_tests::direct_effect_sites_reject_independent_authority_mutations",
+    "lib.rs::hir::resources::tests::complete_release_contracts_derive_leaf_and_shared_aggregate_unions",
+    "lib.rs::hir::resources::tests::operation_function_leaf_and_plan_mutations_reject_independently",
+    "lib.rs::hir::resources::tests::empty_cleanup_effects_preserve_real_plans_and_responsibility",
+    "lib.rs::execution::effect_authority_tests::cached_cleanup_effect_summaries_are_bound_to_canonical_derivation",
+    "lib.rs::hir::resources::tests::aggregate_summary_unions_distinct_release_contracts_without_expansion"
   ],
   "contract_corrections": [],
   "fixture_adaptations": []

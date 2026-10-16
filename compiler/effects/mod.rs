@@ -18,6 +18,24 @@ struct DeclarationOrigins {
 }
 
 impl Declaration {
+    #[cfg(test)]
+    pub(crate) fn synthetic(set: EffectSet, span: Span) -> Self {
+        if set == EffectSet::EMPTY {
+            return Self::default();
+        }
+        let mut members = [None; 8];
+        for effect in set.iter() {
+            members[effect as usize] = Some(span);
+        }
+        Self {
+            set,
+            origins: Some(std::rc::Rc::new(DeclarationOrigins {
+                clause: span,
+                members,
+            })),
+        }
+    }
+
     pub fn set(&self) -> EffectSet {
         self.set
     }

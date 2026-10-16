@@ -19,6 +19,7 @@ pub(crate) struct Operation {
     pub(crate) id: OperationId,
     pub(crate) function: FunctionId,
     pub(crate) kind: OperationKind,
+    pub(crate) effects: crate::effects::EffectSet,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Leaf {
@@ -26,6 +27,7 @@ pub(crate) struct Leaf {
     pub(crate) record: RecordId,
     pub(crate) acquire: OperationId,
     pub(crate) release: OperationId,
+    pub(crate) cleanup_effects: crate::effects::EffectSet,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Catalog {
@@ -83,6 +85,106 @@ fn reserve_plan<T>(
         .map_err(|_| PlanError::Host(message))
 }
 impl Catalog {
+    /// Called only with the canonical plans produced/checked by admission.
+    /// An empty vector canonically denotes all-empty summaries, not absent plans.
+    pub(crate) fn summaries(
+        &self,
+        p: &Program,
+        plans: &[Option<CleanupPlan>],
+    ) -> Result<Vec<crate::effects::EffectSet>, PlanError> {
+        use crate::effects::EffectSet;
+        for leaf in &self.leaves {
+            let operation = self
+                .operations
+                .get(leaf.release.0)
+                .filter(|o| o.id == leaf.release && o.kind == OperationKind::Release(leaf.id))
+                .ok_or("foreign cleanup release operation")?;
+            let function = p
+                .functions
+                .get(operation.function.0)
+                .filter(|f| f.id() == operation.function)
+                .and_then(Function::as_ordinary)
+                .ok_or("foreign cleanup release function")?;
+            if leaf.cleanup_effects != operation.effects
+                || operation.effects != function.effects.set()
+            {
+                return Err("cleanup contract derivation mismatch".into());
+            }
+        }
+        if self
+            .leaves
+            .iter()
+            .all(|l| l.cleanup_effects == EffectSet::EMPTY)
+        {
+            return Ok(Vec::new());
+        }
+        if plans.len() != p.records.len() || plans.len() > 4096 {
+            return Err("cleanup summary table shape".into());
+        }
+        let mut summaries = Vec::new();
+        reserve_plan(
+            &mut summaries,
+            plans.len(),
+            "cleanup effect summary allocation failed",
+        )?;
+        summaries.resize(plans.len(), EffectSet::EMPTY);
+        let mut marks = Vec::new();
+        reserve_plan(
+            &mut marks,
+            plans.len(),
+            "cleanup effect graph allocation failed",
+        )?;
+        marks.resize(plans.len(), 0u8);
+        fn visit(
+            catalog: &Catalog,
+            plans: &[Option<CleanupPlan>],
+            summaries: &mut [EffectSet],
+            marks: &mut [u8],
+            record: RecordId,
+            depth: usize,
+        ) -> Result<EffectSet, PlanError> {
+            if depth > 32 {
+                return Err(PlanError::Limit("cleanup effect graph depth exceeded"));
+            }
+            match marks
+                .get(record.0)
+                .copied()
+                .ok_or("foreign cleanup summary record")?
+            {
+                1 => return Err("cyclic cleanup effect graph".into()),
+                2 => return Ok(summaries[record.0]),
+                _ => {}
+            }
+            marks[record.0] = 1;
+            let mut result = EffectSet::EMPTY;
+            match &plans[record.0] {
+                Some(CleanupPlan::Release(resource, operation)) => {
+                    let leaf = catalog
+                        .leaves
+                        .get(resource.0)
+                        .filter(|l| l.id == *resource && l.record == record && l.release == *operation)
+                        .ok_or("cleanup summary release binding mismatch")?;
+                    result = leaf.cleanup_effects;
+                }
+                Some(CleanupPlan::Fields(children)) => {
+                    for (_, child) in children {
+                        let child_effects =
+                            visit(catalog, plans, summaries, marks, *child, depth + 1)?;
+                        result = result.union(child_effects);
+                    }
+                }
+                None => {}
+            }
+            marks[record.0] = 2;
+            summaries[record.0] = result;
+            Ok(result)
+        }
+        for index in 0..plans.len() {
+            visit(self, plans, &mut summaries, &mut marks, RecordId(index), 1)?;
+        }
+        Ok(summaries)
+    }
+
     pub(crate) fn is_leaf(&self, record: RecordId) -> bool {
         self.leaves.iter().any(|l| l.record == record)
     }
@@ -152,6 +254,12 @@ impl Catalog {
                 .filter(|f| f.id() == op.function)
                 .and_then(Function::as_ordinary)
                 .ok_or("trusted operation is not canonical ordinary function")?;
+            if op.effects != f.effects.set() {
+                return Err("trusted operation/function effect contract mismatch".into());
+            }
+            if !acquire && leaf.cleanup_effects != op.effects {
+                return Err("resource leaf cleanup effect derivation mismatch".into());
+            }
             if acquire {
                 if !matches!(f.body.as_slice(), [ValueStatement::Return { value: TypedExpr { kind: ExprKind::RecordConstruct { record, fields }, ty: ExprType::Record(ty), .. }, .. }] if *record == leaf.record && *ty == leaf.record && fields.is_empty())
                 {
@@ -538,17 +646,20 @@ pub(crate) fn fixture_with(extra: &str) -> Program {
             record: RecordId(0),
             acquire: OperationId(0),
             release: OperationId(1),
+            cleanup_effects: crate::effects::EffectSet::EMPTY,
         }],
         operations: vec![
             Operation {
                 id: OperationId(0),
                 function: FunctionId(0),
                 kind: OperationKind::Acquire(ResourceId(0)),
+                effects: crate::effects::EffectSet::EMPTY,
             },
             Operation {
                 id: OperationId(1),
                 function: FunctionId(1),
                 kind: OperationKind::Release(ResourceId(0)),
+                effects: crate::effects::EffectSet::EMPTY,
             },
         ],
     };
@@ -556,8 +667,149 @@ pub(crate) fn fixture_with(extra: &str) -> Program {
 }
 
 #[cfg(test)]
+pub(crate) fn fixture_effects(
+    extra: &str,
+    acquire: crate::effects::EffectSet,
+    release: crate::effects::EffectSet,
+) -> Program {
+    let mut p = fixture_with(extra);
+    for (index, set) in [(0, acquire), (1, release)] {
+        let Function::Ordinary(f) = &mut p.functions[index] else {
+            unreachable!()
+        };
+        f.effects = crate::effects::Declaration::synthetic(set, f.span);
+        p.resources.operations[index].effects = set;
+    }
+    p.resources.leaves[0].cleanup_effects = release;
+    p
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn complete_release_contracts_derive_leaf_and_shared_aggregate_unions() {
+        use crate::effects::{Effect, EffectSet};
+        for effect in Effect::ALL {
+            let mut release = EffectSet::EMPTY;
+            release.insert(effect);
+            let mut acquire = EffectSet::EMPTY;
+            acquire.insert(Effect::Io);
+            let p = fixture_effects("", acquire, release);
+            p.resources.validate(&p).unwrap();
+            let plans = p.resources.plans(&p).unwrap();
+            let summaries = p.resources.summaries(&p, &plans).unwrap();
+            assert_eq!(summaries, vec![release, release]);
+            assert_eq!(p.resources.operations[0].effects, acquire);
+            assert_eq!(p.resources.leaves[0].cleanup_effects, release);
+        }
+    }
+
+    #[test]
+    fn aggregate_summary_unions_distinct_release_contracts_without_expansion() {
+        use crate::effects::{Declaration, Effect, EffectSet};
+        let mut first = EffectSet::EMPTY;
+        first.insert(Effect::Filesystem);
+        first.insert(Effect::Blocking);
+        let mut second = EffectSet::EMPTY;
+        second.insert(Effect::Clock);
+        let mut p = fixture_effects(
+            "record Other{data:R} fn acquire_other()->Other{return Other{data:0};} fn release_other(x:Other){}",
+            EffectSet::EMPTY,
+            first,
+        );
+        p.records[2].fields.clear();
+        p.fields.pop();
+        p.fields[2].ty = ValueType::Record(RecordId(2));
+        let Function::Ordinary(acquire) = &mut p.functions[2] else {
+            unreachable!()
+        };
+        let ValueStatement::Return { value, .. } = &mut acquire.body[0] else {
+            unreachable!()
+        };
+        value.kind = ExprKind::RecordConstruct {
+            record: RecordId(2),
+            fields: Vec::new(),
+        };
+        let Function::Ordinary(release) = &mut p.functions[3] else {
+            unreachable!()
+        };
+        release.effects = Declaration::synthetic(second, release.span);
+        p.resources.leaves.push(Leaf {
+            id: ResourceId(1),
+            record: RecordId(2),
+            acquire: OperationId(2),
+            release: OperationId(3),
+            cleanup_effects: second,
+        });
+        p.resources.operations.extend([
+            Operation {
+                id: OperationId(2),
+                function: FunctionId(2),
+                kind: OperationKind::Acquire(ResourceId(1)),
+                effects: EffectSet::EMPTY,
+            },
+            Operation {
+                id: OperationId(3),
+                function: FunctionId(3),
+                kind: OperationKind::Release(ResourceId(1)),
+                effects: second,
+            },
+        ]);
+        p.validate_record_expressions().unwrap();
+        let plans = p.resources.plans(&p).unwrap();
+        assert_eq!(
+            p.resources.summaries(&p, &plans).unwrap(),
+            vec![first, first.union(second), second]
+        );
+        assert_eq!(
+            plans[1],
+            Some(CleanupPlan::Fields(vec![
+                (FieldId(2), RecordId(2)),
+                (FieldId(0), RecordId(0))
+            ]))
+        );
+    }
+
+    #[test]
+    fn operation_function_leaf_and_plan_mutations_reject_independently() {
+        use crate::effects::{Effect, EffectSet};
+        let mut release = EffectSet::EMPTY;
+        release.insert(Effect::Filesystem);
+        release.insert(Effect::Blocking);
+        for mutation in 0..5 {
+            let mut p = fixture_effects("", EffectSet::EMPTY, release);
+            match mutation {
+                0 => p.resources.operations[1].effects = EffectSet::EMPTY,
+                1 => {
+                    let Function::Ordinary(f) = &mut p.functions[1] else {
+                        unreachable!()
+                    };
+                    f.effects = crate::effects::Declaration::default();
+                }
+                2 => p.resources.leaves[0].cleanup_effects = EffectSet::EMPTY,
+                3 => p.resources.leaves[0].release = OperationId(0),
+                _ => p.resources.operations[1].function = FunctionId(0),
+            }
+            assert!(p.resources.validate(&p).is_err(), "mutation {mutation}");
+        }
+    }
+
+    #[test]
+    fn empty_cleanup_effects_preserve_real_plans_and_responsibility() {
+        let p = fixture();
+        let plans = p.resources.plans(&p).unwrap();
+        assert!(plans[0].is_some());
+        assert!(plans[1].is_some());
+        assert!(p.resources.summaries(&p, &plans).unwrap().is_empty());
+        assert_eq!(
+            p.resources.leaves[0].cleanup_effects,
+            crate::effects::EffectSet::EMPTY
+        );
+        let inert = crate::compile_source("type N=range 0..1;record R{x:N}fn f(){}").unwrap();
+        assert_eq!(inert.resources.plans(&inert).unwrap(), vec![None]);
+    }
     #[test]
     fn cached_child_plans_do_not_hide_full_type_graph_depth() {
         let mut p = fixture_with("record Outer{payload:R}");
