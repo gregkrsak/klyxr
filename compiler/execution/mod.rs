@@ -567,15 +567,20 @@ mod effect_authority_tests {
             let mut e = prepare_execution(
                 "fn leaf() effects clock {} fn demo() effects io,clock {leaf();leaf();}",
                 AdmissionLimits::default(),
-            ).unwrap();
+            )
+            .unwrap();
             let sites = &mut e.mir.test_functions_mut()[1].direct_effects;
             match mutation {
-                0 => { sites.pop(); }
+                0 => {
+                    sites.pop();
+                }
                 1 => sites.push(sites[0].clone()),
                 2 => sites.swap(0, 1),
                 3 => sites[0].function = FunctionId(0),
                 4 => sites[0].effects = EffectSet::EMPTY,
-                5 => { sites[0].effects.insert(Effect::Io); }
+                5 => {
+                    sites[0].effects.insert(Effect::Io);
+                }
                 6 => sites[0].origin.start += 1,
                 7 => sites[0].ordinal += 10,
                 _ => sites[0].callee = FunctionId(1),

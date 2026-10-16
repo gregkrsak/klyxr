@@ -26,7 +26,11 @@ impl Collector<'_> {
     fn call(&mut self, callee: FunctionId, origin: Span, arguments: &[TypedExpr]) {
         let ordinal = self.ordinal;
         self.ordinal += 1;
-        let contract = self.program.function(callee).as_ordinary().expect("typed ordinary callee");
+        let contract = self
+            .program
+            .function(callee)
+            .as_ordinary()
+            .expect("typed ordinary callee");
         if contract.effects.set() != EffectSet::EMPTY {
             self.sites.push(CallSite {
                 ordinal,
@@ -43,7 +47,10 @@ impl Collector<'_> {
 
     fn expression(&mut self, expression: &TypedExpr) {
         match &expression.kind {
-            ExprKind::Call { function, arguments } => {
+            ExprKind::Call {
+                function,
+                arguments,
+            } => {
                 self.call(*function, expression.span, arguments);
             }
             ExprKind::RecordConstruct { fields, .. } => {
@@ -51,7 +58,11 @@ impl Collector<'_> {
                     self.expression(&field.value);
                 }
             }
-            ExprKind::IfValue { condition, then_value, else_value } => {
+            ExprKind::IfValue {
+                condition,
+                then_value,
+                else_value,
+            } => {
                 self.expression(condition);
                 self.expression(then_value);
                 self.expression(else_value);
@@ -68,7 +79,11 @@ impl Collector<'_> {
     fn statements(&mut self, statements: &[ValueStatement]) {
         for statement in statements {
             match statement {
-                ValueStatement::CallNoValue { function, arguments, span } => {
+                ValueStatement::CallNoValue {
+                    function,
+                    arguments,
+                    span,
+                } => {
                     self.call(*function, *span, arguments);
                 }
                 ValueStatement::Let { initializer, .. } => self.expression(initializer),
@@ -77,12 +92,19 @@ impl Collector<'_> {
                 | ValueStatement::CopyFieldAssign { value, .. }
                 | ValueStatement::CopyReferenceFieldAssign { value, .. }
                 | ValueStatement::Return { value, .. } => self.expression(value),
-                ValueStatement::If { condition, then_body, else_body, .. } => {
+                ValueStatement::If {
+                    condition,
+                    then_body,
+                    else_body,
+                    ..
+                } => {
                     self.expression(condition);
                     self.statements(then_body);
                     self.statements(else_body);
                 }
-                ValueStatement::While { condition, body, .. } => {
+                ValueStatement::While {
+                    condition, body, ..
+                } => {
                     self.expression(condition);
                     self.statements(body);
                 }
@@ -111,8 +133,15 @@ pub(crate) fn check(program: &Program) -> Result<(), Vec<Diagnostic>> {
             if site.effects.is_subset(function.effects.set()) {
                 continue;
             }
-            let callee = program.function(site.callee).as_ordinary().expect("typed ordinary callee");
-            let missing = site.effects.iter().find(|e| !function.effects.set().contains(*e)).unwrap();
+            let callee = program
+                .function(site.callee)
+                .as_ordinary()
+                .expect("typed ordinary callee");
+            let missing = site
+                .effects
+                .iter()
+                .find(|e| !function.effects.set().contains(*e))
+                .unwrap();
             let declaration = callee.effects.origin(missing).unwrap_or(callee.span);
             return Err(vec![Diagnostic::semantic(
                 site.origin,

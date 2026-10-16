@@ -16,6 +16,7 @@ fn bad(body: &str, phase: &str, message: &str) -> (String, klyxr_compiler::lexer
             e[0].span,
         ),
         FrontendError::Ownership(e) => ("Ownership", e[0].message.clone(), e[0].span),
+        FrontendError::Effects(e) => ("Effects", e[0].message.clone(), e[0].span),
         FrontendError::Resolve(e) => ("Resolve", e[0].message.clone(), e[0].span),
         FrontendError::Parse(e) => ("Parse", e.message, e.span),
         FrontendError::Lex(e) => ("Lex", e.message, e.span),

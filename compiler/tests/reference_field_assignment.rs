@@ -17,6 +17,7 @@ fn bad(body: &str, phase: &str, word: &str) {
         FrontendError::Resolve(_) => "Resolve",
         FrontendError::Type(_) => "Type",
         FrontendError::Ownership(_) => "Ownership",
+        FrontendError::Effects(_) => "Effects",
     };
     assert_eq!(actual, phase, "{e}");
     assert!(e.to_string().contains(word), "{e}");

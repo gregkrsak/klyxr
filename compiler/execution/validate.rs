@@ -534,7 +534,9 @@ pub(super) fn mir_shape(
             return Err(ResourceFailure::limit("direct effect sites", START).into());
         }
         for site in &f.direct_effects {
-            let callee = p.functions().get(site.callee.0)
+            let callee = p
+                .functions()
+                .get(site.callee.0)
                 .filter(|f| f.id() == site.callee)
                 .and_then(|f| f.as_ordinary())
                 .ok_or_else(bad)?;

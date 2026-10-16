@@ -22,6 +22,7 @@ fn bad(body: &str, phase: &str, wording: &str) {
         FrontendError::Resolve(ds) => ("Resolve", ds[0].render("case.klx", &source)),
         FrontendError::Type(ds) => ("Type", ds[0].render("case.klx", &source)),
         FrontendError::Ownership(ds) => ("Ownership", ds[0].render("case.klx", &source)),
+        FrontendError::Effects(ds) => ("Effects", ds[0].render("case.klx", &source)),
     };
     assert_eq!(actual, phase, "{body}: {detail}");
     assert!(detail.contains(wording), "{body}: {detail}");

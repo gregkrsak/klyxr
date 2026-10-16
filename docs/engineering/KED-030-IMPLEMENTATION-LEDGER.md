@@ -132,3 +132,19 @@ contract-edge diagnostics through both preparation APIs, unsafe disclosure witho
 ownership permission, and nine independent direct-site mutations at approval.
 These new tests are authored; execution awaits this milestone's workflows.
 Cleanup contracts/realization and private abort domains are still pending.
+
+## Milestone 3 first-push compilation correction
+
+Commit `e228d4eb69df62dfe5654b09395c19b3002499f2`, tree
+`4bc5d686b9c912544dc1a29feeee3d1eb02f093a`, failed all-target compilation in
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38969651618) and
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38969651702): predecessor
+helpers exhaustively matched the public frontend error enum and needed its new
+Effects variant. Explicit Effects classifiers were added to the eight affected
+helper files (ordinary_records, copy_field_assignment, reference_field_assignment,
+reference_field_reads, contextual_literals, multiple_field_records, while_loops,
+local_reassignment). All original expected phases, assertions and identities stay
+unchanged. No test migration, weakened expectation or platform failure is claimed.
+[Docs](https://github.com/gregkrsak/klyxr/actions/runs/38969651619) and
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38969651788) passed.
+No later milestone was started on this failing compilation gate.
