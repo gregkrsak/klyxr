@@ -98,7 +98,13 @@ impl Declaration {
             && self.clause().map_or(true, valid)
             && Effect::ALL.into_iter().all(|effect| {
                 let member = self.origin(effect);
-                member.is_some() == self.set.contains(effect) && member.map_or(true, valid)
+                member.is_some() == self.set.contains(effect)
+                    && member.map_or(true, |span| {
+                        valid(span)
+                            && self.clause().is_some_and(|clause| {
+                                span.start >= clause.start && span.end <= clause.end
+                            })
+                    })
             })
     }
 }
@@ -232,6 +238,10 @@ mod tests {
             .unwrap()
             .line = 0;
         assert!(!bad_span.validate());
+        let mut outside = valid.clone();
+        let origins = std::rc::Rc::make_mut(outside.origins.as_mut().unwrap());
+        origins.members[Effect::Clock as usize].as_mut().unwrap().end = origins.clause.end + 1;
+        assert!(!outside.validate());
         assert!(Declaration::default().validate());
     }
 

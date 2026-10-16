@@ -22,7 +22,9 @@ fn explicit_effect_contracts_check_transitively_without_changing_proof_scope() {
         assert!(good.status.success());
         assert!(good.stderr.is_empty());
         let text = String::from_utf8(good.stdout).unwrap();
-        assert!(text.contains("ordinary effects: explicit upper bounds and complete callee contracts checked"));
+        assert!(text.contains(
+            "ordinary effects: explicit upper bounds and complete callee contracts checked"
+        ));
         assert!(text.contains("not effects-aware verification"));
         assert!(text.contains("function bodies proven: 0"));
         assert!(text.contains("calls checked: 0"));
@@ -33,14 +35,26 @@ fn explicit_effect_contracts_check_transitively_without_changing_proof_scope() {
         assert!(text.contains("unadmitted effect `io`"));
         assert!(text.contains("call to `middle`"));
     }
-    let good = run(&["run", &example("explicit_effects.klx"), "--function", "demo"]);
+    let good = run(&[
+        "run",
+        &example("explicit_effects.klx"),
+        "--function",
+        "demo",
+    ]);
     assert!(good.status.success());
     assert!(good.stderr.is_empty());
     assert_eq!(String::from_utf8(good.stdout).unwrap().trim(), "Bool(true)");
-    let bad = run(&["run", &example("explicit_effects_fail.klx"), "--function", "demo"]);
+    let bad = run(&[
+        "run",
+        &example("explicit_effects_fail.klx"),
+        "--function",
+        "demo",
+    ]);
     assert_eq!(bad.status.code(), Some(1));
     assert!(bad.stdout.is_empty());
-    assert!(String::from_utf8(bad.stderr).unwrap().contains("unadmitted effect `io`"));
+    assert!(String::from_utf8(bad.stderr)
+        .unwrap()
+        .contains("unadmitted effect `io`"));
 }
 
 #[test]

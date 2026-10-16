@@ -492,3 +492,25 @@ The only local verification claimed is static diff/manifest/context inspection;
 no local Rust executable result is claimed. Final exact head/tree, independent
 PR workflow results and full changed-file list will be recorded on the PR and
 Issue #70 after final branch-push validation.
+
+Milestone 9 first push `b8f956daff88c8529c83f04a83a31bbb8d402f2b`, tree
+`cae7fe73f79974a6dcd5d54e42a1ea588122aeae`, passed
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38975591104) and
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38975591074), including
+the new positive/negative CLI example control. [Build](https://github.com/gregkrsak/klyxr/actions/runs/38975591075)
+passed all-target compilation and failed only formatting in the new CLI test;
+the reviewed CI diff is applied. [Tests](https://github.com/gregkrsak/klyxr/actions/runs/38975591090)
+records the complete debug/release reconciliation for that head.
+Both profiles passed all 1,743 predecessors plus 47 additions = 1,790 identities,
+the authority doctest, 1,800 affine cases and the explicit protocol-domain audit.
+
+The final whole-branch audit also tightened source-origin precision: a clause span
+now covers the keyword through its last member, and declaration validation rejects
+members outside that span. Existing grammar and malformed-declaration identities
+now assert full-clause slicing and a foreign member endpoint. This is an origin
+correspondence correction, with unchanged effect sets, eligibility and safety rules.
+`origin/prod` was fetched again and still exactly matches authorized baseline
+commit `edf80c1e68e6fe3e2b25f6a557fc121395e45adc`, tree
+`844afe3deacf22bc55844bc8ea92d76036cb3fc2`. Static asset/scaffold, manifest,
+generated-context byte and full diff-integrity checks passed. All executable
+claims still depend on the final correction's GitHub gate and independent PR runs.

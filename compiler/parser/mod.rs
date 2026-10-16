@@ -275,7 +275,11 @@ impl Parser<'_> {
                 }
                 self.advance();
             }
-            Some(crate::ast::EffectClause { span, names })
+            let end = names.last().expect("nonempty effect clause").span.end;
+            Some(crate::ast::EffectClause {
+                span: Span { end, ..span },
+                names,
+            })
         } else {
             None
         };

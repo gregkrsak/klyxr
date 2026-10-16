@@ -18,6 +18,8 @@ fn ordinary_result_kinds_and_keyword_spellings_preserve_contracts() {
             assert!(f.effects.origin(Effect::Clock).is_some());
             assert!(f.effects.origin(Effect::Io).is_some());
             assert!(f.effects.origin(Effect::Unsafe).is_none());
+            let clause = f.effects.clause().unwrap();
+            assert_eq!(&source[clause.start..clause.end], "effects clock, io");
             let m = mir::lower(&p);
             assert_eq!(m.functions()[0].effects(), &f.effects);
             m.functions()[0].validate().unwrap();
