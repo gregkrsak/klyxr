@@ -2,6 +2,7 @@
 use crate::hir::{self, FunctionId, LocalId, Place, TypedExpr, ValueStatement};
 use crate::lexer::Span;
 pub(crate) mod cleanup;
+pub(crate) mod temporaries;
 
 /// Compilation-local CFG identity, unrelated to source declaration identities.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -89,6 +90,7 @@ impl BasicBlock {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MirFunction {
+    pub(crate) temporaries: Option<temporaries::Flow>,
     pub(crate) cleanup: Option<cleanup::Flow>,
     function: FunctionId,
     entry: BasicBlockId,
@@ -256,6 +258,8 @@ pub fn lower(program: &hir::Program) -> MirProgram {
 /// Produced by the same lowering, never reconstructed by the runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OriginKind {
+    TemporaryRegion,
+    TemporaryCreation,
     ScopeEntry,
     OwnerInitialization,
     Replacement,
@@ -279,7 +283,12 @@ pub(crate) fn lower_with_origins(
     } else {
         program.resources.plans(program)?
     };
-    Ok(lower_internal(program, false, &plans))
+    let (mut mir, origins) = lower_internal(program, false, &plans);
+    for function in &mut mir.functions {
+        let body = &program.function(function.function).as_ordinary().unwrap().body;
+        function.temporaries = temporaries::Flow::lower(program, body, &plans)?;
+    }
+    Ok((mir, origins))
 }
 fn lower_internal(
     program: &hir::Program,
@@ -327,6 +336,7 @@ fn lower_internal(
                 );
             }
             let function = MirFunction {
+                temporaries: None,
                 cleanup: builder.cleanup,
                 function: f.id,
                 entry,
@@ -1183,6 +1193,7 @@ mod tests {
                 },
             ] {
                 let m = MirFunction {
+                    temporaries: None,
                     cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
@@ -1210,6 +1221,7 @@ mod tests {
                 },
             ] {
                 let m = MirFunction {
+                    temporaries: None,
                     cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
@@ -1255,6 +1267,7 @@ mod tests {
                 hir::ExprKind::FieldAccess(access)
             };
             let m = MirFunction {
+                    temporaries: None,
                 cleanup: None,
                 function: f.id,
                 entry: BasicBlockId(0),
@@ -1328,6 +1341,7 @@ mod multiple_field_tests {
                 ];
                 for statement in statements {
                     let m = MirFunction {
+                    temporaries: None,
                         cleanup: None,
                         function: f.id,
                         entry: BasicBlockId(0),
@@ -1342,6 +1356,7 @@ mod multiple_field_tests {
                     );
                 }
                 let m = MirFunction {
+                    temporaries: None,
                     cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
@@ -1356,6 +1371,7 @@ mod multiple_field_tests {
                 );
                 e.ty = hir::ExprType::Bool;
                 let m = MirFunction {
+                    temporaries: None,
                     cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
@@ -1406,6 +1422,7 @@ mod multiple_field_tests {
                     hir::ExprKind::FieldAccess(access)
                 };
                 let m = MirFunction {
+                    temporaries: None,
                     cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
@@ -1449,6 +1466,7 @@ mod multiple_field_tests {
                     arguments[0].ty = hir::ExprType::Bool;
                 }
                 let m = MirFunction {
+                    temporaries: None,
                     cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
@@ -1474,6 +1492,7 @@ mod multiple_field_tests {
             span: value.span,
         };
         let m = MirFunction {
+                    temporaries: None,
             cleanup: None,
             function: f.id,
             entry: BasicBlockId(0),
@@ -1563,6 +1582,7 @@ mod multiple_field_tests {
                     },
                 ] {
                     let m = MirFunction {
+                    temporaries: None,
                         cleanup: None,
                         function: f.id,
                         entry: BasicBlockId(0),
@@ -1574,6 +1594,7 @@ mod multiple_field_tests {
                     assert_eq!(m.validate(), Err(error));
                 }
                 let m = MirFunction {
+                    temporaries: None,
                     cleanup: None,
                     function: f.id,
                     entry: BasicBlockId(0),
@@ -1585,6 +1606,7 @@ mod multiple_field_tests {
                 assert_eq!(m.validate(), Err(error));
                 if e.ty == hir::ExprType::Bool {
                     let m = MirFunction {
+                    temporaries: None,
                         cleanup: None,
                         function: f.id,
                         entry: BasicBlockId(0),

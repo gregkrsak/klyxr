@@ -1,0 +1,9 @@
+{
+  "migrations": {},
+  "additions": [
+    "lib.rs::mir::temporaries::tests::conditional_initializer_keeps_one_source_region_across_cfg",
+    "lib.rs::mir::temporaries::tests::call_sites_bind_exact_parameter_destinations_in_written_order",
+    "lib.rs::mir::temporaries::tests::nested_call_is_not_an_extra_caller_region",
+    "lib.rs::mir::temporaries::tests::unused_catalog_does_not_create_resource_free_regions"
+  ]
+}
