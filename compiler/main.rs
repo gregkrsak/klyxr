@@ -64,7 +64,8 @@ fn run() -> Result<(), i32> {
                 FrontendError::Parse(error) => (error.span, error.message),
                 FrontendError::Resolve(diagnostics)
                 | FrontendError::Type(diagnostics)
-                | FrontendError::Ownership(diagnostics) => {
+                | FrontendError::Ownership(diagnostics)
+                | FrontendError::Effects(diagnostics) => {
                     for diagnostic in diagnostics {
                         eprint!("{}", diagnostic.render(&path, &source));
                     }

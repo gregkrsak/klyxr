@@ -9,7 +9,12 @@
     "tests/effects.rs::absent_clause_is_empty_and_declarations_collect_before_bodies",
     "tests/effects.rs::unknown_duplicate_and_malformed_clauses_reject",
     "tests/effects.rs::verified_and_harness_effect_clauses_remain_excluded",
-    "lib.rs::effects::tests::declaration_invariants_reject_independent_mutations"
+    "lib.rs::effects::tests::declaration_invariants_reject_independent_mutations",
+    "tests/effects.rs::complete_declared_contracts_propagate_through_both_call_forms",
+    "tests/effects.rs::structural_unions_keep_terminal_short_circuit_and_loop_calls",
+    "tests/effects.rs::recursive_contract_diagnostics_terminate_at_an_honest_declaration_edge",
+    "tests/effects.rs::unsafe_membership_cannot_authorize_reusing_a_moved_owner",
+    "lib.rs::execution::effect_authority_tests::direct_effect_sites_reject_independent_authority_mutations"
   ],
   "contract_corrections": [],
   "fixture_adaptations": []

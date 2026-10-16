@@ -1,6 +1,7 @@
 //! Canonical KED-030 audit identities. Membership never grants permission.
 use crate::lexer::Span;
 use std::fmt;
+pub(crate) mod calls;
 
 /// A complete ordinary signature contract. Absent clauses allocate no origins.
 /// Verified and harness declarations never contain this representation.

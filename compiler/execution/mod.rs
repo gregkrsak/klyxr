@@ -373,6 +373,8 @@ pub fn prepare_execution(
     if let Some(e) = context.failure.get() {
         return Err(e.into());
     }
+    crate::effects::calls::check(&program)
+        .map_err(|e| frontend("effects", e, &context))?;
     seal(program, limits)
 }
 impl From<hir::resources::PlanError> for ExecutionError {
@@ -549,7 +551,38 @@ fn prepare_synthetic(
     if let Some(e) = context.failure.get() {
         return Err(e.into());
     }
+    crate::effects::calls::check(&program)
+        .map_err(|e| frontend("effects", e, &context))?;
     seal(program, limits)
+}
+
+#[cfg(test)]
+mod effect_authority_tests {
+    use super::*;
+    use crate::effects::{Effect, EffectSet};
+
+    #[test]
+    fn direct_effect_sites_reject_independent_authority_mutations() {
+        for mutation in 0..9 {
+            let mut e = prepare_execution(
+                "fn leaf() effects clock {} fn demo() effects io,clock {leaf();leaf();}",
+                AdmissionLimits::default(),
+            ).unwrap();
+            let sites = &mut e.mir.test_functions_mut()[1].direct_effects;
+            match mutation {
+                0 => { sites.pop(); }
+                1 => sites.push(sites[0].clone()),
+                2 => sites.swap(0, 1),
+                3 => sites[0].function = FunctionId(0),
+                4 => sites[0].effects = EffectSet::EMPTY,
+                5 => { sites[0].effects.insert(Effect::Io); }
+                6 => sites[0].origin.start += 1,
+                7 => sites[0].ordinal += 10,
+                _ => sites[0].callee = FunctionId(1),
+            }
+            assert!(e.validate().is_err(), "mutation {mutation}");
+        }
+    }
 }
 
 #[cfg(test)]

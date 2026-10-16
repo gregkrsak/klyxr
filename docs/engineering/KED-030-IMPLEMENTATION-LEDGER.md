@@ -97,3 +97,38 @@ assertion or predecessor identity changed. Release was not reached.
 [verify](https://github.com/gregkrsak/klyxr/actions/runs/38969016520) passed.
 These are implementation formatting/evidence-manifest errors, not platform
 failures. No later architectural layer was added on the failing milestone.
+
+## Milestone 2 completed
+
+Correction commit `3db5aba640885810a04df74824160ac71efbd1f7`, tree
+`096fa362e59e8d543126a40bb96faa10cf2af3ec`, passed all four workflows:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38969187579),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38969187747),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38969187827),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38969187641).
+Job 117203057962 reconciled 1,743 predecessors plus nine additions = 1,752
+passing identities in both profiles; both affine and authority controls passed.
+All four job conclusions and relevant logs were inspected before milestone 3.
+Declaration origins share an immutable fixed-size array; absent clauses allocate
+none. Only ordinary function representations contain those origins.
+
+## Milestone 3 — Direct and transitive contracts
+
+A structural visitor collects complete canonical call declarations, without
+interprocedural inference. Both ordinary call forms and all expression containers
+contribute. Terminal branches, loops and both short-circuit operands remain
+structurally represented. Source check/verify and both execution preparation
+routes enforce subset checks after ownership approval. Private synthetic
+preparation enforces the same check.
+
+MIR retains nonempty direct call sites with canonical enclosing/callee identities,
+source call ordinals, masks and origins. Resource-free empty-contract calls add no
+site entries. Structural and table-aware validation plus exact deterministic
+correspondence protect the metadata. No runtime effects analysis is added.
+
+Five new identities exercise all atoms/spellings/result/call forms, three-function
+propagation through unused strict supersets, structural unions, recursive bounded
+contract-edge diagnostics through both preparation APIs, unsafe disclosure without
+ownership permission, and nine independent direct-site mutations at approval.
+These new tests are authored; execution awaits this milestone's workflows.
+Cleanup contracts/realization and private abort domains are still pending.

@@ -530,6 +530,18 @@ pub(super) fn mir_shape(
             .filter(|v| v.id() == f.function())
             .and_then(|v| v.as_ordinary())
             .ok_or_else(bad)?;
+        if f.direct_effects.len() > c.limits.tokens {
+            return Err(ResourceFailure::limit("direct effect sites", START).into());
+        }
+        for site in &f.direct_effects {
+            let callee = p.functions().get(site.callee.0)
+                .filter(|f| f.id() == site.callee)
+                .and_then(|f| f.as_ordinary())
+                .ok_or_else(bad)?;
+            if site.function != f.function() || site.effects != callee.effects.set() {
+                return Err(bad());
+            }
+        }
         if f.blocks().len() > c.limits.tokens.checked_mul(4).ok_or_else(bad)? {
             return Err(bad());
         }

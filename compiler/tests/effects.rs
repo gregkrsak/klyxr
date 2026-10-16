@@ -139,3 +139,69 @@ fn verified_and_harness_effect_clauses_remain_excluded() {
         ));
     }
 }
+
+#[test]
+fn complete_declared_contracts_propagate_through_both_call_forms() {
+    for effect in Effect::ALL {
+        for keyword in ["fn", "function"] {
+            for value in [false, true] {
+                let source = if value {
+                    format!("{keyword} leaf()->bool effects {0}{{return true;}} {keyword} middle()->bool effects {0}{{return leaf();}} {keyword} top()->bool{{return middle();}}", effect.name())
+                } else {
+                    format!("{keyword} leaf() effects {0}{{}} {keyword} middle() effects {0}{{leaf();}} {keyword} top(){{middle();}}", effect.name())
+                };
+                let error = compile_source(&source).unwrap_err();
+                assert!(matches!(error, FrontendError::Effects(_)), "{error}");
+                let message = error.to_string();
+                assert!(message.contains(effect.name()));
+                assert!(message.contains("middle"));
+                assert!(message.contains("declaration at"));
+                let source = if value {
+                    source.replace("top()->bool{", &format!("top()->bool effects {}{{", effect.name()))
+                } else {
+                    source.replace("top(){", &format!("top() effects {}{{", effect.name()))
+                };
+                compile_source(&source).unwrap();
+            }
+        }
+    }
+}
+
+#[test]
+fn structural_unions_keep_terminal_short_circuit_and_loop_calls() {
+    let prelude = "fn emit() effects io {} fn clock()->bool effects clock{return true;}";
+    for body in [
+        "if true {emit();return;}",
+        "if false {emit();} else {return;}",
+        "let observed = false && clock();",
+        "let observed = true || clock();",
+        "while false {emit();break;}",
+        "while true {emit();continue;}",
+        "while false {if true {emit();return;}else{continue;}}",
+        "let chosen=if true {clock()} else {false};",
+    ] {
+        let error = compile_source(&format!("{prelude} fn demo(){{{body}}}")).unwrap_err();
+        assert!(matches!(error, FrontendError::Effects(_)), "{body}: {error}");
+        compile_source(&format!("{prelude} fn demo() effects io,clock {{{body}}}")).unwrap();
+    }
+}
+
+#[test]
+fn recursive_contract_diagnostics_terminate_at_an_honest_declaration_edge() {
+    let source = "fn a() effects clock {b();} fn b() effects clock {a();} fn demo(){a();}";
+    let error = compile_source(source).unwrap_err();
+    let message = error.to_string();
+    assert!(message.contains("clock"));
+    assert!(message.contains("call to `a`"));
+    assert!(message.len() < 512);
+    let e = execution::prepare_execution(source, AdmissionLimits::default()).err().unwrap();
+    assert!(matches!(e.kind, execution::ErrorKind::Frontend { phase: "effects", .. }));
+    let e = execution::prepare_execution_from_reader(source.as_bytes(), AdmissionLimits::default()).err().unwrap();
+    assert!(matches!(e.kind, execution::ErrorKind::Frontend { phase: "effects", .. }));
+}
+
+#[test]
+fn unsafe_membership_cannot_authorize_reusing_a_moved_owner() {
+    let error = compile_source("type N=range 0..1; record R{x:N} fn demo(x:R) effects unsafe {let first=x;let second=x;}").unwrap_err();
+    assert!(matches!(error, FrontendError::Ownership(_)));
+}
