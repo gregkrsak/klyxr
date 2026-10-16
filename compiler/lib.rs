@@ -1,6 +1,7 @@
 pub mod ast;
 mod bounded;
 pub mod diagnostics;
+pub mod effects;
 pub mod execution;
 pub mod hir;
 pub mod lexer;

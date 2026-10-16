@@ -1,0 +1,10 @@
+{
+  "migrations": {},
+  "additions": [
+    "lib.rs::effects::tests::identities_are_independent_and_render_in_canonical_order",
+    "lib.rs::effects::tests::every_bounded_set_obeys_union_and_subset",
+    "lib.rs::effects::tests::wider_foreign_encodings_reject_before_narrowing"
+  ],
+  "contract_corrections": [],
+  "fixture_adaptations": []
+}
