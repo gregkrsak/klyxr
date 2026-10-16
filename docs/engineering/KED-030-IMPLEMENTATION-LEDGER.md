@@ -269,3 +269,33 @@ filtered tests. [Build](https://github.com/gregkrsak/klyxr/actions/runs/38972672
 passed all-target compilation and failed formatting; Clippy and Rustdoc were
 therefore skipped. The next correction applies only the reviewed CI rustfmt diff
 to six implementation files; no later architectural layer has begun.
+
+Milestone 5 formatting correction `17db6bc69a4a8c444786a2274a7b65805cfce123`,
+tree `8c512d07bcd67f34ac41ab85af1da86dd3341df7`, passed all four workflows:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38973143032),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38973142682),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38973142667),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38973142669).
+All steps and relevant logs were inspected, including formatting, warnings-denied
+Clippy/Rustdoc, both 1,769-test reconciliations, both affine checks, and the doctest.
+
+## Milestone 6 — Effectful replacement, return, temporary and entry evidence
+
+Six new runtime identities exercise successful ownership-approved source with
+nonempty fixed operation contracts. They assert exact acquisition/release identity
+order across replacement generations and nested argument pass-through, protected
+return versus remaining parameter cleanup, and both short-circuit alternatives.
+Every fuel cut through two-argument entry checks conservation, including an actual
+partially published parameter frame. Runtime storage is checked at its exact
+sufficient/insufficient neighbors. A release failure preserves Complete of the
+first owner, Attempt/Failure of the next, and the never-attempted suffix, and
+refuses resumption. Unused network/unsafe supersets add no events.
+
+Existing canonical temporary site plans carry the mechanically derived latent
+summary by record identity; transfer preserves that plan without an independently
+writable effect mask. No ordinary source temporary remains eligible at successful
+region retirement: accepted record values transfer to their validated destination
+or are protected returns. Private leftover injection is protocol evidence and
+will receive an explicit separate sealed domain in milestone 7.
+
+These six tests are authored; authoritative CI evidence is pending.

@@ -3,6 +3,8 @@ use super::*;
 use crate::hir::resources::OperationKind;
 use crate::mir::cleanup::ScopeId;
 mod replacement;
+#[cfg(test)]
+mod effects;
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Event {
     Acquire(u64),

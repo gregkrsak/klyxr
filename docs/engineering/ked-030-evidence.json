@@ -26,7 +26,13 @@
     "lib.rs::execution::effect_authority_tests::cleanup_witness_site_function_owner_plan_summary_and_origin_mutations_reject",
     "lib.rs::execution::effect_authority_tests::cleanup_witness_storage_neighbors_and_host_failure_never_grant_authority",
     "lib.rs::ownership::cleanup_effect_transaction_tests::complete_expression_failure_restores_cleanup_custody_without_an_approval",
-    "lib.rs::execution::effect_authority_tests::protected_return_owner_cannot_gain_cleanup_authority_from_an_unused_superset"
+    "lib.rs::execution::effect_authority_tests::protected_return_owner_cannot_gain_cleanup_authority_from_an_unused_superset",
+    "lib.rs::execution::machine::cleanup::effects::nonempty_contracts_preserve_replacement_generations_and_argument_deferral",
+    "lib.rs::execution::machine::cleanup::effects::protected_result_and_other_parameter_keep_distinct_cleanup_owners",
+    "lib.rs::execution::machine::cleanup::effects::short_circuit_skip_and_execution_release_the_actual_owner_once",
+    "lib.rs::execution::machine::cleanup::effects::nonempty_effects_conserve_partial_call_entry_at_every_fuel_stop",
+    "lib.rs::execution::machine::cleanup::effects::nonempty_effects_preserve_exact_runtime_storage_neighbors",
+    "lib.rs::execution::machine::cleanup::effects::effectful_release_failure_preserves_attempt_failure_and_never_started_suffix"
   ],
   "contract_corrections": [],
   "fixture_adaptations": [
