@@ -742,6 +742,28 @@ scope and GitHub-executed evidence. Local Rust validation was unavailable becaus
 of confirmed Work-runtime corruption. Acceptance remains Greg's decision and only
 a human may merge.
 
+## KED-029 expression temporary extension
+
+Frozen Issue #66 Draft 2 gives admitted resource-bearing expression intermediates
+explicit bounded ownership. Caller expressions share their source evaluation
+region; callee statements and returns have their own regions. Record fields use
+child regions, transferring into pending construction before child retirement.
+Owned arguments evaluate left to right and transfer once on whole-call entry.
+Remaining siblings retire in reverse successful creation order; complete aggregates
+retain reverse canonical field-declaration cleanup order.
+
+Results are protected before other temporaries retire and before locals, existing
+assignments, returns, replacements or condition selection continue. Pending-field
+transfer is the specified immediate-transfer exception. Static regions/sites and
+dynamic activations/owners are distinct; temporary handles are neither LocalIds nor
+borrowable places. Resource-free evaluations omit empty temporary machinery.
+
+This refines earlier temporary exclusions only within frozen KED-029. Temporary
+borrowing, value-returning call statements, new recurring-while Move/reference
+eligibility, unwind, rollback, custom destructors and public resource APIs remain
+excluded. See the KED-029 implementation ledger for GitHub-executed evidence.
+Implementation acceptance remains Greg's decision; only a human may merge.
+
 <!-- END KLYXR_CONTEXT.md -->
 
 ---
@@ -2233,6 +2255,38 @@ recoverable propagation, generalized place/dataflow engine or verifier expansion
 Earlier KD sections retain their historical boundaries; this decision narrowly
 extends KD-026 and KD-042 and refines OQ-022/OQ-023/OQ-025/OQ-026.
 
+## KED-029 — deterministic resource-bearing expression temporaries
+
+Status: frozen Draft 2 decision, Issue #66; implementation acceptance is separate.
+No new KD number is assigned. This narrowly refines KD-042 and KED-028 temporary
+boundaries while preserving KD-041 argument order and KD-034 statement restrictions.
+
+Every admitted resource-bearing expression intermediate has one explicit bounded
+machine owner. Ordering history owns no payload. Static source regions and sites
+are distinct from runtime activations and owners. Nested caller expressions remain
+in their caller region; executed callee statements and return operands get their
+own regions. Conditional initializers retain one region across MIR blocks. Each
+record-field initializer has a child region and transfers its result into pending
+construction before that child retires.
+
+Owned arguments evaluate left to right, remain responsible while later arguments
+evaluate, and transfer exactly once during valid whole-call entry. Remaining
+sibling owners clean in reverse successful creation order. Cleanup inside complete
+aggregates remains reverse canonical field-declaration order. Local initialization
+protects the result, retires other temporaries, publishes and registers the local,
+then continues. Existing assignments similarly protect, retire and perform their
+pending write. Returns and KED-028 replacements use their protected holders before
+operand retirement. Conditions protect their Bool and retire before branch selection.
+
+Temporary borrowing and escape remain rejected at every representation layer.
+Temporary owners are not hidden user locals or borrowable places. Recurring while
+conditions gain no Move/reference eligibility. Value-returning call statements
+remain rejected. Vacancy never establishes valid transfer or cleanup. Terminal
+stops retain actual unfinished responsibilities and completed prefixes; no unwind,
+rollback, retry, arbitrary destructor, public resource API, ownership inference or
+second ownership checker is added. See the KED-029 ledger for implementation and
+independent-review status. OQ-022/OQ-023/OQ-025/OQ-026 retain their broader questions.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -3284,6 +3338,34 @@ The executor consumes MIR authority and does not reconstruct ownership or HIR sc
 Public resource APIs and all frozen non-goals remain excluded. Evidence and precise
 CI identities are recorded in `docs/engineering/KED-028-IMPLEMENTATION-LEDGER.md`.
 
+## KED-029 temporary custody and authority
+
+Fallible canonical MIR metadata binds source evaluation ordinals, regions, sites,
+canonical types/plans, destinations and creation/transfer/cleanup/retirement origins.
+Ordinals include resource-free predecessors, while empty regions are omitted. MIR
+points bind source regions across CFG blocks; conditional initializer leaves finish
+the same activation. Region/site identities are separate from LocalId and Place.
+Exact HIR/MIR/origin correspondence and opaque approval seal the complete protocol;
+bounded validation rejects malformed tables before following their references.
+
+The machine lazily allocates temporary state. Each dynamic activation contains
+explicit Owned/Transferred/Cleaning/Cleaned custody and payload holders. Operand
+handles identify owners without duplicating payloads. Combined prospective growth
+is checked before detachment where feasible. Whole-call entry publishes an explicit
+callee frame before incremental parameter transfer; a stopped partial entry retains
+both published parameters and untransferred arguments, without executing the body.
+
+Completion protects results before reverse sibling retirement. Return and replacement
+results use their existing dedicated holders. Local/assignment/condition completion
+uses activation protection until publication or selection. Pending fields receive
+immediate canonical membership before child retirement. Existing cleanup cursors
+retain a stopped leaf and completed prefixes. Vacancy is checked against explicit
+custody and never substitutes for it. Fresh activations distinguish repeated source
+regions; no host destructor implements Klyxr cleanup. Capacities and payload storage
+are bounded and charged without counting non-owning handles as duplicate payloads.
+Resource-free paths retain their previous accounting. The KED-029 ledger records
+identity-sensitive tests, independent artifact mutations and private allocation probes.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -3920,5 +4002,16 @@ resource temporaries, user destructors, recoverable propagation, production reso
 APIs and generalized cyclic ownership/dataflow remain unresolved or excluded.
 The specialized verifier and proof counts are unchanged. Historical statements
 that non-Copy replacement is open now apply to those broader facilities.
+
+### KED-029 refinement of expression-temporary questions
+
+Frozen Draft 2 settles bounded ownership, region retirement and destination custody
+for admitted resource-bearing expression intermediates. This narrows the historical
+arbitrary-temporary exclusions above, without settling temporary borrowing, lifetime
+extension, value-returning call statements, recurring-while Move/reference activity,
+public resource admission, arbitrary destructors, recoverable propagation, unwind,
+rollback or generalized ownership/dataflow. Existing aggregate field order and
+KED-028 replacement remain authoritative. Independent acceptance of the implementation
+is separate from the frozen decision; no new verifier proof claim is made.
 
 <!-- END OPEN_QUESTIONS.md -->

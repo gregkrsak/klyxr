@@ -1042,3 +1042,31 @@ history, vacancy and release attempts are never counted as completed responsibil
 The executor consumes MIR authority and does not reconstruct ownership or HIR scopes.
 Public resource APIs and all frozen non-goals remain excluded. Evidence and precise
 CI identities are recorded in `docs/engineering/KED-028-IMPLEMENTATION-LEDGER.md`.
+
+## KED-029 temporary custody and authority
+
+Fallible canonical MIR metadata binds source evaluation ordinals, regions, sites,
+canonical types/plans, destinations and creation/transfer/cleanup/retirement origins.
+Ordinals include resource-free predecessors, while empty regions are omitted. MIR
+points bind source regions across CFG blocks; conditional initializer leaves finish
+the same activation. Region/site identities are separate from LocalId and Place.
+Exact HIR/MIR/origin correspondence and opaque approval seal the complete protocol;
+bounded validation rejects malformed tables before following their references.
+
+The machine lazily allocates temporary state. Each dynamic activation contains
+explicit Owned/Transferred/Cleaning/Cleaned custody and payload holders. Operand
+handles identify owners without duplicating payloads. Combined prospective growth
+is checked before detachment where feasible. Whole-call entry publishes an explicit
+callee frame before incremental parameter transfer; a stopped partial entry retains
+both published parameters and untransferred arguments, without executing the body.
+
+Completion protects results before reverse sibling retirement. Return and replacement
+results use their existing dedicated holders. Local/assignment/condition completion
+uses activation protection until publication or selection. Pending fields receive
+immediate canonical membership before child retirement. Existing cleanup cursors
+retain a stopped leaf and completed prefixes. Vacancy is checked against explicit
+custody and never substitutes for it. Fresh activations distinguish repeated source
+regions; no host destructor implements Klyxr cleanup. Capacities and payload storage
+are bounded and charged without counting non-owning handles as duplicate payloads.
+Resource-free paths retain their previous accounting. The KED-029 ledger records
+identity-sensitive tests, independent artifact mutations and private allocation probes.

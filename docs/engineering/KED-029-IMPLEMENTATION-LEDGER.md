@@ -319,3 +319,53 @@ Other runs: tests https://github.com/gregkrsak/klyxr/actions/runs/38851977323,
 docs https://github.com/gregkrsak/klyxr/actions/runs/38851977322,
 verify https://github.com/gregkrsak/klyxr/actions/runs/38851977308.
 No later layer added while this milestone's build gate was red.
+
+Milestone 7 completed at `cc48724d8bb1ef8b0e1a963b8ee0095ca5ff8188`, tree
+`e172d43df93b2eb51ce5808ce902d73313d4d656`. All four passed:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38852179648),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38852179652),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38852179651),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38852179655).
+Both complete profiles reconciled 1,706 predecessors plus 37 additions = 1,743
+passing identities, zero failed/ignored/filtered. Both 1,800-case affine checks
+and compile-fail authority doctests passed.
+
+## Final conformance and documentation
+
+The evidence manifest lists all 37 additions individually. Its `migrations` map
+means identity renames and is empty. The separate `contract_corrections` list
+records two preserved-ID admission corrections and the fuel threshold correction;
+`fixture_adaptations` records the unchanged named-source stop witness adapter.
+The reconciliation script now prints these categories explicitly. Historical
+KED-027/KED-028 inventories and reconciliation scripts remain unchanged.
+
+| Frozen requirement / pressure | GitHub-executed evidence |
+| --- | --- |
+| Source regions, CFG, canonical sites and origins | Four MIR tests, source ordinal and selected-leaf tests, 37 independent single-fault authority mutations |
+| Direct/nested/multiple owned arguments, one transfer | Three vertical call tests, partial-entry fuel cuts, exact caller/parameter holder census |
+| Reverse sibling order and canonical aggregate order | Private A/B/C exact C/B/A retirement, A/G/B order and each trusted-release failure |
+| Protect before local publication | U/R success, Host stop and every configured fuel cut; unpublished R and completed prefix census |
+| Existing assignment forms and RHS effects | All four forms, retirement-stop neighbors, prefix mutation retained without pending write |
+| Protected return and KED-028 replacement | Dedicated protected-holder stop tests; predecessor A/B/C replacement witness preserved |
+| Field child regions and canonical pending membership | Middle-field named move and nested pending last-written middle-field stop tests |
+| Conditions and dynamic activations | Retirement before selection, selected arm only, CFG-spanning initializer, fresh loop-body activations |
+| Exclusions and authority isolation | Source borrow/discard/while rejection, malformed artifacts, forged acquisition rejection, compile-fail opaque authority doctest |
+| Bounds and terminal failures | Exact admission and storage neighbors, every call fuel/storage cut, actual reserve probes, failed acquisition, trusted release, refused resume |
+| Conservation and cost preservation | Independent identity census of physical holders; resource-free predecessor suite; both affine checks |
+
+Implementation-facing context, decisions, architecture, open questions, compiler
+README and bounded-execution documentation now describe frozen Draft 2. The context
+bundle is regenerated and checked byte-for-byte; README/assets and scaffold checks
+are run locally using Python and repeated by GitHub. No local Rust, Cargo, Rustfmt,
+Clippy or executable-test result is claimed: local Rust validation was unavailable
+because of confirmed Work-runtime corruption. Formatting repairs above apply text
+from GitHub Rustfmt logs; all executable validation belongs to GitHub Actions.
+
+The full baseline-to-head source diff, predecessor inventory provenance, manifest,
+workflow changes and generated documentation are audited before PR creation. No
+frozen semantic change, non-goal expansion or deferred facility was required.
+The exact publishing head/tree and completed documentation push gate, followed by
+independent pull-request workflow URLs, are recorded in Issue #66 and the linked
+implementation PR after those events exist. This avoids self-referential commit
+identifiers in a versioned ledger. Independent implementation review and Greg's
+acceptance remain outstanding; Issue #66 stays open and only a human may merge.

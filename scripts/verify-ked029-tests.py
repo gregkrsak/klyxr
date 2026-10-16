@@ -60,9 +60,18 @@ def reconcile(actual, baseline, migrations, additions):
     assert actual.get(affine) == "ok", "missing 1,800-case affine cross-check"
     doctests = [k for k in actual if k.startswith("doctest:")]
     assert len(doctests) == 1 and "CheckedExecutable - compile fail" in doctests[0]
-    print(f"KED-029 reconciliation: 1,706 predecessors ({len(migrations)} explicit migrations) + {len(additions)} new = {len(actual)} passed")
+    print(f"KED-029 reconciliation: 1,706 predecessors ({len(migrations)} identity renames) + {len(additions)} new = {len(actual)} passed")
     print("compile-fail doctest: passed; affine cross-check: 1,800 cases passed")
     print("failed/ignored/filtered: 0/0/0")
 
 manifest = json.loads((root / "docs/engineering/ked-029-evidence.json").read_text())
 reconcile(actual, baseline, manifest["migrations"], manifest["additions"])
+predecessors = {r["id"] for r in baseline["identities"]}
+corrections = manifest["contract_corrections"]
+assert len({r["id"] for r in corrections}) == len(corrections) == 3
+assert [r["kind"] for r in corrections].count("admission") == 2
+assert [r["kind"] for r in corrections].count("fuel") == 1
+for row in corrections + manifest["fixture_adaptations"]:
+    assert row["id"] in predecessors and actual.get(row["id"]) == "ok"
+    assert row["reason"], "undocumented predecessor correction"
+print("preserved-ID contract corrections: 2 admission, 1 fuel; fixture adaptation: 1")

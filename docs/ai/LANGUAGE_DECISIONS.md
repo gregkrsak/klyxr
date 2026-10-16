@@ -1393,3 +1393,35 @@ partial move, reference replacement, destructor callback, production resource AP
 recoverable propagation, generalized place/dataflow engine or verifier expansion.
 Earlier KD sections retain their historical boundaries; this decision narrowly
 extends KD-026 and KD-042 and refines OQ-022/OQ-023/OQ-025/OQ-026.
+
+## KED-029 — deterministic resource-bearing expression temporaries
+
+Status: frozen Draft 2 decision, Issue #66; implementation acceptance is separate.
+No new KD number is assigned. This narrowly refines KD-042 and KED-028 temporary
+boundaries while preserving KD-041 argument order and KD-034 statement restrictions.
+
+Every admitted resource-bearing expression intermediate has one explicit bounded
+machine owner. Ordering history owns no payload. Static source regions and sites
+are distinct from runtime activations and owners. Nested caller expressions remain
+in their caller region; executed callee statements and return operands get their
+own regions. Conditional initializers retain one region across MIR blocks. Each
+record-field initializer has a child region and transfers its result into pending
+construction before that child retires.
+
+Owned arguments evaluate left to right, remain responsible while later arguments
+evaluate, and transfer exactly once during valid whole-call entry. Remaining
+sibling owners clean in reverse successful creation order. Cleanup inside complete
+aggregates remains reverse canonical field-declaration order. Local initialization
+protects the result, retires other temporaries, publishes and registers the local,
+then continues. Existing assignments similarly protect, retire and perform their
+pending write. Returns and KED-028 replacements use their protected holders before
+operand retirement. Conditions protect their Bool and retire before branch selection.
+
+Temporary borrowing and escape remain rejected at every representation layer.
+Temporary owners are not hidden user locals or borrowable places. Recurring while
+conditions gain no Move/reference eligibility. Value-returning call statements
+remain rejected. Vacancy never establishes valid transfer or cleanup. Terminal
+stops retain actual unfinished responsibilities and completed prefixes; no unwind,
+rollback, retry, arbitrary destructor, public resource API, ownership inference or
+second ownership checker is added. See the KED-029 ledger for implementation and
+independent-review status. OQ-022/OQ-023/OQ-025/OQ-026 retain their broader questions.

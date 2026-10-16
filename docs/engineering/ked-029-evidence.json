@@ -38,5 +38,28 @@
     "lib.rs::execution::temporary_authority_tests::exact_admission_work_and_storage_neighbors_keep_typed_limits",
     "lib.rs::execution::machine::temporaries::tests::every_ur_fuel_cut_retains_unpublished_result_and_completed_prefix",
     "lib.rs::execution::machine::cleanup::temporary_aggregate_tests::each_remaining_aggregate_leaf_failure_retains_other_temporary_owners"
+  ],
+  "contract_corrections": [
+    {
+      "id": "lib.rs::execution::machine::cleanup::bounds_and_artifact_tests::undefined_resource_argument_temporary_is_rejected",
+      "kind": "admission",
+      "reason": "Frozen KED-029 admits release(acquire()); exact identity release and conservation replace obsolete rejection."
+    },
+    {
+      "id": "lib.rs::execution::machine::cleanup::replacement_authority_tests::replacement_result_boundary_does_not_admit_argument_temporary",
+      "kind": "admission",
+      "reason": "Frozen KED-029 admits nested owned arguments in replacement RHS; exact releases and conservation replace obsolete rejection."
+    },
+    {
+      "id": "lib.rs::execution::machine::cleanup::bounds_and_artifact_tests::exact_sufficient_and_insufficient_cleanup_fuel",
+      "kind": "fuel",
+      "reason": "Frozen section 14 adds seven charged temporary progress operations; exact threshold changes from 11 to 18, with insufficient neighbor retained."
+    }
+  ],
+  "fixture_adaptations": [
+    {
+      "id": "lib.rs::execution::machine::cleanup::conservation_tests::later_argument_publication_stop_retains_detached_leaf_exactly_once",
+      "reason": "Recognize sealed SiteEval as well as Eval at the same named-source read; contract and conservation assertions unchanged."
+    }
   ]
 }

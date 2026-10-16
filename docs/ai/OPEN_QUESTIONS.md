@@ -628,3 +628,14 @@ resource temporaries, user destructors, recoverable propagation, production reso
 APIs and generalized cyclic ownership/dataflow remain unresolved or excluded.
 The specialized verifier and proof counts are unchanged. Historical statements
 that non-Copy replacement is open now apply to those broader facilities.
+
+### KED-029 refinement of expression-temporary questions
+
+Frozen Draft 2 settles bounded ownership, region retirement and destination custody
+for admitted resource-bearing expression intermediates. This narrows the historical
+arbitrary-temporary exclusions above, without settling temporary borrowing, lifetime
+extension, value-returning call statements, recurring-while Move/reference activity,
+public resource admission, arbitrary destructors, recoverable propagation, unwind,
+rollback or generalized ownership/dataflow. Existing aggregate field order and
+KED-028 replacement remain authoritative. Independent acceptance of the implementation
+is separate from the frozen decision; no new verifier proof claim is made.
