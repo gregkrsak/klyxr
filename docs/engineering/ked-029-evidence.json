@@ -1,0 +1,65 @@
+{
+  "migrations": {},
+  "additions": [
+    "lib.rs::mir::temporaries::tests::conditional_initializer_keeps_one_source_region_across_cfg",
+    "lib.rs::mir::temporaries::tests::call_sites_bind_exact_parameter_destinations_in_written_order",
+    "lib.rs::mir::temporaries::tests::nested_call_is_not_an_extra_caller_region",
+    "lib.rs::mir::temporaries::tests::unused_catalog_does_not_create_resource_free_regions",
+    "lib.rs::execution::temporary_authority_tests::each_independent_temporary_authority_mutation_is_rejected",
+    "lib.rs::execution::temporary_authority_tests::initializer_points_begin_once_and_complete_only_on_selected_leaf",
+    "lib.rs::execution::temporary_authority_tests::source_evaluation_ordinals_include_resource_free_predecessors",
+    "lib.rs::execution::machine::cleanup::expression_temporary_tests::direct_argument_transfers_to_callee_without_caller_cleanup",
+    "lib.rs::execution::machine::cleanup::expression_temporary_tests::three_arguments_preserve_written_acquisition_and_parameter_cleanup",
+    "lib.rs::execution::machine::cleanup::expression_temporary_tests::nested_pass_through_keeps_one_leaf_through_return_and_outer_entry",
+    "lib.rs::execution::machine::temporaries::tests::private_remaining_abc_frame_cleans_exact_identities_cba",
+    "lib.rs::execution::machine::temporaries::tests::local_ur_failure_keeps_result_protected_and_local_unpublished",
+    "lib.rs::execution::machine::temporaries::tests::local_ur_success_retires_u_before_publishing_r",
+    "lib.rs::execution::machine::temporaries::tests::return_result_uses_return_protection_before_operand_cleanup_stop",
+    "lib.rs::execution::machine::temporaries::tests::replacement_result_is_protected_before_u_stop_and_old_displacement",
+    "lib.rs::execution::machine::temporaries::tests::assignment_cleanup_stop_preserves_rhs_prefix_and_prevents_pending_write",
+    "lib.rs::execution::machine::temporaries::tests::later_argument_trap_retains_earlier_owner_without_call_entry",
+    "lib.rs::execution::machine::temporaries::tests::every_call_fuel_cut_retains_partial_parameters_and_refuses_resume",
+    "lib.rs::execution::machine::temporaries::tests::every_argument_storage_cut_conserves_and_exact_peak_succeeds",
+    "lib.rs::execution::machine::temporaries::tests::every_existing_assignment_has_success_and_retirement_stop_neighbors",
+    "lib.rs::execution::machine::temporaries::tests::condition_retirement_stop_retains_bool_and_prevents_arm_entry",
+    "lib.rs::execution::machine::temporaries::tests::if_selection_occurs_after_retirement_and_only_selected_arm_acquires",
+    "lib.rs::execution::machine::temporaries::tests::conditional_initializer_keeps_one_activation_and_skips_other_leaf",
+    "lib.rs::execution::machine::temporaries::tests::loop_statement_activations_are_fresh_and_bool_wrapper_remains_legal",
+    "lib.rs::execution::machine::temporaries::tests::source_borrow_discard_and_recurring_condition_exclusions_remain",
+    "lib.rs::execution::machine::cleanup::temporary_aggregate_tests::private_a_aggregate_b_retirement_keeps_both_orders_independent",
+    "lib.rs::execution::machine::cleanup::temporary_aggregate_tests::middle_pending_field_keeps_moved_source_membership_after_child_stop",
+    "lib.rs::execution::machine::cleanup::temporary_aggregate_tests::nested_pending_last_written_middle_field_cannot_publish_before_retirement",
+    "lib.rs::execution::machine::temporaries::tests::holder_census_tracks_same_leaf_across_inner_return_and_outer_parameter",
+    "lib.rs::execution::machine::temporaries::tests::each_detected_runtime_allocation_failure_is_host_and_conserves_payloads",
+    "lib.rs::execution::machine::temporaries::tests::failed_acquisition_allocates_no_resource_identity_or_responsibility",
+    "lib.rs::execution::machine::temporaries::tests::malformed_runtime_custody_never_uses_vacancy_or_borrowable_temporary_places",
+    "lib.rs::execution::machine::temporaries::tests::forged_resource_leaf_construction_cannot_manufacture_an_acquisition",
+    "lib.rs::execution::temporary_authority_tests::each_temporary_authority_allocation_failure_preserves_host_classification",
+    "lib.rs::execution::temporary_authority_tests::exact_admission_work_and_storage_neighbors_keep_typed_limits",
+    "lib.rs::execution::machine::temporaries::tests::every_ur_fuel_cut_retains_unpublished_result_and_completed_prefix",
+    "lib.rs::execution::machine::cleanup::temporary_aggregate_tests::each_remaining_aggregate_leaf_failure_retains_other_temporary_owners"
+  ],
+  "contract_corrections": [
+    {
+      "id": "lib.rs::execution::machine::cleanup::bounds_and_artifact_tests::undefined_resource_argument_temporary_is_rejected",
+      "kind": "admission",
+      "reason": "Frozen KED-029 admits release(acquire()); exact identity release and conservation replace obsolete rejection."
+    },
+    {
+      "id": "lib.rs::execution::machine::cleanup::replacement_authority_tests::replacement_result_boundary_does_not_admit_argument_temporary",
+      "kind": "admission",
+      "reason": "Frozen KED-029 admits nested owned arguments in replacement RHS; exact releases and conservation replace obsolete rejection."
+    },
+    {
+      "id": "lib.rs::execution::machine::cleanup::bounds_and_artifact_tests::exact_sufficient_and_insufficient_cleanup_fuel",
+      "kind": "fuel",
+      "reason": "Frozen section 14 adds seven charged temporary progress operations; exact threshold changes from 11 to 18, with insufficient neighbor retained."
+    }
+  ],
+  "fixture_adaptations": [
+    {
+      "id": "lib.rs::execution::machine::cleanup::conservation_tests::later_argument_publication_stop_retains_detached_leaf_exactly_once",
+      "reason": "Recognize sealed SiteEval as well as Eval at the same named-source read; contract and conservation assertions unchanged."
+    }
+  ]
+}

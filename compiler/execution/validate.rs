@@ -533,6 +533,108 @@ pub(super) fn mir_shape(
         if f.blocks().len() > c.limits.tokens.checked_mul(4).ok_or_else(bad)? {
             return Err(bad());
         }
+        if let Some(flow) = &f.temporaries {
+            if flow.sites.len() > c.limits.tokens.saturating_mul(4)
+                || flow.regions.len() > c.limits.tokens.saturating_mul(4)
+                || flow.points.len() > flow.sites.len()
+            {
+                return Err(ResourceFailure::limit("temporary authority nodes", START).into());
+            }
+            let references = flow
+                .sites
+                .iter()
+                .try_fold(0usize, |n, s| n.checked_add(s.children.len()))
+                .and_then(|n| {
+                    flow.regions
+                        .iter()
+                        .try_fold(n, |n, r| n.checked_add(r.roots.len()))
+                });
+            if flow.sites.len() > c.limits.tokens.saturating_mul(4)
+                || flow.regions.len() > c.limits.tokens.saturating_mul(4)
+                || flow.points.len() > flow.sites.len()
+                || references.map_or(true, |n| n > c.limits.tokens.saturating_mul(8))
+            {
+                return Err(ResourceFailure::limit("temporary authority nodes", START).into());
+            }
+            for (i, region) in flow.regions.iter().enumerate() {
+                if region.id.0 != i
+                    || region.parent.is_some_and(|p| p.0 >= i)
+                    || region.roots.len() > c.limits.tokens
+                    || region.origin.kind != mir::OriginKind::TemporaryRegion
+                    || region.retirement.kind != mir::OriginKind::TemporaryRetirement
+                    || region.publication.kind != mir::OriginKind::DestinationPublication
+                    || region.parent.is_none() != region.evaluation.is_some()
+                    || region.evaluation.is_some_and(|n| n >= flow.evaluations)
+                {
+                    return Err(bad());
+                }
+                let mut parent = region.parent;
+                let mut depth = 1usize;
+                while let Some(id) = parent {
+                    depth += 1;
+                    if depth > c.limits.traversal_depth {
+                        return Err(
+                            ResourceFailure::limit("temporary region nesting", START).into()
+                        );
+                    }
+                    parent = flow.regions.get(id.0).ok_or_else(bad)?.parent;
+                }
+                for (j, root) in region.roots.iter().enumerate() {
+                    if region.roots[..j].contains(root)
+                        || flow
+                            .sites
+                            .get(root.0)
+                            .map_or(true, |s| s.region != region.id)
+                    {
+                        return Err(bad());
+                    }
+                }
+            }
+            for (i, site) in flow.sites.iter().enumerate() {
+                ty(p, site.ty)?;
+                if site.id.0 != i
+                    || site.region.0 >= flow.regions.len()
+                    || site.children.len() > c.limits.tokens
+                    || site.origin.kind != mir::OriginKind::TemporaryCreation
+                    || site.transfer.kind != mir::OriginKind::TemporaryTransfer
+                    || site.cleanup.kind != mir::OriginKind::TemporaryCleanup
+                    || site.plan.is_some_and(|r| site.ty != ExprType::Record(r))
+                {
+                    return Err(bad());
+                }
+                for (j, child) in site.children.iter().enumerate() {
+                    if child.0 <= i
+                        || site.children[..j].contains(child)
+                        || flow.sites.get(child.0).map_or(true, |s| {
+                            s.region != site.region
+                                && flow
+                                    .regions
+                                    .get(s.region.0)
+                                    .map_or(true, |r| r.parent != Some(site.region))
+                        })
+                    {
+                        return Err(bad());
+                    }
+                }
+            }
+            for (i, point) in flow.points.iter().enumerate() {
+                if point.region.0 >= flow.regions.len()
+                    || f.blocks()
+                        .nth(point.block.0)
+                        .map_or(true, |(_, b)| point.statement > b.statements().len())
+                    || point.site.is_some_and(|id| {
+                        flow.sites
+                            .get(id.0)
+                            .map_or(true, |s| s.region != point.region)
+                    })
+                    || flow.points[..i]
+                        .iter()
+                        .any(|p| p.block == point.block && p.statement == point.statement)
+                {
+                    return Err(bad());
+                }
+            }
+        }
         if let Some(flow) = &f.cleanup {
             if flow.scopes.len() > c.limits.tokens
                 || flow.blocks.len() > c.limits.tokens.saturating_mul(4)

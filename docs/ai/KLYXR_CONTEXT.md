@@ -728,3 +728,25 @@ is assigned. See LANGUAGE_DECISIONS.md and the KED-028 implementation ledger for
 scope and GitHub-executed evidence. Local Rust validation was unavailable because
 of confirmed Work-runtime corruption. Acceptance remains Greg's decision and only
 a human may merge.
+
+## KED-029 expression temporary extension
+
+Frozen Issue #66 Draft 2 gives admitted resource-bearing expression intermediates
+explicit bounded ownership. Caller expressions share their source evaluation
+region; callee statements and returns have their own regions. Record fields use
+child regions, transferring into pending construction before child retirement.
+Owned arguments evaluate left to right and transfer once on whole-call entry.
+Remaining siblings retire in reverse successful creation order; complete aggregates
+retain reverse canonical field-declaration cleanup order.
+
+Results are protected before other temporaries retire and before locals, existing
+assignments, returns, replacements or condition selection continue. Pending-field
+transfer is the specified immediate-transfer exception. Static regions/sites and
+dynamic activations/owners are distinct; temporary handles are neither LocalIds nor
+borrowable places. Resource-free evaluations omit empty temporary machinery.
+
+This refines earlier temporary exclusions only within frozen KED-029. Temporary
+borrowing, value-returning call statements, new recurring-while Move/reference
+eligibility, unwind, rollback, custom destructors and public resource APIs remain
+excluded. See the KED-029 implementation ledger for GitHub-executed evidence.
+Implementation acceptance remains Greg's decision; only a human may merge.

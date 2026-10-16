@@ -17,7 +17,7 @@ pub(in crate::execution::machine) struct Prepared {
     activation: u64,
     old_generation: Option<u64>,
     phase: Phase,
-    pub(super) protected: Option<Value>,
+    pub(in crate::execution::machine) protected: Option<Value>,
     pub(super) displaced: Option<Value>,
 }
 impl Prepared {
@@ -129,6 +129,32 @@ impl<'a> Machine<'a> {
         });
         Ok(id)
     }
+    pub(in crate::execution::machine) fn replacement_accepts_result(
+        &self,
+        frame: u64,
+        local: hir::LocalId,
+    ) -> Result<(), ExecutionError> {
+        self.resources
+            .as_ref()
+            .and_then(|s| s.replacements.last())
+            .filter(|r| {
+                r.at.frame == frame
+                    && r.at.place == Place::Local(local)
+                    && r.phase == Phase::Rhs
+                    && r.protected.is_none()
+            })
+            .map(|_| ())
+            .ok_or_else(|| self.integrity("replacement result protection mismatch"))
+    }
+    pub(in crate::execution::machine) fn replacement_stage_result(&mut self, value: Value) {
+        self.resources
+            .as_mut()
+            .unwrap()
+            .replacements
+            .last_mut()
+            .unwrap()
+            .protected = Some(value);
+    }
     pub(in crate::execution::machine) fn replacement_commit(
         &mut self,
         id: u64,
@@ -147,14 +173,19 @@ impl<'a> Machine<'a> {
         // No fallible operation between taking N from the value stack and
         // protecting it in the already-reserved context.
         self.replacement_charge(Phase::Rhs)?;
-        let value = self.pop()?;
-        self.resources
-            .as_mut()
+        if self
+            .resources
+            .as_ref()
             .unwrap()
             .replacements
-            .last_mut()
+            .last()
             .unwrap()
-            .protected = Some(value);
+            .protected
+            .is_none()
+        {
+            let value = self.pop()?;
+            self.replacement_stage_result(value);
+        }
         self.resources
             .as_mut()
             .unwrap()

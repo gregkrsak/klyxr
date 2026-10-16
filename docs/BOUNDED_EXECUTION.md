@@ -247,3 +247,33 @@ one separately justified iteration-local outcome correction and every new identi
 are reconciled in each complete debug/release profile. Both profile executions of
 the 1,800-case affine check and the authority compile-fail doctest remain required.
 See [the KED-028 ledger](engineering/KED-028-IMPLEMENTATION-LEDGER.md).
+
+## KED-029 temporary-region accounting
+
+Temporary execution charges before activation entry, successful registration,
+completion/protection, ownership transfer, retirement traversal, owner inspection
+and final retirement. The private single-owner cleanup fixture requires exactly
+18 units, versus its predecessor's 11; the seven extra progress charges are frozen
+KED-029 section 14 work. Empty resource-free regions are omitted and preserve their
+previous fuel/storage behavior. Existing expression, call and cleanup charges remain.
+
+Temporary activation, owner and event capacities, protected payloads, call preparation,
+partial parameter publication and existing cleanup cursors participate in prospective
+storage checks. Non-owning operand handles duplicate no payload. Combined growth is
+reserved before detachment where feasible; every actual fallible handoff retains an
+explicit holder. Static table lengths and parent-chain traversal are bounded before
+reference inspection. Monotonic activation identities cannot silently wrap or reuse.
+
+Configured fuel/storage stops, detected allocation failures and trusted-release
+failures retain unfinished responsibilities and completed prefixes, refuse resume
+and add no unwind or rollback. Private probes inject failures immediately before
+actual fallible reserves and canonical release operations; they are test facilities,
+not public callbacks. Exact sufficient/insufficient neighbors, every configured call
+cut, U/R unpublished-local cuts, partial pending fields, return/replacement protection
+and identity-sensitive holder censuses are recorded in the [KED-029 ledger](engineering/KED-029-IMPLEMENTATION-LEDGER.md).
+
+Each complete debug/release profile reconciles all 1,706 predecessor identities and
+37 additions, with two preserved-ID admission corrections and one justified fuel-cost
+correction. There are no identity renames. Both 1,800-case affine checks and the
+compile-fail authority doctest remain required. GitHub Actions is authoritative;
+local Rust validation was unavailable because of confirmed Work-runtime corruption.

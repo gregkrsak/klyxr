@@ -1705,3 +1705,22 @@ ledger](../docs/engineering/KED-028-IMPLEMENTATION-LEDGER.md) and [bounded execu
 contract](../docs/BOUNDED_EXECUTION.md) for GitHub-executed evidence and terminal
 failure accounting. Local Rust validation was unavailable because of confirmed
 Work-runtime corruption; implementation acceptance and human merge remain separate.
+
+## KED-029 expression temporaries
+
+The frozen Draft 2 extension gives admitted resource-bearing intermediates explicit
+bounded machine custody. Canonical source regions survive conditional-initializer
+CFG splits. Owned arguments preserve left-to-right evaluation and transfer once to
+callee parameters; remaining siblings clean in reverse creation order. Aggregates
+keep reverse canonical field cleanup. Locals, existing assignments, returns,
+replacements and conditions protect results before temporary retirement and their
+specified publication or selection. Pending fields transfer before child retirement.
+
+Resource-bearing execution remains demonstrated through private synthetic fixtures;
+this adds no public resource API or source syntax. Temporary borrowing, discarded
+value-returning calls and expanded recurring-while eligibility remain rejected.
+The existing ownership checker, exact correspondence and opaque execution approval
+remain the authority boundary. See the [KED-029 implementation ledger](../docs/engineering/KED-029-IMPLEMENTATION-LEDGER.md)
+and [bounded execution contract](../docs/BOUNDED_EXECUTION.md). GitHub Actions provides
+compilation and executable evidence; local Rust validation was unavailable because
+of confirmed Work-runtime corruption. Greg alone may accept; only a human may merge.

@@ -3,6 +3,7 @@ use crate::hir::{BinaryOp, BorrowKind, ExprKind, ExprType, Place, ReferentType, 
 use crate::mir::{BasicBlockId, OriginKind, Statement, Terminator};
 use std::mem::size_of;
 mod cleanup;
+mod temporaries;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Location {
@@ -11,6 +12,7 @@ struct Location {
 }
 #[derive(Debug, PartialEq, Eq)]
 enum Value {
+    Temporary(temporaries::OwnerId),
     Leaf {
         resource: hir::resources::ResourceId,
         record: hir::RecordId,
@@ -94,6 +96,16 @@ enum Destination {
 enum Action<'a> {
     Drive,
     Eval(&'a TypedExpr, usize),
+    SiteEval(&'a TypedExpr, usize, u64, crate::mir::temporaries::SiteId),
+    RegisterTemporary(u64, crate::mir::temporaries::SiteId),
+    FinishTemporary(u64),
+    SiteShortCircuit(
+        BinaryOp,
+        &'a TypedExpr,
+        usize,
+        u64,
+        crate::mir::temporaries::SiteId,
+    ),
     Negate,
     Binary(BinaryOp, ExprType),
     ShortCircuit(BinaryOp, &'a TypedExpr, usize),
@@ -125,6 +137,9 @@ pub(super) struct Machine<'a> {
     origin: Origin,
     expression: Option<Span>,
     resources: Option<cleanup::State>,
+    temporaries: Option<temporaries::State>,
+    site: Option<(u64, crate::mir::temporaries::SiteId)>,
+    staged_return: Option<u64>,
     #[cfg(test)]
     max_storage: std::cell::Cell<usize>,
 }
@@ -137,6 +152,9 @@ impl<'a> Machine<'a> {
             tasks: Vec::new(),
             values: Vec::new(),
             resources: None,
+            temporaries: None,
+            site: None,
+            staged_return: None,
             #[cfg(test)]
             max_storage: std::cell::Cell::new(0),
             next_frame: 0,
@@ -202,6 +220,9 @@ impl<'a> Machine<'a> {
         if let Some(s) = &self.resources {
             n = n.checked_add(s.storage()?)?;
         }
+        if let Some(s) = &self.temporaries {
+            n = n.checked_add(s.storage()?)?;
+        }
         Some(n)
     }
     fn reserve(&self, bytes: usize) -> Result<(), ExecutionError> {
@@ -224,6 +245,8 @@ impl<'a> Machine<'a> {
     ) -> Result<(), ExecutionError> {
         if self.tasks.len() == self.tasks.capacity() {
             self.reserve(size_of::<Task<'_>>())?;
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.tasks
                 .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("continuation allocation")))?;
@@ -274,6 +297,8 @@ impl<'a> Machine<'a> {
                 .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
         )?;
         if grow {
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.values
                 .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("value allocation")))?;
@@ -283,9 +308,7 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     fn pop(&mut self) -> Result<Value, ExecutionError> {
-        self.values
-            .pop()
-            .ok_or_else(|| self.integrity("missing evaluated value"))
+        self.pop_to(None)
     }
     fn frame_index(&self, id: u64) -> Result<usize, ExecutionError> {
         self.frames
@@ -324,6 +347,8 @@ impl<'a> Machine<'a> {
                 .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
         )?;
         if grow {
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.frames[f]
                 .slots
                 .try_reserve_exact(1)
@@ -477,10 +502,16 @@ impl<'a> Machine<'a> {
             .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?;
         self.reserve(bytes)?;
         let mut slots = Vec::new();
+        #[cfg(test)]
+        if count > 0 {
+            self.temporary_allocation()?;
+        }
         slots
             .try_reserve_exact(count)
             .map_err(|_| self.failure(ErrorKind::Host("parameter allocation")))?;
         if self.frames.len() == self.frames.capacity() {
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.frames
                 .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("frame allocation")))?;
@@ -491,9 +522,6 @@ impl<'a> Machine<'a> {
             .checked_add(1)
             .ok_or_else(|| self.integrity("frame identity exhausted"))?;
         let start = self.values.len() - count;
-        for (parameter, value) in definition.parameters.iter().zip(self.values.drain(start..)) {
-            slots.push((Place::Parameter(*parameter), Slot::Available(value)));
-        }
         self.frames.push(Frame {
             id,
             function,
@@ -503,6 +531,20 @@ impl<'a> Machine<'a> {
             call_site: self.expression.unwrap_or(self.origin.span),
         });
         self.cleanup_frame(id)?;
+        for (offset, parameter) in definition.parameters.iter().enumerate() {
+            let value = std::mem::replace(&mut self.values[start + offset], Value::Completion);
+            let value = self.temporary_take(
+                value,
+                Some(crate::mir::temporaries::Destination::Parameter(*parameter)),
+            )?;
+            // All receiving slot capacity was reserved before taking any argument.
+            self.frames
+                .last_mut()
+                .unwrap()
+                .slots
+                .push((Place::Parameter(*parameter), Slot::Available(value)));
+        }
+        self.values.truncate(start);
         Ok(id)
     }
     fn eval(&mut self, frame: u64, e: &'a TypedExpr, depth: usize) -> Result<(), ExecutionError> {
@@ -511,22 +553,26 @@ impl<'a> Machine<'a> {
     fn operands(
         &mut self,
         frame: u64,
-        args: impl DoubleEndedIterator<Item = &'a TypedExpr>,
+        args: impl DoubleEndedIterator<Item = &'a TypedExpr> + ExactSizeIterator,
         depth: usize,
     ) -> Result<(), ExecutionError> {
-        for e in args.rev() {
-            self.eval(frame, e, depth)?;
+        let count = args.len();
+        for (index, e) in args.rev().enumerate() {
+            let site = self.temporary_child(self.site, count - index - 1)?;
+            self.eval_at(frame, e, depth, site)?;
         }
         Ok(())
     }
     fn drive(&mut self, id: u64) -> Result<(), ExecutionError> {
         let index = self.frame_index(id)?;
         self.cleanup_enter_block(id)?;
-        let frame = &self.frames[index];
-        let f = self.executable.function(frame.function)?;
-        let block = f.block(frame.block);
-        let origin = self.executable.origin(frame.function, frame.block)?;
-        if let Some(statement) = block.statements().get(frame.statement) {
+        let function = self.frames[index].function;
+        let block_id = self.frames[index].block;
+        let statement_index = self.frames[index].statement;
+        let f = self.executable.function(function)?;
+        let block = f.block(block_id);
+        let origin = self.executable.origin(function, block_id)?;
+        if let Some(statement) = block.statements().get(statement_index) {
             let span = match statement {
                 Statement::CallNoValue { span, .. }
                 | Statement::CopyReferenceFieldAssign { span, .. }
@@ -542,6 +588,7 @@ impl<'a> Machine<'a> {
             };
             self.expression = None;
             self.charge()?;
+            let context = self.temporary_point(id, function, block_id, statement_index)?;
             self.frames[index].statement += 1;
             self.task(id, self.origin, None, Action::Drive)?;
             match statement {
@@ -551,13 +598,30 @@ impl<'a> Machine<'a> {
                     ..
                 } => {
                     self.task(id, self.origin, None, Action::DropNoValue)?;
+                    if let Some(c) = context {
+                        if c.complete {
+                            self.task(
+                                id,
+                                self.origin,
+                                None,
+                                Action::FinishTemporary(c.activation),
+                            )?;
+                        }
+                    }
                     self.task(
                         id,
                         self.origin,
                         None,
                         Action::Invoke(*function, arguments.len()),
                     )?;
-                    self.operands(id, arguments.iter(), 1)?;
+                    for (position, argument) in arguments.iter().enumerate().rev() {
+                        let site = if let Some(c) = context {
+                            Some((c.activation, self.temporary_root(c.activation, position)?))
+                        } else {
+                            None
+                        };
+                        self.eval_at(id, argument, 1, site)?;
+                    }
                 }
                 Statement::Let {
                     local, initializer, ..
@@ -570,7 +634,7 @@ impl<'a> Machine<'a> {
                     let (f, i) = self.slot_index(at)?;
                     self.frames[f].slots[i].1 = Slot::Uninitialized;
                     self.task(id, self.origin, None, Action::Commit(Destination::Slot(at)))?;
-                    self.eval(id, initializer, 1)?;
+                    self.eval_region(id, initializer, 1, context)?;
                 }
                 Statement::Assign { local, value, .. } => {
                     self.task(
@@ -582,7 +646,7 @@ impl<'a> Machine<'a> {
                             place: Place::Local(*local),
                         })),
                     )?;
-                    self.eval(id, value, 1)?;
+                    self.eval_region(id, value, 1, context)?;
                 }
                 Statement::ReplaceOwned {
                     local,
@@ -604,7 +668,7 @@ impl<'a> Machine<'a> {
                         *cleanup_plan,
                     )?;
                     self.task(id, *origin, None, Action::ReplaceCommit(replacement))?;
-                    self.eval(id, value, 1)?;
+                    self.eval_region(id, value, 1, context)?;
                 }
                 Statement::CopyFieldAssign {
                     owner,
@@ -626,7 +690,7 @@ impl<'a> Machine<'a> {
                             *field,
                         )),
                     )?;
-                    self.eval(id, value, 1)?;
+                    self.eval_region(id, value, 1, context)?;
                 }
                 Statement::DerefAssign {
                     reference, value, ..
@@ -639,7 +703,7 @@ impl<'a> Machine<'a> {
                         true,
                     )?;
                     self.task(id, self.origin, None, Action::Commit(Destination::Slot(at)))?;
-                    self.eval(id, value, 1)?;
+                    self.eval_region(id, value, 1, context)?;
                 }
                 Statement::CopyReferenceFieldAssign {
                     reference,
@@ -664,13 +728,14 @@ impl<'a> Machine<'a> {
                         None,
                         Action::Commit(Destination::Field(at, *record, *field)),
                     )?;
-                    self.eval(id, value, 1)?;
+                    self.eval_region(id, value, 1, context)?;
                 }
             }
         } else {
             self.origin = origin;
             self.expression = None;
             self.charge()?;
+            let context = self.temporary_point(id, function, block_id, statement_index)?;
             match block.terminator() {
                 Terminator::Goto { target } => {
                     self.cleanup_exit(id)?;
@@ -685,11 +750,11 @@ impl<'a> Machine<'a> {
                     else_target,
                 } => {
                     self.task(id, origin, None, Action::Select(*then_target, *else_target))?;
-                    self.eval(id, condition, 1)?;
+                    self.eval_region(id, condition, 1, context)?;
                 }
                 Terminator::Return { value } => {
                     self.task(id, origin, None, Action::Return)?;
-                    self.eval(id, value, 1)?;
+                    self.eval_region(id, value, 1, context)?;
                 }
                 Terminator::ReturnNoValue => {
                     self.value(Value::Completion)?;
@@ -798,11 +863,12 @@ impl<'a> Machine<'a> {
             }
             ExprKind::RecordConstruct { record, fields } => {
                 if !self.executable.program.resources.is_leaf(*record)
-                    && (self
-                        .executable
-                        .cleanup_plans
-                        .get(record.0)
-                        .is_some_and(Option::is_some)
+                    && (self.site.is_some()
+                        || self
+                            .executable
+                            .cleanup_plans
+                            .get(record.0)
+                            .is_some_and(Option::is_some)
                         || self
                             .executable
                             .program
@@ -841,17 +907,23 @@ impl<'a> Machine<'a> {
             }
             ExprKind::Unary { operand, .. } => {
                 self.task(frame, self.origin, self.expression, Action::Negate)?;
-                self.eval(frame, operand, depth + 1)?;
+                self.eval_at(
+                    frame,
+                    operand,
+                    depth + 1,
+                    self.temporary_child(self.site, 0)?,
+                )?;
             }
             ExprKind::Binary { op, left, right } => {
                 if matches!(op, BinaryOp::And | BinaryOp::Or) {
-                    self.task(
-                        frame,
-                        self.origin,
-                        self.expression,
-                        Action::ShortCircuit(*op, right, depth + 1),
-                    )?;
-                    self.eval(frame, left, depth + 1)?;
+                    let action =
+                        if let Some((activation, site)) = self.temporary_child(self.site, 1)? {
+                            Action::SiteShortCircuit(*op, right, depth + 1, activation, site)
+                        } else {
+                            Action::ShortCircuit(*op, right, depth + 1)
+                        };
+                    self.task(frame, self.origin, self.expression, action)?;
+                    self.eval_at(frame, left, depth + 1, self.temporary_child(self.site, 0)?)?;
                 } else {
                     self.task(
                         frame,
@@ -859,8 +931,8 @@ impl<'a> Machine<'a> {
                         self.expression,
                         Action::Binary(*op, e.ty),
                     )?;
-                    self.eval(frame, right, depth + 1)?;
-                    self.eval(frame, left, depth + 1)?;
+                    self.eval_at(frame, right, depth + 1, self.temporary_child(self.site, 1)?)?;
+                    self.eval_at(frame, left, depth + 1, self.temporary_child(self.site, 0)?)?;
                 }
             }
             ExprKind::IfValue { .. } | ExprKind::FieldAccess(_) | ExprKind::OldField(_) => {
@@ -945,6 +1017,8 @@ impl<'a> Machine<'a> {
                 .ok_or_else(|| self.integrity("record storage overflow"))?,
         )?;
         let mut result = Vec::new();
+        #[cfg(test)]
+        self.temporary_allocation()?;
         result
             .try_reserve_exact(fields.len())
             .map_err(|_| self.failure(ErrorKind::Host("record allocation")))?;
@@ -964,7 +1038,12 @@ impl<'a> Machine<'a> {
         }))
     }
     fn finish_return(&mut self, id: u64) -> Result<(), ExecutionError> {
-        let value = self.pop()?;
+        let staged = self.staged_return == Some(id);
+        let ordinary = if staged { None } else { Some(self.pop()?) };
+        let value = ordinary
+            .as_ref()
+            .or_else(|| self.resources.as_ref().and_then(|s| s.protected.as_ref()))
+            .ok_or_else(|| self.integrity("missing protected return result"))?;
         let f = self
             .frames
             .last()
@@ -977,7 +1056,7 @@ impl<'a> Machine<'a> {
             .as_ordinary()
             .ok_or_else(|| self.integrity("return function"))?
             .return_type;
-        let matches = match (&value, declared) {
+        let matches = match (value, declared) {
             (
                 Value::Leaf { record, .. } | Value::Aggregate { record, .. },
                 Some(ValueType::Record(t)),
@@ -993,6 +1072,16 @@ impl<'a> Machine<'a> {
         if !matches {
             return Err(self.integrity("return result or escaping reference mismatch"));
         }
+        if staged {
+            if self.executable.function(f.function)?.cleanup.is_some() {
+                self.cleanup_return_protected(id)?;
+            } else {
+                self.deliver_protected_return(id)?;
+            }
+            self.staged_return = None;
+            return Ok(());
+        }
+        let value = ordinary.unwrap();
         if self.executable.function(f.function)?.cleanup.is_some() {
             return self.cleanup_return(id, value);
         }
@@ -1006,9 +1095,26 @@ impl<'a> Machine<'a> {
         }
         self.origin = task.origin;
         self.expression = task.expression;
+        self.site = None;
         match task.action {
             Action::Drive => self.drive(task.frame)?,
             Action::Eval(e, d) => self.expression(task.frame, e, d)?,
+            Action::SiteEval(e, d, activation, site) => {
+                self.origin = self.temporary_site_origin(activation, site, task.frame)?;
+                self.site = Some((activation, site));
+                self.expression(task.frame, e, d)?;
+            }
+            Action::RegisterTemporary(a, s) => self.temporary_register(a, s)?,
+            Action::FinishTemporary(a) => self.temporary_finish(a)?,
+            Action::SiteShortCircuit(op, right, depth, activation, site) => {
+                let value = self.pop()?;
+                let b = self.boolean(value)?;
+                if (op == BinaryOp::And && !b) || (op == BinaryOp::Or && b) {
+                    self.value(Value::Public(RuntimeValue::Bool(b)))?;
+                } else {
+                    self.eval_at(task.frame, right, depth, Some((activation, site)))?;
+                }
+            }
             Action::Negate => {
                 let v = self.pop()?;
                 let b = self.boolean(v)?;
@@ -1093,6 +1199,8 @@ impl<'a> Machine<'a> {
             }
         }
         if !self.frames.is_empty()
+            || self.staged_return.is_some()
+            || self.temporaries.as_ref().is_some_and(|s| !s.is_empty())
             || self.values.len() != 1
             || self
                 .resources
