@@ -1,0 +1,52 @@
+{
+  "migrations": {
+    "tests/local_reassignment.rs::non_copy_record_replacement": "tests/local_reassignment.rs::owned_record_replacement",
+    "tests/no_value_functions.rs::noncopy_replacement_still_rejected": "tests/no_value_functions.rs::owned_replacement_before_implicit_completion",
+    "lib.rs::ownership::tests::non_copy_assignment_rejects_before_consuming_either_owner": "lib.rs::ownership::tests::replacement_transfers_rhs_and_preserves_target_availability",
+    "lib.rs::execution::machine::cleanup::bounds_and_artifact_tests::ordinary_noncopy_replacement_remains_rejected": "lib.rs::execution::machine::cleanup::bounds_and_artifact_tests::ordinary_inert_replacement_is_accepted"
+  },
+  "additions": [
+    "lib.rs::execution::machine::cleanup::generation_tests::repeated_local_id_has_distinct_activation_and_generation",
+    "lib.rs::execution::machine::cleanup::generation_tests::stale_history_cannot_release_a_live_slot",
+    "lib.rs::execution::machine::cleanup::replacement::classification_controls::copy_assignment_cannot_be_retagged_as_owned_replacement",
+    "lib.rs::execution::machine::cleanup::replacement::conformance_tests::aggregate_displacement_uses_reverse_canonical_field_order",
+    "lib.rs::execution::machine::cleanup::replacement::conformance_tests::aggregate_nested_and_recursive_rhs_conserve_at_every_fuel_cut",
+    "lib.rs::execution::machine::cleanup::replacement::conformance_tests::branch_replacement_registers_in_target_owning_activation",
+    "lib.rs::execution::machine::cleanup::replacement::conformance_tests::every_byte_storage_cut_preserves_all_acquired_identities",
+    "lib.rs::execution::machine::cleanup::replacement::conformance_tests::every_nested_release_host_failure_retains_exact_remaining_leaves",
+    "lib.rs::execution::machine::cleanup::replacement::conformance_tests::fallthrough_break_continue_and_bare_return_clean_only_final_generation",
+    "lib.rs::execution::machine::cleanup::replacement::conformance_tests::host_failure_at_each_prepared_phase_retains_old_and_new_owners",
+    "lib.rs::execution::machine::cleanup::replacement::conformance_tests::later_move_and_explicit_release_never_repeat_displaced_cleanup",
+    "lib.rs::execution::machine::cleanup::replacement::conformance_tests::recursive_rhs_keeps_outer_contexts_and_protected_returns_distinct",
+    "lib.rs::execution::machine::cleanup::replacement::conformance_tests::repeated_iteration_activations_and_replacements_preserve_order",
+    "lib.rs::execution::machine::cleanup::replacement::conformance_tests::rhs_prefix_mutation_survives_trap_without_displacement_or_publication",
+    "lib.rs::execution::machine::cleanup::replacement::conformance_tests::target_explicit_consumption_inside_rhs_remains_forbidden",
+    "lib.rs::execution::machine::cleanup::replacement::conformance_tests::value_return_moves_new_generation_before_cleaning_remainder",
+    "lib.rs::execution::machine::cleanup::replacement::tests::abc_generation_order_has_exact_acquisition_and_release_identities",
+    "lib.rs::execution::machine::cleanup::replacement::tests::displaced_release_host_failure_retains_protected_new_owner",
+    "lib.rs::execution::machine::cleanup::replacement::tests::distinct_source_transfer_and_repeated_replacement_release_once",
+    "lib.rs::execution::machine::cleanup::replacement::tests::every_leaf_replacement_fuel_cut_retains_both_responsibilities",
+    "lib.rs::execution::machine::cleanup::replacement::tests::inert_repeated_replacement_executes_without_release",
+    "lib.rs::execution::machine::cleanup::replacement_authority_tests::canonical_replacement_uses_declaring_scope_and_fixed_plan",
+    "lib.rs::execution::machine::cleanup::replacement_authority_tests::independent_replacement_authority_mutations_reject",
+    "lib.rs::execution::machine::cleanup::replacement_authority_tests::replacement_result_boundary_does_not_admit_argument_temporary",
+    "lib.rs::ownership::tests::replacement_failure_restores_complete_prepared_state",
+    "lib.rs::ownership::tests::replacement_final_loan_failure_rolls_back_successful_rhs_transfer",
+    "tests/execution_cli.rs::owned_replacement_example_runs_without_claiming_contract_proof",
+    "tests/owned_replacement.rs::branches_preserve_target_and_conservative_source_joins",
+    "tests/owned_replacement.rs::exact_nominal_type_and_reference_boundaries",
+    "tests/owned_replacement.rs::final_shared_and_exclusive_borrow_uses",
+    "tests/owned_replacement.rs::header_source_is_not_authorized_by_following_return",
+    "tests/owned_replacement.rs::header_target_and_outer_iteration_target_reject",
+    "tests/owned_replacement.rs::iteration_local_repeated_replacement_and_exits",
+    "tests/owned_replacement.rs::later_exclusive_handle_blocks_commit",
+    "tests/owned_replacement.rs::later_shared_handle_blocks_commit",
+    "tests/owned_replacement.rs::moved_and_conditionally_unavailable_targets_reject",
+    "tests/owned_replacement.rs::repeated_and_distinct_source_replacement",
+    "tests/owned_replacement.rs::target_consumption_rejects_at_every_rhs_depth",
+    "tests/owned_replacement.rs::transferred_exclusive_handle_remains_moved"
+  ],
+  "outcome_corrections": {
+    "tests/iteration_local_moves.rs::iteration_local_replacement": "Preserve identity; reject-to-accept because frozen section 12 explicitly permits iteration-local replacement."
+  }
+}

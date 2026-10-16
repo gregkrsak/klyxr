@@ -613,3 +613,18 @@ propagation syntax, non-Copy replacement, partial moves, panic/unwind/fatal-outc
 policy, cancellation, FFI, and broader generalized cleanup/control-flow dataflow.
 KD-042 provides no guarantee across its excluded abrupt outcomes and authorizes
 no compiler or runtime work by freeze alone.
+
+### KED-028 refinement of OQ-022/OQ-023/OQ-025/OQ-026
+
+Frozen Draft 1 settles exact-typed whole-value replacement only for available,
+directly named mutable owned non-reference Move locals. It fixes protected RHS
+ownership, displaced canonical cleanup and new-generation ordering in the target's
+owning activation. Iteration-local replacement is permitted; pre-existing loop
+owners remain excluded. Ordinary non-resource Move destruction stays inert.
+
+Reference/projected/dereferenced replacement, moved-slot reinitialization,
+self-consuming transformations, take/swap/exchange, partial ownership, arbitrary
+resource temporaries, user destructors, recoverable propagation, production resource
+APIs and generalized cyclic ownership/dataflow remain unresolved or excluded.
+The specialized verifier and proof counts are unchanged. Historical statements
+that non-Copy replacement is open now apply to those broader facilities.

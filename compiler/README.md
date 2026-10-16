@@ -10,7 +10,9 @@ KED-026 Draft 3 additionally provides bounded ordinary MIR interpretation throug
 `run`. The KED-004 through KED-025 sections below describe the frontend boundaries
 introduced by those decisions; their historical execution exclusions are refined
 by KD-041. KED-027 adds private synthetic deterministic cleanup under KD-042;
-it exposes no production resource API. No ordinary contract proof or native code
+it exposes no production resource API. KED-028 adds narrow owned Move local
+replacement; its current section refines historical replacement exclusions below.
+No ordinary contract proof or native code
 generation is implied.
 See [bounded execution](../docs/BOUNDED_EXECUTION.md).
 
@@ -1665,3 +1667,41 @@ Actions workflows supply build, debug/release, doctest, Rustdoc, CLI and reposit
 conformance evidence. The tests workflow reconciles all 1,581 baseline identities
 and 86 new KD-042 identities (76 original plus 10 repair regressions) separately in each profile. See the
 [implementation ledger](../docs/engineering/KED-027-IMPLEMENTATION-LEDGER.md).
+
+## KED-028 owned Move replacement
+
+Frozen Issue #64 Draft 1 permits exact-typed whole-value replacement of an available
+mutable owned record local:
+
+```klyxr
+let mut current = Reading { value: 80 };
+let incoming = Reading { value: 60 };
+current = incoming;
+current = rebuild(&current);
+```
+
+The RHS may inspect or temporarily borrow the old owner under existing last-use
+rules, but cannot consume it. A still-live target loan blocks commit. The result
+is protected before the displaced owner ends its lifetime. Ordinary public Move
+records have inert destruction; private synthetic resources use fixed canonical
+cleanup. The successful result becomes a new generation in the target's owning
+scope, determining later cleanup order. Reference/dereference/projected targets,
+unavailable slots, self-consuming replacement and pre-existing loop targets remain
+excluded. Iteration-local replacement is permitted. Earlier feature sections
+retain their historical boundaries; their blanket direct-local replacement
+exclusions are narrowly refined here.
+
+Run the public inert example with:
+
+```bash
+cargo run --locked --bin klyxr -- run examples/owned_replacement.klx --function demo
+```
+
+Expected result: `Reading { value: Percent(59) }`. `check` and `verify` continue to
+check ordinary code without executing it or proving its contracts. This adds no
+resource API, user destructor, take/swap, partial move, recoverable propagation,
+general ownership solver or verifier extension. See the [KED-028 implementation
+ledger](../docs/engineering/KED-028-IMPLEMENTATION-LEDGER.md) and [bounded execution
+contract](../docs/BOUNDED_EXECUTION.md) for GitHub-executed evidence and terminal
+failure accounting. Local Rust validation was unavailable because of confirmed
+Work-runtime corruption; implementation acceptance and human merge remain separate.

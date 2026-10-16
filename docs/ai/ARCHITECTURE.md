@@ -1008,3 +1008,37 @@ loop-carried Move restrictions and specialized verifier isolation remain unchang
 Private malformed-artifact and conservation controls run through the canonical
 approval boundary. The implementation ledger records milestone SHA/run evidence,
 failures and repairs, predecessor identity reconciliation and final review status.
+
+## KED-028 owned replacement
+
+Canonical typed Assign metadata distinguishes Copy writes from owned record
+replacement without names. HIR publication checks target/function membership,
+mutability, owned category and exact RHS type. The single ownership checker wraps
+Move replacement in a prepared-entry transaction and installs an operation-local
+non-consumption restriction at canonical consume. This is neither a synthetic
+loan nor a second ownership map. Final expiry/exclusivity and current-loop header
+checks preserve existing borrowing and relative iteration rules.
+
+Structured lowering emits a compound ReplaceOwned MIR operation with LocalId,
+RecordId, declaring ScopeId, canonical cleanup-plan reference or inert marker,
+complete RHS and replacement origin. Lexical scope metadata also binds inert
+replacement targets. Functions without replacement preserve their existing
+metadata boundary. Existing admission envelopes bound descriptors and lexical
+vectors; opaque deterministic HIR/MIR/origin correspondence is the execution gate.
+
+Dynamic histories identify initialization generations independently of frame/local
+slot associations. Activation identities distinguish recurring static scopes.
+Discharged history entries cannot clean a later occupant; a live entry must match
+the slot's current generation. Frame-associated prepared contexts form a bounded
+stack for recursive RHS calls. Their protected results are separate from protected
+returns, pending fields and cleanup cursors. Both new and displaced payloads and
+all metadata capacities participate in prospective storage accounting.
+
+Runtime replacement evaluates, protects, reserves, detaches, discharges, then
+publishes/registers. The final slot installation, association update and reserved
+history append are one allocation-free transition. No source continuation runs
+between them. Failures retain actual payload holders and completed release prefixes;
+history, vacancy and release attempts are never counted as completed responsibility.
+The executor consumes MIR authority and does not reconstruct ownership or HIR scopes.
+Public resource APIs and all frozen non-goals remain excluded. Evidence and precise
+CI identities are recorded in `docs/engineering/KED-028-IMPLEMENTATION-LEDGER.md`.

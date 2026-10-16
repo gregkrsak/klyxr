@@ -582,6 +582,7 @@ pub(super) fn mir_shape(
                     }
                     mir::Statement::Let { initializer, .. } => initializer,
                     mir::Statement::Assign { value, .. }
+                    | mir::Statement::ReplaceOwned { value, .. }
                     | mir::Statement::CopyFieldAssign { value, .. }
                     | mir::Statement::CopyReferenceFieldAssign { value, .. }
                     | mir::Statement::DerefAssign { value, .. } => value,

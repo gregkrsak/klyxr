@@ -180,7 +180,7 @@ reject!(
     "Ownership",
     "while conditions"
 );
-reject!(noncopy_replacement, "fn f(flag: bool) -> bool { let first = fresh(); while flag { let mut second = fresh(); second = first; break; } return flag; }", "Ownership", "cannot replace");
+reject!(noncopy_replacement, "fn f(flag: bool) -> bool { let first = fresh(); while flag { let mut second = fresh(); second = first; break; } return flag; }", "Ownership", "pre-existing non-Copy");
 
 #[test]
 fn terminal_move_diagnostic_describes_the_retained_boundary() {

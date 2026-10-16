@@ -95,8 +95,8 @@ reject!(duplicate_argument_move, "fn run(flag: bool) -> bool { while flag { let 
 reject!(joined_iteration_local_use, "fn run(flag: bool) -> bool { while flag { let ticket = fresh(); if flag { let done = consume(ticket); } let later = consume(ticket); } return true; }", "Ownership", "may have been moved");
 reject!(both_branch_moves_then_joined_use, "fn run(flag: bool) -> bool { while flag { let ticket = fresh(); if flag { let done = consume(ticket); } else { let done = consume(ticket); } let later = consume(ticket); } return true; }", "Ownership", "may have been moved");
 reject!(conditional_source_cannot_be_reused, "fn run(flag: bool) -> bool { while flag { let ticket = fresh(); let chosen = if flag { ticket } else { ticket }; let done = consume(ticket); } return true; }", "Ownership", "may have been moved");
-reject!(iteration_local_replacement, "fn run(flag: bool) -> bool { while flag { let mut ticket = fresh(); ticket = fresh(); } return true; }", "Ownership", "cannot replace non-Copy owned local");
-reject!(pre_existing_replacement, "fn run(flag: bool) -> bool { let mut ticket = fresh(); while flag { ticket = fresh(); } return true; }", "Ownership", "cannot replace non-Copy owned local");
+accept!(iteration_local_replacement, "fn run(flag: bool) -> bool { while flag { let mut ticket = fresh(); ticket = fresh(); } return true; }");
+reject!(pre_existing_replacement, "fn run(flag: bool) -> bool { let mut ticket = fresh(); while flag { ticket = fresh(); } return true; }", "Ownership", "cannot replace pre-existing non-Copy");
 reject!(
     iteration_local_escapes,
     "fn run(flag: bool) -> Ticket { while flag { let ticket = fresh(); } return ticket; }",

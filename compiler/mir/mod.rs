@@ -37,6 +37,17 @@ pub enum Statement {
         value: TypedExpr,
         span: Span,
     },
+    /// One indivisible source operation; execution protects the RHS, discharges
+    /// the displaced owner, then publishes and registers its successor.
+    ReplaceOwned {
+        local: LocalId,
+        record: hir::RecordId,
+        owning_scope: usize,
+        cleanup_plan: Option<hir::RecordId>,
+        value: TypedExpr,
+        origin: Origin,
+        span: Span,
+    },
     Let {
         local: LocalId,
         initializer: TypedExpr,
@@ -172,6 +183,29 @@ impl MirFunction {
                         expression_valid(value)?;
                     }
                     Statement::Let { initializer, .. } => expression_valid(initializer)?,
+                    Statement::ReplaceOwned {
+                        local,
+                        record,
+                        owning_scope,
+                        cleanup_plan,
+                        value,
+                        origin,
+                        span,
+                    } => {
+                        if value.ty != hir::ExprType::Record(*record)
+                            || cleanup_plan.is_some_and(|id| id != *record)
+                            || origin.kind != OriginKind::Replacement
+                            || origin.span != *span
+                            || !self.cleanup.as_ref().is_some_and(|flow| {
+                                flow.scopes
+                                    .get(*owning_scope)
+                                    .is_some_and(|s| s.owners.contains(local))
+                            })
+                        {
+                            return Err("malformed owned replacement authority");
+                        }
+                        expression_valid(value)?;
+                    }
                     Statement::DerefAssign { value, .. } | Statement::Assign { value, .. } => {
                         expression_valid(value)?
                     }
@@ -224,6 +258,7 @@ pub fn lower(program: &hir::Program) -> MirProgram {
 pub enum OriginKind {
     ScopeEntry,
     OwnerInitialization,
+    Replacement,
     ScopeExit,
     Statement,
     Initializer,
@@ -251,6 +286,18 @@ fn lower_internal(
     legacy_assert: bool,
     plans: &[Option<hir::resources::CleanupPlan>],
 ) -> (MirProgram, Vec<Vec<Origin>>) {
+    fn replacements(body: &[ValueStatement]) -> bool {
+        body.iter().any(|s| match s {
+            ValueStatement::Assign { value, .. } => matches!(value.ty, hir::ExprType::Record(_)),
+            ValueStatement::If {
+                then_body,
+                else_body,
+                ..
+            } => replacements(then_body) || replacements(else_body),
+            ValueStatement::While { body, .. } => replacements(body),
+            _ => false,
+        })
+    }
     let pairs: Vec<_> = program
         .functions()
         .iter()
@@ -260,8 +307,9 @@ fn lower_internal(
             let resource_locals:Vec<_> = program.locals.iter().filter(|l| l.function==f.id && bearing(l.ty)).map(|l|l.id).collect();
             let parameters:Vec<_> = f.parameters.iter().rev().copied().filter(|id| matches!(program.parameter(*id).ty,hir::ParameterType::Value(ty) if bearing(ty))).collect();
             let protected_return=f.return_type.is_some_and(bearing);
-            let cleanup=(!resource_locals.is_empty() || !parameters.is_empty() || protected_return).then_some(cleanup::Flow {parameters,protected_return,..cleanup::Flow::default()});
-            let mut builder = Builder {blocks:Vec::new(),loop_targets:Vec::new(),origins:Vec::new(),cleanup,resource_locals,active_scopes:Vec::new()};
+            let record_locals = if replacements(&f.body) { program.locals.iter().filter(|l| l.function == f.id && matches!(l.ty, hir::ValueType::Record(_))).map(|l| l.id).collect() } else { resource_locals.clone() };
+            let cleanup=(!resource_locals.is_empty() || !parameters.is_empty() || protected_return || replacements(&f.body)).then_some(cleanup::Flow {parameters,protected_return,..cleanup::Flow::default()});
+            let mut builder = Builder {blocks:Vec::new(),loop_targets:Vec::new(),origins:Vec::new(),cleanup,resource_locals,record_locals,active_scopes:Vec::new()};
             let entry = builder.reserve();
             if let Some((tail, statements)) = builder.body(entry, &f.body, f.span) {
                 assert!(
@@ -326,6 +374,7 @@ struct Builder {
     cleanup: Option<cleanup::Flow>,
     active_scopes: Vec<cleanup::ScopeId>,
     resource_locals: Vec<LocalId>,
+    record_locals: Vec<LocalId>,
     origins: Vec<Option<Origin>>,
 }
 impl Builder {
@@ -458,13 +507,16 @@ impl Builder {
         local: LocalId,
         span: Span,
     ) {
-        if !self.resource_locals.contains(&local) {
+        if !self.record_locals.contains(&local) {
             return;
         }
         if let Some(flow) = &mut self.cleanup {
             let scope = *self.active_scopes.last().expect("lexical initialization");
             if !flow.scopes[scope.0].owners.contains(&local) {
                 flow.scopes[scope.0].owners.push(local);
+            }
+            if !self.resource_locals.contains(&local) {
+                return;
             }
             flow.blocks[current.0]
                 .initialize
@@ -599,11 +651,36 @@ impl Builder {
                     });
                 }
                 ValueStatement::Assign { local, value, span } => {
-                    statements.push(Statement::Assign {
-                        local: *local,
-                        value: value.clone(),
-                        span: *span,
-                    })
+                    if let hir::ExprType::Record(record) = value.ty {
+                        let owning_scope = self
+                            .cleanup
+                            .as_ref()
+                            .unwrap()
+                            .scopes
+                            .iter()
+                            .find(|s| s.owners.contains(local))
+                            .expect("declared replacement target")
+                            .id
+                            .0;
+                        statements.push(Statement::ReplaceOwned {
+                            local: *local,
+                            record,
+                            owning_scope,
+                            cleanup_plan: self.resource_locals.contains(local).then_some(record),
+                            value: value.clone(),
+                            origin: Origin {
+                                span: *span,
+                                kind: OriginKind::Replacement,
+                            },
+                            span: *span,
+                        });
+                    } else {
+                        statements.push(Statement::Assign {
+                            local: *local,
+                            value: value.clone(),
+                            span: *span,
+                        });
+                    }
                 }
                 ValueStatement::DerefAssign {
                     reference,

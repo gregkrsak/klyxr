@@ -723,6 +723,25 @@ unchanged. Implementation evidence and the exact predecessor inventory are in
 Actions supplies authoritative executable evidence. Acceptance remains Greg's
 decision and merge remains a human action.
 
+## KED-028 current replacement extension
+
+Frozen Issue #64 Draft 1 adds deterministic whole-owner replacement through existing
+assignment syntax for available mutable owned Move locals. Exact record identity,
+prepared checker rollback, target continuity, final loan expiry and relative loop
+boundaries are authoritative. RHS results are protected before displaced cleanup;
+new generations register in the target's owning activation. Old generations never
+clean a newer occupant. Public records demonstrate inert replacement; private
+synthetic resources demonstrate fixed canonical cleanup and identity conservation.
+
+Earlier sections retain their historical restrictions; this narrowly refines their
+direct-local replacement exclusion. References, projections, self-consuming
+transforms, unavailable slots, loop-carried Move mutation, arbitrary temporaries,
+user destructors and production resource APIs remain excluded. No new KD number
+is assigned. See LANGUAGE_DECISIONS.md and the KED-028 implementation ledger for
+scope and GitHub-executed evidence. Local Rust validation was unavailable because
+of confirmed Work-runtime corruption. Acceptance remains Greg's decision and only
+a human may merge.
+
 <!-- END KLYXR_CONTEXT.md -->
 
 ---
@@ -2173,6 +2192,47 @@ behavior, bounds, diagnostics, temporary admission, synthetic evidence, branch/b
 validation, reporting, and phase structure. Any newly exposed semantic choice
 returns to Greg rather than being decided in code.
 
+## KED-028 — Deterministic replacement of owned Move locals
+
+**Status:** Frozen Draft 1 language decision, Issue #64, freeze comment 6195981810;
+implementation authorized separately by Greg. Implementation acceptance and human
+merge remain separate. No new KD number has been assigned.
+
+An available, directly named mutable owned non-reference Move local may receive an
+exact canonical record value through the existing assignment statement. Parameters,
+immutable bindings, references, projections, dereferences and unavailable slots
+remain excluded. The complete RHS evaluates while the old owner stays in place;
+the target may be borrowed or read non-consumingly but cannot transfer or be
+explicitly consumed within its own RHS. Existing last-use, receiving-hold and
+recurrent-loan rules apply. No active target loan may remain at commit. Rejection
+restores the exact prepared checker state, not runtime effects.
+
+The result enters protected machine ownership before displacement. The old whole
+owner detaches and performs its fixed canonical cleanup, recursively in reverse
+field declaration order if resource-bearing; inert Move destruction executes no
+cleanup. Only then does the protected value publish into the same LocalId as a
+new initialization generation. At later scope exit, only the current live generation
+cleans, in reverse successful publication order within the target's owning dynamic
+activation. A/B/C ordering is acquisition A, B, C; release displaced A; at scope exit
+release current C, then B. History owns no duplicate payload.
+
+Iteration-local owners may be replaced repeatedly. A target or moved RHS source
+present at the current loop header remains protected by KD-028's relative boundary,
+including nested loops and paths followed by return, break or continue. The complete
+replacement-result root is one additional resource lifetime boundary; unnamed
+resource arguments and arbitrary expression temporaries remain excluded.
+
+Explicit MIR replacement authority binds canonical target/type, lexical scope,
+cleanup plan, protected/displaced ownership protocol and origin. Opaque approval
+and deterministic correspondence reject malformed artifacts. Terminal trap, limit,
+integrity or Host outcomes preserve prefix effects and uniquely retained remaining
+responsibilities, refuse resume and provide no unwind or successful continuation.
+This adds no take/swap, self-consuming transformation, moved-slot reinitialization,
+partial move, reference replacement, destructor callback, production resource API,
+recoverable propagation, generalized place/dataflow engine or verifier expansion.
+Earlier KD sections retain their historical boundaries; this decision narrowly
+extends KD-026 and KD-042 and refines OQ-022/OQ-023/OQ-025/OQ-026.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -3190,6 +3250,40 @@ Private malformed-artifact and conservation controls run through the canonical
 approval boundary. The implementation ledger records milestone SHA/run evidence,
 failures and repairs, predecessor identity reconciliation and final review status.
 
+## KED-028 owned replacement
+
+Canonical typed Assign metadata distinguishes Copy writes from owned record
+replacement without names. HIR publication checks target/function membership,
+mutability, owned category and exact RHS type. The single ownership checker wraps
+Move replacement in a prepared-entry transaction and installs an operation-local
+non-consumption restriction at canonical consume. This is neither a synthetic
+loan nor a second ownership map. Final expiry/exclusivity and current-loop header
+checks preserve existing borrowing and relative iteration rules.
+
+Structured lowering emits a compound ReplaceOwned MIR operation with LocalId,
+RecordId, declaring ScopeId, canonical cleanup-plan reference or inert marker,
+complete RHS and replacement origin. Lexical scope metadata also binds inert
+replacement targets. Functions without replacement preserve their existing
+metadata boundary. Existing admission envelopes bound descriptors and lexical
+vectors; opaque deterministic HIR/MIR/origin correspondence is the execution gate.
+
+Dynamic histories identify initialization generations independently of frame/local
+slot associations. Activation identities distinguish recurring static scopes.
+Discharged history entries cannot clean a later occupant; a live entry must match
+the slot's current generation. Frame-associated prepared contexts form a bounded
+stack for recursive RHS calls. Their protected results are separate from protected
+returns, pending fields and cleanup cursors. Both new and displaced payloads and
+all metadata capacities participate in prospective storage accounting.
+
+Runtime replacement evaluates, protects, reserves, detaches, discharges, then
+publishes/registers. The final slot installation, association update and reserved
+history append are one allocation-free transition. No source continuation runs
+between them. Failures retain actual payload holders and completed release prefixes;
+history, vacancy and release attempts are never counted as completed responsibility.
+The executor consumes MIR authority and does not reconstruct ownership or HIR scopes.
+Public resource APIs and all frozen non-goals remain excluded. Evidence and precise
+CI identities are recorded in `docs/engineering/KED-028-IMPLEMENTATION-LEDGER.md`.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -3811,5 +3905,20 @@ propagation syntax, non-Copy replacement, partial moves, panic/unwind/fatal-outc
 policy, cancellation, FFI, and broader generalized cleanup/control-flow dataflow.
 KD-042 provides no guarantee across its excluded abrupt outcomes and authorizes
 no compiler or runtime work by freeze alone.
+
+### KED-028 refinement of OQ-022/OQ-023/OQ-025/OQ-026
+
+Frozen Draft 1 settles exact-typed whole-value replacement only for available,
+directly named mutable owned non-reference Move locals. It fixes protected RHS
+ownership, displaced canonical cleanup and new-generation ordering in the target's
+owning activation. Iteration-local replacement is permitted; pre-existing loop
+owners remain excluded. Ordinary non-resource Move destruction stays inert.
+
+Reference/projected/dereferenced replacement, moved-slot reinitialization,
+self-consuming transformations, take/swap/exchange, partial ownership, arbitrary
+resource temporaries, user destructors, recoverable propagation, production resource
+APIs and generalized cyclic ownership/dataflow remain unresolved or excluded.
+The specialized verifier and proof counts are unchanged. Historical statements
+that non-Copy replacement is open now apply to those broader facilities.
 
 <!-- END OPEN_QUESTIONS.md -->

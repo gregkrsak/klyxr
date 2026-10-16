@@ -75,6 +75,7 @@ enum Slot {
     Vacant,
     Transferred,
     Cleaned,
+    Replacing,
 }
 #[derive(Debug)]
 struct Frame {
@@ -99,6 +100,7 @@ enum Action<'a> {
     Record(hir::RecordId, &'a [hir::RecordFieldInit]),
     Invoke(FunctionId, usize),
     Commit(Destination),
+    ReplaceCommit(u64),
     Select(BasicBlockId, BasicBlockId),
     Return,
     DropNoValue,
@@ -123,6 +125,8 @@ pub(super) struct Machine<'a> {
     origin: Origin,
     expression: Option<Span>,
     resources: Option<cleanup::State>,
+    #[cfg(test)]
+    max_storage: std::cell::Cell<usize>,
 }
 impl<'a> Machine<'a> {
     pub fn new(executable: &'a CheckedExecutable, limits: ExecutionLimits) -> Self {
@@ -133,6 +137,8 @@ impl<'a> Machine<'a> {
             tasks: Vec::new(),
             values: Vec::new(),
             resources: None,
+            #[cfg(test)]
+            max_storage: std::cell::Cell::new(0),
             next_frame: 0,
             steps: 0,
             origin: Origin {
@@ -199,11 +205,12 @@ impl<'a> Machine<'a> {
         Some(n)
     }
     fn reserve(&self, bytes: usize) -> Result<(), ExecutionError> {
-        if self
-            .storage()
-            .and_then(|n| n.checked_add(bytes))
-            .map_or(true, |n| n > self.limits.working_storage)
-        {
+        let wanted = self.storage().and_then(|n| n.checked_add(bytes));
+        #[cfg(test)]
+        if let Some(n) = wanted {
+            self.max_storage.set(self.max_storage.get().max(n));
+        }
+        if wanted.map_or(true, |n| n > self.limits.working_storage) {
             return Err(self.failure(ErrorKind::ConfiguredLimit("working storage")));
         }
         Ok(())
@@ -525,6 +532,7 @@ impl<'a> Machine<'a> {
                 | Statement::CopyReferenceFieldAssign { span, .. }
                 | Statement::CopyFieldAssign { span, .. }
                 | Statement::Assign { span, .. }
+                | Statement::ReplaceOwned { span, .. }
                 | Statement::Let { span, .. }
                 | Statement::DerefAssign { span, .. } => *span,
             };
@@ -574,6 +582,28 @@ impl<'a> Machine<'a> {
                             place: Place::Local(*local),
                         })),
                     )?;
+                    self.eval(id, value, 1)?;
+                }
+                Statement::ReplaceOwned {
+                    local,
+                    record,
+                    owning_scope,
+                    cleanup_plan,
+                    value,
+                    origin,
+                    ..
+                } => {
+                    self.origin = *origin;
+                    let replacement = self.replacement_start(
+                        Location {
+                            frame: id,
+                            place: Place::Local(*local),
+                        },
+                        *record,
+                        *owning_scope,
+                        *cleanup_plan,
+                    )?;
+                    self.task(id, *origin, None, Action::ReplaceCommit(replacement))?;
                     self.eval(id, value, 1)?;
                 }
                 Statement::CopyFieldAssign {
@@ -1008,6 +1038,7 @@ impl<'a> Machine<'a> {
                     self.cleanup_initialized(at)?;
                 }
             }
+            Action::ReplaceCommit(id) => self.replacement_commit(id)?,
             Action::Select(yes, no) => {
                 let v = self.pop()?;
                 let b = self.boolean(v)?;
@@ -1061,7 +1092,13 @@ impl<'a> Machine<'a> {
                 return Err(error);
             }
         }
-        if !self.frames.is_empty() || self.values.len() != 1 {
+        if !self.frames.is_empty()
+            || self.values.len() != 1
+            || self
+                .resources
+                .as_ref()
+                .is_some_and(|s| !s.replacements.is_empty())
+        {
             return Err(self.integrity("incomplete execution state"));
         }
         match self.pop()? {

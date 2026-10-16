@@ -243,8 +243,12 @@ impl Catalog {
                             expression(a, plans, false)?;
                         }
                     }
-                    ValueStatement::Assign { value, .. }
-                    | ValueStatement::DerefAssign { value, .. }
+                    ValueStatement::Assign { value, .. } => {
+                        // Only this complete result gains a boundary. Calls still
+                        // recurse into arguments with boundary=false.
+                        expression(value, plans, matches!(value.ty, ExprType::Record(_)))?
+                    }
+                    ValueStatement::DerefAssign { value, .. }
                     | ValueStatement::CopyFieldAssign { value, .. }
                     | ValueStatement::CopyReferenceFieldAssign { value, .. } => {
                         expression(value, plans, false)?

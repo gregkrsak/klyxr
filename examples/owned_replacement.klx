@@ -1,0 +1,17 @@
+type Percent = range 0..100;
+
+record Reading {
+    value: Percent
+}
+
+fn rebuild(view: &Reading) -> Reading {
+    return Reading { value: view.value - 1 };
+}
+
+fn demo() -> Reading {
+    let mut current = Reading { value: 80 };
+    let incoming = Reading { value: 60 };
+    current = incoming;
+    current = rebuild(&current);
+    return current;
+}

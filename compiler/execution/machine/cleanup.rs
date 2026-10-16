@@ -2,6 +2,7 @@
 use super::*;
 use crate::hir::resources::OperationKind;
 use crate::mir::cleanup::ScopeId;
+mod replacement;
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Event {
     Acquire(u64),
@@ -16,6 +17,11 @@ pub(super) struct State {
     frames: Vec<ResourceFrame>,
     next_identity: u64,
     next_activation: u64,
+    next_generation: u64,
+    pub(super) replacements: Vec<replacement::Prepared>,
+    next_replacement: u64,
+    #[cfg(test)]
+    fail_replacement: Option<replacement::Phase>,
     protected: Option<Value>,
     pub(super) detached: Option<Value>,
     current: Option<Value>,
@@ -38,11 +44,19 @@ struct ResourceFrame {
     id: u64,
     entered: bool,
     scopes: Vec<Activation>,
+    // Slot association is distinct from ordering history and owns no payload.
+    generations: Vec<(hir::LocalId, u64)>,
+}
+#[derive(Clone, Copy)]
+struct Generation {
+    local: hir::LocalId,
+    identity: u64,
+    discharged: bool,
 }
 struct Activation {
     scope: ScopeId,
-    _identity: u64,
-    initialized: Vec<hir::LocalId>,
+    identity: u64,
+    initialized: Vec<Generation>,
 }
 impl State {
     pub(super) fn storage(&self) -> Option<usize> {
@@ -55,7 +69,15 @@ impl State {
             )?;
         n = n
             .checked_add(self.pending.capacity().checked_mul(size_of::<Pending>())?)?
-            .checked_add(self.work.capacity().checked_mul(size_of::<Value>())?)?;
+            .checked_add(self.work.capacity().checked_mul(size_of::<Value>())?)?
+            .checked_add(
+                self.replacements
+                    .capacity()
+                    .checked_mul(size_of::<replacement::Prepared>())?,
+            )?;
+        for r in &self.replacements {
+            n = n.checked_add(r.payload_storage()?)?;
+        }
         for p in &self.pending {
             n = n.checked_add(
                 p.initialized
@@ -71,11 +93,16 @@ impl State {
         }
         for f in &self.frames {
             n = n.checked_add(f.scopes.capacity().checked_mul(size_of::<Activation>())?)?;
+            n = n.checked_add(
+                f.generations
+                    .capacity()
+                    .checked_mul(size_of::<(hir::LocalId, u64)>())?,
+            )?;
             for a in &f.scopes {
                 n = n.checked_add(
                     a.initialized
                         .capacity()
-                        .checked_mul(size_of::<hir::LocalId>())?,
+                        .checked_mul(size_of::<Generation>())?,
                 )?;
             }
         }
@@ -143,6 +170,7 @@ impl<'a> Machine<'a> {
             id,
             entered: false,
             scopes: Vec::new(),
+            generations: Vec::new(),
         });
         Ok(())
     }
@@ -196,7 +224,7 @@ impl<'a> Machine<'a> {
                 .ok_or_else(|| ExecutionError::integrity("scope activation identity exhausted"))?;
             s.frames[r].scopes.push(Activation {
                 scope,
-                _identity: identity,
+                identity,
                 initialized: Vec::new(),
             });
         }
@@ -226,7 +254,11 @@ impl<'a> Machine<'a> {
         if self.resources.as_ref().unwrap().frames[r]
             .scopes
             .iter()
-            .any(|s| s.initialized.iter().any(|l| at.place == Place::Local(*l)))
+            .any(|s| {
+                s.initialized
+                    .iter()
+                    .any(|g| at.place == Place::Local(g.local))
+            })
         {
             return Err(self.integrity("owner slot reused before activation cleanup"));
         }
@@ -268,14 +300,28 @@ impl<'a> Machine<'a> {
             .scopes
             .last()
             .ok_or_else(|| self.integrity("owner initialized outside activation"))?;
-        if a.scope != init.scope || a.initialized.contains(&init.local) {
+        if a.scope != init.scope || a.initialized.iter().any(|g| g.local == init.local) {
             return Err(self.integrity("duplicate or wrong-scope initialization"));
         }
         let grow = a.initialized.len() == a.initialized.capacity();
+        let association = &self.resources.as_ref().unwrap().frames[r].generations;
+        let map_grow = !association.iter().any(|(local, _)| *local == init.local)
+            && association.len() == association.capacity();
+        let identity = self.resources.as_ref().unwrap().next_generation;
+        let next = identity
+            .checked_add(1)
+            .ok_or_else(|| self.integrity("generation identity exhausted"))?;
         self.origin = init.origin;
         self.charge()?;
+        self.reserve(
+            (if grow { size_of::<Generation>() } else { 0 })
+                + if map_grow {
+                    size_of::<(hir::LocalId, u64)>()
+                } else {
+                    0
+                },
+        )?;
         if grow {
-            self.reserve(size_of::<hir::LocalId>())?;
             self.resources.as_mut().unwrap().frames[r]
                 .scopes
                 .last_mut()
@@ -284,12 +330,33 @@ impl<'a> Machine<'a> {
                 .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("initialization history allocation")))?;
         }
+        if map_grow {
+            self.resources.as_mut().unwrap().frames[r]
+                .generations
+                .try_reserve_exact(1)
+                .map_err(|_| self.failure(ErrorKind::Host("generation association allocation")))?;
+        }
+        let s = self.resources.as_mut().unwrap();
+        s.next_generation = next;
+        let associations = &mut s.frames[r].generations;
+        if let Some((_, current)) = associations
+            .iter_mut()
+            .find(|(local, _)| *local == init.local)
+        {
+            *current = identity;
+        } else {
+            associations.push((init.local, identity));
+        }
         self.resources.as_mut().unwrap().frames[r]
             .scopes
             .last_mut()
             .unwrap()
             .initialized
-            .push(init.local);
+            .push(Generation {
+                local: init.local,
+                identity,
+                discharged: false,
+            });
         Ok(())
     }
     fn release_leaf(&mut self, value: Value) -> Result<(), ExecutionError> {
@@ -475,24 +542,36 @@ impl<'a> Machine<'a> {
                 .scopes
                 .last()
                 .ok_or_else(|| self.integrity("cleanup activation already consumed"))?;
-            if a.scope != *scope {
+            if a.scope != *scope || a.identity >= self.resources.as_ref().unwrap().next_activation {
                 return Err(self.integrity("cleanup exits wrong active scope"));
             }
             loop {
-                let local = self.resources.as_ref().unwrap().frames[r]
+                let generation = self.resources.as_ref().unwrap().frames[r]
                     .scopes
                     .last()
                     .unwrap()
                     .initialized
                     .last()
                     .copied();
-                let Some(local) = local else {
+                let Some(generation) = generation else {
                     break;
                 };
-                self.cleanup_owner(Location {
-                    frame: id,
-                    place: Place::Local(local),
-                })?;
+                if !generation.discharged {
+                    let current = self.resources.as_ref().unwrap().frames[r]
+                        .generations
+                        .iter()
+                        .find(|(local, _)| *local == generation.local)
+                        .map(|(_, identity)| *identity);
+                    if current != Some(generation.identity) {
+                        return Err(self.integrity("stale generation cannot clean current slot"));
+                    }
+                    self.cleanup_owner(Location {
+                        frame: id,
+                        place: Place::Local(generation.local),
+                    })?;
+                } else {
+                    self.charge()?;
+                }
                 self.resources.as_mut().unwrap().frames[r]
                     .scopes
                     .last_mut()
@@ -1160,7 +1239,8 @@ mod aggregate_tests {
                         hir::ValueStatement::Let { initializer, .. } => {
                             expression(initializer, bearing)
                         }
-                        hir::ValueStatement::Return { value, .. } => expression(value, bearing),
+                        hir::ValueStatement::Return { value, .. }
+                        | hir::ValueStatement::Assign { value, .. } => expression(value, bearing),
                         _ => {}
                     }
                 }
@@ -1677,12 +1757,9 @@ mod bounds_and_artifact_tests {
         }
     }
     #[test]
-    fn ordinary_noncopy_replacement_remains_rejected() {
+    fn ordinary_inert_replacement_is_accepted() {
         let source="type R=range 0..1;record Leaf{data:R}fn acquire()->Leaf{return Leaf{data:0};}fn demo(){let mut a=acquire();let b=acquire();a=b;}";
-        assert!(matches!(
-            crate::compile_source(source),
-            Err(crate::FrontendError::Ownership(_))
-        ));
+        crate::compile_source(source).unwrap();
     }
 }
 #[cfg(test)]
@@ -1804,7 +1881,7 @@ mod conservation_tests {
             _ => {}
         }
     }
-    fn conserved(m: &Machine<'_>) {
+    pub(super) fn conserved(m: &Machine<'_>) {
         let s = m.resources.as_ref().unwrap();
         let mut acquired = Vec::new();
         let mut completed = Vec::new();
@@ -1837,6 +1914,11 @@ mod conservation_tests {
         }
         for p in &s.pending {
             for (_, v) in &p.initialized {
+                leaves(v, &mut owned);
+            }
+        }
+        for r in &s.replacements {
+            for v in [&r.protected, &r.displaced].into_iter().flatten() {
                 leaves(v, &mut owned);
             }
         }
@@ -2328,5 +2410,181 @@ mod repair_plan_failure_tests {
             ExecutionError::from(large.resources.plans(&large).unwrap_err()).kind,
             ErrorKind::ConfiguredLimit(_)
         ));
+    }
+}
+
+#[cfg(test)]
+mod replacement_authority_tests {
+    use super::*;
+    fn artifact() -> CheckedExecutable {
+        super::super::super::prepare_synthetic(
+            hir::resources::fixture_with(
+                "fn demo(){let mut a=acquire();if true{let inner=acquire();a=acquire();}}",
+            ),
+            AdmissionLimits::default(),
+        )
+        .unwrap()
+    }
+    #[test]
+    fn canonical_replacement_uses_declaring_scope_and_fixed_plan() {
+        let e = artifact();
+        e.validate().unwrap();
+        let f = e.mir.functions().last().unwrap();
+        let operations: Vec<_> = f
+            .blocks()
+            .flat_map(|(_, b)| b.statements())
+            .filter_map(|s| {
+                if let Statement::ReplaceOwned {
+                    owning_scope,
+                    cleanup_plan,
+                    origin,
+                    ..
+                } = s
+                {
+                    Some((*owning_scope, *cleanup_plan, origin.kind))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(
+            operations,
+            vec![(0, Some(hir::RecordId(0)), OriginKind::Replacement)]
+        );
+    }
+    #[test]
+    fn independent_replacement_authority_mutations_reject() {
+        for fault in 0..11 {
+            let mut e = artifact();
+            e.validate().unwrap();
+            let f = e.mir.test_functions_mut().last_mut().unwrap();
+            let b = f
+                .test_blocks_mut()
+                .iter_mut()
+                .find(|b| {
+                    b.statements()
+                        .iter()
+                        .any(|s| matches!(s, Statement::ReplaceOwned { .. }))
+                })
+                .unwrap();
+            let operations = b.test_statements_mut();
+            let index = operations
+                .iter()
+                .position(|s| matches!(s, Statement::ReplaceOwned { .. }))
+                .unwrap();
+            let copy = operations[index].clone();
+            match fault {
+                0 => {
+                    operations.remove(index);
+                }
+                1 => operations.insert(index, copy),
+                2 => operations.swap(0, index),
+                10 => {
+                    let Statement::ReplaceOwned {
+                        local, value, span, ..
+                    } = copy
+                    else {
+                        panic!()
+                    };
+                    operations[index] = Statement::Assign { local, value, span };
+                }
+                _ => {
+                    let Statement::ReplaceOwned {
+                        local,
+                        record,
+                        owning_scope,
+                        cleanup_plan,
+                        origin,
+                        ..
+                    } = &mut operations[index]
+                    else {
+                        panic!()
+                    };
+                    match fault {
+                        3 => *local = hir::LocalId(999),
+                        4 => *record = hir::RecordId(1),
+                        5 => *owning_scope = 1,
+                        6 => *cleanup_plan = None,
+                        7 => origin.kind = OriginKind::Statement,
+                        8 => origin.span.line += 1,
+                        9 => *cleanup_plan = Some(hir::RecordId(1)),
+                        _ => unreachable!(),
+                    }
+                }
+            }
+            assert!(e.validate().is_err(), "fault {fault}");
+        }
+    }
+    #[test]
+    fn replacement_result_boundary_does_not_admit_argument_temporary() {
+        let p = hir::resources::fixture_with(
+            "fn pass(x:Leaf)->Leaf{return x;}fn demo(){let mut a=acquire();a=pass(acquire());}",
+        );
+        assert!(super::super::super::prepare_synthetic(p, AdmissionLimits::default()).is_err());
+        artifact().validate().unwrap();
+    }
+}
+
+#[cfg(test)]
+mod generation_tests {
+    use super::*;
+    fn artifact(body: &str) -> CheckedExecutable {
+        super::super::super::prepare_synthetic(
+            hir::resources::fixture_with(body),
+            AdmissionLimits::default(),
+        )
+        .unwrap()
+    }
+    #[test]
+    fn repeated_local_id_has_distinct_activation_and_generation() {
+        let e = artifact("type N=range 0..3;fn demo(){let mut n=N_start();while !(n==0){let a=acquire();n=n-1;}}fn N_start()->N{return 3;}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        let mut identities = std::collections::BTreeSet::new();
+        while let Some(task) = m.tasks.pop() {
+            m.step(task).unwrap();
+            if let Some(s) = &m.resources {
+                for f in &s.frames {
+                    for a in &f.scopes {
+                        for g in &a.initialized {
+                            assert_eq!(
+                                f.generations.iter().find(|(l, _)| *l == g.local).unwrap().1,
+                                g.identity
+                            );
+                            identities.insert((a.identity, g.identity));
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(identities.len(), 3);
+        conservation_tests::conserved(&m);
+    }
+    #[test]
+    fn stale_history_cannot_release_a_live_slot() {
+        let e = artifact("fn demo(){let a=acquire();}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        loop {
+            let task = m.tasks.pop().unwrap();
+            let commit = matches!(task.action, Action::Commit(_));
+            m.step(task).unwrap();
+            if commit {
+                break;
+            }
+        }
+        m.resources.as_mut().unwrap().frames[0].scopes[0].initialized[0].identity = u64::MAX;
+        assert!(matches!(
+            m.resume().unwrap_err().kind,
+            ErrorKind::Integrity("stale generation cannot clean current slot")
+        ));
+        assert!(!m
+            .resources
+            .as_ref()
+            .unwrap()
+            .events
+            .iter()
+            .any(|e| matches!(e, Event::Complete(_))));
+        conservation_tests::conserved(&m);
     }
 }

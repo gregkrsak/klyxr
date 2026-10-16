@@ -14,15 +14,15 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo test --locked --workspace 2>&1 | tee "$RUNNER_TEMP/ked027-debug.log"
-          python scripts/verify-ked027-tests.py "$RUNNER_TEMP/ked027-debug.log"
+          cargo test --locked --workspace 2>&1 | tee "$RUNNER_TEMP/ked028-debug.log"
+          python scripts/verify-ked028-tests.py "$RUNNER_TEMP/ked028-debug.log"
 
       - name: Verify arithmetic checks in optimized builds
         shell: bash
         run: |
           set -o pipefail
-          cargo test --locked --workspace --release 2>&1 | tee "$RUNNER_TEMP/ked027-release.log"
-          python scripts/verify-ked027-tests.py "$RUNNER_TEMP/ked027-release.log"
+          cargo test --locked --workspace --release 2>&1 | tee "$RUNNER_TEMP/ked028-release.log"
+          python scripts/verify-ked028-tests.py "$RUNNER_TEMP/ked028-release.log"
 
       - name: Verify compact and explicit examples remain present
         run: |

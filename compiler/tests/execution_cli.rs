@@ -94,3 +94,25 @@ fn run_does_not_evaluate_failing_specialized_harness() {
         .contains("90 <= 80 is false"));
     fs::remove_file(p).unwrap();
 }
+
+#[test]
+fn owned_replacement_example_runs_without_claiming_contract_proof() {
+    let path = format!(
+        "{}/../examples/owned_replacement.klx",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let output = run(&["run", &path, "--function", "demo"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"Reading { value: Percent(59) }\n");
+    for mode in ["check", "verify"] {
+        let output = run(&[mode, &path]);
+        assert!(output.status.success());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("no verified function contracts"));
+        assert!(text.contains("not executed or verified; constrained results are not proven"));
+    }
+}

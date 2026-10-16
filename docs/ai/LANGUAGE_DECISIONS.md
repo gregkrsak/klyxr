@@ -1352,3 +1352,44 @@ admission, HIR/MIR representation, cleanup synthesis and correspondence, executo
 behavior, bounds, diagnostics, temporary admission, synthetic evidence, branch/base,
 validation, reporting, and phase structure. Any newly exposed semantic choice
 returns to Greg rather than being decided in code.
+
+## KED-028 — Deterministic replacement of owned Move locals
+
+**Status:** Frozen Draft 1 language decision, Issue #64, freeze comment 6195981810;
+implementation authorized separately by Greg. Implementation acceptance and human
+merge remain separate. No new KD number has been assigned.
+
+An available, directly named mutable owned non-reference Move local may receive an
+exact canonical record value through the existing assignment statement. Parameters,
+immutable bindings, references, projections, dereferences and unavailable slots
+remain excluded. The complete RHS evaluates while the old owner stays in place;
+the target may be borrowed or read non-consumingly but cannot transfer or be
+explicitly consumed within its own RHS. Existing last-use, receiving-hold and
+recurrent-loan rules apply. No active target loan may remain at commit. Rejection
+restores the exact prepared checker state, not runtime effects.
+
+The result enters protected machine ownership before displacement. The old whole
+owner detaches and performs its fixed canonical cleanup, recursively in reverse
+field declaration order if resource-bearing; inert Move destruction executes no
+cleanup. Only then does the protected value publish into the same LocalId as a
+new initialization generation. At later scope exit, only the current live generation
+cleans, in reverse successful publication order within the target's owning dynamic
+activation. A/B/C ordering is acquisition A, B, C; release displaced A; at scope exit
+release current C, then B. History owns no duplicate payload.
+
+Iteration-local owners may be replaced repeatedly. A target or moved RHS source
+present at the current loop header remains protected by KD-028's relative boundary,
+including nested loops and paths followed by return, break or continue. The complete
+replacement-result root is one additional resource lifetime boundary; unnamed
+resource arguments and arbitrary expression temporaries remain excluded.
+
+Explicit MIR replacement authority binds canonical target/type, lexical scope,
+cleanup plan, protected/displaced ownership protocol and origin. Opaque approval
+and deterministic correspondence reject malformed artifacts. Terminal trap, limit,
+integrity or Host outcomes preserve prefix effects and uniquely retained remaining
+responsibilities, refuse resume and provide no unwind or successful continuation.
+This adds no take/swap, self-consuming transformation, moved-slot reinitialization,
+partial move, reference replacement, destructor callback, production resource API,
+recoverable propagation, generalized place/dataflow engine or verifier expansion.
+Earlier KD sections retain their historical boundaries; this decision narrowly
+extends KD-026 and KD-042 and refines OQ-022/OQ-023/OQ-025/OQ-026.
