@@ -4,6 +4,23 @@ use super::*;
 use hir::resources::PlanError;
 use hir::{ExprKind, ExprType, FieldId, ParameterId, RecordId};
 
+#[cfg(test)]
+thread_local! {
+    pub(crate) static FAIL_ALLOCATION: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+#[cfg(test)]
+pub(super) fn allocation() -> Result<(), PlanError> {
+    #[cfg(test)]
+    FAIL_ALLOCATION.with(|remaining| {
+        if let Some(n) = remaining.get() {
+            if n == 0 { return Err(PlanError::Host("synthetic temporary authority allocation")); }
+            remaining.set(Some(n - 1));
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct RegionId(pub(crate) usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,6 +100,8 @@ impl Flow {
         flow.body(p, body, plans)?;
         // At most one MIR point per retained expression site: initializer
         // conditions and leaves replace, rather than duplicate, the root.
+        #[cfg(test)]
+        if !flow.sites.is_empty() { allocation()?; }
         flow.points
             .try_reserve_exact(flow.sites.len())
             .map_err(|_| PlanError::Host("temporary point allocation"))?;
@@ -120,6 +139,8 @@ impl Flow {
         span: Span,
     ) -> Result<RegionId, PlanError> {
         let id = RegionId(self.regions.len());
+        #[cfg(test)]
+        allocation()?;
         self.regions
             .try_reserve_exact(1)
             .map_err(|_| PlanError::Host("temporary region allocation"))?;
@@ -163,6 +184,8 @@ impl Flow {
             ExprType::Record(r) if plans.get(r.0).is_some_and(Option::is_some) => Some(r),
             _ => None,
         };
+        #[cfg(test)]
+        allocation()?;
         self.sites
             .try_reserve_exact(1)
             .map_err(|_| PlanError::Host("temporary site allocation"))?;
@@ -195,6 +218,8 @@ impl Flow {
             ExprKind::Binary { .. } => 2,
             _ => 0,
         };
+        #[cfg(test)]
+        if count > 0 { allocation()?; }
         children
             .try_reserve_exact(count)
             .map_err(|_| PlanError::Host("temporary child allocation"))?;
@@ -278,6 +303,8 @@ impl Flow {
 
     fn root(&mut self, region: RegionId, site: SiteId) -> Result<(), PlanError> {
         let roots = &mut self.regions[region.0].roots;
+        #[cfg(test)]
+        allocation()?;
         roots
             .try_reserve_exact(1)
             .map_err(|_| PlanError::Host("temporary root allocation"))?;

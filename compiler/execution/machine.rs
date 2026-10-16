@@ -245,6 +245,8 @@ impl<'a> Machine<'a> {
     ) -> Result<(), ExecutionError> {
         if self.tasks.len() == self.tasks.capacity() {
             self.reserve(size_of::<Task<'_>>())?;
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.tasks
                 .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("continuation allocation")))?;
@@ -295,6 +297,8 @@ impl<'a> Machine<'a> {
                 .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
         )?;
         if grow {
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.values
                 .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("value allocation")))?;
@@ -343,6 +347,8 @@ impl<'a> Machine<'a> {
                 .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
         )?;
         if grow {
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.frames[f]
                 .slots
                 .try_reserve_exact(1)
@@ -496,10 +502,14 @@ impl<'a> Machine<'a> {
             .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?;
         self.reserve(bytes)?;
         let mut slots = Vec::new();
+        #[cfg(test)]
+        if count > 0 { self.temporary_allocation()?; }
         slots
             .try_reserve_exact(count)
             .map_err(|_| self.failure(ErrorKind::Host("parameter allocation")))?;
         if self.frames.len() == self.frames.capacity() {
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.frames
                 .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("frame allocation")))?;
@@ -1005,6 +1015,8 @@ impl<'a> Machine<'a> {
                 .ok_or_else(|| self.integrity("record storage overflow"))?,
         )?;
         let mut result = Vec::new();
+        #[cfg(test)]
+        self.temporary_allocation()?;
         result
             .try_reserve_exact(fields.len())
             .map_err(|_| self.failure(ErrorKind::Host("record allocation")))?;
@@ -1086,6 +1098,7 @@ impl<'a> Machine<'a> {
             Action::Drive => self.drive(task.frame)?,
             Action::Eval(e, d) => self.expression(task.frame, e, d)?,
             Action::SiteEval(e, d, activation, site) => {
+                self.origin = self.temporary_site_origin(activation, site, task.frame)?;
                 self.site = Some((activation, site));
                 self.expression(task.frame, e, d)?;
             }

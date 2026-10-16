@@ -189,8 +189,12 @@ impl Catalog {
         fn expression(
             e: &TypedExpr,
             plans: &[Option<CleanupPlan>],
+            leaves: &[Leaf],
             boundary: bool,
         ) -> Result<(), &'static str> {
+            if matches!(e.kind, ExprKind::RecordConstruct {record,..} if leaves.iter().any(|l| l.record == record)) {
+                return Err("trusted resource leaf construction outside canonical acquisition stub");
+            }
             if bearing(e, plans)
                 && !boundary
                 && !matches!(e.kind, ExprKind::Local(_) | ExprKind::Parameter(_))
@@ -202,12 +206,12 @@ impl Catalog {
             match &e.kind {
                 ExprKind::RecordConstruct { fields, .. } => {
                     for f in fields {
-                        expression(&f.value, plans, true)?;
+                        expression(&f.value, plans, leaves, true)?;
                     }
                 }
                 ExprKind::Call { arguments, .. } => {
                     for a in arguments {
-                        expression(a, plans, true)?;
+                        expression(a, plans, leaves, true)?;
                     }
                 }
                 ExprKind::IfValue {
@@ -215,14 +219,14 @@ impl Catalog {
                     then_value,
                     else_value,
                 } => {
-                    expression(condition, plans, false)?;
-                    expression(then_value, plans, boundary)?;
-                    expression(else_value, plans, boundary)?;
+                    expression(condition, plans, leaves, false)?;
+                    expression(then_value, plans, leaves, boundary)?;
+                    expression(else_value, plans, leaves, boundary)?;
                 }
-                ExprKind::Unary { operand, .. } => expression(operand, plans, false)?,
+                ExprKind::Unary { operand, .. } => expression(operand, plans, leaves, false)?,
                 ExprKind::Binary { left, right, .. } => {
-                    expression(left, plans, false)?;
-                    expression(right, plans, false)?;
+                    expression(left, plans, leaves, false)?;
+                    expression(right, plans, leaves, false)?;
                 }
                 _ => {}
             }
@@ -231,27 +235,28 @@ impl Catalog {
         fn statements(
             body: &[ValueStatement],
             plans: &[Option<CleanupPlan>],
+            leaves: &[Leaf],
         ) -> Result<(), &'static str> {
             for s in body {
                 match s {
                     ValueStatement::Let { initializer, .. } => {
-                        expression(initializer, plans, true)?
+                        expression(initializer, plans, leaves, true)?
                     }
-                    ValueStatement::Return { value, .. } => expression(value, plans, true)?,
+                    ValueStatement::Return { value, .. } => expression(value, plans, leaves, true)?,
                     ValueStatement::CallNoValue { arguments, .. } => {
                         for a in arguments {
-                            expression(a, plans, true)?;
+                            expression(a, plans, leaves, true)?;
                         }
                     }
                     ValueStatement::Assign { value, .. } => {
-                        // Only this complete result gains a boundary. Calls still
-                        // recurse into arguments with boundary=false.
-                        expression(value, plans, matches!(value.ty, ExprType::Record(_)))?
+                        // Complete replacement results and exact owned call
+                        // arguments have their respective protected boundaries.
+                        expression(value, plans, leaves, matches!(value.ty, ExprType::Record(_)))?
                     }
                     ValueStatement::DerefAssign { value, .. }
                     | ValueStatement::CopyFieldAssign { value, .. }
                     | ValueStatement::CopyReferenceFieldAssign { value, .. } => {
-                        expression(value, plans, false)?
+                        expression(value, plans, leaves, false)?
                     }
                     ValueStatement::If {
                         condition,
@@ -259,15 +264,15 @@ impl Catalog {
                         else_body,
                         ..
                     } => {
-                        expression(condition, plans, false)?;
-                        statements(then_body, plans)?;
-                        statements(else_body, plans)?;
+                        expression(condition, plans, leaves, false)?;
+                        statements(then_body, plans, leaves)?;
+                        statements(else_body, plans, leaves)?;
                     }
                     ValueStatement::While {
                         condition, body, ..
                     } => {
-                        expression(condition, plans, false)?;
-                        statements(body, plans)?;
+                        expression(condition, plans, leaves, false)?;
+                        statements(body, plans, leaves)?;
                     }
                     _ => {}
                 }
@@ -276,7 +281,8 @@ impl Catalog {
         }
         for f in &p.functions {
             if let Function::Ordinary(f) = f {
-                statements(&f.body, plans)?;
+                if self.operations.iter().any(|o| o.function == f.id && matches!(o.kind, OperationKind::Acquire(_))) { continue; }
+                statements(&f.body, plans, &self.leaves)?;
             }
         }
         Ok(())

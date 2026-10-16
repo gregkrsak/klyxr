@@ -2,6 +2,11 @@
 use super::*;
 use crate::mir::temporaries::{Destination as Transfer, Point, RegionId, SiteId};
 
+#[cfg(test)]
+thread_local! {
+    pub(super) static FAIL_ALLOCATION: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct OwnerId {
     pub(super) activation: u64,
@@ -95,9 +100,28 @@ impl State {
             }
         }
     }
+    #[cfg(test)]
+    pub(super) fn visit_holders(&self, mut visit: impl FnMut(&Value, String)) {
+        for f in &self.frames {
+            for (ordinal, owner) in f.owners.iter().enumerate() {
+                if let Some(v) = &owner.value { visit(v, format!("temporary:{}:owner:{ordinal}", f.id)); }
+            }
+            if let Some(v) = &f.protected { visit(v, format!("protected-completion:{}", f.id)); }
+        }
+    }
 }
 
 impl<'a> Machine<'a> {
+    #[cfg(test)]
+    pub(super) fn temporary_allocation(&self) -> Result<(), ExecutionError> {
+        FAIL_ALLOCATION.with(|remaining| {
+            if let Some(n) = remaining.get() {
+                if n == 0 { return Err(self.failure(ErrorKind::Host("synthetic runtime allocation"))); }
+                remaining.set(Some(n - 1));
+            }
+            Ok(())
+        })
+    }
     #[cfg(test)]
     pub(super) fn inject_temporary_leaf(&mut self, activation: u64) -> u64 {
         let i = self.temporary_index(activation).unwrap();
@@ -141,6 +165,8 @@ impl<'a> Machine<'a> {
         let s = self.temporaries.as_ref().unwrap();
         if s.events.len() == s.events.capacity() {
             self.reserve(size_of::<Event>())?;
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.temporaries
                 .as_mut()
                 .unwrap()
@@ -171,6 +197,9 @@ impl<'a> Machine<'a> {
             .ok_or_else(|| self.integrity("missing temporary authority"))?
             .regions[region.0];
         let parent = self.temporaries.as_ref().and_then(|s| s.frames.last());
+        if parent.is_some_and(|p| p.phase != Phase::Active || (description.parent.is_none() && p.frame == frame)) {
+            return Err(self.integrity("overlapping source temporary regions"));
+        }
         if let Some(expected) = description.parent {
             if parent.map_or(true, |p| {
                 p.frame != frame
@@ -199,6 +228,8 @@ impl<'a> Machine<'a> {
             .ok_or_else(|| self.integrity("temporary activation exhausted"))?;
         if s.frames.len() == s.frames.capacity() {
             self.reserve(size_of::<Activation>())?;
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.temporaries
                 .as_mut()
                 .unwrap()
@@ -265,6 +296,16 @@ impl<'a> Machine<'a> {
             complete: p.complete,
         }))
     }
+    pub(super) fn temporary_site_origin(&self, activation: u64, site: SiteId, frame: u64) -> Result<Origin, ExecutionError> {
+        let i = self.temporary_index(activation)?;
+        let f = &self.temporaries.as_ref().unwrap().frames[i];
+        let site = self.executable.function(f.function)?.temporaries.as_ref().unwrap().sites.get(site.0)
+            .ok_or_else(|| self.integrity("foreign temporary expression site"))?;
+        if f.frame != frame || f.region != site.region || f.phase != Phase::Active {
+            return Err(self.integrity("temporary expression activation mismatch"));
+        }
+        Ok(site.origin)
+    }
     pub(super) fn temporary_register(
         &mut self,
         activation: u64,
@@ -280,7 +321,8 @@ impl<'a> Machine<'a> {
             .as_ref()
             .unwrap()
             .sites[site.0];
-        if f.phase != Phase::Active
+        if i + 1 != self.temporaries.as_ref().unwrap().frames.len()
+            || f.phase != Phase::Active
             || f.region != metadata.region
             || metadata.plan.is_none()
             || !matches!(self.values.last(), Some(Value::Leaf {record,..} | Value::Aggregate {record,..}) if Some(*record) == metadata.plan)
@@ -288,8 +330,14 @@ impl<'a> Machine<'a> {
             return Err(self.integrity("invalid temporary creation type, region or plan"));
         }
         let ordinal = f.owners.len();
-        if ordinal == f.owners.capacity() {
+        let owner_growth = if ordinal == f.owners.capacity() { size_of::<Owner>() } else { 0 };
+        let events = &self.temporaries.as_ref().unwrap().events;
+        let event_growth = if events.len() == events.capacity() { size_of::<Event>() } else { 0 };
+        self.reserve(owner_growth.checked_add(event_growth).ok_or_else(|| self.integrity("temporary prospective storage overflow"))?)?;
+        if owner_growth > 0 {
             self.reserve(size_of::<Owner>())?;
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.temporaries.as_mut().unwrap().frames[i]
                 .owners
                 .try_reserve_exact(1)
@@ -461,10 +509,15 @@ impl<'a> Machine<'a> {
         )
     }
     pub(super) fn temporary_retire(&mut self, activation: u64) -> Result<(), ExecutionError> {
+        self.charge()?;
         let i = self.temporary_index(activation)?;
         if i + 1 != self.temporaries.as_ref().unwrap().frames.len() {
             return Err(self.integrity("temporary retirement crosses active child"));
         }
+        let f = &self.temporaries.as_ref().unwrap().frames[i];
+        let retirement = self.executable.function(f.function)?.temporaries.as_ref().unwrap().regions[f.region.0].retirement;
+        self.origin = retirement;
+        self.expression = None;
         let f = &mut self.temporaries.as_mut().unwrap().frames[i];
         if f.phase == Phase::Active {
             f.phase = Phase::Retiring;
@@ -477,6 +530,9 @@ impl<'a> Machine<'a> {
             self.charge()?;
             let ordinal = self.temporaries.as_ref().unwrap().frames[i].cursor - 1;
             let owner = &self.temporaries.as_ref().unwrap().frames[i].owners[ordinal];
+            if (owner.custody == Custody::Owned) != owner.value.is_some() {
+                return Err(self.integrity("temporary custody and payload disagree"));
+            }
             match owner.custody {
                 Custody::Transferred => {
                     if owner.value.is_some() {
@@ -484,6 +540,9 @@ impl<'a> Machine<'a> {
                     }
                 }
                 Custody::Owned => {
+                    let f = &self.temporaries.as_ref().unwrap().frames[i];
+                    self.origin = self.executable.function(f.function)?.temporaries.as_ref().unwrap().sites[owner.site.0].cleanup;
+                    self.expression = Some(self.origin.span);
                     self.temporary_event_reserve()?;
                     let s = self.temporaries.as_mut().unwrap();
                     let owner = &mut s.frames[i].owners[ordinal];
@@ -501,6 +560,8 @@ impl<'a> Machine<'a> {
             }
             self.temporaries.as_mut().unwrap().frames[i].cursor = ordinal;
         }
+        self.origin = retirement;
+        self.expression = None;
         self.charge()?;
         self.temporary_event_reserve()?;
         let s = self.temporaries.as_mut().unwrap();
@@ -509,6 +570,7 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     pub(super) fn temporary_finish(&mut self, activation: u64) -> Result<(), ExecutionError> {
+        self.charge()?;
         let i = self.temporary_index(activation)?;
         let f = &self.temporaries.as_ref().unwrap().frames[i];
         let frame = f.frame;
@@ -1150,5 +1212,110 @@ mod tests {
                 .kind,
             ErrorKind::Integrity(_)
         ));
+    }
+
+    #[test]
+    fn holder_census_tracks_same_leaf_across_inner_return_and_outer_parameter() {
+        use crate::execution::machine::cleanup::conservation_tests::holders;
+        let e = artifact("fn pass(x:Leaf)->Leaf{return x;}fn take(x:Leaf){}fn demo(){take(pass(acquire()));}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        let mut history = Vec::new();
+        let mut release_holder = None;
+        while let Some(task) = m.tasks.pop() {
+            let before = holders(&m);
+            let count = m.resources.as_ref().map_or(0, |s| s.events.iter().filter(|e| matches!(e, Release::Complete(0))).count());
+            m.step(task).unwrap();
+            if m.resources.is_some() { conserved(&m); }
+            for (id, label) in holders(&m) { assert_eq!(id, 0); history.push(label); }
+            if m.resources.as_ref().is_some_and(|s| s.events.iter().filter(|e| matches!(e, Release::Complete(0))).count() > count) {
+                release_holder = before.into_iter().find(|(id,_)| *id == 0).map(|(_,label)| label);
+            }
+        }
+        let mut offset = 0;
+        for prefix in ["temporary:0:owner:0", "frame:1:Parameter", "protected-return", "temporary:0:owner:1", "frame:2:Parameter"] {
+            offset += history[offset..].iter().position(|label| label.starts_with(prefix)).unwrap() + 1;
+        }
+        assert!(release_holder.unwrap().starts_with("frame:2:Parameter"));
+        assert_eq!(completed(&m), vec![0]);
+        assert!(!m.temporaries.as_ref().unwrap().events.iter().any(|e| matches!(e, Event::Cleanup(_))));
+    }
+
+    #[test]
+    fn each_detected_runtime_allocation_failure_is_host_and_conserves_payloads() {
+        let e = artifact("fn pass(x:Leaf)->Leaf{return x;}fn take(a:Leaf,b:Leaf,c:Leaf){let local=acquire();}fn demo(){take(acquire(),pass(acquire()),acquire());}");
+        let take = e.program.functions().iter().find(|f| f.name() == "take").unwrap().id();
+        let mut success = None;
+        let mut after_acquisition = 0;
+        let mut partial_entry = 0;
+        for cut in 0..512 {
+            let mut m = Machine::new(&e, ExecutionLimits::default());
+            FAIL_ALLOCATION.with(|f| f.set(Some(cut)));
+            let result = m.start(e.entry("demo").unwrap()).and_then(|_| m.resume());
+            FAIL_ALLOCATION.with(|f| f.set(None));
+            if result.is_ok() { success = Some(cut); conserved(&m); break; }
+            let error = result.unwrap_err();
+            assert!(matches!(error.kind, ErrorKind::Host(_)), "allocation {cut}: {error:?}");
+            if m.resources.is_some() {
+                conserved(&m);
+                if m.resources.as_ref().unwrap().events.iter().any(|e| matches!(e, Release::Acquire(_))) { after_acquisition += 1; }
+                if m.frames.last().is_some_and(|f| f.function == take && matches!(f.slots.len(), 1 | 2)) {
+                    partial_entry += 1;
+                    assert_eq!(m.resources.as_ref().unwrap().events.iter().filter(|e| matches!(e, Release::Acquire(_))).count(), 3);
+                }
+            }
+        }
+        assert!(success.unwrap() > 20);
+        assert!(after_acquisition > 10);
+        assert!(partial_entry > 0);
+    }
+
+    #[test]
+    fn failed_acquisition_allocates_no_resource_identity_or_responsibility() {
+        use crate::execution::machine::cleanup::conservation_tests::holders;
+        let e = artifact("fn take(x:Leaf){}fn demo(){take(acquire());}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        loop {
+            let task = m.tasks.pop().unwrap();
+            if matches!(task.action, Action::Invoke(FunctionId(0),0)) { m.tasks.push(task); break; }
+            m.step(task).unwrap();
+        }
+        FAIL_ALLOCATION.with(|f| f.set(Some(0)));
+        let result = m.resume();
+        FAIL_ALLOCATION.with(|f| f.set(None));
+        assert!(matches!(result.unwrap_err().kind, ErrorKind::Host(_)));
+        assert!(holders(&m).is_empty());
+        assert!(!m.resources.as_ref().unwrap().events.iter().any(|e| matches!(e, Release::Acquire(_))));
+        conserved(&m);
+    }
+
+    #[test]
+    fn malformed_runtime_custody_never_uses_vacancy_or_borrowable_temporary_places() {
+        let e = artifact("fn demo(){let r=acquire();}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        let activation = pause_region(&mut m, |d| matches!(d, Transfer::Local(_)));
+        m.inject_temporary_leaf(activation);
+        assert!(matches!(m.reference(Location {frame:0,place:Place::Local(hir::LocalId(0))}, false).unwrap_err().kind, ErrorKind::Integrity(_)));
+        let id = OwnerId {activation,ordinal:0};
+        assert!(matches!(m.temporary_take(Value::Temporary(id), Some(Transfer::Parameter(hir::ParameterId(999)))).unwrap_err().kind, ErrorKind::Integrity(_)));
+        assert!(matches!(m.temporary_take(Value::Temporary(OwnerId {activation,ordinal:999}), None).unwrap_err().kind, ErrorKind::Integrity(_)));
+        conserved(&m);
+        let value = m.temporary_take(Value::Temporary(id), None).unwrap();
+        m.value(value).unwrap();
+        assert!(matches!(m.temporary_take(Value::Temporary(id), None).unwrap_err().kind, ErrorKind::Integrity(_)));
+        m.temporaries.as_mut().unwrap().frames[0].owners[0].custody = Custody::Owned;
+        assert!(matches!(m.temporary_retire(activation).unwrap_err().kind, ErrorKind::Integrity(_)));
+        conserved(&m);
+    }
+
+    #[test]
+    fn forged_resource_leaf_construction_cannot_manufacture_an_acquisition() {
+        let mut p = hir::resources::fixture_with("fn demo(){release(acquire());}");
+        let hir::Function::Ordinary(f) = p.functions.last_mut().unwrap() else { panic!() };
+        let hir::ValueStatement::CallNoValue {arguments,..} = &mut f.body[0] else { panic!() };
+        arguments[0].kind = ExprKind::RecordConstruct {record:hir::RecordId(0),fields:Vec::new()};
+        assert!(matches!(crate::execution::prepare_synthetic(p, AdmissionLimits::default()).err().unwrap().kind, ErrorKind::Integrity(_)));
     }
 }

@@ -28,6 +28,13 @@
     "lib.rs::execution::machine::temporaries::tests::source_borrow_discard_and_recurring_condition_exclusions_remain",
     "lib.rs::execution::machine::cleanup::temporary_aggregate_tests::private_a_aggregate_b_retirement_keeps_both_orders_independent",
     "lib.rs::execution::machine::cleanup::temporary_aggregate_tests::middle_pending_field_keeps_moved_source_membership_after_child_stop",
-    "lib.rs::execution::machine::cleanup::temporary_aggregate_tests::nested_pending_last_written_middle_field_cannot_publish_before_retirement"
+    "lib.rs::execution::machine::cleanup::temporary_aggregate_tests::nested_pending_last_written_middle_field_cannot_publish_before_retirement",
+    "lib.rs::execution::machine::temporaries::tests::holder_census_tracks_same_leaf_across_inner_return_and_outer_parameter",
+    "lib.rs::execution::machine::temporaries::tests::each_detected_runtime_allocation_failure_is_host_and_conserves_payloads",
+    "lib.rs::execution::machine::temporaries::tests::failed_acquisition_allocates_no_resource_identity_or_responsibility",
+    "lib.rs::execution::machine::temporaries::tests::malformed_runtime_custody_never_uses_vacancy_or_borrowable_temporary_places",
+    "lib.rs::execution::machine::temporaries::tests::forged_resource_leaf_construction_cannot_manufacture_an_acquisition",
+    "lib.rs::execution::temporary_authority_tests::each_temporary_authority_allocation_failure_preserves_host_classification",
+    "lib.rs::execution::temporary_authority_tests::exact_admission_work_and_storage_neighbors_keep_typed_limits"
   ]
 }

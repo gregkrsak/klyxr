@@ -233,3 +233,45 @@ runs: tests https://github.com/gregkrsak/klyxr/actions/runs/38850141257,
 docs https://github.com/gregkrsak/klyxr/actions/runs/38850141181,
 verify https://github.com/gregkrsak/klyxr/actions/runs/38850141160.
 No later layer added before the four-workflow formatting repair gate passes.
+
+Milestone 5 completed at `5423989c82a2a8fa08b0f790e0350e1c52f66aa8`, tree
+`2d8b6e317fbdc29e41177e68679655e04e71457a`. All four passed:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38850319723),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38850319794),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38850319781),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38850319730).
+Both complete profiles reconciled 1,734 identities; both affine checks and
+authority doctests passed.
+
+## Milestone 6 — allocation, admission and holder evidence
+
+Test-only fault probes sit immediately before actual vector reservations in the
+new temporary state, call/value/continuation buffers and existing cleanup holders.
+A cut-by-cut fixture requires Host classification and conservation, including
+partial callee publication. A separate acquisition cut proves no acquisition or
+responsibility exists before successful fixed-operation publication. Static
+temporary-authority allocation cuts preserve Host classification, while exact
+admission work/storage neighbors preserve Configured Limit classification.
+
+The physical identity census is cross-checked against named holder paths covering
+slots, operand staging, temporary owners, every protected destination, pending
+fields, detached payloads and cleanup cursors. A same-leaf witness observes caller
+temporary, inner parameter, protected return, new caller temporary and outer
+parameter in order; release is attributed to that outer parameter, not caller
+temporary cleanup. Runtime malformed-custody controls reject wrong destinations,
+foreign/missing owners, duplicate transfers and vacancy marked as owned.
+
+Admission checks table lengths before scanning references and bounds parent-chain
+nesting. Source sites and cleanup work use their sealed origins. Registration
+checks combined owner/event growth before moving the staged payload. Completion
+and retirement each charge before frame traversal; the exact single-owner
+resource threshold is now 18 (the original 11 plus seven explicit temporary
+progress charges). The historical 16-unit milestone result is retained above;
+its old assertion was corrected for these previously uncharged traversals under
+frozen section 14. Resource-free paths enter no temporary machinery.
+
+Forged resource-leaf construction now rejects outside the already validated
+canonical acquisition stub. This preserves the predecessor trusted-acquisition
+contract when admitting new temporary positions; it creates no constructor or
+resource API. Seven new test identities are explicit in the manifest. Validation
+pending; no final implementation or acceptance claim.

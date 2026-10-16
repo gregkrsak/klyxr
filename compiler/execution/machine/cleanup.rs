@@ -265,6 +265,8 @@ impl<'a> Machine<'a> {
             == self.resources.as_ref().unwrap().events.capacity()
         {
             self.reserve(size_of::<Event>())?;
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.resources
                 .as_mut()
                 .unwrap()
@@ -286,6 +288,8 @@ impl<'a> Machine<'a> {
         let s = self.resources.as_ref().unwrap();
         if s.frames.len() == s.frames.capacity() {
             self.reserve(size_of::<ResourceFrame>())?;
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.resources
                 .as_mut()
                 .unwrap()
@@ -338,6 +342,8 @@ impl<'a> Machine<'a> {
             };
             if grow {
                 self.reserve(size_of::<Activation>())?;
+                #[cfg(test)]
+                self.temporary_allocation()?;
                 self.resources.as_mut().unwrap().frames[r]
                     .scopes
                     .try_reserve_exact(1)
@@ -449,6 +455,8 @@ impl<'a> Machine<'a> {
                 },
         )?;
         if grow {
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.resources.as_mut().unwrap().frames[r]
                 .scopes
                 .last_mut()
@@ -458,6 +466,8 @@ impl<'a> Machine<'a> {
                 .map_err(|_| self.failure(ErrorKind::Host("initialization history allocation")))?;
         }
         if map_grow {
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.resources.as_mut().unwrap().frames[r]
                 .generations
                 .try_reserve_exact(1)
@@ -533,6 +543,8 @@ impl<'a> Machine<'a> {
                     .checked_mul(size_of::<Event>())
                     .ok_or_else(|| self.integrity("release event reservation overflow"))?,
             )?;
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.resources
                 .as_mut()
                 .unwrap()
@@ -559,6 +571,8 @@ impl<'a> Machine<'a> {
             == self.resources.as_ref().unwrap().work.capacity();
         self.reserve(if grow { size_of::<Value>() } else { 0 })?;
         if grow {
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.resources
                 .as_mut()
                 .unwrap()
@@ -755,6 +769,8 @@ impl<'a> Machine<'a> {
         let grow = self.values.len() == self.values.capacity();
         self.reserve(if grow { size_of::<Value>() } else { 0 })?;
         if grow {
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.values
                 .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("protected result allocation")))?;
@@ -786,6 +802,8 @@ impl<'a> Machine<'a> {
             == self.resources.as_ref().unwrap().pending.capacity();
         if grow {
             self.reserve(size_of::<Pending>())?;
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.resources
                 .as_mut()
                 .unwrap()
@@ -898,6 +916,8 @@ impl<'a> Machine<'a> {
             let grow = self.values.len() == self.values.capacity();
             self.reserve(if grow { size_of::<Value>() } else { 0 })?;
             if grow {
+                #[cfg(test)]
+                self.temporary_allocation()?;
                 self.values
                     .try_reserve_exact(1)
                     .map_err(|_| self.failure(ErrorKind::Host("aggregate result allocation")))?;
@@ -945,6 +965,8 @@ impl<'a> Machine<'a> {
             0
         })?;
         if grow {
+            #[cfg(test)]
+            self.temporary_allocation()?;
             self.resources.as_mut().unwrap().pending[p]
                 .initialized
                 .try_reserve_exact(1)
@@ -1040,11 +1062,15 @@ impl<'a> Machine<'a> {
                         + (if event_grow { size_of::<Event>() } else { 0 }),
                 )?;
                 if value_grow {
+                    #[cfg(test)]
+                    self.temporary_allocation()?;
                     self.values.try_reserve_exact(1).map_err(|_| {
                         self.failure(ErrorKind::Host("acquisition value allocation"))
                     })?;
                 }
                 if event_grow {
+                    #[cfg(test)]
+                    self.temporary_allocation()?;
                     self.resources
                         .as_mut()
                         .unwrap()
@@ -1660,7 +1686,7 @@ mod bounds_and_artifact_tests {
         let mut m = start(&e, ExecutionLimits::default());
         m.resume().unwrap();
         let steps = m.steps;
-        assert_eq!(steps, 16);
+        assert_eq!(steps, 18);
         assert_eq!(
             execute(
                 &e,
@@ -2044,6 +2070,37 @@ mod copy_and_reporting_tests {
 #[cfg(test)]
 pub(super) mod conservation_tests {
     use super::*;
+    pub(in crate::execution::machine) fn holders(m: &Machine<'_>) -> Vec<(u64, String)> {
+        fn append(v: &Value, label: String, out: &mut Vec<(u64, String)>) {
+            match v {
+                Value::Leaf {identity,..} => out.push((*identity, label)),
+                Value::Aggregate {fields,..} => for (field, value) in fields { append(value, format!("{label}.field:{}", field.0), out); },
+                _ => {}
+            }
+        }
+        let mut out = Vec::new();
+        for frame in &m.frames {
+            for (place, slot) in &frame.slots {
+                if let Slot::Available(v) = slot { append(v, format!("frame:{}:{place:?}", frame.id), &mut out); }
+            }
+        }
+        for (index, v) in m.values.iter().enumerate() { append(v, format!("operand:{index}"), &mut out); }
+        if let Some(s) = &m.resources {
+            for (label, value) in [("cleanup-current", &s.current), ("protected-return", &s.protected), ("detached", &s.detached)] {
+                if let Some(v) = value { append(v, label.into(), &mut out); }
+            }
+            for (index, v) in s.work.iter().enumerate() { append(v, format!("cleanup-work:{index}"), &mut out); }
+            for p in &s.pending {
+                for (field, v) in &p.initialized { append(v, format!("pending:{}:field:{}", p.id, field.0), &mut out); }
+            }
+            for (index, r) in s.replacements.iter().enumerate() {
+                if let Some(v) = &r.protected { append(v, format!("protected-replacement:{index}"), &mut out); }
+                if let Some(v) = &r.displaced { append(v, format!("displaced-replacement:{index}"), &mut out); }
+            }
+        }
+        if let Some(s) = &m.temporaries { s.visit_holders(|v, label| append(v, label, &mut out)); }
+        out
+    }
     fn leaves(value: &Value, ids: &mut Vec<u64>) {
         match value {
             Value::Leaf { identity, .. } => ids.push(*identity),
@@ -2099,6 +2156,11 @@ pub(super) mod conservation_tests {
         if let Some(temporaries) = &m.temporaries {
             temporaries.visit_values(|v| leaves(v, &mut owned));
         }
+        let mut labelled: Vec<_> = holders(m).iter().map(|(id,_)| *id).collect();
+        let mut physical = owned.clone();
+        labelled.sort_unstable();
+        physical.sort_unstable();
+        assert_eq!(labelled, physical, "holder census must cover all physical payloads");
         owned.extend(completed);
         owned.sort_unstable();
         acquired.sort_unstable();

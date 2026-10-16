@@ -294,6 +294,8 @@ pub(crate) fn lower_with_origins(
         .filter_map(|f| f.as_ordinary())
         .filter(|_| plans.iter().any(Option::is_some))
     {
+        #[cfg(test)]
+        temporaries::allocation()?;
         flows
             .try_reserve_exact(1)
             .map_err(|_| hir::resources::PlanError::Host("temporary function allocation"))?;
