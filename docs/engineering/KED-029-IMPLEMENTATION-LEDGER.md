@@ -95,3 +95,45 @@ verify https://github.com/gregkrsak/klyxr/actions/runs/38847834686.
 Three added tests cover 26 independent authority mutations, selected initializer
 paths and source ordinals with resource-free predecessor statements. No runtime
 layer started while this milestone's build gate was red.
+
+Milestone 2 completed at `c352861ff6085b715e1bc52e53fb803ec2996f88`, tree
+`c8858d7b95713b25927e11171885217b5866fc25`. All four passed:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38847970102),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38847970119),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38847970097),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38847970098).
+Debug and release each: 1,706 predecessors + seven additions = 1,713 passed;
+both affine checks and authority doctests passed.
+
+## Milestone 3 — explicit temporary custody and call vertical slice
+
+A separate lazy machine state retains dynamic region activations, payload owners,
+creation histories, protected completion results and typed transfer/cleanup events.
+Operand handles are not places and own no duplicate payload. Resource registration
+retains the actual value stack payload throughout fallible reservations. Transfer
+vacates the owner only after validation, fuel and event reservation. Parameter
+capacity is reserved before entry; an explicit callee frame retains any published
+prefix, while remaining arguments stay staged. Body continuation is queued only
+after entry completes. Existing resource-free continuations retain their path.
+
+The vertical slice necessarily installs common result-protection/retirement hooks
+at existing MIR completion points; record field continuations transfer membership
+before child retirement. Runtime boundary conformance and adversarial failure
+evidence remain subsequent milestones. No completion claim is made here.
+
+The two designated obsolete argument rejections retain their original identities
+and source witnesses, now asserting successful identity-conserving execution.
+Frozen sections 4-5 admit those exact owned arguments, including replacement RHS
+composition. The metadata-only nested-call test now also checks normal admission
+and the single ownership checker. One additional predecessor assertion changes:
+the exact single-owner fuel threshold from 11 to 16, accounting for region entry,
+registration, transfer, owner inspection and retirement required by frozen section
+14. Its sufficient/insufficient boundary witness is preserved. The existing
+later-argument publication-stop fixture recognizes SiteEval as well as Eval at
+the same source-read transition; its conservation assertions remain intact.
+
+New vertical evidence distinguishes caller temporary transfers from callee cleanup,
+preserves A/B/C acquisition identities and C/B/A parameter cleanup, and traces a
+single leaf through an inner protected return and outer entry. The common
+conservation census includes actual temporary and protected-result payloads.
+Validation pending; later failure and destination batteries are not yet claimed.

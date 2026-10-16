@@ -11,6 +11,63 @@ pub(super) enum Event {
     Failure(u64),
     Retire(u64),
 }
+
+#[cfg(test)]
+mod expression_temporary_tests {
+    use super::*;
+    use crate::execution::machine::temporaries::Event as TemporaryEvent;
+
+    fn artifact(source: &str) -> CheckedExecutable {
+        crate::execution::prepare_synthetic(hir::resources::fixture_with(source), AdmissionLimits::default()).unwrap()
+    }
+    fn completed(m: &Machine<'_>) -> Vec<u64> {
+        m.resources.as_ref().unwrap().events.iter().filter_map(|e| if let Event::Complete(id) = e { Some(*id) } else { None }).collect()
+    }
+
+    #[test]
+    fn direct_argument_transfers_to_callee_without_caller_cleanup() {
+        let e = artifact("fn take(x:Leaf){}fn demo(){take(acquire());}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        while let Some(task) = m.tasks.pop() {
+            m.step(task).unwrap();
+            super::conservation_tests::conserved(&m);
+        }
+        assert_eq!(completed(&m), vec![0]);
+        assert!(!m.temporaries.as_ref().unwrap().events.iter().any(|e| matches!(e, TemporaryEvent::Cleanup(_))));
+        assert!(m.resources.as_ref().unwrap().events.contains(&Event::Retire(1)));
+        assert!(m.temporaries.as_ref().unwrap().is_empty());
+        assert_eq!(m.resume().unwrap(), ExecutionResult::NoValue);
+    }
+
+    #[test]
+    fn three_arguments_preserve_written_acquisition_and_parameter_cleanup() {
+        let e = artifact("fn take(a:Leaf,b:Leaf,c:Leaf){}fn demo(){take(acquire(),acquire(),acquire());}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        m.resume().unwrap();
+        assert_eq!(completed(&m), vec![2,1,0]);
+        let acquisitions: Vec<_> = m.resources.as_ref().unwrap().events.iter().filter_map(|e| if let Event::Acquire(id) = e { Some(*id) } else { None }).collect();
+        assert_eq!(acquisitions, vec![0,1,2]);
+        assert!(!m.temporaries.as_ref().unwrap().events.iter().any(|e| matches!(e, TemporaryEvent::Cleanup(_))));
+        super::conservation_tests::conserved(&m);
+    }
+
+    #[test]
+    fn nested_pass_through_keeps_one_leaf_through_return_and_outer_entry() {
+        let e = artifact("fn pass(x:Leaf)->Leaf{return x;}fn take(x:Leaf){}fn demo(){take(pass(acquire()));}");
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        while let Some(task) = m.tasks.pop() {
+            m.step(task).unwrap();
+            super::conservation_tests::conserved(&m);
+        }
+        assert_eq!(completed(&m), vec![0]);
+        assert_eq!(m.resources.as_ref().unwrap().events.iter().filter(|e| matches!(e, Event::Acquire(_))).count(), 1);
+        assert_eq!(m.temporaries.as_ref().unwrap().events.iter().filter(|e| matches!(e, TemporaryEvent::Transfer(_, _))).count(), 3);
+        assert_eq!(m.resume().unwrap(), ExecutionResult::NoValue);
+    }
+}
 #[derive(Default)]
 pub(super) struct State {
     pub(super) events: Vec<Event>,
@@ -39,6 +96,8 @@ struct Pending {
     record: hir::RecordId,
     initialized: Vec<(hir::FieldId, Value)>,
     complete: bool,
+    temporary_site: Option<(u64, crate::mir::temporaries::SiteId)>,
+    child_activation: Option<u64>,
 }
 struct ResourceFrame {
     id: u64,
@@ -443,7 +502,7 @@ impl<'a> Machine<'a> {
         self.resources.as_mut().unwrap().work.push(value);
         Ok(())
     }
-    fn release_value(&mut self, value: Value) -> Result<(), ExecutionError> {
+    pub(super) fn release_value(&mut self, value: Value) -> Result<(), ExecutionError> {
         self.queue_cleanup(value)?;
         while let Some(value) = self.resources.as_mut().unwrap().work.pop() {
             self.resources.as_mut().unwrap().current = Some(value);
@@ -664,6 +723,8 @@ impl<'a> Machine<'a> {
             record,
             initialized: Vec::new(),
             complete: false,
+            temporary_site: self.site,
+            child_activation: None,
         });
         self.task(
             frame,
@@ -715,7 +776,17 @@ impl<'a> Machine<'a> {
                 Some(field.span),
                 Action::PendingField(id, field.field),
             )?;
-            self.eval(frame, &field.value, depth + 1)?;
+            let parent_site = self.resources.as_ref().unwrap().pending[p].temporary_site;
+            let child_site = self.temporary_child(parent_site, index)?;
+            let child_site = if let Some((parent, site)) = child_site {
+                let function = self.frames[self.frame_index(frame)?].function;
+                let region = self.executable.function(function)?.temporaries.as_ref().unwrap().sites[site.0].region;
+                let child = self.temporary_begin(frame, function, region)?;
+                self.resources.as_mut().unwrap().pending[p].child_activation = Some(child);
+                let _parent = parent;
+                Some((child, site))
+            } else { None };
+            self.eval_at(frame, &field.value, depth + 1, child_site)?;
         } else {
             let pending = &self.resources.as_ref().unwrap().pending[p];
             let declaration = self.executable.program.record(pending.record);
@@ -765,7 +836,8 @@ impl<'a> Machine<'a> {
         {
             return Err(self.integrity("pending field membership or duplicate initialization"));
         }
-        let value = self.pop()?;
+        let record = self.resources.as_ref().unwrap().pending[p].record;
+        let value = self.pop_to(Some(crate::mir::temporaries::Destination::Pending(record, field)))?;
         if self.resources.as_ref().unwrap().detached.is_some() {
             return Err(self.integrity("detached construction payload already occupied"));
         }
@@ -789,6 +861,11 @@ impl<'a> Machine<'a> {
         self.resources.as_mut().unwrap().pending[p]
             .initialized
             .push((field, value));
+        if let Some(child) = self.resources.as_ref().unwrap().pending[p].child_activation {
+            self.temporary_retire(child)?;
+            self.temporary_end(child)?;
+            self.resources.as_mut().unwrap().pending[p].child_activation = None;
+        }
         Ok(())
     }
     fn pending_abort(&mut self) -> Result<(), ExecutionError> {
@@ -1490,7 +1567,7 @@ mod bounds_and_artifact_tests {
         let mut m = start(&e, ExecutionLimits::default());
         m.resume().unwrap();
         let steps = m.steps;
-        assert_eq!(steps, 11);
+        assert_eq!(steps, 16);
         assert_eq!(
             execute(
                 &e,
@@ -1608,7 +1685,11 @@ mod bounds_and_artifact_tests {
     #[test]
     fn undefined_resource_argument_temporary_is_rejected() {
         let p = hir::resources::fixture_with("fn demo(){release(acquire());}");
-        assert!(super::super::super::prepare_synthetic(p, AdmissionLimits::default()).is_err());
+        let e = super::super::super::prepare_synthetic(p, AdmissionLimits::default()).unwrap();
+        let mut m = start(&e, ExecutionLimits::default());
+        m.resume().unwrap();
+        assert_eq!(completes(&m), vec![0]);
+        super::conservation_tests::conserved(&m);
     }
     #[test]
     fn unused_resource_catalog_preserves_resource_free_fuel_and_storage() {
@@ -1922,6 +2003,9 @@ mod conservation_tests {
                 leaves(v, &mut owned);
             }
         }
+        if let Some(temporaries) = &m.temporaries {
+            temporaries.visit_values(|v| leaves(v, &mut owned));
+        }
         owned.extend(completed);
         owned.sort_unstable();
         acquired.sort_unstable();
@@ -1943,13 +2027,8 @@ mod conservation_tests {
             let task = m.tasks.pop().unwrap();
             if matches!(
                 &task.action,
-                Action::Eval(
-                    hir::TypedExpr {
-                        kind: ExprKind::Local(_),
-                        ..
-                    },
-                    _
-                )
+                Action::Eval(hir::TypedExpr { kind: ExprKind::Local(_), .. }, _)
+                    | Action::SiteEval(hir::TypedExpr { kind: ExprKind::Local(_), .. }, _, _, _)
             ) {
                 assert_eq!(m.values.len(), 1);
                 assert_eq!(m.values.capacity(), 1);
@@ -2520,7 +2599,13 @@ mod replacement_authority_tests {
         let p = hir::resources::fixture_with(
             "fn pass(x:Leaf)->Leaf{return x;}fn demo(){let mut a=acquire();a=pass(acquire());}",
         );
-        assert!(super::super::super::prepare_synthetic(p, AdmissionLimits::default()).is_err());
+        let e = super::super::super::prepare_synthetic(p, AdmissionLimits::default()).unwrap();
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        m.resume().unwrap();
+        let completed: Vec<_> = m.resources.as_ref().unwrap().events.iter().filter_map(|e| if let Event::Complete(id) = e { Some(*id) } else { None }).collect();
+        assert_eq!(completed, vec![0, 1]);
+        super::conservation_tests::conserved(&m);
         artifact().validate().unwrap();
     }
 }

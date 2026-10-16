@@ -7,6 +7,9 @@
     "lib.rs::mir::temporaries::tests::unused_catalog_does_not_create_resource_free_regions",
     "lib.rs::execution::temporary_authority_tests::each_independent_temporary_authority_mutation_is_rejected",
     "lib.rs::execution::temporary_authority_tests::initializer_points_begin_once_and_complete_only_on_selected_leaf",
-    "lib.rs::execution::temporary_authority_tests::source_evaluation_ordinals_include_resource_free_predecessors"
+    "lib.rs::execution::temporary_authority_tests::source_evaluation_ordinals_include_resource_free_predecessors",
+    "lib.rs::execution::machine::cleanup::expression_temporary_tests::direct_argument_transfers_to_callee_without_caller_cleanup",
+    "lib.rs::execution::machine::cleanup::expression_temporary_tests::three_arguments_preserve_written_acquisition_and_parameter_cleanup",
+    "lib.rs::execution::machine::cleanup::expression_temporary_tests::nested_pass_through_keeps_one_leaf_through_return_and_outer_entry"
   ]
 }

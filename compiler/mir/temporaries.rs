@@ -440,9 +440,9 @@ mod tests {
     #[test]
     fn nested_call_is_not_an_extra_caller_region() {
         let p = hir::resources::fixture_with("fn pass(a:Leaf)->Leaf{return a;}fn take(a:Leaf){}fn demo(){let a=acquire();take(pass(a));}");
-        // Metadata can describe this frozen form before runtime admission opens.
-        // The existing full publication gate must still reject it in this layer.
-        assert!(p.validate_record_expressions().is_err());
+        // The frozen owned-argument boundary now admits this original witness.
+        p.validate_record_expressions().unwrap();
+        crate::ownership::check(&p).unwrap();
         p.validate_record_expressions_without_resources().unwrap();
         let body = &p.functions.last().unwrap().as_ordinary().unwrap().body;
         let f = Flow::lower(&p, body, &p.resources.plans(&p).unwrap())

@@ -207,7 +207,7 @@ impl Catalog {
                 }
                 ExprKind::Call { arguments, .. } => {
                     for a in arguments {
-                        expression(a, plans, false)?;
+                        expression(a, plans, true)?;
                     }
                 }
                 ExprKind::IfValue {
@@ -240,7 +240,7 @@ impl Catalog {
                     ValueStatement::Return { value, .. } => expression(value, plans, true)?,
                     ValueStatement::CallNoValue { arguments, .. } => {
                         for a in arguments {
-                            expression(a, plans, false)?;
+                            expression(a, plans, true)?;
                         }
                     }
                     ValueStatement::Assign { value, .. } => {
