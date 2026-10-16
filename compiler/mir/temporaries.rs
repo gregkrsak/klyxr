@@ -29,6 +29,11 @@ pub(crate) enum Destination {
 pub(crate) struct Region {
     pub(crate) id: RegionId,
     pub(crate) parent: Option<RegionId>,
+    pub(crate) evaluation: Option<usize>,
+    pub(crate) retirement: Origin,
+    pub(crate) publication: Origin,
+    pub(crate) protect_result: bool,
+    pub(crate) retire_before_publication: bool,
     pub(crate) destination: Destination,
     pub(crate) origin: Origin,
     pub(crate) roots: Vec<SiteId>,
@@ -42,11 +47,25 @@ pub(crate) struct Site {
     pub(crate) plan: Option<RecordId>,
     pub(crate) destination: Destination,
     pub(crate) origin: Origin,
+    pub(crate) transfer: Origin,
+    pub(crate) cleanup: Origin,
     pub(crate) children: Vec<SiteId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Point {
+    pub(crate) block: BasicBlockId,
+    pub(crate) statement: usize,
+    pub(crate) region: RegionId,
+    pub(crate) site: Option<SiteId>,
+    pub(crate) begin: bool,
+    pub(crate) complete: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Flow {
+    pub(crate) evaluations: usize,
+    pub(crate) points: Vec<Point>,
     pub(crate) regions: Vec<Region>,
     pub(crate) sites: Vec<Site>,
 }
@@ -62,6 +81,10 @@ impl Flow {
         }
         let mut flow = Self::default();
         flow.body(p, body, plans)?;
+        // At most one MIR point per retained expression site: initializer
+        // conditions and leaves replace, rather than duplicate, the root.
+        flow.points.try_reserve_exact(flow.sites.len())
+            .map_err(|_| PlanError::Host("temporary point allocation"))?;
         Ok((!flow.regions.is_empty()).then_some(flow))
     }
 
@@ -102,6 +125,11 @@ impl Flow {
         self.regions.push(Region {
             id,
             parent,
+            evaluation: None,
+            retirement: Origin { span, kind: OriginKind::TemporaryRetirement },
+            publication: Origin { span, kind: OriginKind::DestinationPublication },
+            protect_result: !matches!(destination, Destination::NoValue(_) | Destination::Pending(_, _)),
+            retire_before_publication: !matches!(destination, Destination::Pending(_, _)),
             destination,
             origin: Origin {
                 span,
@@ -138,6 +166,8 @@ impl Flow {
                 span: e.span,
                 kind: OriginKind::TemporaryCreation,
             },
+            transfer: Origin { span: e.span, kind: OriginKind::TemporaryTransfer },
+            cleanup: Origin { span: e.span, kind: OriginKind::TemporaryCleanup },
             children: Vec::new(),
         });
         let mut children = Vec::new();
@@ -216,10 +246,13 @@ impl Flow {
         span: Span,
         plans: &[Option<hir::resources::CleanupPlan>],
     ) -> Result<(), PlanError> {
+        let evaluation = self.evaluations;
+        self.evaluations += 1;
         if !values.iter().any(|e| Self::bearing(e, plans)) {
             return Ok(());
         }
         let region = self.region(None, destination, span)?;
+        self.regions[region.0].evaluation = Some(evaluation);
         for e in values {
             let root = self.expression(p, e, region, destination, plans)?;
             self.root(region, root)?;
@@ -307,8 +340,11 @@ impl Flow {
                     arguments,
                     span,
                 } => {
+                    let evaluation = self.evaluations;
+                    self.evaluations += 1;
                     if arguments.iter().any(|e| Self::bearing(e, plans)) {
                         let r = self.region(None, Destination::NoValue(*function), *span)?;
+                        self.regions[r.0].evaluation = Some(evaluation);
                         let f = p
                             .function(*function)
                             .as_ordinary()

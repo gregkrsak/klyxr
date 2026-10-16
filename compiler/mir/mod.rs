@@ -252,7 +252,7 @@ impl MirProgram {
 pub fn lower(program: &hir::Program) -> MirProgram {
     // Public source HIR cannot contain the private trusted catalog. Synthetic
     // preparation uses the fallible lower_with_origins entry below.
-    lower_internal(program, true, &[]).0
+    lower_internal(program, true, &[], Vec::new()).0
 }
 
 /// Produced by the same lowering, never reconstructed by the runtime.
@@ -260,6 +260,10 @@ pub fn lower(program: &hir::Program) -> MirProgram {
 pub enum OriginKind {
     TemporaryRegion,
     TemporaryCreation,
+    TemporaryTransfer,
+    TemporaryCleanup,
+    TemporaryRetirement,
+    DestinationPublication,
     ScopeEntry,
     OwnerInitialization,
     Replacement,
@@ -283,21 +287,18 @@ pub(crate) fn lower_with_origins(
     } else {
         program.resources.plans(program)?
     };
-    let (mut mir, origins) = lower_internal(program, false, &plans);
-    for function in &mut mir.functions {
-        let body = &program
-            .function(function.function)
-            .as_ordinary()
-            .unwrap()
-            .body;
-        function.temporaries = temporaries::Flow::lower(program, body, &plans)?;
+    let mut flows = Vec::new();
+    for function in program.functions().iter().filter_map(|f| f.as_ordinary()).filter(|_| plans.iter().any(Option::is_some)) {
+        flows.try_reserve_exact(1).map_err(|_| hir::resources::PlanError::Host("temporary function allocation"))?;
+        flows.push(temporaries::Flow::lower(program, &function.body, &plans)?);
     }
-    Ok((mir, origins))
+    Ok(lower_internal(program, false, &plans, flows))
 }
 fn lower_internal(
     program: &hir::Program,
     legacy_assert: bool,
     plans: &[Option<hir::resources::CleanupPlan>],
+    flows: Vec<Option<temporaries::Flow>>,
 ) -> (MirProgram, Vec<Vec<Origin>>) {
     fn replacements(body: &[ValueStatement]) -> bool {
         body.iter().any(|s| match s {
@@ -311,6 +312,7 @@ fn lower_internal(
             _ => false,
         })
     }
+    let mut flows = flows.into_iter();
     let pairs: Vec<_> = program
         .functions()
         .iter()
@@ -322,7 +324,7 @@ fn lower_internal(
             let protected_return=f.return_type.is_some_and(bearing);
             let record_locals = if replacements(&f.body) { program.locals.iter().filter(|l| l.function == f.id && matches!(l.ty, hir::ValueType::Record(_))).map(|l| l.id).collect() } else { resource_locals.clone() };
             let cleanup=(!resource_locals.is_empty() || !parameters.is_empty() || protected_return || replacements(&f.body)).then_some(cleanup::Flow {parameters,protected_return,..cleanup::Flow::default()});
-            let mut builder = Builder {blocks:Vec::new(),loop_targets:Vec::new(),origins:Vec::new(),cleanup,resource_locals,record_locals,active_scopes:Vec::new()};
+            let mut builder = Builder {temporaries: flows.next().flatten(), next_evaluation: 0, blocks:Vec::new(),loop_targets:Vec::new(),origins:Vec::new(),cleanup,resource_locals,record_locals,active_scopes:Vec::new()};
             let entry = builder.reserve();
             if let Some((tail, statements)) = builder.body(entry, &f.body, f.span) {
                 assert!(
@@ -340,7 +342,7 @@ fn lower_internal(
                 );
             }
             let function = MirFunction {
-                temporaries: None,
+                temporaries: builder.temporaries,
                 cleanup: builder.cleanup,
                 function: f.id,
                 entry,
@@ -382,7 +384,16 @@ fn value_statement_span(statement: &ValueStatement) -> Span {
         | ValueStatement::While { span, .. } => *span,
     }
 }
+#[derive(Clone, Copy)]
+struct InitializerDestination {
+    local: LocalId,
+    span: Span,
+    join: BasicBlockId,
+}
+
 struct Builder {
+    temporaries: Option<temporaries::Flow>,
+    next_evaluation: usize,
     blocks: Vec<Option<BasicBlock>>,
     loop_targets: Vec<(BasicBlockId, BasicBlockId, usize)>,
     cleanup: Option<cleanup::Flow>,
@@ -392,6 +403,21 @@ struct Builder {
     origins: Vec<Option<Origin>>,
 }
 impl Builder {
+    fn temporary_region(&mut self, statement: &ValueStatement) -> Option<temporaries::RegionId> {
+        if matches!(statement, ValueStatement::ReturnNoValue { .. } | ValueStatement::Break { .. } | ValueStatement::Continue { .. }) {
+            return None;
+        }
+        let evaluation = self.next_evaluation;
+        self.next_evaluation += 1;
+        self.temporaries.as_ref()?.regions.iter()
+            .find(|r| r.evaluation == Some(evaluation)).map(|r| r.id)
+    }
+    fn temporary_point(&mut self, block: BasicBlockId, statement: usize, region: Option<temporaries::RegionId>, site: Option<temporaries::SiteId>, begin: bool, complete: bool) {
+        if let (Some(flow), Some(region)) = (&mut self.temporaries, region) {
+            assert!(flow.points.len() < flow.points.capacity(), "reserved source points");
+            flow.points.push(temporaries::Point { block, statement, region, site, begin, complete });
+        }
+    }
     fn reserve(&mut self) -> BasicBlockId {
         let id = BasicBlockId(self.blocks.len());
         self.blocks.push(None);
@@ -421,11 +447,12 @@ impl Builder {
         &mut self,
         current: BasicBlockId,
         mut statements: Vec<Statement>,
-        local: LocalId,
         value: &TypedExpr,
-        span: Span,
-        join: BasicBlockId,
+        target: InitializerDestination,
+        region_site: Option<(temporaries::RegionId, temporaries::SiteId)>,
+        begin: bool,
     ) {
+        let InitializerDestination { local, span, join } = target;
         let origin = Origin {
             span,
             kind: OriginKind::Initializer,
@@ -438,6 +465,11 @@ impl Builder {
         {
             let then_target = self.reserve();
             let else_target = self.reserve();
+            let child = |index| region_site.map(|(r, s)| (r, self.temporaries.as_ref().unwrap().sites[s.0].children[index]));
+            let condition_site = child(0);
+            let then_site = child(1);
+            let else_site = child(2);
+            self.temporary_point(current, statements.len(), region_site.map(|p| p.0), condition_site.map(|p| p.1), begin, false);
             self.finish(
                 current,
                 statements,
@@ -448,9 +480,10 @@ impl Builder {
                 },
                 origin,
             );
-            self.initialize(then_target, Vec::new(), local, then_value, span, join);
-            self.initialize(else_target, Vec::new(), local, else_value, span, join);
+            self.initialize(then_target, Vec::new(), then_value, target, then_site, false);
+            self.initialize(else_target, Vec::new(), else_value, target, else_site, false);
         } else {
+            self.temporary_point(current, statements.len(), region_site.map(|p| p.0), region_site.map(|p| p.1), begin, true);
             self.initialization(current, statements.len(), local, span);
             statements.push(Statement::Let {
                 local,
@@ -570,6 +603,11 @@ impl Builder {
                 span,
                 kind: OriginKind::Statement,
             };
+            let region = self.temporary_region(statement);
+            let root = region.and_then(|r| self.temporaries.as_ref().unwrap().regions[r.0].roots.first().copied());
+            if !matches!(statement, ValueStatement::Let { initializer: TypedExpr { kind: hir::ExprKind::IfValue { .. }, .. }, .. } | ValueStatement::If { .. } | ValueStatement::While { .. }) {
+                self.temporary_point(current, statements.len(), region, if matches!(statement, ValueStatement::CallNoValue { .. }) { None } else { root }, true, true);
+            }
             match statement {
                 ValueStatement::ReturnNoValue { .. } => {
                     self.exiting(current, 0, span);
@@ -611,10 +649,10 @@ impl Builder {
                         self.initialize(
                             current,
                             std::mem::take(&mut statements),
-                            *local,
                             initializer,
-                            *span,
-                            join,
+                            InitializerDestination { local: *local, span: *span, join },
+                            region.zip(root),
+                            true,
                         );
                         current = join;
                     } else {
@@ -721,6 +759,7 @@ impl Builder {
                         Terminator::Goto { target: header },
                         origin,
                     );
+                    self.temporary_point(header, 0, region, root, true, true);
                     self.finish(
                         header,
                         Vec::new(),
@@ -752,6 +791,7 @@ impl Builder {
                         span,
                         kind: OriginKind::If,
                     };
+                    self.temporary_point(current, statements.len(), region, root, true, true);
                     let then_target = self.reserve();
                     let else_target = if else_body.is_empty() {
                         None

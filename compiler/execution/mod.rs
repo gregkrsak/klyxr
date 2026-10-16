@@ -551,3 +551,77 @@ fn prepare_synthetic(
     }
     seal(program, limits)
 }
+
+#[cfg(test)]
+mod temporary_authority_tests {
+    use super::*;
+    use crate::mir::temporaries::{Destination, RegionId, SiteId};
+
+    fn artifact() -> CheckedExecutable {
+        prepare_synthetic(hir::resources::fixture_with("fn take(a:Leaf,b:Leaf){}fn demo(){let a=acquire();let b=acquire();take(a,b);}"), AdmissionLimits::default()).unwrap()
+    }
+
+    #[test]
+    fn each_independent_temporary_authority_mutation_is_rejected() {
+        for fault in 0..26 {
+            let mut e = artifact();
+            let f = e.mir.test_functions_mut().last_mut().unwrap();
+            if fault == 0 {
+                f.temporaries = None;
+            } else {
+                let flow = f.temporaries.as_mut().unwrap();
+                match fault {
+                    1 => flow.regions[0].roots.clear(),
+                    2 => { let root = flow.regions[0].roots[0]; flow.regions[0].roots.push(root); },
+                    3 => flow.sites[0].id = SiteId(usize::MAX),
+                    4 => flow.sites[0].plan = Some(hir::RecordId(999)),
+                    5 => flow.sites[0].destination = Destination::Parameter(hir::ParameterId(999)),
+                    6 => flow.regions[0].parent = Some(RegionId(0)),
+                    7 => flow.regions[0].origin.kind = mir::OriginKind::FunctionBoundary,
+                    8 => flow.sites[0].transfer.kind = mir::OriginKind::Statement,
+                    9 => flow.sites[0].cleanup.kind = mir::OriginKind::Statement,
+                    10 => flow.regions.last_mut().unwrap().roots.swap(0, 1),
+                    11 => { flow.points.remove(0); },
+                    12 => flow.points.push(flow.points[0].clone()),
+                    13 => flow.points[0].block = mir::BasicBlockId(usize::MAX),
+                    14 => flow.points[0].statement = usize::MAX,
+                    15 => flow.points[0].begin = false,
+                    16 => flow.points[0].complete = false,
+                    17 => flow.regions[0].protect_result = false,
+                    18 => flow.regions[0].retire_before_publication = false,
+                    19 => flow.regions[0].destination = Destination::Return,
+                    20 => flow.sites.push(flow.sites[0].clone()),
+                    21 => flow.regions.push(flow.regions[0].clone()),
+                    22 => flow.sites[0].children.push(SiteId(0)),
+                    23 => flow.regions[0].evaluation = Some(1),
+                    24 => flow.sites[0].origin.span.line = 0,
+                    25 => flow.sites[0].plan = None,
+                    _ => unreachable!(),
+                }
+            }
+            assert!(matches!(e.validate().unwrap_err().kind, ErrorKind::Integrity(_)), "fault {fault}");
+        }
+    }
+
+    #[test]
+    fn initializer_points_begin_once_and_complete_only_on_selected_leaf() {
+        let e = prepare_synthetic(hir::resources::fixture_with("fn demo(){let a=acquire();let chosen=if true{a}else{acquire()};}"), AdmissionLimits::default()).unwrap();
+        let flow = e.mir.functions().last().unwrap().temporaries.as_ref().unwrap();
+        let points: Vec<_> = flow.points.iter().filter(|p| p.region == RegionId(1)).collect();
+        assert_eq!(points.len(), 3);
+        assert_eq!(points.iter().filter(|p| p.begin).count(), 1);
+        assert_eq!(points.iter().filter(|p| p.complete).count(), 2);
+        assert!(points[0].begin && !points[0].complete);
+        assert!(points[1..].iter().all(|p| !p.begin && p.complete));
+        assert_ne!(points[0].block, points[1].block);
+    }
+
+    #[test]
+    fn source_evaluation_ordinals_include_resource_free_predecessors() {
+        let e = prepare_synthetic(hir::resources::fixture_with("fn demo(){let flag=true;let a=acquire();let unused=false;release(a);}"), AdmissionLimits::default()).unwrap();
+        let f = e.mir.functions().last().unwrap();
+        let flow = f.temporaries.as_ref().unwrap();
+        assert_eq!(flow.regions.iter().map(|r| r.evaluation).collect::<Vec<_>>(), vec![Some(1), Some(3)]);
+        assert_eq!(flow.points.iter().map(|p| p.statement).collect::<Vec<_>>(), vec![1,3]);
+    }
+}

@@ -62,3 +62,25 @@ language expectation or claim runtime support. Docs
 https://github.com/gregkrsak/klyxr/actions/runs/38847302430 and verify
 https://github.com/gregkrsak/klyxr/actions/runs/38847302405 passed. No later layer
 started. Metadata repair validation pending.
+
+Milestone 1 completed at `07c68f34ae78465313b5abbae1e50b2e391b761b`, tree
+`473d4144adcd14dc38de9b64eb844eb499b00064`. All four push workflows passed:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38847430093),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38847430100),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38847430222),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38847430132).
+Complete debug and release each reconciled 1,706 predecessors plus four new
+identities = 1,710 passed. Both affine checks and authority doctests passed.
+
+## Milestone 2 — MIR execution-point authority
+
+Canonical source evaluation ordinals bind regions to MIR statement/terminator
+points during the existing structured lowering. Neither spelling, span equality,
+nor block numbering supplies region identity. Conditional-initializer conditions
+and leaves use their original site-tree identities across generated blocks.
+Only the initial point begins the region; selected value leaves complete it.
+Field-child sites remain explicit. Creation, transfer, cleanup, retirement and
+publication retain distinct origins and destination-specific protection policy.
+Point storage is reserved fallibly before lowering and never grows during it.
+Bounded shape validation precedes opaque exact correspondence. Runtime admission
+remains closed pending the next layer. Validation pending.

@@ -4,6 +4,9 @@
     "lib.rs::mir::temporaries::tests::conditional_initializer_keeps_one_source_region_across_cfg",
     "lib.rs::mir::temporaries::tests::call_sites_bind_exact_parameter_destinations_in_written_order",
     "lib.rs::mir::temporaries::tests::nested_call_is_not_an_extra_caller_region",
-    "lib.rs::mir::temporaries::tests::unused_catalog_does_not_create_resource_free_regions"
+    "lib.rs::mir::temporaries::tests::unused_catalog_does_not_create_resource_free_regions",
+    "lib.rs::execution::temporary_authority_tests::each_independent_temporary_authority_mutation_is_rejected",
+    "lib.rs::execution::temporary_authority_tests::initializer_points_begin_once_and_complete_only_on_selected_leaf",
+    "lib.rs::execution::temporary_authority_tests::source_evaluation_ordinals_include_resource_free_predecessors"
   ]
 }
