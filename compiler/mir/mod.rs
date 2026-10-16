@@ -284,7 +284,9 @@ impl MirProgram {
 pub fn lower(program: &hir::Program) -> MirProgram {
     // Public source HIR cannot contain the private trusted catalog. Synthetic
     // preparation uses the fallible lower_with_origins entry below.
-    lower_internal(program, true, &[], Vec::new()).expect("MIR metadata allocation failed").0
+    lower_internal(program, true, &[], Vec::new())
+        .expect("MIR metadata allocation failed")
+        .0
 }
 
 /// Attach only the successful checker's immutable cleanup realization evidence.
@@ -375,7 +377,7 @@ fn lower_internal(
     legacy_assert: bool,
     plans: &[Option<hir::resources::CleanupPlan>],
     flows: Vec<Option<temporaries::Flow>>,
-) -> Result<(MirProgram, Vec<Vec<Origin>>),hir::resources::PlanError> {
+) -> Result<(MirProgram, Vec<Vec<Origin>>), hir::resources::PlanError> {
     fn replacements(body: &[ValueStatement]) -> bool {
         body.iter().any(|s| match s {
             ValueStatement::Assign { value, .. } => matches!(value.ty, hir::ExprType::Record(_)),

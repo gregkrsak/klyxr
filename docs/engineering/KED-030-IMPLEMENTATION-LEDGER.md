@@ -407,3 +407,15 @@ now also audits fixture adaptation identities, explicit primitive-domain invento
 and the absence of predecessor contract corrections.
 
 These controls are authored and await this milestone's authoritative CI gate.
+
+Milestone 8 first push `f3ec1a0ae08030ed69591fe8c01dab03ca41b109`, tree
+`6a5800f177bc1ae1a0d6a672d63a34048860de34`, passed all-target compilation
+and [docs](https://github.com/gregkrsak/klyxr/actions/runs/38974811538).
+[Build](https://github.com/gregkrsak/klyxr/actions/runs/38974811932) failed
+formatting. [Tests](https://github.com/gregkrsak/klyxr/actions/runs/38974811829)
+found one new fixture descriptor mismatch: the predecessor fixture helper changes
+Pair's first/last fields to resource-bearing Leaf, while this new control intends
+an inert Pair. Its original scalar field descriptors are restored explicitly;
+the Leaf catalog, empty summary and real cleanup assertions remain unchanged.
+The reviewed formatting diff is applied. The debug failure skipped release;
+no later layer was started on this gate.

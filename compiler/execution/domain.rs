@@ -259,8 +259,8 @@ impl Abort {
             })?;
         let mut effects = crate::effects::EffectSet::EMPTY;
         let mut failure = None;
-        let mut before_site=None;
-        let mut before_origin=None;
+        let mut before_site = None;
+        let mut before_origin = None;
         for child in &site.children {
             let child = flow.sites.get(child.0).ok_or_else(invalid)?;
             let Destination::Pending(parent, field) = child.destination else {
@@ -270,8 +270,8 @@ impl Abort {
                 return Err(invalid());
             }
             if field == request.before {
-                before_site=Some(child.id);
-                before_origin=Some(child.origin);
+                before_site = Some(child.id);
+                before_origin = Some(child.origin);
                 failure = Some(
                     flow.regions
                         .get(child.region.0)
@@ -319,8 +319,8 @@ impl Abort {
             effects,
             origin: site.origin,
             failure,
-            before_site:before_site.ok_or_else(invalid)?,
-            before_origin:before_origin.ok_or_else(invalid)?,
+            before_site: before_site.ok_or_else(invalid)?,
+            before_origin: before_origin.ok_or_else(invalid)?,
         })
     }
 }

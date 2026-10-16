@@ -1064,7 +1064,7 @@ impl<'a> Machine<'a> {
         }
         // Validate every container before the first attempted release. This loop
         // is bounded by the sealed scenario; no ownership or effect inference.
-        for (ordinal,(template, pending)) in templates.iter().zip(pending).enumerate() {
+        for (ordinal, (template, pending)) in templates.iter().zip(pending).enumerate() {
             let request = template.request;
             let actual = self
                 .frames
@@ -1094,11 +1094,17 @@ impl<'a> Machine<'a> {
             {
                 return Err(self.integrity("private abort exact origin binding"));
             }
-            if ordinal+1==templates.len() {
-                if pending.child_activation.is_some(){return Err(self.integrity("private abort trigger has an active field"));}
+            if ordinal + 1 == templates.len() {
+                if pending.child_activation.is_some() {
+                    return Err(self.integrity("private abort trigger has an active field"));
+                }
             } else {
-                let child=pending.child_activation.ok_or_else(||self.integrity("private abort ancestor has no in-progress field"))?;
-                if self.temporary_site_origin(child,template.before_site,pending.frame)?!=template.before_origin {
+                let child = pending.child_activation.ok_or_else(|| {
+                    self.integrity("private abort ancestor has no in-progress field")
+                })?;
+                if self.temporary_site_origin(child, template.before_site, pending.frame)?
+                    != template.before_origin
+                {
                     return Err(self.integrity("private abort in-progress field binding"));
                 }
             }

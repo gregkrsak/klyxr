@@ -233,15 +233,49 @@ fn unsafe_membership_cannot_authorize_reusing_a_moved_owner() {
 
 #[test]
 fn effect_diagnostic_admission_and_rendering_have_exact_limits() {
-    let source="fn leaf() effects unsafe,io {} fn caller(){leaf();}";
-    let prepare=|bytes|execution::prepare_execution(source,AdmissionLimits{diagnostic_storage:bytes,..AdmissionLimits::default()});
-    let(mut low,mut high)=(1,AdmissionLimits::default().diagnostic_storage);
-    assert!(matches!(prepare(high).err().unwrap().kind,execution::ErrorKind::Frontend{phase:"effects",..}));
-    while low<high {let middle=low+(high-low)/2;match prepare(middle).err().unwrap().kind{execution::ErrorKind::ConfiguredLimit(_)=>low=middle+1,execution::ErrorKind::Frontend{phase:"effects",..}=>high=middle,other=>panic!("{other:?}")}}
-    let error=prepare(low).err().unwrap();
-    assert!(matches!(prepare(low-1).err().unwrap().kind,execution::ErrorKind::ConfiguredLimit(_)));
-    let rendered=execution::render_admission_error(&error,65536).unwrap();
+    let source = "fn leaf() effects unsafe,io {} fn caller(){leaf();}";
+    let prepare = |bytes| {
+        execution::prepare_execution(
+            source,
+            AdmissionLimits {
+                diagnostic_storage: bytes,
+                ..AdmissionLimits::default()
+            },
+        )
+    };
+    let (mut low, mut high) = (1, AdmissionLimits::default().diagnostic_storage);
+    assert!(matches!(
+        prepare(high).err().unwrap().kind,
+        execution::ErrorKind::Frontend {
+            phase: "effects",
+            ..
+        }
+    ));
+    while low < high {
+        let middle = low + (high - low) / 2;
+        match prepare(middle).err().unwrap().kind {
+            execution::ErrorKind::ConfiguredLimit(_) => low = middle + 1,
+            execution::ErrorKind::Frontend {
+                phase: "effects", ..
+            } => high = middle,
+            other => panic!("{other:?}"),
+        }
+    }
+    let error = prepare(low).err().unwrap();
+    assert!(matches!(
+        prepare(low - 1).err().unwrap().kind,
+        execution::ErrorKind::ConfiguredLimit(_)
+    ));
+    let rendered = execution::render_admission_error(&error, 65536).unwrap();
     assert!(rendered.contains("io"));
-    assert_eq!(execution::render_admission_error(&error,rendered.len()).unwrap(),rendered);
-    assert_eq!(execution::render_admission_error(&error,rendered.len()-1).unwrap_err().kind,execution::ErrorKind::ConfiguredLimit("rendered output"));
+    assert_eq!(
+        execution::render_admission_error(&error, rendered.len()).unwrap(),
+        rendered
+    );
+    assert_eq!(
+        execution::render_admission_error(&error, rendered.len() - 1)
+            .unwrap_err()
+            .kind,
+        execution::ErrorKind::ConfiguredLimit("rendered output")
+    );
 }
