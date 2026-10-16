@@ -703,7 +703,7 @@ RHS mismatches are Type errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
 This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, KD-033, and KD-034 only for the documented subset.
-General type inference, advanced borrowing/ownership, effects, MIR backend/verification lowering, VIR,
+General type inference, advanced borrowing/ownership, advanced effects beyond KED-030, MIR backend/verification lowering, VIR,
 and broader HIR features remain future work.
 
 ## What the proof establishes
@@ -767,7 +767,7 @@ The prototype does not implement ownership beyond core ordinary moves and
 whole-value acyclic loans, reference returns, explicit lifetimes, reborrowing,
 auto-dereference, non-Copy replacement, field/reference mutation beyond KD-038/KD-040 direct
 Copy-field assignment and Copy-safe whole-value writes, partial borrowing, general replacement, destruction,
-effects, runtime contracts, expressions beyond this subset, general cyclic ownership/loans, quantifiers,
+advanced effects beyond KED-030, runtime contracts, expressions beyond this subset, general cyclic ownership/loans, quantifiers,
 multi-field verified/harness state, record invariants, SMT/VIR or MIR backend/verification lowering, or machine-code generation. In particular,
 `examples/effects.klx` is illustrative and is rejected rather than analyzed.
 A successful prototype result must not be described as establishing those
@@ -1728,3 +1728,60 @@ compilation and executable evidence; local Rust validation was unavailable becau
 of confirmed Work-runtime corruption. Greg accepted and human-merged PR #67 as
 commit `5ce5dc5895efab7ba29a7cbc8e980ce58a7b24ab`, tree
 `e95fb9e69d7554719d86d9662cf22cbf5151b84b`.
+
+## Frozen KED-030 explicit ordinary effects
+
+This branch implements frozen Draft 2 from [Issue #70](https://github.com/gregkrsak/klyxr/issues/70),
+with independent exact-head review and Greg's acceptance pending. It does not change
+KD-008's broader Direction Accepted status. Ordinary Value and NoValue functions
+support the same contextual clause for both keyword spellings:
+
+```klyxr
+function observe() -> bool effects clock, io { return true; }
+fn sample() effects io, clock { let value = observe(); }
+```
+
+The canonical independent identities, in presentation order, are `io`, `heap`,
+`blocking`, `network`, `filesystem`, `clock`, `random`, `unsafe`. Lists contain one
+to eight distinct known names; omitting the clause declares empty. These spellings,
+including `effects`, remain ordinary identifiers outside the clause. Clauses occur
+after the optional return type and before the body. Verified/harness declarations
+remain excluded.
+
+Every structurally reachable ordinary call requires the containing function to
+admit the callee's complete explicit contract, including unused members. Both call
+forms, terminal branches, short-circuit alternatives and loops contribute. Collected
+signatures handle forward/recursive calls without inferred minimum contracts or
+whole-program fixed points. A strict superset is legal and caller-visible.
+
+Fixed trusted descriptors and bound functions have exactly equal contracts. Leaf
+cleanup derives from the complete release contract; aggregate cleanup unions child
+summaries. Existing successful ownership analysis produces eligible cleanup
+witnesses for scope/completion/return/break/continue/iteration and replacement.
+It preserves short-circuit custody alternatives independently of usability. Moving,
+pending/parameter transfer and protected returns defer responsibility; an empty
+summary still requires cleanup. Existing MIR temporary plans reference the same
+canonical record summaries. Opaque approval retains original custody evidence and
+exact HIR/MIR/origin correspondence. Execution does not redo static analysis.
+
+Ordinary terminal stops add no cleanup edge. Test-only approved abort scenarios
+admit complete possible cleanup authority before execution; primitive/protocol
+fixtures are explicitly separate. Release Attempt, Complete, Failure and never-
+attempted suffixes remain distinguishable, with completed prefixes retained and
+resumption refused after failure. `unsafe` bypasses no safety or validation rule.
+
+Run the positive example (conservative declarations, no clock/I/O operation):
+
+```bash
+cargo run --locked --bin klyxr -- check examples/explicit_effects.klx
+cargo run --locked --bin klyxr -- run examples/explicit_effects.klx --function demo
+```
+
+The run returns `Bool(true)`. Both `check` and `verify` report zero proof bodies and
+zero proof calls for these ordinary functions. `examples/explicit_effects_fail.klx`
+rejects the three-function transitive edge missing `io`, including under `run`.
+The older `examples/effects.klx` remains future policy illustration and rejects.
+No production resource/effectful API, policy attribute, effect hierarchy, alias,
+polymorphism, unsafe construct, unwinding or effects-aware proof behavior is added.
+See the [implementation ledger](../docs/engineering/KED-030-IMPLEMENTATION-LEDGER.md)
+for exact GitHub workflow/commit evidence, predecessor identities and corrections.

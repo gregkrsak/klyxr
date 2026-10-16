@@ -432,3 +432,63 @@ renderer returns its fixed truncated diagnostic when the full text does not fit.
 The new test now checks exact full-text neighbors, exact fallback text and its
 sufficient/insufficient neighbors. The renderer and predecessor tests are unchanged;
 release was skipped after the integration failure.
+
+Milestone 8 renderer-expectation correction `4206de4d3114ce1fb6f109e30e0bc4e50b3d6c83`,
+tree `fd198352eae41fd0db57368116287053e8c607ee`, passed
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38975167087),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38975167117),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38975167078), and
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38975167054).
+Every step and relevant log was inspected. Each complete profile passed 1,743
+predecessors plus 46 additions = 1,789 identities, the authority doctest, the
+1,800-case affine check and the 129-identity explicit protocol classification audit.
+
+## Milestone 9 — Documentation, CLI examples and final conformance
+
+Canonical KD-008 remains Direction Accepted for the broader system. The frozen
+first ordinary phase and its implementation are documented without self-accepting
+the implementation or assigning a new KD number. OQ-001 distinguishes settled
+first-phase clauses/contracts from deferred broader syntax and assurance. Context,
+architecture, compiler scope and bounded execution describe declarations, custody,
+opaque approval, private domains, bounds and failure accounting. The generated
+context bundle is rebuilt from its canonical sources.
+
+Two public resource-free examples demonstrate conservative complete declarations
+and a missing three-function transitive upper bound. A new CLI identity executes
+positive/negative check, verify and run paths, preserving zero ordinary proof
+counts and honest assurance reporting. The CLI adds an explicit checked-effects
+line while retaining predecessor success/error behavior and scope assertions.
+All earlier illustrative policy syntax remains unsupported.
+
+The implementation does not add production effectful/resource APIs, hierarchy,
+aliases, policy syntax, polymorphism, unsafe authority, user destructors, unwind,
+rollback/retry or effects-aware verified/harness behavior. Independent exact-head
+review remains Sarah's responsibility; Greg retains acceptance and humans retain
+merge authority. No issue closure, approval, prod write or merge is performed.
+
+### Frozen conformance audit
+
+| Requirement | Executable or retained evidence |
+| --- | --- |
+| Eight atoms, canonical sets/raw rejection | effects unit tests: all 65,536 pairs; wider encodings; declaration mutation controls |
+| Both function kinds/spellings, contextual names, exclusions | tests/effects.rs ordinary grammar and verified/harness controls |
+| Complete call declarations and three-function propagation | all-eight call-form/spelling matrix; recursive diagnostics; new CLI positive/negative examples |
+| Strict supersets, no fabricated events, unsafe audit only | empty/no-op execution; exact resource events with unused network/unsafe; moved-owner rejection |
+| Mechanical operation/release/leaf/aggregate equality | resources unit matrices; canonical cache/plan independent mutations |
+| Every ordinary cleanup boundary | effect_authority_tests all exits, iteration/break/continue and replacement, positive and missing-effect controls |
+| Empty-summary responsibility, inert values and references | effects::empty_cleanup_summary_preserves_owner_but_does_not_own_references_or_inert_moves |
+| Protected return and transfer deferral | both-path/pass-through tests; exact parameter remainder/return identities; canonical-looking protected-owner forgery rejection |
+| Branch/short-circuit custody | successful checker witness tests plus skipped/executed runtime single-release controls |
+| Replacement, temporaries, pending and partial entry | exact generation/argument event order; every-fuel conservation with an observed partially entered parameter frame |
+| Ordinary stops versus approved abort versus primitive | four-way sealed-domain controls; pending traps/limits; refused injection; 129 predecessor protocol classifications |
+| Exact private binding, nested/recursive pending stacks | template/domain/membership/origin matrices; cross-frame completeness; identical sites at distinct recursive frames; in-progress-field negative control |
+| Attempt/Complete/Failure/never attempted | ordinary and approved-abort failure prefixes, unique retained holders, refused resumption |
+| Opaque approval/correspondence | direct-site/custody/cache matrices plus preserved authority doctest and predecessor mutations |
+| Admission/diagnostic/render/work/storage/Host | exact neighbors; bounded truncation; detected direct/witness/private allocation failures with no artifact |
+| Compatibility | exact predecessor inventory, no identity renames or contract corrections; complete debug/release reconciliation and affine/doctest gates |
+
+All milestone-9 changes and the complete branch are awaiting authoritative CI.
+The only local verification claimed is static diff/manifest/context inspection;
+no local Rust executable result is claimed. Final exact head/tree, independent
+PR workflow results and full changed-file list will be recorded on the PR and
+Issue #70 after final branch-push validation.

@@ -174,7 +174,7 @@ for every admissible input of the supported structure, and tracks state between
 literal-argument harness calls. Calls across function kinds are rejected; OQ-019,
 OQ-021 through OQ-026 retain the broader assurance, arithmetic, function,
 Copy/destruction, advanced borrowing, and general mutation questions.
-General cyclic ownership/lifetimes beyond iteration-local moves/borrowing and stable carried access, effects, runtime
+General cyclic ownership/lifetimes beyond iteration-local moves/borrowing and stable carried access, advanced effects beyond frozen KED-030, runtime
 contracts, VIR, MIR backend/verification lowering, SMT integration,
 and machine-code generation remain unimplemented. Read `compiler/README.md`
 before making claims about what the executable establishes.
@@ -302,6 +302,22 @@ A call that attempts to consume `90` from a battery at `80` charge is memory-saf
 That distinction is central to Klyxr.
 
 ### Effects
+
+Frozen KED-030 Draft 2's first phase uses ordinary explicit upper bounds:
+
+```klyxr
+fn observe() -> bool effects clock, io { return true; }
+fn demo() -> bool effects io, clock { return observe(); }
+```
+
+The complete declaration is caller-visible even when its body does not perform an
+effect. Absence means empty. All eight canonical identities are independent;
+`unsafe` adds no safety permission. Derived cleanup contracts enter only where the
+existing successful ownership checker produces eligible custody evidence. A move
+transfers that obligation; ordinary terminal stops add no unwind. This branch's
+implementation awaits independent exact-head review and Greg's acceptance.
+
+The following remains illustrative future policy syntax, outside KED-030:
 
 ```klyxr
 #[deny_effects(heap, blocking)]

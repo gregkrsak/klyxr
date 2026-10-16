@@ -277,3 +277,46 @@ Each complete debug/release profile reconciles all 1,706 predecessor identities 
 correction. There are no identity renames. Both 1,800-case affine checks and the
 compile-fail authority doctest remain required. GitHub Actions is authoritative;
 local Rust validation was unavailable because of confirmed Work-runtime corruption.
+
+## Frozen KED-030 effect authority and bounds
+
+Explicit ordinary declarations are bounded eight-identity upper bounds. Complete
+callee declarations and mechanically derived cleanup summaries are checked during
+preparation. Fixed descriptor/function/release/leaf/aggregate copies must agree.
+Successful ownership analysis produces custody/realization witnesses; exact MIR
+and origin correspondence plus an immutable original witness seal approval.
+Missing, foreign, duplicated, reordered or cross-compilation authority rejects.
+Execution consumes validated metadata without rerunning ownership/effect analysis.
+
+Raw lists, immutable origins, direct sites, derived record summaries and retained
+custody witnesses fit bounded frontend storage/work. Nonempty cleanup reserves an
+additional holder-site/snapshot envelope; its work ceiling is a checked 640*n^4
+plus source bytes. Empty-summary predecessors retain their existing envelope.
+Recursive type plans and summaries have canonical depth/cycle checks; diagnostic
+release ancestry has a fixed 16-visit budget with honest truncation. Diagnostic
+storage and full/fallback rendering have exact sufficient/insufficient controls.
+Detected direct-site, summary, witness or private-metadata allocation failures
+remain typed Host failures and publish no executable.
+
+Only Ordinary is available in production. Private Approved Abort fixtures admit
+the complete possible initialized-member cleanup in every affected pending frame
+before approval. Their bounded templates bind canonical membership/plan, containing
+function, construction/in-progress sites and origins, exact monotonic frame and
+pending identities, and stack depth. Runtime validates the entire stack before
+the first attempted release. Primitive state-injection fixtures are separately
+sealed protocol evidence. The manifest explicitly lists 129 predecessor identities
+in that evidence domain without changing their assertions or outcomes.
+
+Ordinary traps, configured limits, Integrity and Host stops add no cleanup edge or
+unwind. In the fixed release protocol, Attempt survives Failure and is distinct
+from Complete; later never-attempted owners remain held. Acquire denotes successful
+payload acquisition, not failed preparatory tool allocation. Transfer, replacement
+generations, pending fields, incremental parameter entry and protected results
+retain their original payload custody/order. No declaration-driven events or new
+source fuel charges are introduced. `unsafe` bypasses no rule; interpreter memory
+and diagnostic output do not become source `heap` or `io`.
+
+The [KED-030 ledger](engineering/KED-030-IMPLEMENTATION-LEDGER.md) records complete
+debug/release identity reconciliation, all corrections and authoritative GitHub
+workflows. Specification freeze is separate from independent implementation review
+and acceptance. No local Rust executable evidence is claimed.

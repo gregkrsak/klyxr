@@ -1,0 +1,10 @@
+fn leaf() effects clock, io {}
+
+function middle() effects io, clock {
+    leaf();
+}
+
+// Missing io: callers must admit the complete declaration, including unused io.
+fn demo() effects clock {
+    middle();
+}

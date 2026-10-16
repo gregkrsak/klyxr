@@ -122,6 +122,7 @@ fn run() -> Result<(), i32> {
             }
             println!("  ordinary value functions type-checked: {value_functions} (not executed or verified; constrained results are not proven)");
             println!("  ordinary ownership: core Copy/move checking passed; whole-value loans checked; Copy-safe borrowed access checked; destruction is not implemented");
+            println!("  ordinary effects: explicit upper bounds and complete callee contracts checked (not effects-aware verification)");
         }
         println!(
             "  function bodies proven: {} (subtraction safety, field ranges, postconditions)",

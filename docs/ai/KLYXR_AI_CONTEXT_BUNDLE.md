@@ -187,7 +187,7 @@ for every admissible input of the supported structure, and tracks state between
 literal-argument harness calls. Calls across function kinds are rejected; OQ-019,
 OQ-021 through OQ-026 retain the broader assurance, arithmetic, function,
 Copy/destruction, advanced borrowing, and general mutation questions.
-General cyclic ownership/lifetimes beyond iteration-local moves/borrowing and stable carried access, effects, runtime
+General cyclic ownership/lifetimes beyond iteration-local moves/borrowing and stable carried access, advanced effects beyond frozen KED-030, runtime
 contracts, VIR, MIR backend/verification lowering, SMT integration,
 and machine-code generation remain unimplemented. Read `compiler/README.md`
 before making claims about what the executable establishes.
@@ -315,6 +315,22 @@ A call that attempts to consume `90` from a battery at `80` charge is memory-saf
 That distinction is central to Klyxr.
 
 ### Effects
+
+Frozen KED-030 Draft 2's first phase uses ordinary explicit upper bounds:
+
+```klyxr
+fn observe() -> bool effects clock, io { return true; }
+fn demo() -> bool effects io, clock { return observe(); }
+```
+
+The complete declaration is caller-visible even when its body does not perform an
+effect. Absence means empty. All eight canonical identities are independent;
+`unsafe` adds no safety permission. Derived cleanup contracts enter only where the
+existing successful ownership checker produces eligible custody evidence. A move
+transfers that obligation; ordinary terminal stops add no unwind. This branch's
+implementation awaits independent exact-head review and Greg's acceptance.
+
+The following remains illustrative future policy syntax, outside KED-030:
 
 ```klyxr
 #[deny_effects(heap, blocking)]
@@ -994,6 +1010,27 @@ Candidate core effects include:
 - `unsafe`
 
 Effects propagate transitively through the call graph.
+
+Frozen KED-030 Draft 2 ([Issue #70](https://github.com/gregkrsak/klyxr/issues/70))
+fixes the first ordinary-function phase: these eight spellings are independent
+canonical audit identities. Ordinary Value and NoValue `fn`/`function` signatures
+may declare `effects io, clock` after the optional result type. Absence means the
+empty set; unknown and duplicate identities reject. A declaration is an explicit
+upper bound, including any legal unused members. Every structurally reachable
+ordinary call contributes the callee's complete declaration without fixed-point
+body inference. Verified and harness declarations remain excluded.
+
+The same bound admits mechanically derived cleanup effects at eligible sites
+produced by the existing ownership checker. Leaf cleanup derives from the complete
+fixed release-operation contract; aggregate cleanup unions child summaries. Moving
+responsibility performs no cleanup, and an empty summary preserves the obligation.
+`unsafe` grants no permission. Ordinary terminal stops add no cleanup edge; private
+approved abort and primitive/protocol evidence have separate sealed domains.
+
+This branch implements the frozen first phase and awaits independent exact-head
+review and Greg's acceptance. KD-008's broader Direction Accepted status is unchanged.
+Production effectful APIs, effects-aware verification, policies, aliases,
+hierarchies and polymorphism are not part of this phase.
 
 ---
 
@@ -3371,6 +3408,42 @@ are bounded and charged without counting non-owning handles as duplicate payload
 Resource-free paths retain their previous accounting. The KED-029 ledger records
 identity-sensitive tests, independent artifact mutations and private allocation probes.
 
+## Frozen KED-030 explicit effects implementation
+
+Canonical bounded sets and immutable declaration origins pass from raw contextual
+clauses through collected ordinary signatures, HIR and MIR. Complete declarations
+make forward and recursive edges checkable without traversing callee bodies or
+computing inferred minimum contracts. Both call forms and all structural branches
+contribute; strict supersets remain part of the API. Verified/harness metadata and
+proof behavior are unchanged.
+
+Trusted operation and bound-function contracts must agree exactly. Canonical
+cleanup plans derive leaf release effects and memoized aggregate unions. A separate
+may-custody product inside the existing successful ownership checker records
+realization holders, types, kinds and origins. It does not grant move/loan permission
+or use ConditionalMove, vacancy or runtime events as an authority oracle. Branch
+residual custody, terminal evidence and short-circuit skip alternatives remain
+distinct from usability. Return transfer precedes remaining-owner cleanup; existing
+replacement generations and temporary/pending/parameter transfers retain their order.
+
+Successful checker output is attached to MIR and retained immutably by opaque
+approval. Bounded validation checks each independent contract/summary/site/origin
+copy, exact deterministic lowering and compilation identity. The machine consumes
+validated custody and plans without rerunning ownership or effect analysis. Fixed
+effect identities and admitted supersets do not generate runtime events.
+
+Only Ordinary exists in production. Test-only Approved Abort templates admit the
+whole pending stack's initialized canonical membership and derived effects before
+approval, binding exact frame/pending identities, stack depth, construction and
+in-progress field sites and origins. Runtime checks every binding before attempting
+any release. Primitive fixtures are separately sealed and make no unchanged-source
+claim. Ordinary traps/limits/Integrity/Host stops add no cleanup edge. Retained
+metadata, recursive derivations, diagnostics and validation fit conservative checked
+work/storage envelopes; detected fallible allocation failures remain Host.
+
+The implementation ledger and identity manifest record GitHub-executed milestones.
+Specification freeze does not constitute independent implementation acceptance.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -3385,7 +3458,15 @@ When one is settled, add/update a decision in `LANGUAGE_DECISIONS.md`.
 
 ## OQ-001 — Exact effect syntax
 
-Open: attribute vs clause syntax, inferred vs declared effects, effect polymorphism, groups/aliases, generic interaction, diagnostics.
+Frozen KED-030 Draft 2 settles the first ordinary-function phase: a contextual
+`effects` clause declares an explicit upper bound, absence means empty, and calls
+propagate complete declared contracts. Derived cleanup participates at ownership-
+approved realization sites. See KD-008 and Issue #70; implementation review and
+acceptance remain separate from specification freeze.
+
+Broader effect polymorphism, groups/aliases, generic interaction, project policy,
+effects-aware verified/harness behavior and richer diagnostic presentation remain
+open or deferred. No attribute policy syntax is admitted by this first phase.
 
 ## OQ-002 — Heap-managed ownership vocabulary
 

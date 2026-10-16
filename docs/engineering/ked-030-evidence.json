@@ -46,7 +46,8 @@
     "lib.rs::execution::machine::cleanup::effects::ordinary_pending_limits_keep_payloads_without_adding_abort_cleanup",
     "lib.rs::execution::machine::cleanup::effects::recursive_abort_templates_distinguish_identical_sites_in_distinct_frames",
     "tests/effects.rs::effect_diagnostic_admission_and_rendering_have_exact_limits",
-    "lib.rs::effects::calls::tests::retained_direct_site_allocation_failure_is_host_and_publishes_no_executable"
+    "lib.rs::effects::calls::tests::retained_direct_site_allocation_failure_is_host_and_publishes_no_executable",
+    "tests/cli.rs::explicit_effect_contracts_check_transitively_without_changing_proof_scope"
   ],
   "contract_corrections": [],
   "fixture_adaptations": [

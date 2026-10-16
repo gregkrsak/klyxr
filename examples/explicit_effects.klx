@@ -1,0 +1,13 @@
+// Conservative audit contracts; this example invokes no clock or I/O API.
+function observe() -> bool effects clock, io {
+    return true;
+}
+
+fn sample() effects io, clock {
+    let observed = observe();
+}
+
+function demo() -> bool effects clock, io, unsafe {
+    sample();
+    return observe();
+}

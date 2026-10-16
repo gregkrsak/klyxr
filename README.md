@@ -265,7 +265,7 @@ Klyxr's goal is different:
 | Algebraic enums / matching | ✅ | ✅ |
 | Range/domain types | Usually modeled | First-class design goal |
 | Preconditions / postconditions | External patterns/tools | First-class |
-| Explicit effects | Mostly encoded indirectly | First-class design goal |
+| Explicit effects | Mostly encoded indirectly | Explicit ordinary upper bounds; broader system remains a design goal |
 | Formal verification | Specialized toolchains | Integrated workflow |
 | Assurance progression | Not language-level | `safe → checked → verified` |
 | Trust audit | Tool/project dependent | Explicit design goal |
@@ -373,7 +373,7 @@ It is part of the language philosophy.
 > **Klyxr is an early-stage language project.**
 >
 > The compiler, verifier, syntax, semantics, and tooling are still being designed and prototyped.
-> An executable Rust-based prototype now resolves and type-checks ordinary value functions, checks core moves, path-sensitive whole-value loans across straight-line code and acyclic branches, and explicit Copy-safe borrowed access/mutation, supports initializer-only owned/Copy conditional values and direct Copy-safe mutable-local reassignment, supports ownership-stable statement `while` with Copy state, iteration-local Move/borrowing and stable carried-reference access and structured unlabeled `continue`/`break` and lowers `if`/`else`, conditional initializers, and loops to ordinary MIR CFGs with real backedges, and supports a narrow verified integer/record subset. It proves supported subtraction safety, field-range preservation, and postconditions, and checks call preconditions using state updated by earlier calls. General ownership, effects, runtime contracts, and code generation are not yet implemented.
+> An executable Rust-based prototype now resolves and type-checks ordinary value functions, checks core moves, path-sensitive whole-value loans across straight-line code and acyclic branches, and explicit Copy-safe borrowed access/mutation, supports initializer-only owned/Copy conditional values and direct Copy-safe mutable-local reassignment, supports ownership-stable statement `while` with Copy state, iteration-local Move/borrowing and stable carried-reference access and structured unlabeled `continue`/`break` and lowers `if`/`else`, conditional initializers, and loops to ordinary MIR CFGs with real backedges, and supports a narrow verified integer/record subset. It proves supported subtraction safety, field-range preservation, and postconditions, and checks call preconditions using state updated by earlier calls. General ownership beyond the documented subset, advanced effects beyond frozen KED-030, runtime contracts, and code generation are not yet implemented.
 > The badges at the top of this README are **live GitHub Actions status badges** for this repository's `build`, `tests`, `verify`, and `docs` workflows. These workflows build the prototype, run its regression tests in debug and optimized builds, exercise successful and failing contract examples, and validate documentation assets. They do not establish production readiness.
 
 KD-037 now permits direct signed integer literals to form named-range values at
@@ -543,3 +543,20 @@ ordinary MIR. It does not evaluate verified proofs or harness calls and does not
 prove ordinary contracts. Named-range violations stop immediately; configured
 resource stops are not nontermination proofs. See
 [bounded execution](docs/BOUNDED_EXECUTION.md) for supported limits and reporting.
+
+## Frozen KED-030 ordinary effects
+
+Ordinary `fn` and `function` declarations now support explicit upper bounds such
+as `fn observe() -> bool effects clock, io { return true; }`. Calls require the
+callee's complete declared contract, including unused members; absent clauses mean
+empty. Derived cleanup effects follow ownership-approved realization sites.
+`unsafe` is an audit identity and grants no safety permission. Verified/harness
+proofs and ordinary terminal-stop behavior are unchanged.
+
+Try [the runnable example](examples/explicit_effects.klx) and
+[the transitive rejection example](examples/explicit_effects_fail.klx). These
+conservative declarations provide no clock or I/O API. Policy attributes in the
+older illustrative `effects.klx` remain unsupported. This branch implements frozen
+Draft 2 and awaits independent exact-head review and Greg's acceptance; see the
+[compiler scope](compiler/README.md#frozen-ked-030-explicit-ordinary-effects) and
+[implementation ledger](docs/engineering/KED-030-IMPLEMENTATION-LEDGER.md).
