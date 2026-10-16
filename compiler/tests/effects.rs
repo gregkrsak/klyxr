@@ -272,8 +272,18 @@ fn effect_diagnostic_admission_and_rendering_have_exact_limits() {
         execution::render_admission_error(&error, rendered.len()).unwrap(),
         rendered
     );
+    let fallback = execution::render_admission_error(&error, rendered.len() - 1).unwrap();
+    let expected = format!(
+        "error: diagnostic truncated at {}:{}",
+        error.origin.line, error.origin.column
+    );
+    assert_eq!(fallback, expected);
     assert_eq!(
-        execution::render_admission_error(&error, rendered.len() - 1)
+        execution::render_admission_error(&error, fallback.len()).unwrap(),
+        fallback
+    );
+    assert_eq!(
+        execution::render_admission_error(&error, fallback.len() - 1)
             .unwrap_err()
             .kind,
         execution::ErrorKind::ConfiguredLimit("rendered output")

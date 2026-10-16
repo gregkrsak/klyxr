@@ -419,3 +419,16 @@ an inert Pair. Its original scalar field descriptors are restored explicitly;
 the Leaf catalog, empty summary and real cleanup assertions remain unchanged.
 The reviewed formatting diff is applied. The debug failure skipped release;
 no later layer was started on this gate.
+
+The milestone 8 first push also passed [verify](https://github.com/gregkrsak/klyxr/actions/runs/38974811882).
+Correction `fa3137c34fbce41dab0e4c63fddf65c303b52dd9`, tree
+`482eeb3da1ec07ee7152a8b538c34646c7f54950`, passed
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38974998414),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38974998309), and
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38974998459).
+[Tests](https://github.com/gregkrsak/klyxr/actions/runs/38974998387) passed all
+unit controls, then exposed an incorrect new renderer expectation: the canonical
+renderer returns its fixed truncated diagnostic when the full text does not fit.
+The new test now checks exact full-text neighbors, exact fallback text and its
+sufficient/insufficient neighbors. The renderer and predecessor tests are unchanged;
+release was skipped after the integration failure.
