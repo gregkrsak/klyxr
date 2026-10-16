@@ -246,3 +246,15 @@ forgery under a legal unused superset, exact storage
 neighbors, detected witness allocation failure, and expression-transaction custody
 rollback. They are authored and await this milestone's authoritative CI results.
 Temporary/private-domain integration and final conformance remain pending.
+
+Milestone 5 first push `ccff5adae8a1d111e9c490afcfba06a1c19b4b20`, tree
+`223de7860f68fb1878a56d439c203f40e906ba09`, compiled the implementation but failed
+all-target checking in [build](https://github.com/gregkrsak/klyxr/actions/runs/38972493921)
+and [tests](https://github.com/gregkrsak/klyxr/actions/runs/38972493916). One
+predecessor fault-injection test called the private seal helper directly and
+needed its new successful-checker-evidence argument. The fixture now obtains
+ownership/effect approval before entering its unchanged allocation-failure loop.
+All Host and no-artifact assertions remain unchanged; its exact identity and
+reason are recorded under fixture_adaptations. [Docs](https://github.com/gregkrsak/klyxr/actions/runs/38972493924)
+and [verify](https://github.com/gregkrsak/klyxr/actions/runs/38972493928) passed.
+No later layer was started on this failing gate.

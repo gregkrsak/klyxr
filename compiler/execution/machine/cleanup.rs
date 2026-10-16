@@ -2640,9 +2640,16 @@ mod repair_plan_failure_tests {
     fn later_sealing_plan_failure_publishes_no_executable() {
         let p = program();
         p.resources.validate(&p).unwrap();
+        let cleanup_sites = crate::ownership::analyze(&p).unwrap();
+        crate::effects::calls::check(&p).unwrap();
+        crate::effects::custody::check(&p, &cleanup_sites).unwrap();
         for after in 0..8 {
             let result = failing(after, || {
-                super::super::super::seal(p.clone(), AdmissionLimits::default())
+                super::super::super::seal(
+                    p.clone(),
+                    AdmissionLimits::default(),
+                    cleanup_sites.clone(),
+                )
             });
             assert!(matches!(result.err().unwrap().kind, ErrorKind::Host(_)));
         }

@@ -29,5 +29,10 @@
     "lib.rs::execution::effect_authority_tests::protected_return_owner_cannot_gain_cleanup_authority_from_an_unused_superset"
   ],
   "contract_corrections": [],
-  "fixture_adaptations": []
+  "fixture_adaptations": [
+    {
+      "id": "lib.rs::execution::machine::cleanup::repair_plan_failure_tests::later_sealing_plan_failure_publishes_no_executable",
+      "reason": "The private seal signature now requires successful checker-produced cleanup evidence. Obtain that evidence and complete effect checks before injecting the same sealing allocation failures; preserve all Host/no-artifact assertions."
+    }
+  ]
 }
