@@ -673,14 +673,19 @@ mod temporary_authority_tests {
 
     #[test]
     fn each_temporary_authority_allocation_failure_preserves_host_classification() {
-        let p = hir::resources::fixture_with("fn take(a:Leaf,b:Leaf){}fn demo(){take(acquire(),acquire());}");
+        let p = hir::resources::fixture_with(
+            "fn take(a:Leaf,b:Leaf){}fn demo(){take(acquire(),acquire());}",
+        );
         let mut success = None;
         for cut in 0..512 {
             mir::temporaries::FAIL_ALLOCATION.with(|f| f.set(Some(cut)));
             let result = prepare_synthetic(p.clone(), AdmissionLimits::default());
             mir::temporaries::FAIL_ALLOCATION.with(|f| f.set(None));
             match result {
-                Ok(_) => { success = Some(cut); break; },
+                Ok(_) => {
+                    success = Some(cut);
+                    break;
+                }
                 Err(e) => assert!(matches!(e.kind, ErrorKind::Host(_)), "cut {cut}: {e:?}"),
             }
         }
@@ -689,25 +694,49 @@ mod temporary_authority_tests {
 
     #[test]
     fn exact_admission_work_and_storage_neighbors_keep_typed_limits() {
-        let p = hir::resources::fixture_with("fn take(a:Leaf,b:Leaf){}fn demo(){take(acquire(),acquire());}");
-        for work in [false,true] {
+        let p = hir::resources::fixture_with(
+            "fn take(a:Leaf,b:Leaf){}fn demo(){take(acquire(),acquire());}",
+        );
+        for work in [false, true] {
             let default = AdmissionLimits::default();
             let mut low = 1u64;
-            let mut high = if work {default.frontend_work} else {default.working_storage as u64};
+            let mut high = if work {
+                default.frontend_work
+            } else {
+                default.working_storage as u64
+            };
             while low < high {
-                let mid = low + (high-low)/2;
+                let mid = low + (high - low) / 2;
                 let mut limits = default;
-                if work { limits.frontend_work = mid; } else { limits.working_storage = mid as usize; }
+                if work {
+                    limits.frontend_work = mid;
+                } else {
+                    limits.working_storage = mid as usize;
+                }
                 match prepare_synthetic(p.clone(), limits) {
                     Ok(_) => high = mid,
-                    Err(e) => { assert!(matches!(e.kind, ErrorKind::ConfiguredLimit(_)), "{e:?}"); low = mid+1; },
+                    Err(e) => {
+                        assert!(matches!(e.kind, ErrorKind::ConfiguredLimit(_)), "{e:?}");
+                        low = mid + 1;
+                    }
                 }
             }
             let mut limits = default;
-            if work { limits.frontend_work = low; } else { limits.working_storage = low as usize; }
+            if work {
+                limits.frontend_work = low;
+            } else {
+                limits.working_storage = low as usize;
+            }
             assert!(prepare_synthetic(p.clone(), limits).is_ok());
-            if work { limits.frontend_work -= 1; } else { limits.working_storage -= 1; }
-            assert!(matches!(prepare_synthetic(p.clone(), limits).err().unwrap().kind, ErrorKind::ConfiguredLimit(_)));
+            if work {
+                limits.frontend_work -= 1;
+            } else {
+                limits.working_storage -= 1;
+            }
+            assert!(matches!(
+                prepare_synthetic(p.clone(), limits).err().unwrap().kind,
+                ErrorKind::ConfiguredLimit(_)
+            ));
         }
     }
 }

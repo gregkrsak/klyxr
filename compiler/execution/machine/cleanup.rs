@@ -2073,32 +2073,56 @@ pub(super) mod conservation_tests {
     pub(in crate::execution::machine) fn holders(m: &Machine<'_>) -> Vec<(u64, String)> {
         fn append(v: &Value, label: String, out: &mut Vec<(u64, String)>) {
             match v {
-                Value::Leaf {identity,..} => out.push((*identity, label)),
-                Value::Aggregate {fields,..} => for (field, value) in fields { append(value, format!("{label}.field:{}", field.0), out); },
+                Value::Leaf { identity, .. } => out.push((*identity, label)),
+                Value::Aggregate { fields, .. } => {
+                    for (field, value) in fields {
+                        append(value, format!("{label}.field:{}", field.0), out);
+                    }
+                }
                 _ => {}
             }
         }
         let mut out = Vec::new();
         for frame in &m.frames {
             for (place, slot) in &frame.slots {
-                if let Slot::Available(v) = slot { append(v, format!("frame:{}:{place:?}", frame.id), &mut out); }
+                if let Slot::Available(v) = slot {
+                    append(v, format!("frame:{}:{place:?}", frame.id), &mut out);
+                }
             }
         }
-        for (index, v) in m.values.iter().enumerate() { append(v, format!("operand:{index}"), &mut out); }
+        for (index, v) in m.values.iter().enumerate() {
+            append(v, format!("operand:{index}"), &mut out);
+        }
         if let Some(s) = &m.resources {
-            for (label, value) in [("cleanup-current", &s.current), ("protected-return", &s.protected), ("detached", &s.detached)] {
-                if let Some(v) = value { append(v, label.into(), &mut out); }
+            for (label, value) in [
+                ("cleanup-current", &s.current),
+                ("protected-return", &s.protected),
+                ("detached", &s.detached),
+            ] {
+                if let Some(v) = value {
+                    append(v, label.into(), &mut out);
+                }
             }
-            for (index, v) in s.work.iter().enumerate() { append(v, format!("cleanup-work:{index}"), &mut out); }
+            for (index, v) in s.work.iter().enumerate() {
+                append(v, format!("cleanup-work:{index}"), &mut out);
+            }
             for p in &s.pending {
-                for (field, v) in &p.initialized { append(v, format!("pending:{}:field:{}", p.id, field.0), &mut out); }
+                for (field, v) in &p.initialized {
+                    append(v, format!("pending:{}:field:{}", p.id, field.0), &mut out);
+                }
             }
             for (index, r) in s.replacements.iter().enumerate() {
-                if let Some(v) = &r.protected { append(v, format!("protected-replacement:{index}"), &mut out); }
-                if let Some(v) = &r.displaced { append(v, format!("displaced-replacement:{index}"), &mut out); }
+                if let Some(v) = &r.protected {
+                    append(v, format!("protected-replacement:{index}"), &mut out);
+                }
+                if let Some(v) = &r.displaced {
+                    append(v, format!("displaced-replacement:{index}"), &mut out);
+                }
             }
         }
-        if let Some(s) = &m.temporaries { s.visit_holders(|v, label| append(v, label, &mut out)); }
+        if let Some(s) = &m.temporaries {
+            s.visit_holders(|v, label| append(v, label, &mut out));
+        }
         out
     }
     fn leaves(value: &Value, ids: &mut Vec<u64>) {
@@ -2156,11 +2180,14 @@ pub(super) mod conservation_tests {
         if let Some(temporaries) = &m.temporaries {
             temporaries.visit_values(|v| leaves(v, &mut owned));
         }
-        let mut labelled: Vec<_> = holders(m).iter().map(|(id,_)| *id).collect();
+        let mut labelled: Vec<_> = holders(m).iter().map(|(id, _)| *id).collect();
         let mut physical = owned.clone();
         labelled.sort_unstable();
         physical.sort_unstable();
-        assert_eq!(labelled, physical, "holder census must cover all physical payloads");
+        assert_eq!(
+            labelled, physical,
+            "holder census must cover all physical payloads"
+        );
         owned.extend(completed);
         owned.sort_unstable();
         acquired.sort_unstable();

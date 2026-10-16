@@ -275,3 +275,14 @@ canonical acquisition stub. This preserves the predecessor trusted-acquisition
 contract when admitting new temporary positions; it creates no constructor or
 resource API. Seven new test identities are explicit in the manifest. Validation
 pending; no final implementation or acceptance claim.
+
+Adversarial commit `41fce84ad8ea2dba3f1ed364c15a76f9babb17ff`, tree
+`a7d7c2611f897a8f81b856d264e2372ee90c4742`: compilation and complete debug
+and release profiles passed, each reconciling 1,706 predecessors plus 35 additions
+= 1,741 passing identities. Both affine checks and authority doctests passed.
+Build https://github.com/gregkrsak/klyxr/actions/runs/38851327364 reported only
+formatting differences, applied from the complete GitHub Rustfmt output. Other
+runs: tests https://github.com/gregkrsak/klyxr/actions/runs/38851327325,
+docs https://github.com/gregkrsak/klyxr/actions/runs/38851327345,
+verify https://github.com/gregkrsak/klyxr/actions/runs/38851327393.
+No documentation/final layer begins before this four-workflow repair gate passes.

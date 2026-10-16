@@ -13,7 +13,9 @@ pub(super) fn allocation() -> Result<(), PlanError> {
     #[cfg(test)]
     FAIL_ALLOCATION.with(|remaining| {
         if let Some(n) = remaining.get() {
-            if n == 0 { return Err(PlanError::Host("synthetic temporary authority allocation")); }
+            if n == 0 {
+                return Err(PlanError::Host("synthetic temporary authority allocation"));
+            }
             remaining.set(Some(n - 1));
         }
         Ok(())
@@ -101,7 +103,9 @@ impl Flow {
         // At most one MIR point per retained expression site: initializer
         // conditions and leaves replace, rather than duplicate, the root.
         #[cfg(test)]
-        if !flow.sites.is_empty() { allocation()?; }
+        if !flow.sites.is_empty() {
+            allocation()?;
+        }
         flow.points
             .try_reserve_exact(flow.sites.len())
             .map_err(|_| PlanError::Host("temporary point allocation"))?;
@@ -219,7 +223,9 @@ impl Flow {
             _ => 0,
         };
         #[cfg(test)]
-        if count > 0 { allocation()?; }
+        if count > 0 {
+            allocation()?;
+        }
         children
             .try_reserve_exact(count)
             .map_err(|_| PlanError::Host("temporary child allocation"))?;

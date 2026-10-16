@@ -503,7 +503,9 @@ impl<'a> Machine<'a> {
         self.reserve(bytes)?;
         let mut slots = Vec::new();
         #[cfg(test)]
-        if count > 0 { self.temporary_allocation()?; }
+        if count > 0 {
+            self.temporary_allocation()?;
+        }
         slots
             .try_reserve_exact(count)
             .map_err(|_| self.failure(ErrorKind::Host("parameter allocation")))?;

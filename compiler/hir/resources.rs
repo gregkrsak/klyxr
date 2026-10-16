@@ -192,8 +192,11 @@ impl Catalog {
             leaves: &[Leaf],
             boundary: bool,
         ) -> Result<(), &'static str> {
-            if matches!(e.kind, ExprKind::RecordConstruct {record,..} if leaves.iter().any(|l| l.record == record)) {
-                return Err("trusted resource leaf construction outside canonical acquisition stub");
+            if matches!(e.kind, ExprKind::RecordConstruct {record,..} if leaves.iter().any(|l| l.record == record))
+            {
+                return Err(
+                    "trusted resource leaf construction outside canonical acquisition stub",
+                );
             }
             if bearing(e, plans)
                 && !boundary
@@ -251,7 +254,12 @@ impl Catalog {
                     ValueStatement::Assign { value, .. } => {
                         // Complete replacement results and exact owned call
                         // arguments have their respective protected boundaries.
-                        expression(value, plans, leaves, matches!(value.ty, ExprType::Record(_)))?
+                        expression(
+                            value,
+                            plans,
+                            leaves,
+                            matches!(value.ty, ExprType::Record(_)),
+                        )?
                     }
                     ValueStatement::DerefAssign { value, .. }
                     | ValueStatement::CopyFieldAssign { value, .. }
@@ -281,7 +289,13 @@ impl Catalog {
         }
         for f in &p.functions {
             if let Function::Ordinary(f) = f {
-                if self.operations.iter().any(|o| o.function == f.id && matches!(o.kind, OperationKind::Acquire(_))) { continue; }
+                if self
+                    .operations
+                    .iter()
+                    .any(|o| o.function == f.id && matches!(o.kind, OperationKind::Acquire(_)))
+                {
+                    continue;
+                }
                 statements(&f.body, plans, &self.leaves)?;
             }
         }

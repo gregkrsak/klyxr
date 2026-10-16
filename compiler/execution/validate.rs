@@ -537,7 +537,9 @@ pub(super) fn mir_shape(
             if flow.sites.len() > c.limits.tokens.saturating_mul(4)
                 || flow.regions.len() > c.limits.tokens.saturating_mul(4)
                 || flow.points.len() > flow.sites.len()
-            { return Err(ResourceFailure::limit("temporary authority nodes", START).into()); }
+            {
+                return Err(ResourceFailure::limit("temporary authority nodes", START).into());
+            }
             let references = flow
                 .sites
                 .iter()
@@ -570,7 +572,11 @@ pub(super) fn mir_shape(
                 let mut depth = 1usize;
                 while let Some(id) = parent {
                     depth += 1;
-                    if depth > c.limits.traversal_depth { return Err(ResourceFailure::limit("temporary region nesting", START).into()); }
+                    if depth > c.limits.traversal_depth {
+                        return Err(
+                            ResourceFailure::limit("temporary region nesting", START).into()
+                        );
+                    }
                     parent = flow.regions.get(id.0).ok_or_else(bad)?.parent;
                 }
                 for (j, root) in region.roots.iter().enumerate() {
