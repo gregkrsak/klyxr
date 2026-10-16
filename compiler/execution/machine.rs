@@ -99,7 +99,13 @@ enum Action<'a> {
     SiteEval(&'a TypedExpr, usize, u64, crate::mir::temporaries::SiteId),
     RegisterTemporary(u64, crate::mir::temporaries::SiteId),
     FinishTemporary(u64),
-    SiteShortCircuit(BinaryOp, &'a TypedExpr, usize, u64, crate::mir::temporaries::SiteId),
+    SiteShortCircuit(
+        BinaryOp,
+        &'a TypedExpr,
+        usize,
+        u64,
+        crate::mir::temporaries::SiteId,
+    ),
     Negate,
     Binary(BinaryOp, ExprType),
     ShortCircuit(BinaryOp, &'a TypedExpr, usize),
@@ -212,7 +218,9 @@ impl<'a> Machine<'a> {
         if let Some(s) = &self.resources {
             n = n.checked_add(s.storage()?)?;
         }
-        if let Some(s) = &self.temporaries { n = n.checked_add(s.storage()?)?; }
+        if let Some(s) = &self.temporaries {
+            n = n.checked_add(s.storage()?)?;
+        }
         Some(n)
     }
     fn reserve(&self, bytes: usize) -> Result<(), ExecutionError> {
@@ -511,9 +519,16 @@ impl<'a> Machine<'a> {
         self.cleanup_frame(id)?;
         for (offset, parameter) in definition.parameters.iter().enumerate() {
             let value = std::mem::replace(&mut self.values[start + offset], Value::Completion);
-            let value = self.temporary_take(value, Some(crate::mir::temporaries::Destination::Parameter(*parameter)))?;
+            let value = self.temporary_take(
+                value,
+                Some(crate::mir::temporaries::Destination::Parameter(*parameter)),
+            )?;
             // All receiving slot capacity was reserved before taking any argument.
-            self.frames.last_mut().unwrap().slots.push((Place::Parameter(*parameter), Slot::Available(value)));
+            self.frames
+                .last_mut()
+                .unwrap()
+                .slots
+                .push((Place::Parameter(*parameter), Slot::Available(value)));
         }
         self.values.truncate(start);
         Ok(id)
@@ -570,7 +585,14 @@ impl<'a> Machine<'a> {
                 } => {
                     self.task(id, self.origin, None, Action::DropNoValue)?;
                     if let Some(c) = context {
-                        if c.complete { self.task(id, self.origin, None, Action::FinishTemporary(c.activation))?; }
+                        if c.complete {
+                            self.task(
+                                id,
+                                self.origin,
+                                None,
+                                Action::FinishTemporary(c.activation),
+                            )?;
+                        }
                     }
                     self.task(
                         id,
@@ -579,7 +601,11 @@ impl<'a> Machine<'a> {
                         Action::Invoke(*function, arguments.len()),
                     )?;
                     for (position, argument) in arguments.iter().enumerate().rev() {
-                        let site = if let Some(c) = context { Some((c.activation, self.temporary_root(c.activation, position)?)) } else { None };
+                        let site = if let Some(c) = context {
+                            Some((c.activation, self.temporary_root(c.activation, position)?))
+                        } else {
+                            None
+                        };
                         self.eval_at(id, argument, 1, site)?;
                     }
                 }
@@ -823,11 +849,12 @@ impl<'a> Machine<'a> {
             }
             ExprKind::RecordConstruct { record, fields } => {
                 if !self.executable.program.resources.is_leaf(*record)
-                    && (self.site.is_some() || self
-                        .executable
-                        .cleanup_plans
-                        .get(record.0)
-                        .is_some_and(Option::is_some)
+                    && (self.site.is_some()
+                        || self
+                            .executable
+                            .cleanup_plans
+                            .get(record.0)
+                            .is_some_and(Option::is_some)
                         || self
                             .executable
                             .program
@@ -866,13 +893,21 @@ impl<'a> Machine<'a> {
             }
             ExprKind::Unary { operand, .. } => {
                 self.task(frame, self.origin, self.expression, Action::Negate)?;
-                self.eval_at(frame, operand, depth + 1, self.temporary_child(self.site, 0)?)?;
+                self.eval_at(
+                    frame,
+                    operand,
+                    depth + 1,
+                    self.temporary_child(self.site, 0)?,
+                )?;
             }
             ExprKind::Binary { op, left, right } => {
                 if matches!(op, BinaryOp::And | BinaryOp::Or) {
-                    let action = if let Some((activation, site)) = self.temporary_child(self.site, 1)? {
-                        Action::SiteShortCircuit(*op, right, depth + 1, activation, site)
-                    } else { Action::ShortCircuit(*op, right, depth + 1) };
+                    let action =
+                        if let Some((activation, site)) = self.temporary_child(self.site, 1)? {
+                            Action::SiteShortCircuit(*op, right, depth + 1, activation, site)
+                        } else {
+                            Action::ShortCircuit(*op, right, depth + 1)
+                        };
                     self.task(frame, self.origin, self.expression, action)?;
                     self.eval_at(frame, left, depth + 1, self.temporary_child(self.site, 0)?)?;
                 } else {

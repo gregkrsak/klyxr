@@ -137,3 +137,16 @@ preserves A/B/C acquisition identities and C/B/A parameter cleanup, and traces a
 single leaf through an inner protected return and outer entry. The common
 conservation census includes actual temporary and protected-result payloads.
 Validation pending; later failure and destination batteries are not yet claimed.
+
+Initial runtime slice `1365998011cf0617f83a756b0937842ed7a35f74`, tree
+`f8009fdbd2e7ff86cee0bc35afe7a805558cbb41`: GitHub compilation and complete
+debug/release profiles passed, each reconciling 1,706 predecessors plus ten new
+identities = 1,716 passed. Build
+https://github.com/gregkrsak/klyxr/actions/runs/38848759716 reported formatting
+differences, applied from the complete GitHub Rustfmt output. Other runs: tests
+https://github.com/gregkrsak/klyxr/actions/runs/38848759654, docs
+https://github.com/gregkrsak/klyxr/actions/runs/38848759450, verify
+https://github.com/gregkrsak/klyxr/actions/runs/38848759628. Both affine checks
+and authority doctests passed. Destination-specific return/replacement protection
+integration and controlled leftover-owner evidence remain required before the
+implementation can be considered complete. No later layer added while build red.

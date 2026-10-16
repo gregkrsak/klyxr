@@ -18,10 +18,26 @@ mod expression_temporary_tests {
     use crate::execution::machine::temporaries::Event as TemporaryEvent;
 
     fn artifact(source: &str) -> CheckedExecutable {
-        crate::execution::prepare_synthetic(hir::resources::fixture_with(source), AdmissionLimits::default()).unwrap()
+        crate::execution::prepare_synthetic(
+            hir::resources::fixture_with(source),
+            AdmissionLimits::default(),
+        )
+        .unwrap()
     }
     fn completed(m: &Machine<'_>) -> Vec<u64> {
-        m.resources.as_ref().unwrap().events.iter().filter_map(|e| if let Event::Complete(id) = e { Some(*id) } else { None }).collect()
+        m.resources
+            .as_ref()
+            .unwrap()
+            .events
+            .iter()
+            .filter_map(|e| {
+                if let Event::Complete(id) = e {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     #[test]
@@ -34,28 +50,62 @@ mod expression_temporary_tests {
             super::conservation_tests::conserved(&m);
         }
         assert_eq!(completed(&m), vec![0]);
-        assert!(!m.temporaries.as_ref().unwrap().events.iter().any(|e| matches!(e, TemporaryEvent::Cleanup(_))));
-        assert!(m.resources.as_ref().unwrap().events.contains(&Event::Retire(1)));
+        assert!(!m
+            .temporaries
+            .as_ref()
+            .unwrap()
+            .events
+            .iter()
+            .any(|e| matches!(e, TemporaryEvent::Cleanup(_))));
+        assert!(m
+            .resources
+            .as_ref()
+            .unwrap()
+            .events
+            .contains(&Event::Retire(1)));
         assert!(m.temporaries.as_ref().unwrap().is_empty());
         assert_eq!(m.resume().unwrap(), ExecutionResult::NoValue);
     }
 
     #[test]
     fn three_arguments_preserve_written_acquisition_and_parameter_cleanup() {
-        let e = artifact("fn take(a:Leaf,b:Leaf,c:Leaf){}fn demo(){take(acquire(),acquire(),acquire());}");
+        let e = artifact(
+            "fn take(a:Leaf,b:Leaf,c:Leaf){}fn demo(){take(acquire(),acquire(),acquire());}",
+        );
         let mut m = Machine::new(&e, ExecutionLimits::default());
         m.start(e.entry("demo").unwrap()).unwrap();
         m.resume().unwrap();
-        assert_eq!(completed(&m), vec![2,1,0]);
-        let acquisitions: Vec<_> = m.resources.as_ref().unwrap().events.iter().filter_map(|e| if let Event::Acquire(id) = e { Some(*id) } else { None }).collect();
-        assert_eq!(acquisitions, vec![0,1,2]);
-        assert!(!m.temporaries.as_ref().unwrap().events.iter().any(|e| matches!(e, TemporaryEvent::Cleanup(_))));
+        assert_eq!(completed(&m), vec![2, 1, 0]);
+        let acquisitions: Vec<_> = m
+            .resources
+            .as_ref()
+            .unwrap()
+            .events
+            .iter()
+            .filter_map(|e| {
+                if let Event::Acquire(id) = e {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(acquisitions, vec![0, 1, 2]);
+        assert!(!m
+            .temporaries
+            .as_ref()
+            .unwrap()
+            .events
+            .iter()
+            .any(|e| matches!(e, TemporaryEvent::Cleanup(_))));
         super::conservation_tests::conserved(&m);
     }
 
     #[test]
     fn nested_pass_through_keeps_one_leaf_through_return_and_outer_entry() {
-        let e = artifact("fn pass(x:Leaf)->Leaf{return x;}fn take(x:Leaf){}fn demo(){take(pass(acquire()));}");
+        let e = artifact(
+            "fn pass(x:Leaf)->Leaf{return x;}fn take(x:Leaf){}fn demo(){take(pass(acquire()));}",
+        );
         let mut m = Machine::new(&e, ExecutionLimits::default());
         m.start(e.entry("demo").unwrap()).unwrap();
         while let Some(task) = m.tasks.pop() {
@@ -63,8 +113,26 @@ mod expression_temporary_tests {
             super::conservation_tests::conserved(&m);
         }
         assert_eq!(completed(&m), vec![0]);
-        assert_eq!(m.resources.as_ref().unwrap().events.iter().filter(|e| matches!(e, Event::Acquire(_))).count(), 1);
-        assert_eq!(m.temporaries.as_ref().unwrap().events.iter().filter(|e| matches!(e, TemporaryEvent::Transfer(_, _))).count(), 3);
+        assert_eq!(
+            m.resources
+                .as_ref()
+                .unwrap()
+                .events
+                .iter()
+                .filter(|e| matches!(e, Event::Acquire(_)))
+                .count(),
+            1
+        );
+        assert_eq!(
+            m.temporaries
+                .as_ref()
+                .unwrap()
+                .events
+                .iter()
+                .filter(|e| matches!(e, TemporaryEvent::Transfer(_, _)))
+                .count(),
+            3
+        );
         assert_eq!(m.resume().unwrap(), ExecutionResult::NoValue);
     }
 }
@@ -780,12 +848,21 @@ impl<'a> Machine<'a> {
             let child_site = self.temporary_child(parent_site, index)?;
             let child_site = if let Some((parent, site)) = child_site {
                 let function = self.frames[self.frame_index(frame)?].function;
-                let region = self.executable.function(function)?.temporaries.as_ref().unwrap().sites[site.0].region;
+                let region = self
+                    .executable
+                    .function(function)?
+                    .temporaries
+                    .as_ref()
+                    .unwrap()
+                    .sites[site.0]
+                    .region;
                 let child = self.temporary_begin(frame, function, region)?;
                 self.resources.as_mut().unwrap().pending[p].child_activation = Some(child);
                 let _parent = parent;
                 Some((child, site))
-            } else { None };
+            } else {
+                None
+            };
             self.eval_at(frame, &field.value, depth + 1, child_site)?;
         } else {
             let pending = &self.resources.as_ref().unwrap().pending[p];
@@ -837,7 +914,9 @@ impl<'a> Machine<'a> {
             return Err(self.integrity("pending field membership or duplicate initialization"));
         }
         let record = self.resources.as_ref().unwrap().pending[p].record;
-        let value = self.pop_to(Some(crate::mir::temporaries::Destination::Pending(record, field)))?;
+        let value = self.pop_to(Some(crate::mir::temporaries::Destination::Pending(
+            record, field,
+        )))?;
         if self.resources.as_ref().unwrap().detached.is_some() {
             return Err(self.integrity("detached construction payload already occupied"));
         }
@@ -2027,8 +2106,21 @@ mod conservation_tests {
             let task = m.tasks.pop().unwrap();
             if matches!(
                 &task.action,
-                Action::Eval(hir::TypedExpr { kind: ExprKind::Local(_), .. }, _)
-                    | Action::SiteEval(hir::TypedExpr { kind: ExprKind::Local(_), .. }, _, _, _)
+                Action::Eval(
+                    hir::TypedExpr {
+                        kind: ExprKind::Local(_),
+                        ..
+                    },
+                    _
+                ) | Action::SiteEval(
+                    hir::TypedExpr {
+                        kind: ExprKind::Local(_),
+                        ..
+                    },
+                    _,
+                    _,
+                    _
+                )
             ) {
                 assert_eq!(m.values.len(), 1);
                 assert_eq!(m.values.capacity(), 1);
@@ -2603,7 +2695,20 @@ mod replacement_authority_tests {
         let mut m = Machine::new(&e, ExecutionLimits::default());
         m.start(e.entry("demo").unwrap()).unwrap();
         m.resume().unwrap();
-        let completed: Vec<_> = m.resources.as_ref().unwrap().events.iter().filter_map(|e| if let Event::Complete(id) = e { Some(*id) } else { None }).collect();
+        let completed: Vec<_> = m
+            .resources
+            .as_ref()
+            .unwrap()
+            .events
+            .iter()
+            .filter_map(|e| {
+                if let Event::Complete(id) = e {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect();
         assert_eq!(completed, vec![0, 1]);
         super::conservation_tests::conserved(&m);
         artifact().validate().unwrap();
