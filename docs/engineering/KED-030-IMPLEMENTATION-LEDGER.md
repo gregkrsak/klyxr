@@ -258,3 +258,14 @@ All Host and no-artifact assertions remain unchanged; its exact identity and
 reason are recorded under fixture_adaptations. [Docs](https://github.com/gregkrsak/klyxr/actions/runs/38972493924)
 and [verify](https://github.com/gregkrsak/klyxr/actions/runs/38972493928) passed.
 No later layer was started on this failing gate.
+
+Correction `a5fe8e5db7a892ac3797eb7abde53fb33952ab57`, tree
+`165db26097de9d909e8a0a4179689225e2582806`, passed [tests](https://github.com/gregkrsak/klyxr/actions/runs/38972672280),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38972672271), and
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38972672467).
+Both profiles independently reconciled all 1,743 predecessors plus 26 additions
+(1,769 tests), the authority doctest, and 1,800 affine cases, with no ignored or
+filtered tests. [Build](https://github.com/gregkrsak/klyxr/actions/runs/38972672297)
+passed all-target compilation and failed formatting; Clippy and Rustdoc were
+therefore skipped. The next correction applies only the reviewed CI rustfmt diff
+to six implementation files; no later architectural layer has begun.

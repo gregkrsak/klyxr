@@ -17,12 +17,18 @@ use crate::{
 
 fn statement_span(statement: &ValueStatement) -> Span {
     match statement {
-        ValueStatement::Let { span, .. } | ValueStatement::Assign { span, .. }
-        | ValueStatement::DerefAssign { span, .. } | ValueStatement::CopyFieldAssign { span, .. }
-        | ValueStatement::CopyReferenceFieldAssign { span, .. } | ValueStatement::CallNoValue { span, .. }
-        | ValueStatement::If { span, .. } | ValueStatement::While { span, .. }
-        | ValueStatement::Return { span, .. } | ValueStatement::ReturnNoValue { span }
-        | ValueStatement::Break { span } | ValueStatement::Continue { span } => *span,
+        ValueStatement::Let { span, .. }
+        | ValueStatement::Assign { span, .. }
+        | ValueStatement::DerefAssign { span, .. }
+        | ValueStatement::CopyFieldAssign { span, .. }
+        | ValueStatement::CopyReferenceFieldAssign { span, .. }
+        | ValueStatement::CallNoValue { span, .. }
+        | ValueStatement::If { span, .. }
+        | ValueStatement::While { span, .. }
+        | ValueStatement::Return { span, .. }
+        | ValueStatement::ReturnNoValue { span }
+        | ValueStatement::Break { span }
+        | ValueStatement::Continue { span } => *span,
     }
 }
 
@@ -338,7 +344,9 @@ pub fn check(program: &Program) -> Result<(), Vec<Diagnostic>> {
     analyze(program).map(|_| ())
 }
 
-pub(crate) fn analyze(program: &Program) -> Result<Vec<crate::effects::custody::Site>, Vec<Diagnostic>> {
+pub(crate) fn analyze(
+    program: &Program,
+) -> Result<Vec<crate::effects::custody::Site>, Vec<Diagnostic>> {
     analyze_with(program, None)
 }
 
@@ -368,7 +376,11 @@ fn effect_analysis_error(
             });
         }
     }
-    vec![Diagnostic::semantic(crate::bounded::START, error.message(), "canonical bounded cleanup effect evidence is required")]
+    vec![Diagnostic::semantic(
+        crate::bounded::START,
+        error.message(),
+        "canonical bounded cleanup effect evidence is required",
+    )]
 }
 
 fn analyze_with(
@@ -377,23 +389,49 @@ fn analyze_with(
 ) -> Result<Vec<crate::effects::custody::Site>, Vec<Diagnostic>> {
     use crate::effects::{custody::Custody, EffectSet};
     use crate::hir::resources::PlanError;
-    let active = program.resources.leaves.iter().any(|l| l.cleanup_effects != EffectSet::EMPTY)
-        || program.resources.operations.iter().any(|o| o.effects != EffectSet::EMPTY);
+    let active = program
+        .resources
+        .leaves
+        .iter()
+        .any(|l| l.cleanup_effects != EffectSet::EMPTY)
+        || program
+            .resources
+            .operations
+            .iter()
+            .any(|o| o.effects != EffectSet::EMPTY);
     let summaries = if active {
-        program.resources.validate(program).map_err(|e| effect_analysis_error(e, context))?;
-        let plans = program.resources.plans(program).map_err(|e| effect_analysis_error(e, context))?;
-        program.resources.summaries(program, &plans).map_err(|e| effect_analysis_error(e, context))?
+        program
+            .resources
+            .validate(program)
+            .map_err(|e| effect_analysis_error(e, context))?;
+        let plans = program
+            .resources
+            .plans(program)
+            .map_err(|e| effect_analysis_error(e, context))?;
+        program
+            .resources
+            .summaries(program, &plans)
+            .map_err(|e| effect_analysis_error(e, context))?
     } else {
         Vec::new()
     };
     if !summaries.is_empty() {
         if let Some(context) = context {
-            let nodes = context.resource_nodes.get() + program.functions.len() + program.locals.len() + program.parameters.len();
-            context.reserve_cleanup_effects(nodes, crate::effects::custody::holder_bound(program))
-                .map_err(|e| effect_analysis_error(match e.kind {
-                    crate::bounded::ResourceKind::Limit => PlanError::Limit(e.resource),
-                    crate::bounded::ResourceKind::Host => PlanError::Host(e.resource),
-                }, Some(context)))?;
+            let nodes = context.resource_nodes.get()
+                + program.functions.len()
+                + program.locals.len()
+                + program.parameters.len();
+            context
+                .reserve_cleanup_effects(nodes, crate::effects::custody::holder_bound(program))
+                .map_err(|e| {
+                    effect_analysis_error(
+                        match e.kind {
+                            crate::bounded::ResourceKind::Limit => PlanError::Limit(e.resource),
+                            crate::bounded::ResourceKind::Host => PlanError::Host(e.resource),
+                        },
+                        Some(context),
+                    )
+                })?;
         }
     }
     let summaries = Rc::new(summaries);
@@ -402,7 +440,13 @@ fn analyze_with(
         let mut checker = Checker::new(program, function);
         checker.context = context;
         // Registered stubs are fixed primitive boundaries, never callback bodies.
-        if !summaries.is_empty() && !program.resources.operations.iter().any(|o| o.function == function.id) {
+        if !summaries.is_empty()
+            && !program
+                .resources
+                .operations
+                .iter()
+                .any(|o| o.function == function.id)
+        {
             let mut custody = Custody::new(function.id, summaries.clone());
             for parameter in &function.parameters {
                 if let ParameterType::Value(ty) = program.parameter(*parameter).ty {
@@ -677,7 +721,11 @@ impl<'a> Checker<'a> {
             self.complete_no_value(function.span)?;
             if flow == Flow::Fallthrough {
                 if let Some(custody) = &mut self.cleanup_custody {
-                    custody.retire(|_| true, function.span, crate::effects::custody::Kind::Completion);
+                    custody.retire(
+                        |_| true,
+                        function.span,
+                        crate::effects::custody::Kind::Completion,
+                    );
                 }
             }
         }
@@ -893,7 +941,11 @@ impl<'a> Checker<'a> {
             }
             self.replacement_target = before.replacement_target;
             if let Some(custody) = &mut self.cleanup_custody {
-                custody.retire(|p| p == place, span, crate::effects::custody::Kind::Replacement);
+                custody.retire(
+                    |p| p == place,
+                    span,
+                    crate::effects::custody::Kind::Replacement,
+                );
                 custody.initialize(place, declaration.ty);
             }
             Ok(())
@@ -1256,13 +1308,19 @@ impl<'a> Checker<'a> {
         if iteration.statements_with(body, function, &outside)? == Flow::Fallthrough {
             iteration.validate_loop_backedge(&header, span)?;
             if let Some(custody) = &mut iteration.cleanup_custody {
-                custody.retire(|p| !header.states.contains_key(&p), span, crate::effects::custody::Kind::Iteration);
+                custody.retire(
+                    |p| !header.states.contains_key(&p),
+                    span,
+                    crate::effects::custody::Kind::Iteration,
+                );
             }
         }
         // Every terminal edge was independently checked. No arbitrary exit join:
         // the independently checked false state is the one canonical successor.
         let mut exit = (*false_exit).clone();
-        if let (Some(exit_custody), Some(iteration_custody)) = (&mut exit.cleanup_custody, &iteration.cleanup_custody) {
+        if let (Some(exit_custody), Some(iteration_custody)) =
+            (&mut exit.cleanup_custody, &iteration.cleanup_custody)
+        {
             exit_custody.merge_sites(iteration_custody);
         }
         *self = exit;
@@ -1291,7 +1349,11 @@ impl<'a> Checker<'a> {
                 return Err(self.diagnostic(span, "break exit does not match canonical loop-exit ownership and loan state".into(), "break may clean target-iteration locals and end only its own recurrence; carried availability and surviving provenance cannot be repaired or replaced", None));
             }
             if let Some(custody) = &mut self.cleanup_custody {
-                custody.retire(|p| !target.header.states.contains_key(&p), span, crate::effects::custody::Kind::Break);
+                custody.retire(
+                    |p| !target.header.states.contains_key(&p),
+                    span,
+                    crate::effects::custody::Kind::Break,
+                );
             }
             Ok(Flow::Break)
         })();
@@ -1387,7 +1449,11 @@ impl<'a> Checker<'a> {
         match self.validate_loop_backedge(&target.header, span) {
             Ok(()) => {
                 if let Some(custody) = &mut self.cleanup_custody {
-                    custody.retire(|p| !target.header.states.contains_key(&p), span, crate::effects::custody::Kind::Continue);
+                    custody.retire(
+                        |p| !target.header.states.contains_key(&p),
+                        span,
+                        crate::effects::custody::Kind::Continue,
+                    );
                 }
                 Ok(Flow::Continue)
             }
@@ -1467,17 +1533,33 @@ impl<'a> Checker<'a> {
         let mut no = self.clone();
         let yes_flow = yes.statements_with(then_body, function, after)?;
         let no_flow = no.statements_with(else_body, function, after)?;
-        for (branch, flow, body) in [(&mut yes, yes_flow, then_body), (&mut no, no_flow, else_body)] {
+        for (branch, flow, body) in [
+            (&mut yes, yes_flow, then_body),
+            (&mut no, no_flow, else_body),
+        ] {
             if flow == Flow::Fallthrough {
                 if let Some(custody) = &mut branch.cleanup_custody {
                     let origin = body.last().map(statement_span).unwrap_or(condition.span);
-                    custody.retire(|p| !self.states.contains_key(&p), origin, crate::effects::custody::Kind::Fallthrough);
+                    custody.retire(
+                        |p| !self.states.contains_key(&p),
+                        origin,
+                        crate::effects::custody::Kind::Fallthrough,
+                    );
                 }
             }
         }
         let mut merged_custody = self.cleanup_custody.clone();
-        if let (Some(merged), Some(a), Some(b)) = (&mut merged_custody, &yes.cleanup_custody, &no.cleanup_custody) {
-            merged.branches(a, b, yes_flow == Flow::Fallthrough, no_flow == Flow::Fallthrough);
+        if let (Some(merged), Some(a), Some(b)) = (
+            &mut merged_custody,
+            &yes.cleanup_custody,
+            &no.cleanup_custody,
+        ) {
+            merged.branches(
+                a,
+                b,
+                yes_flow == Flow::Fallthrough,
+                no_flow == Flow::Fallthrough,
+            );
         }
         match (yes_flow, no_flow) {
             (a, b) if a != Flow::Fallthrough && b != Flow::Fallthrough => {
@@ -1526,7 +1608,11 @@ impl<'a> Checker<'a> {
         else_state.validate_incoming_lineage(self, span)?;
         then_state.assert_no_holds();
         else_state.assert_no_holds();
-        if let (Some(merged), Some(a), Some(b)) = (&mut self.cleanup_custody, &then_state.cleanup_custody, &else_state.cleanup_custody) {
+        if let (Some(merged), Some(a), Some(b)) = (
+            &mut self.cleanup_custody,
+            &then_state.cleanup_custody,
+            &else_state.cleanup_custody,
+        ) {
             merged.branches(a, b, true, true);
         }
         // Branch-created loans are scoped away, never merged. An incoming
@@ -7718,10 +7804,16 @@ mod cleanup_effect_transaction_tests {
             custody.initialize(Place::Parameter(*parameter), ValueType::Record(RecordId(0)));
         }
         checker.cleanup_custody = Some(custody);
-        let ValueStatement::Return { value, .. } = &f.body[0] else { unreachable!() };
+        let ValueStatement::Return { value, .. } = &f.body[0] else {
+            unreachable!()
+        };
         let mut value = value.clone();
-        let ExprKind::Call { arguments, .. } = &mut value.kind else { unreachable!() };
-        let ExprKind::Call { arguments, .. } = &mut arguments[1].kind else { unreachable!() };
+        let ExprKind::Call { arguments, .. } = &mut value.kind else {
+            unreachable!()
+        };
+        let ExprKind::Call { arguments, .. } = &mut arguments[1].kind else {
+            unreachable!()
+        };
         arguments[0].kind = ExprKind::Parameter(f.parameters[0]);
         let before = checker.clone();
         assert!(checker.expression(&value, Transfer::Return(f.id)).is_err());

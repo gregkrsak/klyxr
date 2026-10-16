@@ -32,7 +32,15 @@ pub(crate) struct Site {
 
 impl Site {
     pub(crate) fn order(&self) -> (FunctionId, usize, usize, usize, usize, Kind, Place) {
-        (self.function, self.origin.start, self.origin.end, self.origin.line, self.origin.column, self.kind, self.holder)
+        (
+            self.function,
+            self.origin.start,
+            self.origin.end,
+            self.origin.line,
+            self.origin.column,
+            self.kind,
+            self.holder,
+        )
     }
 }
 
@@ -49,12 +57,21 @@ pub(crate) struct Custody {
 
 impl Custody {
     pub(crate) fn new(function: FunctionId, summaries: Rc<Vec<EffectSet>>) -> Self {
-        Self { function, summaries, live: BTreeMap::new(), sites: BTreeMap::new() }
+        Self {
+            function,
+            summaries,
+            live: BTreeMap::new(),
+            sites: BTreeMap::new(),
+        }
     }
 
     pub(crate) fn initialize(&mut self, place: Place, ty: ValueType) {
         if let ValueType::Record(record) = ty {
-            if self.summaries.get(record.0).is_some_and(|s| *s != EffectSet::EMPTY) {
+            if self
+                .summaries
+                .get(record.0)
+                .is_some_and(|s| *s != EffectSet::EMPTY)
+            {
                 self.live.insert(place, record);
             }
         }
@@ -78,24 +95,41 @@ impl Custody {
             if !eligible(*place) {
                 return true;
             }
-            let key = (origin.start, origin.end, origin.line, origin.column, kind, *place);
-            sites.insert(key, Site {
-                function,
-                holder: *place,
-                record: *record,
-                effects: summaries[record.0],
+            let key = (
+                origin.start,
+                origin.end,
+                origin.line,
+                origin.column,
                 kind,
-                origin,
-            });
+                *place,
+            );
+            sites.insert(
+                key,
+                Site {
+                    function,
+                    holder: *place,
+                    record: *record,
+                    effects: summaries[record.0],
+                    kind,
+                    origin,
+                },
+            );
             false
         });
     }
 
     pub(crate) fn merge_sites(&mut self, other: &Self) {
-        self.sites.extend(other.sites.iter().map(|(k, v)| (*k, v.clone())));
+        self.sites
+            .extend(other.sites.iter().map(|(k, v)| (*k, v.clone())));
     }
 
-    pub(crate) fn branches(&mut self, yes: &Self, no: &Self, yes_continues: bool, no_continues: bool) {
+    pub(crate) fn branches(
+        &mut self,
+        yes: &Self,
+        no: &Self,
+        yes_continues: bool,
+        no_continues: bool,
+    ) {
         self.live.clear();
         if yes_continues {
             self.live.extend(yes.live.iter().map(|(p, r)| (*p, *r)));
@@ -119,9 +153,20 @@ impl Custody {
 }
 
 pub(crate) fn holder_bound(program: &Program) -> usize {
-    program.functions().iter().filter_map(|f| f.as_ordinary()).map(|f| {
-        f.parameters.len() + program.locals().iter().filter(|l| l.function == f.id).count()
-    }).max().unwrap_or(0)
+    program
+        .functions()
+        .iter()
+        .filter_map(|f| f.as_ordinary())
+        .map(|f| {
+            f.parameters.len()
+                + program
+                    .locals()
+                    .iter()
+                    .filter(|l| l.function == f.id)
+                    .count()
+        })
+        .max()
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -135,21 +180,36 @@ pub(crate) fn reserve_output(
 ) -> Result<(), crate::hir::resources::PlanError> {
     #[cfg(test)]
     if count > 0 && FAIL_WITNESS_ALLOCATION.with(std::cell::Cell::get) {
-        return Err(crate::hir::resources::PlanError::Host("cleanup effect witness allocation"));
+        return Err(crate::hir::resources::PlanError::Host(
+            "cleanup effect witness allocation",
+        ));
     }
-    output.try_reserve_exact(count)
+    output
+        .try_reserve_exact(count)
         .map_err(|_| crate::hir::resources::PlanError::Host("cleanup effect witness allocation"))
 }
 
 pub(crate) fn check(program: &Program, sites: &[Site]) -> Result<(), Vec<Diagnostic>> {
     for site in sites {
-        let function = program.function(site.function).as_ordinary().expect("checked ordinary function");
+        let function = program
+            .function(site.function)
+            .as_ordinary()
+            .expect("checked ordinary function");
         if site.effects.is_subset(function.effects.set()) {
             continue;
         }
-        let missing = site.effects.iter().find(|e| !function.effects.set().contains(*e)).unwrap();
+        let missing = site
+            .effects
+            .iter()
+            .find(|e| !function.effects.set().contains(*e))
+            .unwrap();
         let record = program.record(site.record);
-        fn release_origin(program: &Program, record: RecordId, effect: super::Effect, budget: &mut usize) -> Option<(FunctionId, Span)> {
+        fn release_origin(
+            program: &Program,
+            record: RecordId,
+            effect: super::Effect,
+            budget: &mut usize,
+        ) -> Option<(FunctionId, Span)> {
             if *budget == 0 {
                 return None;
             }
@@ -158,7 +218,10 @@ pub(crate) fn check(program: &Program, sites: &[Site]) -> Result<(), Vec<Diagnos
                 if leaf.cleanup_effects.contains(effect) {
                     let operation = &program.resources.operations[leaf.release.0];
                     let function = program.function(operation.function).as_ordinary()?;
-                    return Some((function.id, function.effects.origin(effect).unwrap_or(function.span)));
+                    return Some((
+                        function.id,
+                        function.effects.origin(effect).unwrap_or(function.span),
+                    ));
                 }
                 return None;
             }
@@ -175,11 +238,18 @@ pub(crate) fn check(program: &Program, sites: &[Site]) -> Result<(), Vec<Diagnos
             }
             None
         }
-        let trace = if let Some((id, origin)) = release_origin(program, site.record, missing, &mut 16) {
-            format!("release declaration `{}` at {}:{}", program.function(id).name(), origin.line, origin.column)
-        } else {
-            "canonical type cleanup origin; ancestry truncated at the bounded diagnostic budget".into()
-        };
+        let trace =
+            if let Some((id, origin)) = release_origin(program, site.record, missing, &mut 16) {
+                format!(
+                    "release declaration `{}` at {}:{}",
+                    program.function(id).name(),
+                    origin.line,
+                    origin.column
+                )
+            } else {
+                "canonical type cleanup origin; ancestry truncated at the bounded diagnostic budget"
+                    .into()
+            };
         return Err(vec![Diagnostic::semantic(
             site.origin,
             format!(

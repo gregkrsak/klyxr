@@ -149,18 +149,34 @@ impl Context {
         let entries = n.checked_mul(holders);
         let factor = self.limits.traversal_depth.checked_mul(16);
         let extra = entries
-            .and_then(|e| factor.and_then(|d| d.checked_add(16)).and_then(|d| e.checked_mul(d)))
+            .and_then(|e| {
+                factor
+                    .and_then(|d| d.checked_add(16))
+                    .and_then(|d| e.checked_mul(d))
+            })
             .and_then(|e| e.checked_mul(256));
-        let base = factor.and_then(|d| d.checked_add(32))
+        let base = factor
+            .and_then(|d| d.checked_add(32))
             .and_then(|d| d.checked_mul(n))
             .and_then(|e| e.checked_mul(self.limits.identifier_bytes + 512))
-            .and_then(|e| self.envelope_source.get().checked_mul(8).and_then(|s| e.checked_add(s)));
-        if base.and_then(|b| extra.and_then(|e| b.checked_add(e)))
+            .and_then(|e| {
+                self.envelope_source
+                    .get()
+                    .checked_mul(8)
+                    .and_then(|s| e.checked_add(s))
+            });
+        if base
+            .and_then(|b| extra.and_then(|e| b.checked_add(e)))
             .map_or(true, |e| e > self.limits.working_storage)
         {
-            return Err(ResourceFailure::limit("cleanup effect witness storage", START));
+            return Err(ResourceFailure::limit(
+                "cleanup effect witness storage",
+                START,
+            ));
         }
-        let work = (n as u64).checked_pow(4).and_then(|e| e.checked_mul(640))
+        let work = (n as u64)
+            .checked_pow(4)
+            .and_then(|e| e.checked_mul(640))
             .and_then(|e| e.checked_add(self.envelope_source.get() as u64));
         if work.map_or(true, |w| w > self.limits.frontend_work) {
             return Err(ResourceFailure::limit("cleanup effect witness work", START));
@@ -255,7 +271,8 @@ impl Context {
             ));
         }
         self.envelope_nodes.set(self.envelope_nodes.get().max(n));
-        self.envelope_source.set(self.envelope_source.get().max(source));
+        self.envelope_source
+            .set(self.envelope_source.get().max(source));
         Ok(())
     }
     pub fn expression(&self, expression: &ast::Expr) -> Result<(), ()> {

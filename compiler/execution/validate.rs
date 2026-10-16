@@ -520,7 +520,9 @@ pub(super) fn cleanup_site_shape(
     summaries: &[crate::effects::EffectSet],
 ) -> Result<(), ExecutionError> {
     for (index, site) in sites.iter().enumerate() {
-        let f = p.functions().get(site.function.0)
+        let f = p
+            .functions()
+            .get(site.function.0)
             .filter(|f| f.id() == site.function)
             .and_then(|f| f.as_ordinary())
             .ok_or_else(bad)?;
@@ -528,8 +530,13 @@ pub(super) fn cleanup_site_shape(
             || summaries.get(site.record.0).copied() != Some(site.effects)
             || site.effects == crate::effects::EffectSet::EMPTY
             || !site.effects.is_subset(f.effects.set())
-            || site.origin.line == 0 || site.origin.column == 0 || site.origin.start > site.origin.end
-            || p.resources.operations.iter().any(|o| o.function == site.function)
+            || site.origin.line == 0
+            || site.origin.column == 0
+            || site.origin.start > site.origin.end
+            || p.resources
+                .operations
+                .iter()
+                .any(|o| o.function == site.function)
             || index > 0 && sites[index - 1].order() >= site.order()
         {
             return Err(bad());

@@ -606,35 +606,54 @@ mod effect_authority_tests {
     fn protected_return_owner_cannot_gain_cleanup_authority_from_an_unused_superset() {
         let mut e = prepare_synthetic(cleanup_fixture("fn make()->Leaf effects io,filesystem{let outgoing=acquire();return outgoing;} fn demo() effects io,filesystem{let received=make();}"), AdmissionLimits::default()).unwrap();
         let f = e.program.functions()[2].as_ordinary().unwrap();
-        let local = e.program.locals().iter().find(|l| l.function == f.id).unwrap().id;
-        let hir::ValueStatement::Return { span, .. } = f.body.last().unwrap() else { unreachable!() };
+        let local = e
+            .program
+            .locals()
+            .iter()
+            .find(|l| l.function == f.id)
+            .unwrap()
+            .id;
+        let hir::ValueStatement::Return { span, .. } = f.body.last().unwrap() else {
+            unreachable!()
+        };
         let mut effects = EffectSet::EMPTY;
         effects.insert(Effect::Filesystem);
         assert!(e.mir.functions()[2].cleanup_effect_sites.is_empty());
-        e.mir.test_functions_mut()[2].cleanup_effect_sites.push(crate::effects::custody::Site {
-            function: f.id,
-            holder: hir::Place::Local(local),
-            record: hir::RecordId(0),
-            effects,
-            kind: crate::effects::custody::Kind::Return,
-            origin: *span,
-        });
+        e.mir.test_functions_mut()[2]
+            .cleanup_effect_sites
+            .push(crate::effects::custody::Site {
+                function: f.id,
+                holder: hir::Place::Local(local),
+                record: hir::RecordId(0),
+                effects,
+                kind: crate::effects::custody::Kind::Return,
+                origin: *span,
+            });
         assert!(e.validate().is_err());
     }
 
     #[test]
     fn cleanup_witness_storage_neighbors_and_host_failure_never_grant_authority() {
         let p = cleanup_fixture("fn demo() effects io,filesystem{let x=acquire();}");
-        let prepare = |bytes| prepare_synthetic(p.clone(), AdmissionLimits {
-            working_storage: bytes,
-            ..AdmissionLimits::default()
-        });
+        let prepare = |bytes| {
+            prepare_synthetic(
+                p.clone(),
+                AdmissionLimits {
+                    working_storage: bytes,
+                    ..AdmissionLimits::default()
+                },
+            )
+        };
         let mut low = 1;
         let mut high = AdmissionLimits::default().working_storage;
         assert!(prepare(high).is_ok());
         while low < high {
             let middle = low + (high - low) / 2;
-            if prepare(middle).is_ok() { high = middle; } else { low = middle + 1; }
+            if prepare(middle).is_ok() {
+                high = middle;
+            } else {
+                low = middle + 1;
+            }
         }
         assert!(prepare(low).is_ok());
         let error = prepare(low - 1).err().unwrap();
@@ -648,7 +667,10 @@ mod effect_authority_tests {
         let _restore = Restore;
         crate::effects::custody::FAIL_WITNESS_ALLOCATION.with(|f| f.set(true));
         let error = prepare(high).err().unwrap();
-        assert_eq!(error.kind, ErrorKind::Host("cleanup effect witness allocation"));
+        assert_eq!(
+            error.kind,
+            ErrorKind::Host("cleanup effect witness allocation")
+        );
     }
 
     #[test]
@@ -659,16 +681,37 @@ mod effect_authority_tests {
             ("", "let x=acquire();return;", Kind::BareReturn),
             ("->bool", "let x=acquire();return true;", Kind::Return),
             ("", "if true{let x=acquire();}", Kind::Fallthrough),
-            ("", "let mut flag=true;while flag{let x=acquire();flag=false;}", Kind::Iteration),
+            (
+                "",
+                "let mut flag=true;while flag{let x=acquire();flag=false;}",
+                Kind::Iteration,
+            ),
             ("", "while true{let x=acquire();break;}", Kind::Break),
-            ("", "let mut flag=true;while flag{let x=acquire();flag=false;continue;}", Kind::Continue),
+            (
+                "",
+                "let mut flag=true;while flag{let x=acquire();flag=false;continue;}",
+                Kind::Continue,
+            ),
             ("", "let mut x=acquire();x=acquire();", Kind::Replacement),
         ] {
             let bad = cleanup_fixture(&format!("fn demo(){result} effects io{{{body}}}"));
-            let error = prepare_synthetic(bad, AdmissionLimits::default()).err().unwrap();
-            assert!(matches!(error.kind, ErrorKind::Frontend { phase: "effects", .. }), "{error}");
+            let error = prepare_synthetic(bad, AdmissionLimits::default())
+                .err()
+                .unwrap();
+            assert!(
+                matches!(
+                    error.kind,
+                    ErrorKind::Frontend {
+                        phase: "effects",
+                        ..
+                    }
+                ),
+                "{error}"
+            );
             assert!(error.to_string().contains("filesystem"));
-            let good = cleanup_fixture(&format!("fn demo(){result} effects io,filesystem{{{body}}}"));
+            let good = cleanup_fixture(&format!(
+                "fn demo(){result} effects io,filesystem{{{body}}}"
+            ));
             let e = prepare_synthetic(good, AdmissionLimits::default()).unwrap();
             assert!(e.approval.cleanup_sites.iter().any(|s| s.kind == kind));
             assert!(execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).is_ok());
@@ -680,12 +723,32 @@ mod effect_authority_tests {
         let source = "fn pass(x:Leaf)->Leaf{return x;} fn branches(x:Leaf,flag:bool)->Leaf{if flag{return x;}else{return x;}} fn make()->Leaf effects io{return acquire();} fn mixed(x:Leaf,flag:bool)->Leaf effects io,filesystem{if flag{return x;}let other=acquire();return other;} fn consume(x:Leaf) effects filesystem{} fn both(x:Leaf,flag:bool) effects filesystem{if flag{consume(x);}else{consume(x);}} fn maybe(x:Leaf,flag:bool) effects filesystem{if flag{consume(x);}} fn demo() effects io,filesystem{let a=acquire();let b=pass(a);let c=branches(b,false);let d=mixed(c,true);let e=make();both(acquire(),true);maybe(acquire(),false);}";
         let e = prepare_synthetic(cleanup_fixture(source), AdmissionLimits::default()).unwrap();
         for name in ["pass", "branches", "make", "both"] {
-            let id = e.program.functions().iter().find(|f| f.name() == name).unwrap().id();
-            assert!(!e.approval.cleanup_sites.iter().any(|s| s.function == id), "{name}");
+            let id = e
+                .program
+                .functions()
+                .iter()
+                .find(|f| f.name() == name)
+                .unwrap()
+                .id();
+            assert!(
+                !e.approval.cleanup_sites.iter().any(|s| s.function == id),
+                "{name}"
+            );
         }
         for name in ["mixed", "maybe"] {
-            let f = e.program.functions().iter().find(|f| f.name() == name).unwrap().as_ordinary().unwrap();
-            assert!(e.approval.cleanup_sites.iter().any(|s| s.function == f.id && s.holder == hir::Place::Parameter(f.parameters[0])));
+            let f = e
+                .program
+                .functions()
+                .iter()
+                .find(|f| f.name() == name)
+                .unwrap()
+                .as_ordinary()
+                .unwrap();
+            assert!(e
+                .approval
+                .cleanup_sites
+                .iter()
+                .any(|s| s.function == f.id && s.holder == hir::Place::Parameter(f.parameters[0])));
         }
         assert!(execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).is_ok());
     }
@@ -694,20 +757,48 @@ mod effect_authority_tests {
     fn short_circuit_cleanup_custody_keeps_skip_alternatives_separate_from_usability() {
         let source = "fn take(x:Leaf)->bool effects filesystem{return true;} fn skipped(x:Leaf) effects filesystem{let seen=false&&take(x);} fn direct(x:Leaf) effects filesystem{let seen=take(x);} fn demo() effects io,filesystem{skipped(acquire());direct(acquire());}";
         let e = prepare_synthetic(cleanup_fixture(source), AdmissionLimits::default()).unwrap();
-        let find = |name| e.program.functions().iter().find(|f| f.name() == name).unwrap().id();
-        assert!(e.approval.cleanup_sites.iter().any(|s| s.function == find("skipped")));
-        assert!(!e.approval.cleanup_sites.iter().any(|s| s.function == find("direct")));
+        let find = |name| {
+            e.program
+                .functions()
+                .iter()
+                .find(|f| f.name() == name)
+                .unwrap()
+                .id()
+        };
+        assert!(e
+            .approval
+            .cleanup_sites
+            .iter()
+            .any(|s| s.function == find("skipped")));
+        assert!(!e
+            .approval
+            .cleanup_sites
+            .iter()
+            .any(|s| s.function == find("direct")));
         assert!(execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).is_ok());
     }
 
     #[test]
     fn cleanup_witness_site_function_owner_plan_summary_and_origin_mutations_reject() {
         for mutation in 0..11 {
-            let mut e = prepare_synthetic(cleanup_fixture("fn demo() effects io,filesystem{let a=acquire();let b=acquire();}"), AdmissionLimits::default()).unwrap();
-            let sites = &mut e.mir.test_functions_mut().last_mut().unwrap().cleanup_effect_sites;
+            let mut e = prepare_synthetic(
+                cleanup_fixture(
+                    "fn demo() effects io,filesystem{let a=acquire();let b=acquire();}",
+                ),
+                AdmissionLimits::default(),
+            )
+            .unwrap();
+            let sites = &mut e
+                .mir
+                .test_functions_mut()
+                .last_mut()
+                .unwrap()
+                .cleanup_effect_sites;
             assert_eq!(sites.len(), 2);
             match mutation {
-                0 => { sites.pop(); }
+                0 => {
+                    sites.pop();
+                }
                 1 => sites.push(sites[0].clone()),
                 2 => sites.swap(0, 1),
                 3 => sites[0].function = FunctionId(0),
@@ -715,7 +806,9 @@ mod effect_authority_tests {
                 5 => sites[0].record = hir::RecordId(1),
                 6 => sites[0].effects = EffectSet::EMPTY,
                 7 => sites[0].origin.start += 1,
-                8 => { sites[0].effects.insert(Effect::Io); }
+                8 => {
+                    sites[0].effects.insert(Effect::Io);
+                }
                 9 => sites[0].kind = crate::effects::custody::Kind::Replacement,
                 _ => sites[0].holder = sites[1].holder,
             }
