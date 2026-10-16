@@ -157,7 +157,10 @@ fn complete_declared_contracts_propagate_through_both_call_forms() {
                 assert!(message.contains("middle"));
                 assert!(message.contains("declaration at"));
                 let source = if value {
-                    source.replace("top()->bool{", &format!("top()->bool effects {}{{", effect.name()))
+                    source.replace(
+                        "top()->bool{",
+                        &format!("top()->bool effects {}{{", effect.name()),
+                    )
                 } else {
                     source.replace("top(){", &format!("top() effects {}{{", effect.name()))
                 };
@@ -181,7 +184,10 @@ fn structural_unions_keep_terminal_short_circuit_and_loop_calls() {
         "let chosen=if true {clock()} else {false};",
     ] {
         let error = compile_source(&format!("{prelude} fn demo(){{{body}}}")).unwrap_err();
-        assert!(matches!(error, FrontendError::Effects(_)), "{body}: {error}");
+        assert!(
+            matches!(error, FrontendError::Effects(_)),
+            "{body}: {error}"
+        );
         compile_source(&format!("{prelude} fn demo() effects io,clock {{{body}}}")).unwrap();
     }
 }
@@ -194,14 +200,33 @@ fn recursive_contract_diagnostics_terminate_at_an_honest_declaration_edge() {
     assert!(message.contains("clock"));
     assert!(message.contains("call to `a`"));
     assert!(message.len() < 512);
-    let e = execution::prepare_execution(source, AdmissionLimits::default()).err().unwrap();
-    assert!(matches!(e.kind, execution::ErrorKind::Frontend { phase: "effects", .. }));
-    let e = execution::prepare_execution_from_reader(source.as_bytes(), AdmissionLimits::default()).err().unwrap();
-    assert!(matches!(e.kind, execution::ErrorKind::Frontend { phase: "effects", .. }));
+    let e = execution::prepare_execution(source, AdmissionLimits::default())
+        .err()
+        .unwrap();
+    assert!(matches!(
+        e.kind,
+        execution::ErrorKind::Frontend {
+            phase: "effects",
+            ..
+        }
+    ));
+    let e = execution::prepare_execution_from_reader(source.as_bytes(), AdmissionLimits::default())
+        .err()
+        .unwrap();
+    assert!(matches!(
+        e.kind,
+        execution::ErrorKind::Frontend {
+            phase: "effects",
+            ..
+        }
+    ));
 }
 
 #[test]
 fn unsafe_membership_cannot_authorize_reusing_a_moved_owner() {
-    let error = compile_source("type N=range 0..1; record R{x:N} fn demo(x:R) effects unsafe {let first=x;let second=x;}").unwrap_err();
+    let error = compile_source(
+        "type N=range 0..1; record R{x:N} fn demo(x:R) effects unsafe {let first=x;let second=x;}",
+    )
+    .unwrap_err();
     assert!(matches!(error, FrontendError::Ownership(_)));
 }

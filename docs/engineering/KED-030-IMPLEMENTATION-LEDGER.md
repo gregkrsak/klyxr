@@ -148,3 +148,12 @@ unchanged. No test migration, weakened expectation or platform failure is claime
 [Docs](https://github.com/gregkrsak/klyxr/actions/runs/38969651619) and
 [verify](https://github.com/gregkrsak/klyxr/actions/runs/38969651788) passed.
 No later milestone was started on this failing compilation gate.
+
+Milestone 3 compilation correction `46a1df5337a082c68f377c2d43008477f79f42b8`
+(tree `e0d3c2341a76fd4daff78d26546087efdcafac29`) passed all-target compilation.
+[Build 38969904121](https://github.com/gregkrsak/klyxr/actions/runs/38969904121)
+then stopped only at rustfmt layout. Its exact diff was applied to execution
+preparation call layout and new test layout. [Tests 38969904096](https://github.com/gregkrsak/klyxr/actions/runs/38969904096)
+passed debug test execution/reconciliation; release was still running when this
+format-only correction was prepared. [Docs](https://github.com/gregkrsak/klyxr/actions/runs/38969904112)
+and [verify](https://github.com/gregkrsak/klyxr/actions/runs/38969904118) passed.

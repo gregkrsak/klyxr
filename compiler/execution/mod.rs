@@ -373,8 +373,7 @@ pub fn prepare_execution(
     if let Some(e) = context.failure.get() {
         return Err(e.into());
     }
-    crate::effects::calls::check(&program)
-        .map_err(|e| frontend("effects", e, &context))?;
+    crate::effects::calls::check(&program).map_err(|e| frontend("effects", e, &context))?;
     seal(program, limits)
 }
 impl From<hir::resources::PlanError> for ExecutionError {
@@ -551,8 +550,7 @@ fn prepare_synthetic(
     if let Some(e) = context.failure.get() {
         return Err(e.into());
     }
-    crate::effects::calls::check(&program)
-        .map_err(|e| frontend("effects", e, &context))?;
+    crate::effects::calls::check(&program).map_err(|e| frontend("effects", e, &context))?;
     seal(program, limits)
 }
 
