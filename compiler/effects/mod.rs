@@ -2,6 +2,7 @@
 use crate::lexer::Span;
 use std::fmt;
 pub(crate) mod calls;
+pub(crate) mod custody;
 
 /// A complete ordinary signature contract. Absent clauses allocate no origins.
 /// Verified and harness declarations never contain this representation.

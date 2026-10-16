@@ -67,7 +67,8 @@ pub fn compile_source(source: &str) -> Result<hir::Program, FrontendError> {
     let ast = parse_source(source)?;
     let resolved = resolve::resolve(&ast).map_err(FrontendError::Resolve)?;
     let program = types::check(resolved).map_err(FrontendError::Type)?;
-    ownership::check(&program).map_err(FrontendError::Ownership)?;
+    let cleanup_sites = ownership::analyze(&program).map_err(FrontendError::Ownership)?;
     effects::calls::check(&program).map_err(FrontendError::Effects)?;
+    effects::custody::check(&program, &cleanup_sites).map_err(FrontendError::Effects)?;
     Ok(program)
 }

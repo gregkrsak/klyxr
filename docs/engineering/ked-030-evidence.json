@@ -19,7 +19,14 @@
     "lib.rs::hir::resources::tests::operation_function_leaf_and_plan_mutations_reject_independently",
     "lib.rs::hir::resources::tests::empty_cleanup_effects_preserve_real_plans_and_responsibility",
     "lib.rs::execution::effect_authority_tests::cached_cleanup_effect_summaries_are_bound_to_canonical_derivation",
-    "lib.rs::hir::resources::tests::aggregate_summary_unions_distinct_release_contracts_without_expansion"
+    "lib.rs::hir::resources::tests::aggregate_summary_unions_distinct_release_contracts_without_expansion",
+    "lib.rs::execution::effect_authority_tests::every_ordinary_exit_and_displacement_requires_its_cleanup_effect",
+    "lib.rs::execution::effect_authority_tests::pass_through_both_path_transfer_and_return_protection_do_not_charge_cleanup",
+    "lib.rs::execution::effect_authority_tests::short_circuit_cleanup_custody_keeps_skip_alternatives_separate_from_usability",
+    "lib.rs::execution::effect_authority_tests::cleanup_witness_site_function_owner_plan_summary_and_origin_mutations_reject",
+    "lib.rs::execution::effect_authority_tests::cleanup_witness_storage_neighbors_and_host_failure_never_grant_authority",
+    "lib.rs::ownership::cleanup_effect_transaction_tests::complete_expression_failure_restores_cleanup_custody_without_an_approval",
+    "lib.rs::execution::effect_authority_tests::protected_return_owner_cannot_gain_cleanup_authority_from_an_unused_superset"
   ],
   "contract_corrections": [],
   "fixture_adaptations": []

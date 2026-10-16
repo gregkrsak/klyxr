@@ -90,6 +90,7 @@ impl BasicBlock {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MirFunction {
+    pub(crate) cleanup_effect_sites: Vec<crate::effects::custody::Site>,
     pub(crate) direct_effects: Vec<crate::effects::calls::CallSite>,
     effects: crate::effects::Declaration,
     pub(crate) temporaries: Option<temporaries::Flow>,
@@ -121,6 +122,17 @@ impl MirFunction {
     pub fn validate(&self) -> Result<(), &'static str> {
         if !self.effects.validate() {
             return Err("invalid MIR effect declaration");
+        }
+        for site in &self.cleanup_effect_sites {
+            if site.function != self.function
+                || !site.effects.is_subset(self.effects.set())
+                || site.effects == crate::effects::EffectSet::EMPTY
+                || site.origin.line == 0
+                || site.origin.column == 0
+                || site.origin.start > site.origin.end
+            {
+                return Err("invalid MIR cleanup effect site");
+            }
         }
         for (index, site) in self.direct_effects.iter().enumerate() {
             if site.function != self.function
@@ -275,6 +287,24 @@ pub fn lower(program: &hir::Program) -> MirProgram {
     lower_internal(program, true, &[], Vec::new()).0
 }
 
+/// Attach only the successful checker's immutable cleanup realization evidence.
+/// This performs no ownership or effect inference.
+pub(crate) fn attach_cleanup_effects(
+    program: &mut MirProgram,
+    sites: &[crate::effects::custody::Site],
+) -> Result<(), hir::resources::PlanError> {
+    if sites.iter().any(|s| !program.functions.iter().any(|f| f.function == s.function)) {
+        return Err(hir::resources::PlanError::Integrity("foreign cleanup effect witness function"));
+    }
+    for function in &mut program.functions {
+        let count = sites.iter().filter(|s| s.function == function.function).count();
+        function.cleanup_effect_sites.try_reserve_exact(count)
+            .map_err(|_| hir::resources::PlanError::Host("MIR cleanup effect witness allocation"))?;
+        function.cleanup_effect_sites.extend(sites.iter().filter(|s| s.function == function.function).cloned());
+    }
+    Ok(())
+}
+
 /// Produced by the same lowering, never reconstructed by the runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OriginKind {
@@ -371,6 +401,7 @@ fn lower_internal(
                 );
             }
             let function = MirFunction {
+                cleanup_effect_sites: Vec::new(),
                 direct_effects: crate::effects::calls::sites(program, f),
                 effects: f.effects.clone(),
                 temporaries: builder.temporaries,
@@ -1360,6 +1391,7 @@ mod tests {
                 },
             ] {
                 let m = MirFunction {
+                    cleanup_effect_sites: Vec::new(),
                     direct_effects: Vec::new(),
                     effects: crate::effects::Declaration::default(),
                     temporaries: None,
@@ -1390,6 +1422,7 @@ mod tests {
                 },
             ] {
                 let m = MirFunction {
+                    cleanup_effect_sites: Vec::new(),
                     direct_effects: Vec::new(),
                     effects: crate::effects::Declaration::default(),
                     temporaries: None,
@@ -1438,6 +1471,7 @@ mod tests {
                 hir::ExprKind::FieldAccess(access)
             };
             let m = MirFunction {
+                cleanup_effect_sites: Vec::new(),
                 direct_effects: Vec::new(),
                 effects: crate::effects::Declaration::default(),
                 temporaries: None,
@@ -1514,6 +1548,7 @@ mod multiple_field_tests {
                 ];
                 for statement in statements {
                     let m = MirFunction {
+                        cleanup_effect_sites: Vec::new(),
                         direct_effects: Vec::new(),
                         effects: crate::effects::Declaration::default(),
                         temporaries: None,
@@ -1531,6 +1566,7 @@ mod multiple_field_tests {
                     );
                 }
                 let m = MirFunction {
+                    cleanup_effect_sites: Vec::new(),
                     direct_effects: Vec::new(),
                     effects: crate::effects::Declaration::default(),
                     temporaries: None,
@@ -1548,6 +1584,7 @@ mod multiple_field_tests {
                 );
                 e.ty = hir::ExprType::Bool;
                 let m = MirFunction {
+                    cleanup_effect_sites: Vec::new(),
                     direct_effects: Vec::new(),
                     effects: crate::effects::Declaration::default(),
                     temporaries: None,
@@ -1601,6 +1638,7 @@ mod multiple_field_tests {
                     hir::ExprKind::FieldAccess(access)
                 };
                 let m = MirFunction {
+                    cleanup_effect_sites: Vec::new(),
                     direct_effects: Vec::new(),
                     effects: crate::effects::Declaration::default(),
                     temporaries: None,
@@ -1647,6 +1685,7 @@ mod multiple_field_tests {
                     arguments[0].ty = hir::ExprType::Bool;
                 }
                 let m = MirFunction {
+                    cleanup_effect_sites: Vec::new(),
                     direct_effects: Vec::new(),
                     effects: crate::effects::Declaration::default(),
                     temporaries: None,
@@ -1675,6 +1714,7 @@ mod multiple_field_tests {
             span: value.span,
         };
         let m = MirFunction {
+            cleanup_effect_sites: Vec::new(),
             direct_effects: Vec::new(),
             effects: crate::effects::Declaration::default(),
             temporaries: None,
@@ -1767,6 +1807,7 @@ mod multiple_field_tests {
                     },
                 ] {
                     let m = MirFunction {
+                        cleanup_effect_sites: Vec::new(),
                         direct_effects: Vec::new(),
                         effects: crate::effects::Declaration::default(),
                         temporaries: None,
@@ -1781,6 +1822,7 @@ mod multiple_field_tests {
                     assert_eq!(m.validate(), Err(error));
                 }
                 let m = MirFunction {
+                    cleanup_effect_sites: Vec::new(),
                     direct_effects: Vec::new(),
                     effects: crate::effects::Declaration::default(),
                     temporaries: None,
@@ -1795,6 +1837,7 @@ mod multiple_field_tests {
                 assert_eq!(m.validate(), Err(error));
                 if e.ty == hir::ExprType::Bool {
                     let m = MirFunction {
+                        cleanup_effect_sites: Vec::new(),
                         direct_effects: Vec::new(),
                         effects: crate::effects::Declaration::default(),
                         temporaries: None,

@@ -201,3 +201,48 @@ identities in each profile, with both affine/authority controls passed.
 [Build](https://github.com/gregkrsak/klyxr/actions/runs/38970650641) stopped at one
 rustfmt call-layout diff, which was applied exactly. Clippy/Rustdoc await the
 corrective push; no later layer was started on this gate.
+
+## Milestone 4 completed
+
+Correction commit `17b382b0a76a9995857af6ba0a20a6fd654ca37f`, tree
+`4aed797145f7c234c4b8c9452db1ec811180f9df`, passed all four workflows:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38970841650),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38970841711),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38970841538),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38970841567).
+Job 117208545567 reconciled 1,743 predecessors plus 19 additions = 1,762 passing
+identities in both profiles; affine/doctest controls passed. All job steps and
+relevant logs were inspected before milestone 5.
+
+## Milestone 5 — Cleanup realization evidence and approval
+
+The existing structured ownership checker now carries an effects-only may-custody
+product. Validated initialization/consume/replacement transitions update it;
+no new move or loan permission is introduced. Fallthrough alternatives union
+residual custody, while effects from terminal branches remain recorded. Both-path
+transfer leaves no old responsibility. Short-circuit skip custody is retained
+independently of the predecessor's conservative usability state. Return results
+transfer before remaining owners contribute. Loop locals contribute before
+normalization removes their safety state. Displaced replacement owners contribute
+before new-generation initialization; existing runtime ordering is unchanged.
+
+The successful checker emits canonical holder/type/realization/origin evidence.
+MIR receives that evidence, and opaque approval retains its immutable original.
+Pre-execution validation checks shape/type/summary/order and deterministic lowering
+against the retained witness without rerunning ownership or inferring runtime
+effects. All compilation/preparation routes enforce the cleanup subset rule.
+
+Nonempty cleanup effects reserve an additional conservative envelope before
+checker snapshots: holder-site combinations times simultaneous snapshot depth,
+plus original frontend storage; work is bounded by a checked 640*n^4 envelope.
+The holder bound is the maximum within one function, not an interprocedural
+ownership model. Empty-effect predecessors retain the old envelope. Diagnostic
+release ancestry has a fixed 16-visit budget and stops honestly if truncated.
+
+Seven new identities cover every ordinary exit and replacement, missing cleanup
+rejection, pass-through/both-path transfer, protected return remainders,
+short-circuit residual custody, independent MIR witness mutations and a canonical-looking protected-result cleanup
+forgery under a legal unused superset, exact storage
+neighbors, detected witness allocation failure, and expression-transaction custody
+rollback. They are authored and await this milestone's authoritative CI results.
+Temporary/private-domain integration and final conformance remain pending.
