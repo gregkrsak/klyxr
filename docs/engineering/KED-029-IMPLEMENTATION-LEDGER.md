@@ -194,3 +194,31 @@ https://github.com/gregkrsak/klyxr/actions/runs/38849550748, docs
 https://github.com/gregkrsak/klyxr/actions/runs/38849550785, verify
 https://github.com/gregkrsak/klyxr/actions/runs/38849550885. No later layer added
 before this milestone's four gates pass.
+
+Milestone 4 completed at `56dc5ec39fa4d08091a7270bec618281b2947c43`, tree
+`e03d5a7bcbdd984986dd75316b5d7d8dfb75701a`. All four passed:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38849723088),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38849722960),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38849723026),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38849722891).
+Both complete profiles reconciled 1,725 passing identities; both affine checks
+and authority doctests passed.
+
+## Milestone 5 — aggregate, assignment and control-flow evidence
+
+Private A/G/B retirement distinguishes sibling creation order from G's canonical
+field plan. Pending construction witnesses stop retirement after a middle
+canonical field receives a moved named source, and after the last written field
+of a nested pending record. Initialized membership, moved source and incomplete
+publication state are inspected directly alongside identity conservation.
+
+All four assignment forms have exact success and retirement-stop neighbors.
+Conditions retain Bool and retire before selection; a cleanup stop prevents arm
+entry. Conditional initializers keep one caller activation across their selected
+CFG path and never execute the other leaf. Repeated loop statements receive
+fresh activations. Bool wrappers remain legal while direct/nested Move and
+reference activity in recurring conditions reject. Parser temporary-borrow
+rejections, source value-discard typing and private forged resource-discard
+metadata are checked separately. Nine new test identities enumerate these
+matrices. Validation pending; Host allocation, admission and final artifact
+pressure remain before documentation and complete implementation conformance.

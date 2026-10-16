@@ -19,6 +19,15 @@
     "lib.rs::execution::machine::temporaries::tests::assignment_cleanup_stop_preserves_rhs_prefix_and_prevents_pending_write",
     "lib.rs::execution::machine::temporaries::tests::later_argument_trap_retains_earlier_owner_without_call_entry",
     "lib.rs::execution::machine::temporaries::tests::every_call_fuel_cut_retains_partial_parameters_and_refuses_resume",
-    "lib.rs::execution::machine::temporaries::tests::every_argument_storage_cut_conserves_and_exact_peak_succeeds"
+    "lib.rs::execution::machine::temporaries::tests::every_argument_storage_cut_conserves_and_exact_peak_succeeds",
+    "lib.rs::execution::machine::temporaries::tests::every_existing_assignment_has_success_and_retirement_stop_neighbors",
+    "lib.rs::execution::machine::temporaries::tests::condition_retirement_stop_retains_bool_and_prevents_arm_entry",
+    "lib.rs::execution::machine::temporaries::tests::if_selection_occurs_after_retirement_and_only_selected_arm_acquires",
+    "lib.rs::execution::machine::temporaries::tests::conditional_initializer_keeps_one_activation_and_skips_other_leaf",
+    "lib.rs::execution::machine::temporaries::tests::loop_statement_activations_are_fresh_and_bool_wrapper_remains_legal",
+    "lib.rs::execution::machine::temporaries::tests::source_borrow_discard_and_recurring_condition_exclusions_remain",
+    "lib.rs::execution::machine::cleanup::temporary_aggregate_tests::private_a_aggregate_b_retirement_keeps_both_orders_independent",
+    "lib.rs::execution::machine::cleanup::temporary_aggregate_tests::middle_pending_field_keeps_moved_source_membership_after_child_stop",
+    "lib.rs::execution::machine::cleanup::temporary_aggregate_tests::nested_pending_last_written_middle_field_cannot_publish_before_retirement"
   ]
 }
