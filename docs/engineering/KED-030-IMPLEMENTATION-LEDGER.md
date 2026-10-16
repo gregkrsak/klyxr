@@ -514,3 +514,14 @@ commit `edf80c1e68e6fe3e2b25f6a557fc121395e45adc`, tree
 `844afe3deacf22bc55844bc8ea92d76036cb3fc2`. Static asset/scaffold, manifest,
 generated-context byte and full diff-integrity checks passed. All executable
 claims still depend on the final correction's GitHub gate and independent PR runs.
+
+Origin correction `d30d506be5143f9cb272937423e2a2056651d5dd`, tree
+`56a9e2a8995bcc0bc2d69cd41caa136d090242d2`, passed all-target compilation,
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38975842428) and
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38975842326).
+[Build](https://github.com/gregkrsak/klyxr/actions/runs/38975842300) requested
+one final formatting hunk in the added member-origin mutation assertion; it is
+applied without behavior changes. [Tests](https://github.com/gregkrsak/klyxr/actions/runs/38975842289)
+contains that head's profile evidence. The next head changes only that formatting
+and this auditable gate entry; final push and independent PR results are reported
+externally with their exact immutable head/tree.

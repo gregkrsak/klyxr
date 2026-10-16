@@ -240,7 +240,10 @@ mod tests {
         assert!(!bad_span.validate());
         let mut outside = valid.clone();
         let origins = std::rc::Rc::make_mut(outside.origins.as_mut().unwrap());
-        origins.members[Effect::Clock as usize].as_mut().unwrap().end = origins.clause.end + 1;
+        origins.members[Effect::Clock as usize]
+            .as_mut()
+            .unwrap()
+            .end = origins.clause.end + 1;
         assert!(!outside.validate());
         assert!(Declaration::default().validate());
     }
