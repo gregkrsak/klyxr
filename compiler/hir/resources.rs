@@ -162,7 +162,9 @@ impl Catalog {
                     let leaf = catalog
                         .leaves
                         .get(resource.0)
-                        .filter(|l| l.id == *resource && l.record == record && l.release == *operation)
+                        .filter(|l| {
+                            l.id == *resource && l.record == record && l.release == *operation
+                        })
                         .ok_or("cleanup summary release binding mismatch")?;
                     result = leaf.cleanup_effects;
                 }

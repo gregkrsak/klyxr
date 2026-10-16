@@ -190,3 +190,14 @@ operation/function/leaf/binding mutations, aggregate unions, empty-summary plans
 and independent cached-summary mutations through actual execution approval.
 These new tests await milestone GitHub execution. Ownership-produced realization
 checking and private execution-domain authority remain pending.
+
+Milestone 4 first push `3f638b0e522586eb003d41b4c4929e2bd95ca150`, tree
+`42be08ec26ddfbc66424fce1ca51f6db4e33526c`, passed all-target compilation and
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38970650456): job
+117207905893 reconciled 1,743 predecessors plus 19 additions = 1,762 passing
+identities in each profile, with both affine/authority controls passed.
+[Docs](https://github.com/gregkrsak/klyxr/actions/runs/38970650381) and
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38970650493) passed.
+[Build](https://github.com/gregkrsak/klyxr/actions/runs/38970650641) stopped at one
+rustfmt call-layout diff, which was applied exactly. Clippy/Rustdoc await the
+corrective push; no later layer was started on this gate.
