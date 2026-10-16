@@ -288,8 +288,15 @@ pub(crate) fn lower_with_origins(
         program.resources.plans(program)?
     };
     let mut flows = Vec::new();
-    for function in program.functions().iter().filter_map(|f| f.as_ordinary()).filter(|_| plans.iter().any(Option::is_some)) {
-        flows.try_reserve_exact(1).map_err(|_| hir::resources::PlanError::Host("temporary function allocation"))?;
+    for function in program
+        .functions()
+        .iter()
+        .filter_map(|f| f.as_ordinary())
+        .filter(|_| plans.iter().any(Option::is_some))
+    {
+        flows
+            .try_reserve_exact(1)
+            .map_err(|_| hir::resources::PlanError::Host("temporary function allocation"))?;
         flows.push(temporaries::Flow::lower(program, &function.body, &plans)?);
     }
     Ok(lower_internal(program, false, &plans, flows))
@@ -404,18 +411,45 @@ struct Builder {
 }
 impl Builder {
     fn temporary_region(&mut self, statement: &ValueStatement) -> Option<temporaries::RegionId> {
-        if matches!(statement, ValueStatement::ReturnNoValue { .. } | ValueStatement::Break { .. } | ValueStatement::Continue { .. }) {
+        if matches!(
+            statement,
+            ValueStatement::ReturnNoValue { .. }
+                | ValueStatement::Break { .. }
+                | ValueStatement::Continue { .. }
+        ) {
             return None;
         }
         let evaluation = self.next_evaluation;
         self.next_evaluation += 1;
-        self.temporaries.as_ref()?.regions.iter()
-            .find(|r| r.evaluation == Some(evaluation)).map(|r| r.id)
+        self.temporaries
+            .as_ref()?
+            .regions
+            .iter()
+            .find(|r| r.evaluation == Some(evaluation))
+            .map(|r| r.id)
     }
-    fn temporary_point(&mut self, block: BasicBlockId, statement: usize, region: Option<temporaries::RegionId>, site: Option<temporaries::SiteId>, begin: bool, complete: bool) {
+    fn temporary_point(
+        &mut self,
+        block: BasicBlockId,
+        statement: usize,
+        region: Option<temporaries::RegionId>,
+        site: Option<temporaries::SiteId>,
+        begin: bool,
+        complete: bool,
+    ) {
         if let (Some(flow), Some(region)) = (&mut self.temporaries, region) {
-            assert!(flow.points.len() < flow.points.capacity(), "reserved source points");
-            flow.points.push(temporaries::Point { block, statement, region, site, begin, complete });
+            assert!(
+                flow.points.len() < flow.points.capacity(),
+                "reserved source points"
+            );
+            flow.points.push(temporaries::Point {
+                block,
+                statement,
+                region,
+                site,
+                begin,
+                complete,
+            });
         }
     }
     fn reserve(&mut self) -> BasicBlockId {
@@ -465,11 +499,25 @@ impl Builder {
         {
             let then_target = self.reserve();
             let else_target = self.reserve();
-            let child = |index| region_site.map(|(r, s)| (r, self.temporaries.as_ref().unwrap().sites[s.0].children[index]));
+            let child = |index| {
+                region_site.map(|(r, s)| {
+                    (
+                        r,
+                        self.temporaries.as_ref().unwrap().sites[s.0].children[index],
+                    )
+                })
+            };
             let condition_site = child(0);
             let then_site = child(1);
             let else_site = child(2);
-            self.temporary_point(current, statements.len(), region_site.map(|p| p.0), condition_site.map(|p| p.1), begin, false);
+            self.temporary_point(
+                current,
+                statements.len(),
+                region_site.map(|p| p.0),
+                condition_site.map(|p| p.1),
+                begin,
+                false,
+            );
             self.finish(
                 current,
                 statements,
@@ -480,10 +528,31 @@ impl Builder {
                 },
                 origin,
             );
-            self.initialize(then_target, Vec::new(), then_value, target, then_site, false);
-            self.initialize(else_target, Vec::new(), else_value, target, else_site, false);
+            self.initialize(
+                then_target,
+                Vec::new(),
+                then_value,
+                target,
+                then_site,
+                false,
+            );
+            self.initialize(
+                else_target,
+                Vec::new(),
+                else_value,
+                target,
+                else_site,
+                false,
+            );
         } else {
-            self.temporary_point(current, statements.len(), region_site.map(|p| p.0), region_site.map(|p| p.1), begin, true);
+            self.temporary_point(
+                current,
+                statements.len(),
+                region_site.map(|p| p.0),
+                region_site.map(|p| p.1),
+                begin,
+                true,
+            );
             self.initialization(current, statements.len(), local, span);
             statements.push(Statement::Let {
                 local,
@@ -604,9 +673,35 @@ impl Builder {
                 kind: OriginKind::Statement,
             };
             let region = self.temporary_region(statement);
-            let root = region.and_then(|r| self.temporaries.as_ref().unwrap().regions[r.0].roots.first().copied());
-            if !matches!(statement, ValueStatement::Let { initializer: TypedExpr { kind: hir::ExprKind::IfValue { .. }, .. }, .. } | ValueStatement::If { .. } | ValueStatement::While { .. }) {
-                self.temporary_point(current, statements.len(), region, if matches!(statement, ValueStatement::CallNoValue { .. }) { None } else { root }, true, true);
+            let root = region.and_then(|r| {
+                self.temporaries.as_ref().unwrap().regions[r.0]
+                    .roots
+                    .first()
+                    .copied()
+            });
+            if !matches!(
+                statement,
+                ValueStatement::Let {
+                    initializer: TypedExpr {
+                        kind: hir::ExprKind::IfValue { .. },
+                        ..
+                    },
+                    ..
+                } | ValueStatement::If { .. }
+                    | ValueStatement::While { .. }
+            ) {
+                self.temporary_point(
+                    current,
+                    statements.len(),
+                    region,
+                    if matches!(statement, ValueStatement::CallNoValue { .. }) {
+                        None
+                    } else {
+                        root
+                    },
+                    true,
+                    true,
+                );
             }
             match statement {
                 ValueStatement::ReturnNoValue { .. } => {
@@ -650,7 +745,11 @@ impl Builder {
                             current,
                             std::mem::take(&mut statements),
                             initializer,
-                            InitializerDestination { local: *local, span: *span, join },
+                            InitializerDestination {
+                                local: *local,
+                                span: *span,
+                                join,
+                            },
                             region.zip(root),
                             true,
                         );

@@ -83,7 +83,8 @@ impl Flow {
         flow.body(p, body, plans)?;
         // At most one MIR point per retained expression site: initializer
         // conditions and leaves replace, rather than duplicate, the root.
-        flow.points.try_reserve_exact(flow.sites.len())
+        flow.points
+            .try_reserve_exact(flow.sites.len())
             .map_err(|_| PlanError::Host("temporary point allocation"))?;
         Ok((!flow.regions.is_empty()).then_some(flow))
     }
@@ -126,9 +127,18 @@ impl Flow {
             id,
             parent,
             evaluation: None,
-            retirement: Origin { span, kind: OriginKind::TemporaryRetirement },
-            publication: Origin { span, kind: OriginKind::DestinationPublication },
-            protect_result: !matches!(destination, Destination::NoValue(_) | Destination::Pending(_, _)),
+            retirement: Origin {
+                span,
+                kind: OriginKind::TemporaryRetirement,
+            },
+            publication: Origin {
+                span,
+                kind: OriginKind::DestinationPublication,
+            },
+            protect_result: !matches!(
+                destination,
+                Destination::NoValue(_) | Destination::Pending(_, _)
+            ),
             retire_before_publication: !matches!(destination, Destination::Pending(_, _)),
             destination,
             origin: Origin {
@@ -166,8 +176,14 @@ impl Flow {
                 span: e.span,
                 kind: OriginKind::TemporaryCreation,
             },
-            transfer: Origin { span: e.span, kind: OriginKind::TemporaryTransfer },
-            cleanup: Origin { span: e.span, kind: OriginKind::TemporaryCleanup },
+            transfer: Origin {
+                span: e.span,
+                kind: OriginKind::TemporaryTransfer,
+            },
+            cleanup: Origin {
+                span: e.span,
+                kind: OriginKind::TemporaryCleanup,
+            },
             children: Vec::new(),
         });
         let mut children = Vec::new();

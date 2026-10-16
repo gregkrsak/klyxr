@@ -534,8 +534,15 @@ pub(super) fn mir_shape(
             return Err(bad());
         }
         if let Some(flow) = &f.temporaries {
-            let references = flow.sites.iter().try_fold(0usize, |n, s| n.checked_add(s.children.len()))
-                .and_then(|n| flow.regions.iter().try_fold(n, |n, r| n.checked_add(r.roots.len())));
+            let references = flow
+                .sites
+                .iter()
+                .try_fold(0usize, |n, s| n.checked_add(s.children.len()))
+                .and_then(|n| {
+                    flow.regions
+                        .iter()
+                        .try_fold(n, |n, r| n.checked_add(r.roots.len()))
+                });
             if flow.sites.len() > c.limits.tokens.saturating_mul(4)
                 || flow.regions.len() > c.limits.tokens.saturating_mul(4)
                 || flow.points.len() > flow.sites.len()
@@ -595,10 +602,20 @@ pub(super) fn mir_shape(
             }
             for (i, point) in flow.points.iter().enumerate() {
                 if point.region.0 >= flow.regions.len()
-                    || f.blocks().nth(point.block.0).map_or(true, |(_, b)| point.statement > b.statements().len())
-                    || point.site.is_some_and(|id| flow.sites.get(id.0).map_or(true, |s| s.region != point.region))
-                    || flow.points[..i].iter().any(|p| p.block == point.block && p.statement == point.statement)
-                { return Err(bad()); }
+                    || f.blocks()
+                        .nth(point.block.0)
+                        .map_or(true, |(_, b)| point.statement > b.statements().len())
+                    || point.site.is_some_and(|id| {
+                        flow.sites
+                            .get(id.0)
+                            .map_or(true, |s| s.region != point.region)
+                    })
+                    || flow.points[..i]
+                        .iter()
+                        .any(|p| p.block == point.block && p.statement == point.statement)
+                {
+                    return Err(bad());
+                }
             }
         }
         if let Some(flow) = &f.cleanup {

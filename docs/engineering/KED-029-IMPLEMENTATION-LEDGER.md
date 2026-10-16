@@ -84,3 +84,14 @@ publication retain distinct origins and destination-specific protection policy.
 Point storage is reserved fallibly before lowering and never grows during it.
 Bounded shape validation precedes opaque exact correspondence. Runtime admission
 remains closed pending the next layer. Validation pending.
+
+First MIR-authority commit `92fb0086459fdc25c066ca4cff8ceec9ba9cae97`, tree
+`de93ab1ac03695e1c9380c04ea3a8b225d3a18ea`: compilation and complete debug
+tests passed. Build https://github.com/gregkrsak/klyxr/actions/runs/38847834695
+reported Rustfmt differences; applied the complete CI formatting output as text.
+Other runs: tests https://github.com/gregkrsak/klyxr/actions/runs/38847834629,
+docs https://github.com/gregkrsak/klyxr/actions/runs/38847834638,
+verify https://github.com/gregkrsak/klyxr/actions/runs/38847834686.
+Three added tests cover 26 independent authority mutations, selected initializer
+paths and source ordinals with resource-free predecessor statements. No runtime
+layer started while this milestone's build gate was red.
