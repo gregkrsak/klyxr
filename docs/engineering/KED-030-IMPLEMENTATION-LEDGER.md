@@ -81,3 +81,19 @@ documentation and complete conformance remain unimplemented at this milestone.
 No production resource API, unsafe permission, effectful proof semantics, new
 ownership checker, source recoverable failure or unwind is introduced.
 Implementation completion, independent acceptance and merge are not claimed.
+
+## Milestone 2 first push and correction
+
+Commit `4ebdf2beeb6dc80a5ad4e1f06cb8343aacc10198`, tree
+`7ad86db19b49372b28d556e6a160ef908ef6a5cc`, compiled all targets.
+[Build 38969016547](https://github.com/gregkrsak/klyxr/actions/runs/38969016547)
+stopped at formatting; its exact rustfmt diff was applied. Clippy and Rustdoc were
+not reached on that push. [Tests 38969016526](https://github.com/gregkrsak/klyxr/actions/runs/38969016526)
+passed the debug test bodies but stopped in reconciliation: the five new
+integration identities were listed as `effects.rs::...` instead of Cargo's actual
+`tests/effects.rs::...`. Only those new manifest entries were corrected; no test
+assertion or predecessor identity changed. Release was not reached.
+[Docs](https://github.com/gregkrsak/klyxr/actions/runs/38969016525) and
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38969016520) passed.
+These are implementation formatting/evidence-manifest errors, not platform
+failures. No later architectural layer was added on the failing milestone.

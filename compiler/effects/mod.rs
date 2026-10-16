@@ -22,7 +22,9 @@ impl Declaration {
     }
 
     pub fn origin(&self, effect: Effect) -> Option<Span> {
-        self.origins.as_ref().and_then(|o| o.members[effect as usize])
+        self.origins
+            .as_ref()
+            .and_then(|o| o.members[effect as usize])
     }
 
     pub fn clause(&self) -> Option<Span> {
@@ -196,7 +198,8 @@ mod tests {
         missing.origins = None;
         assert!(!missing.validate());
         let mut missing = valid.clone();
-        std::rc::Rc::make_mut(missing.origins.as_mut().unwrap()).members[Effect::Clock as usize] = None;
+        std::rc::Rc::make_mut(missing.origins.as_mut().unwrap()).members[Effect::Clock as usize] =
+            None;
         assert!(!missing.validate());
         let mut foreign = valid.clone();
         let origins = std::rc::Rc::make_mut(foreign.origins.as_mut().unwrap());
@@ -204,7 +207,10 @@ mod tests {
         assert!(!foreign.validate());
         let mut bad_span = valid.clone();
         let origins = std::rc::Rc::make_mut(bad_span.origins.as_mut().unwrap());
-        origins.members[Effect::Clock as usize].as_mut().unwrap().line = 0;
+        origins.members[Effect::Clock as usize]
+            .as_mut()
+            .unwrap()
+            .line = 0;
         assert!(!bad_span.validate());
         assert!(Declaration::default().validate());
     }

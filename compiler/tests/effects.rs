@@ -23,7 +23,8 @@ fn ordinary_result_kinds_and_keyword_spellings_preserve_contracts() {
             m.functions()[0].validate().unwrap();
             let e = execution::prepare_execution(&source, AdmissionLimits::default()).unwrap();
             let result =
-                execution::execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).unwrap();
+                execution::execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default())
+                    .unwrap();
             if no_value {
                 assert_eq!(result, ExecutionResult::NoValue);
             } else {
@@ -39,7 +40,15 @@ fn ordinary_result_kinds_and_keyword_spellings_preserve_contracts() {
 #[test]
 fn all_new_spellings_remain_identifiers_outside_the_clause() {
     for name in [
-        "effects", "io", "heap", "blocking", "network", "filesystem", "clock", "random", "unsafe",
+        "effects",
+        "io",
+        "heap",
+        "blocking",
+        "network",
+        "filesystem",
+        "clock",
+        "random",
+        "unsafe",
     ] {
         assert!(matches!(&lex(name).unwrap()[0].kind, TokenKind::Ident(n) if n == name));
         let source = format!("fn {name}({name}: bool) -> bool {{ return {name}; }} fn demo() -> bool {{ return {name}(true); }}");
@@ -54,7 +63,10 @@ fn all_new_spellings_remain_identifiers_outside_the_clause() {
 
 #[test]
 fn absent_clause_is_empty_and_declarations_collect_before_bodies() {
-    let p = compile_source("fn first() effects io {second();} function second() effects io {first();} fn plain() {}").unwrap();
+    let p = compile_source(
+        "fn first() effects io {second();} function second() effects io {first();} fn plain() {}",
+    )
+    .unwrap();
     assert_eq!(
         p.functions()[0]
             .as_ordinary()
@@ -116,7 +128,10 @@ fn verified_and_harness_effect_clauses_remain_excluded() {
         source.replace(") requires", ") effects io requires"),
         source.replace(" requires", " effects unsafe requires"),
         source.replace("let mut cell=", "let mut cell effects io="),
-        source.replace("consume(&mut cell,50);", "consume(&mut cell,50) effects io;"),
+        source.replace(
+            "consume(&mut cell,50);",
+            "consume(&mut cell,50) effects io;",
+        ),
     ] {
         assert!(matches!(
             parse_source(&malformed),
