@@ -1009,7 +1009,7 @@ Private malformed-artifact and conservation controls run through the canonical
 approval boundary. The implementation ledger records milestone SHA/run evidence,
 failures and repairs, predecessor identity reconciliation and final review status.
 
-## KED-028 owned replacement
+## KD-043 owned replacement
 
 Canonical typed Assign metadata distinguishes Copy writes from owned record
 replacement without names. HIR publication checks target/function membership,
@@ -1043,7 +1043,7 @@ The executor consumes MIR authority and does not reconstruct ownership or HIR sc
 Public resource APIs and all frozen non-goals remain excluded. Evidence and precise
 CI identities are recorded in `docs/engineering/KED-028-IMPLEMENTATION-LEDGER.md`.
 
-## KED-029 temporary custody and authority
+## KD-044 temporary custody and authority
 
 Fallible canonical MIR metadata binds source evaluation ordinals, regions, sites,
 canonical types/plans, destinations and creation/transfer/cleanup/retirement origins.
