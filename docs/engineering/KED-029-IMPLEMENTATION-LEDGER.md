@@ -48,3 +48,17 @@ regressions are classified explicitly in the evidence manifest. The new inventor
 verifier requires all 1,706 predecessor identities and all declared additions.
 
 Validation pending. No implementation PR, acceptance, issue closure or merge.
+
+First metadata commit: `d8f30671d966d4aa51b325cd9a04618ac759c53b`, tree
+`e0f5bf25048029021381bb2b382ae62886ce718c`. GitHub compilation passed. Build
+https://github.com/gregkrsak/klyxr/actions/runs/38847302394 failed Rustfmt; applied
+the complete GitHub Rustfmt output as text. Tests
+https://github.com/gregkrsak/klyxr/actions/runs/38847302408 found that the new
+nested-call metadata fixture reached full resource admission before that layer
+is enabled. Its original source witness is retained; it now explicitly checks
+the current full-gate rejection and validates canonical record shape before
+testing the static metadata lowerer directly. This does not change an accepted
+language expectation or claim runtime support. Docs
+https://github.com/gregkrsak/klyxr/actions/runs/38847302430 and verify
+https://github.com/gregkrsak/klyxr/actions/runs/38847302405 passed. No later layer
+started. Metadata repair validation pending.

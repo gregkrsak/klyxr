@@ -540,28 +540,47 @@ pub(super) fn mir_shape(
                 return Err(ResourceFailure::limit("temporary authority nodes", START).into());
             }
             for (i, region) in flow.regions.iter().enumerate() {
-                if region.id.0 != i || region.parent.is_some_and(|p| p.0 >= i)
+                if region.id.0 != i
+                    || region.parent.is_some_and(|p| p.0 >= i)
                     || region.roots.len() > c.limits.tokens
                     || region.origin.kind != mir::OriginKind::TemporaryRegion
-                { return Err(bad()); }
+                {
+                    return Err(bad());
+                }
                 for (j, root) in region.roots.iter().enumerate() {
                     if region.roots[..j].contains(root)
-                        || flow.sites.get(root.0).map_or(true, |s| s.region != region.id)
-                    { return Err(bad()); }
+                        || flow
+                            .sites
+                            .get(root.0)
+                            .map_or(true, |s| s.region != region.id)
+                    {
+                        return Err(bad());
+                    }
                 }
             }
             for (i, site) in flow.sites.iter().enumerate() {
                 ty(p, site.ty)?;
-                if site.id.0 != i || site.region.0 >= flow.regions.len()
+                if site.id.0 != i
+                    || site.region.0 >= flow.regions.len()
                     || site.children.len() > c.limits.tokens
                     || site.origin.kind != mir::OriginKind::TemporaryCreation
                     || site.plan.is_some_and(|r| site.ty != ExprType::Record(r))
-                { return Err(bad()); }
+                {
+                    return Err(bad());
+                }
                 for (j, child) in site.children.iter().enumerate() {
-                    if child.0 <= i || site.children[..j].contains(child)
-                        || flow.sites.get(child.0).map_or(true, |s| s.region != site.region
-                            && flow.regions.get(s.region.0).map_or(true, |r| r.parent != Some(site.region)))
-                    { return Err(bad()); }
+                    if child.0 <= i
+                        || site.children[..j].contains(child)
+                        || flow.sites.get(child.0).map_or(true, |s| {
+                            s.region != site.region
+                                && flow
+                                    .regions
+                                    .get(s.region.0)
+                                    .map_or(true, |r| r.parent != Some(site.region))
+                        })
+                    {
+                        return Err(bad());
+                    }
                 }
             }
         }

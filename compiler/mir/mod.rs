@@ -285,7 +285,11 @@ pub(crate) fn lower_with_origins(
     };
     let (mut mir, origins) = lower_internal(program, false, &plans);
     for function in &mut mir.functions {
-        let body = &program.function(function.function).as_ordinary().unwrap().body;
+        let body = &program
+            .function(function.function)
+            .as_ordinary()
+            .unwrap()
+            .body;
         function.temporaries = temporaries::Flow::lower(program, body, &plans)?;
     }
     Ok((mir, origins))
@@ -1267,7 +1271,7 @@ mod tests {
                 hir::ExprKind::FieldAccess(access)
             };
             let m = MirFunction {
-                    temporaries: None,
+                temporaries: None,
                 cleanup: None,
                 function: f.id,
                 entry: BasicBlockId(0),
@@ -1341,7 +1345,7 @@ mod multiple_field_tests {
                 ];
                 for statement in statements {
                     let m = MirFunction {
-                    temporaries: None,
+                        temporaries: None,
                         cleanup: None,
                         function: f.id,
                         entry: BasicBlockId(0),
@@ -1492,7 +1496,7 @@ mod multiple_field_tests {
             span: value.span,
         };
         let m = MirFunction {
-                    temporaries: None,
+            temporaries: None,
             cleanup: None,
             function: f.id,
             entry: BasicBlockId(0),
@@ -1582,7 +1586,7 @@ mod multiple_field_tests {
                     },
                 ] {
                     let m = MirFunction {
-                    temporaries: None,
+                        temporaries: None,
                         cleanup: None,
                         function: f.id,
                         entry: BasicBlockId(0),
@@ -1606,7 +1610,7 @@ mod multiple_field_tests {
                 assert_eq!(m.validate(), Err(error));
                 if e.ty == hir::ExprType::Bool {
                     let m = MirFunction {
-                    temporaries: None,
+                        temporaries: None,
                         cleanup: None,
                         function: f.id,
                         entry: BasicBlockId(0),
