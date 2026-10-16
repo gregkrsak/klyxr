@@ -206,6 +206,7 @@ fn value_function(
         name: f.name.clone(),
         parameters: f.parameters.clone(),
         return_type,
+        effects: f.effects.clone(),
         body,
         span: f.span,
     })

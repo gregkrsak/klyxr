@@ -20,7 +20,16 @@ impl Program {
         self.validate_record_tables()?;
         for function in &self.functions {
             match function {
-                Function::Ordinary(f) => self.record_statements(f.id, &f.body)?,
+                Function::Ordinary(f) => {
+                    if !f.effects.validate() {
+                        return Err(Box::new(Diagnostic::semantic(
+                            f.span,
+                            "invalid canonical ordinary effect declaration",
+                            "effect membership and bounded declaration origins must agree",
+                        )));
+                    }
+                    self.record_statements(f.id, &f.body)?;
+                }
                 Function::Verified(f) => {
                     if self
                         .records

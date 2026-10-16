@@ -258,12 +258,34 @@ impl Parser<'_> {
         } else {
             None
         };
+        let effects = if matches!(self.peek_kind(), TokenKind::Ident(name) if name == "effects") {
+            let span = self.peek().span;
+            self.advance();
+            let mut names = Vec::new();
+            loop {
+                if names.len() == 8 {
+                    return Err(self
+                        .error("an effects clause has at most eight distinct identities".into()));
+                }
+                let span = self.peek().span;
+                let name = self.expect_ident()?;
+                names.push(crate::ast::EffectName { name, span });
+                if !self.at(&TokenKind::Comma) {
+                    break;
+                }
+                self.advance();
+            }
+            Some(crate::ast::EffectClause { span, names })
+        } else {
+            None
+        };
         self.expect(&TokenKind::LBrace)?;
         let (body, end) = self.parse_value_block(0)?;
         Ok(ValueFunction {
             name,
             parameters,
             return_type,
+            effects,
             body,
             span: Span { end, ..start },
         })

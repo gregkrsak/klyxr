@@ -90,6 +90,7 @@ impl BasicBlock {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MirFunction {
+    effects: crate::effects::Declaration,
     pub(crate) temporaries: Option<temporaries::Flow>,
     pub(crate) cleanup: Option<cleanup::Flow>,
     function: FunctionId,
@@ -97,6 +98,9 @@ pub struct MirFunction {
     blocks: Vec<BasicBlock>,
 }
 impl MirFunction {
+    pub fn effects(&self) -> &crate::effects::Declaration {
+        &self.effects
+    }
     pub fn function(&self) -> FunctionId {
         self.function
     }
@@ -114,6 +118,9 @@ impl MirFunction {
     }
     /// Validate compiler structure, not source semantics or numerical obligations.
     pub fn validate(&self) -> Result<(), &'static str> {
+        if !self.effects.validate() {
+            return Err("invalid MIR effect declaration");
+        }
         fn visit(
             f: &MirFunction,
             entry: BasicBlockId,
@@ -351,6 +358,7 @@ fn lower_internal(
                 );
             }
             let function = MirFunction {
+                effects: f.effects.clone(),
                 temporaries: builder.temporaries,
                 cleanup: builder.cleanup,
                 function: f.id,
@@ -1338,6 +1346,7 @@ mod tests {
                 },
             ] {
                 let m = MirFunction {
+                    effects: crate::effects::Declaration::default(),
                     temporaries: None,
                     cleanup: None,
                     function: f.id,
@@ -1366,6 +1375,7 @@ mod tests {
                 },
             ] {
                 let m = MirFunction {
+                    effects: crate::effects::Declaration::default(),
                     temporaries: None,
                     cleanup: None,
                     function: f.id,
@@ -1412,6 +1422,7 @@ mod tests {
                 hir::ExprKind::FieldAccess(access)
             };
             let m = MirFunction {
+                effects: crate::effects::Declaration::default(),
                 temporaries: None,
                 cleanup: None,
                 function: f.id,
@@ -1486,6 +1497,7 @@ mod multiple_field_tests {
                 ];
                 for statement in statements {
                     let m = MirFunction {
+                        effects: crate::effects::Declaration::default(),
                         temporaries: None,
                         cleanup: None,
                         function: f.id,
@@ -1501,6 +1513,7 @@ mod multiple_field_tests {
                     );
                 }
                 let m = MirFunction {
+                    effects: crate::effects::Declaration::default(),
                     temporaries: None,
                     cleanup: None,
                     function: f.id,
@@ -1516,6 +1529,7 @@ mod multiple_field_tests {
                 );
                 e.ty = hir::ExprType::Bool;
                 let m = MirFunction {
+                    effects: crate::effects::Declaration::default(),
                     temporaries: None,
                     cleanup: None,
                     function: f.id,
@@ -1567,6 +1581,7 @@ mod multiple_field_tests {
                     hir::ExprKind::FieldAccess(access)
                 };
                 let m = MirFunction {
+                    effects: crate::effects::Declaration::default(),
                     temporaries: None,
                     cleanup: None,
                     function: f.id,
@@ -1611,6 +1626,7 @@ mod multiple_field_tests {
                     arguments[0].ty = hir::ExprType::Bool;
                 }
                 let m = MirFunction {
+                    effects: crate::effects::Declaration::default(),
                     temporaries: None,
                     cleanup: None,
                     function: f.id,
@@ -1637,6 +1653,7 @@ mod multiple_field_tests {
             span: value.span,
         };
         let m = MirFunction {
+            effects: crate::effects::Declaration::default(),
             temporaries: None,
             cleanup: None,
             function: f.id,
@@ -1727,6 +1744,7 @@ mod multiple_field_tests {
                     },
                 ] {
                     let m = MirFunction {
+                        effects: crate::effects::Declaration::default(),
                         temporaries: None,
                         cleanup: None,
                         function: f.id,
@@ -1739,6 +1757,7 @@ mod multiple_field_tests {
                     assert_eq!(m.validate(), Err(error));
                 }
                 let m = MirFunction {
+                    effects: crate::effects::Declaration::default(),
                     temporaries: None,
                     cleanup: None,
                     function: f.id,
@@ -1751,6 +1770,7 @@ mod multiple_field_tests {
                 assert_eq!(m.validate(), Err(error));
                 if e.ty == hir::ExprType::Bool {
                     let m = MirFunction {
+                        effects: crate::effects::Declaration::default(),
                         temporaries: None,
                         cleanup: None,
                         function: f.id,

@@ -37,16 +37,43 @@ safety permission.
 
 Three new unit-test identities cover all atoms, duplicate-insertion detection,
 unknown names, all 65,536 pairs of valid sets, and all invalid wider encodings.
-They are authored; milestone GitHub execution remains pending until recorded.
+GitHub milestone commit `cbd35c657ec3ee45aacdeb98f4c3a844d67ef27d`, tree
+`91a58f443813d61ef29a3fefdf853845dc43d07b`, passed all four workflows:
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38968477589),
+[tests](https://github.com/gregkrsak/klyxr/actions/runs/38968477737),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38968477669),
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38968477901).
+Job 117200734355 reconciled 1,743 predecessors plus three additions = 1,746
+passing identities in each profile, with both authority/affine controls passed.
+All four job conclusions and relevant logs were inspected.
 
 `ked-030-predecessors.json` preserves the complete baseline identity set.
 `verify-ked030-tests.py` requires every predecessor plus exactly the explicitly
 listed additions in each complete profile, retaining affine/doctest controls.
 Historical KED-027 through KED-029 manifests and reconcilers are unchanged.
 
+## Milestone 2 — Ordinary grammar and canonical declarations
+
+Contextual clauses preserve raw member and introducer spans only on ordinary AST
+functions. Resolution collects canonical contracts with all signatures before
+bodies. Ordinary typed HIR and MIR retain one bounded declaration representation
+with at most eight member origins; publication/structural validation checks its
+internal consistency. No verified or harness metadata is added. Independent
+approval correspondence includes declarations through existing exact equality.
+
+Five integration identities cover result kinds/spellings, retained metadata and
+execution of unused declarations, lexical compatibility, forward/recursive
+signatures, malformed lists, and verified/harness rejection controls. One unit
+identity mutates declaration mask/origin copies independently. Execution remains
+pending until the milestone workflows are recorded. Direct/transitive body subset
+checking is milestone 3; this milestone alone is not a completed effect system.
+
+One advisory `cargo fmt --all` invocation could not run because Cargo is absent.
+No toolchain repair/probing followed. Formatting is checked by GitHub Actions.
+
 ## Remaining milestones
 
-Ordinary grammar/signatures; direct/transitive checking; operation contracts and
+Direct/transitive checking; operation contracts and
 derived summaries; checker-produced cleanup custody, MIR and approval; replacement
 and temporaries; private abort domains; malformed/bounds/terminal evidence;
 documentation and complete conformance remain unimplemented at this milestone.

@@ -76,7 +76,18 @@ pub struct ValueFunction {
     pub parameters: Vec<ValueParameter>,
     /// None is explicitly NoValue; Some(T) is Value(T), never result inference.
     pub return_type: Option<ValueType>,
+    pub effects: Option<EffectClause>,
     pub body: Vec<ValueStatement>,
+    pub span: Span,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectClause {
+    pub span: Span,
+    pub names: Vec<EffectName>,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectName {
+    pub name: String,
     pub span: Span,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]

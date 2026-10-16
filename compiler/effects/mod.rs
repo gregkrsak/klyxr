@@ -1,5 +1,85 @@
 //! Canonical KED-030 audit identities. Membership never grants permission.
+use crate::lexer::Span;
 use std::fmt;
+
+/// A complete ordinary signature contract. Absent clauses allocate no origins.
+/// Verified and harness declarations never contain this representation.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Declaration {
+    set: EffectSet,
+    origins: Option<std::rc::Rc<DeclarationOrigins>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DeclarationOrigins {
+    clause: Span,
+    members: [Option<Span>; 8],
+}
+
+impl Declaration {
+    pub fn set(&self) -> EffectSet {
+        self.set
+    }
+
+    pub fn origin(&self, effect: Effect) -> Option<Span> {
+        self.origins.as_ref().and_then(|o| o.members[effect as usize])
+    }
+
+    pub fn clause(&self) -> Option<Span> {
+        self.origins.as_ref().map(|o| o.clause)
+    }
+
+    pub(crate) fn resolve(
+        clause: Option<&crate::ast::EffectClause>,
+    ) -> Result<Self, Box<crate::diagnostics::Diagnostic>> {
+        let mut result = Self::default();
+        let Some(clause) = clause else {
+            return Ok(result);
+        };
+        if clause.names.is_empty() || clause.names.len() > 8 {
+            return Err(Box::new(crate::diagnostics::Diagnostic::semantic(
+                clause.span,
+                "effects clause requires one to eight distinct identities",
+                "omit the clause to declare the empty set",
+            )));
+        }
+        let mut origins = DeclarationOrigins {
+            clause: clause.span,
+            members: [None; 8],
+        };
+        for name in &clause.names {
+            let Some(effect) = Effect::resolve(&name.name) else {
+                return Err(Box::new(crate::diagnostics::Diagnostic::semantic(
+                    name.span,
+                    format!("unknown effect identity `{}`", name.name),
+                    "use a canonical built-in effect identity",
+                )));
+            };
+            if !result.set.insert(effect) {
+                return Err(Box::new(crate::diagnostics::Diagnostic::semantic(
+                    name.span,
+                    format!("duplicate effect identity `{}`", name.name),
+                    "each effect identity may occur only once in a declaration",
+                )));
+            }
+            origins.members[effect as usize] = Some(name.span);
+        }
+        // This fixed-size allocation is behind the existing frontend envelope.
+        // Clones share immutable diagnostic origins; absent contracts allocate none.
+        result.origins = Some(std::rc::Rc::new(origins));
+        Ok(result)
+    }
+
+    pub(crate) fn validate(&self) -> bool {
+        let valid = |span: Span| span.line > 0 && span.column > 0 && span.start <= span.end;
+        self.clause().is_some() == (self.set != EffectSet::EMPTY)
+            && self.clause().map_or(true, valid)
+            && Effect::ALL.into_iter().all(|effect| {
+                let member = self.origin(effect);
+                member.is_some() == self.set.contains(effect) && member.map_or(true, valid)
+            })
+    }
+}
 
 /// Independent built-in identities, in canonical presentation order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,6 +183,31 @@ impl fmt::Display for EffectSet {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn declaration_invariants_reject_independent_mutations() {
+        let p = crate::compile_source("fn f() effects clock, io {}").unwrap();
+        let valid = p.functions()[0].as_ordinary().unwrap().effects.clone();
+        assert!(valid.validate());
+        let mut missing = valid.clone();
+        missing.set = EffectSet::EMPTY;
+        assert!(!missing.validate());
+        let mut missing = valid.clone();
+        missing.origins = None;
+        assert!(!missing.validate());
+        let mut missing = valid.clone();
+        std::rc::Rc::make_mut(missing.origins.as_mut().unwrap()).members[Effect::Clock as usize] = None;
+        assert!(!missing.validate());
+        let mut foreign = valid.clone();
+        let origins = std::rc::Rc::make_mut(foreign.origins.as_mut().unwrap());
+        origins.members[Effect::Unsafe as usize] = valid.origin(Effect::Clock);
+        assert!(!foreign.validate());
+        let mut bad_span = valid.clone();
+        let origins = std::rc::Rc::make_mut(bad_span.origins.as_mut().unwrap());
+        origins.members[Effect::Clock as usize].as_mut().unwrap().line = 0;
+        assert!(!bad_span.validate());
+        assert!(Declaration::default().validate());
+    }
 
     #[test]
     fn identities_are_independent_and_render_in_canonical_order() {
