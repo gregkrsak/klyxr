@@ -1516,16 +1516,26 @@ mod tests {
             let mut m = seeded();
             m.limits.steps = steps;
             let result = m.resume();
-            if steps == full.steps { assert_eq!(result.unwrap(), ExecutionResult::NoValue); }
-            else {
-                assert_eq!(result.unwrap_err().kind, ErrorKind::ConfiguredLimit("steps"));
+            if steps == full.steps {
+                assert_eq!(result.unwrap(), ExecutionResult::NoValue);
+            } else {
+                assert_eq!(
+                    result.unwrap_err().kind,
+                    ErrorKind::ConfiguredLimit("steps")
+                );
                 if let Some(f) = m.temporaries.as_ref().unwrap().frames.last() {
-                    if f.phase == Phase::Retiring && matches!(f.protected, Some(Value::Leaf {identity:1,..})) && !completed(&m).contains(&0) {
+                    if f.phase == Phase::Retiring
+                        && matches!(f.protected, Some(Value::Leaf { identity: 1, .. }))
+                        && !completed(&m).contains(&0)
+                    {
                         protected_stops += 1;
                         assert!(matches!(m.frames[0].slots[0].1, Slot::Uninitialized));
                     }
                 }
-                assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Integrity(_)));
+                assert!(matches!(
+                    m.resume().unwrap_err().kind,
+                    ErrorKind::Integrity(_)
+                ));
             }
             conserved(&m);
         }

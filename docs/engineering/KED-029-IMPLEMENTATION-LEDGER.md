@@ -310,3 +310,12 @@ mutations, adding well-formed foreign cleanup/transfer/publication origins,
 foreign source sites and regions, wrong type, missing retirement/publication
 origins and unrelated child registration. All original cases remain intact.
 Validation pending; documentation and final branch/PR gates remain ahead.
+
+Remaining-cut evidence commit `09770710127ef48eb84185e49e40d9ae17ad5ea8`,
+tree `ccf5abde03f0c66646a02f6a6a17c7a2ced8062c`: compilation and debug
+tests passed. Build https://github.com/gregkrsak/klyxr/actions/runs/38851977267
+reported formatting differences, applied from the complete CI Rustfmt output.
+Other runs: tests https://github.com/gregkrsak/klyxr/actions/runs/38851977323,
+docs https://github.com/gregkrsak/klyxr/actions/runs/38851977322,
+verify https://github.com/gregkrsak/klyxr/actions/runs/38851977308.
+No later layer added while this milestone's build gate was red.
