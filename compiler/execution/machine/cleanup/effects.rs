@@ -342,7 +342,7 @@ fn ordinary_approved_abort_and_primitive_protocol_have_separate_sealed_authority
 
 #[test]
 fn ordinary_trap_during_pending_construction_adds_no_cleanup_edge() {
-    let p=aggregate("fn boom()->R{let mut n:R=0;n=n-1;return n;}fn build()->Pair effects io{return Pair{last:0,first:0,inert:boom()};}fn demo() effects io,filesystem{let result=build();}");
+    let p=aggregate("fn zero()->R{return 0;}fn boom()->R{let mut n=zero();n=n-1;return n;}fn build()->Pair effects io{return Pair{last:0,first:0,inert:boom()};}fn demo() effects io,filesystem{let result=build();}");
     let e = crate::execution::prepare_ordinary_synthetic(p, AdmissionLimits::default()).unwrap();
     let build = e
         .program

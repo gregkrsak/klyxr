@@ -363,3 +363,14 @@ the latter asserts resource state is still absent, directly proving refusal
 preceded allocation/acquisition. Neither correction changes the expected semantic
 outcome or any predecessor assertion. The reviewed CI formatting diff is applied.
 The failed debug job did not run the release profile. No later layer was started.
+
+Correction `cc97e06e5c52799087ea5360de99a5918e7e13b0`, tree
+`9845410f015d156259c4f9d0fb29bfa060802261`, passed
+[build](https://github.com/gregkrsak/klyxr/actions/runs/38974183687),
+[docs](https://github.com/gregkrsak/klyxr/actions/runs/38974183714), and
+[verify](https://github.com/gregkrsak/klyxr/actions/runs/38974183678).
+[Tests](https://github.com/gregkrsak/klyxr/actions/runs/38974183706) exposed
+one remaining new trap-fixture syntax error: local type annotations are not
+supported. A typed `zero()` result now supplies the same range context for the
+mutable local. All other unit controls passed; release was skipped. The trap,
+no-unwind and conservation assertions are retained unchanged.
