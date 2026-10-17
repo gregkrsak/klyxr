@@ -129,7 +129,12 @@ impl<'a> Machine<'a> {
         })
     }
     #[cfg(test)]
-    pub(super) fn inject_temporary_leaf(&mut self, activation: u64) -> u64 {
+    pub(super) fn inject_temporary_leaf(&mut self, activation: u64) -> Result<u64, ExecutionError> {
+        if !self.executable.domain.primitive() {
+            return Err(
+                self.integrity("temporary injection requires sealed primitive evidence domain")
+            );
+        }
         let i = self.temporary_index(activation).unwrap();
         let f = &self.temporaries.as_ref().unwrap().frames[i];
         let flow = self
@@ -165,7 +170,7 @@ impl<'a> Machine<'a> {
         };
         self.temporary_register(activation, site).unwrap();
         assert!(matches!(self.values.pop(), Some(Value::Temporary(_))));
-        identity
+        Ok(identity)
     }
     fn temporary_event_reserve(&mut self) -> Result<(), ExecutionError> {
         let s = self.temporaries.as_ref().unwrap();
@@ -579,6 +584,12 @@ impl<'a> Machine<'a> {
                     }
                 }
                 Custody::Owned => {
+                    // Successful ordinary expression roots have transferred to
+                    // their admitted destination or protected result. An injected
+                    // leftover cannot manufacture a source cleanup edge.
+                    if !self.executable.domain.primitive() {
+                        return Err(self.integrity("unapproved residual expression temporary"));
+                    }
                     let f = &self.temporaries.as_ref().unwrap().frames[i];
                     self.origin = self
                         .executable
@@ -792,7 +803,7 @@ mod tests {
         let mut m = Machine::new(&e, ExecutionLimits::default());
         m.start(e.entry("demo").unwrap()).unwrap();
         let activation = pause_region(&mut m, |d| matches!(d, Transfer::Local(_)));
-        let u = m.inject_temporary_leaf(activation);
+        let u = m.inject_temporary_leaf(activation).unwrap();
         m.resources.as_mut().unwrap().failure_at = Some(u);
         assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Host(_)));
         assert!(matches!(m.frames[0].slots[0].1, Slot::Uninitialized));
@@ -812,7 +823,7 @@ mod tests {
         let mut m = Machine::new(&e, ExecutionLimits::default());
         m.start(e.entry("demo").unwrap()).unwrap();
         let activation = pause_region(&mut m, |d| matches!(d, Transfer::Local(_)));
-        m.inject_temporary_leaf(activation);
+        m.inject_temporary_leaf(activation).unwrap();
         m.resume().unwrap();
         assert_eq!(completed(&m), vec![0, 1]);
         conserved(&m);
@@ -824,7 +835,7 @@ mod tests {
         let mut m = Machine::new(&e, ExecutionLimits::default());
         m.start(e.entry("demo").unwrap()).unwrap();
         let activation = pause_region(&mut m, |d| d == Transfer::Return);
-        let u = m.inject_temporary_leaf(activation);
+        let u = m.inject_temporary_leaf(activation).unwrap();
         m.resources.as_mut().unwrap().failure_at = Some(u);
         assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Host(_)));
         assert!(matches!(
@@ -852,7 +863,7 @@ mod tests {
         let mut m = Machine::new(&e, ExecutionLimits::default());
         m.start(e.entry("demo").unwrap()).unwrap();
         let activation = pause_region(&mut m, |d| matches!(d, Transfer::Replacement(_)));
-        let u = m.inject_temporary_leaf(activation);
+        let u = m.inject_temporary_leaf(activation).unwrap();
         m.resources.as_mut().unwrap().failure_at = Some(u);
         assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Host(_)));
         assert!(matches!(
@@ -888,7 +899,7 @@ mod tests {
         let mut m = Machine::new(&e, ExecutionLimits::default());
         m.start(e.entry("demo").unwrap()).unwrap();
         let activation = pause_region(&mut m, |d| matches!(d, Transfer::Field(_, _, _)));
-        let u = m.inject_temporary_leaf(activation);
+        let u = m.inject_temporary_leaf(activation).unwrap();
         m.resources.as_mut().unwrap().failure_at = Some(u);
         assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Host(_)));
         let Slot::Available(Value::Public(RuntimeValue::Record { fields, .. })) =
@@ -1037,7 +1048,7 @@ mod tests {
                     2 => matches!(d, Transfer::ReferenceField(_, _, _)),
                     _ => matches!(d, Transfer::Dereference(_)),
                 });
-                let u = m.inject_temporary_leaf(activation);
+                let u = m.inject_temporary_leaf(activation).unwrap();
                 if stop {
                     m.resources.as_mut().unwrap().failure_at = Some(u);
                     assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Host(_)));
@@ -1087,7 +1098,7 @@ mod tests {
         let mut m = Machine::new(&e, ExecutionLimits::default());
         m.start(e.entry("demo").unwrap()).unwrap();
         let activation = pause_region(&mut m, |d| d == Transfer::Condition);
-        let u = m.inject_temporary_leaf(activation);
+        let u = m.inject_temporary_leaf(activation).unwrap();
         m.resources.as_mut().unwrap().failure_at = Some(u);
         assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Host(_)));
         assert!(matches!(
@@ -1421,7 +1432,7 @@ mod tests {
         let mut m = Machine::new(&e, ExecutionLimits::default());
         m.start(e.entry("demo").unwrap()).unwrap();
         let activation = pause_region(&mut m, |d| matches!(d, Transfer::Local(_)));
-        m.inject_temporary_leaf(activation);
+        m.inject_temporary_leaf(activation).unwrap();
         assert!(matches!(
             m.reference(
                 Location {
@@ -1505,7 +1516,7 @@ mod tests {
             let mut m = Machine::new(&e, ExecutionLimits::default());
             m.start(e.entry("demo").unwrap()).unwrap();
             let activation = pause_region(&mut m, |d| matches!(d, Transfer::Local(_)));
-            m.inject_temporary_leaf(activation);
+            m.inject_temporary_leaf(activation).unwrap();
             m
         };
         let mut full = seeded();

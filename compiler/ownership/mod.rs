@@ -15,6 +15,23 @@ use crate::{
     lexer::Span,
 };
 
+fn statement_span(statement: &ValueStatement) -> Span {
+    match statement {
+        ValueStatement::Let { span, .. }
+        | ValueStatement::Assign { span, .. }
+        | ValueStatement::DerefAssign { span, .. }
+        | ValueStatement::CopyFieldAssign { span, .. }
+        | ValueStatement::CopyReferenceFieldAssign { span, .. }
+        | ValueStatement::CallNoValue { span, .. }
+        | ValueStatement::If { span, .. }
+        | ValueStatement::While { span, .. }
+        | ValueStatement::Return { span, .. }
+        | ValueStatement::ReturnNoValue { span }
+        | ValueStatement::Break { span }
+        | ValueStatement::Continue { span } => *span,
+    }
+}
+
 type OwnershipResult<T = ()> = Result<T, Box<Diagnostic>>;
 
 // A count is consumed only by analysis of its own path. At a conditional the
@@ -324,23 +341,129 @@ struct Loan {
 /// Inspect canonical typed HIR; report the first substantive move/loan error.
 /// compile_source runs resolution and typing before this phase.
 pub fn check(program: &Program) -> Result<(), Vec<Diagnostic>> {
-    for function in program.functions().iter().filter_map(|f| f.as_ordinary()) {
-        Checker::new(program, function)
-            .body(function)
-            .map_err(|e| vec![*e])?;
-    }
-    Ok(())
+    analyze(program).map(|_| ())
 }
+
+pub(crate) fn analyze(
+    program: &Program,
+) -> Result<Vec<crate::effects::custody::Site>, Vec<Diagnostic>> {
+    analyze_with(program, None)
+}
+
 pub(crate) fn check_bounded(
     program: &Program,
     context: &crate::bounded::Context,
-) -> Result<(), Vec<Diagnostic>> {
+) -> Result<Vec<crate::effects::custody::Site>, Vec<Diagnostic>> {
+    analyze_with(program, Some(context))
+}
+
+fn effect_analysis_error(
+    error: crate::hir::resources::PlanError,
+    context: Option<&crate::bounded::Context>,
+) -> Vec<Diagnostic> {
+    use crate::hir::resources::PlanError;
+    if let Some(context) = context {
+        let kind = match error {
+            PlanError::Limit(_) => Some(crate::bounded::ResourceKind::Limit),
+            PlanError::Host(_) => Some(crate::bounded::ResourceKind::Host),
+            PlanError::Integrity(_) => None,
+        };
+        if let Some(kind) = kind {
+            context.fail(crate::bounded::ResourceFailure {
+                kind,
+                resource: error.message(),
+                span: crate::bounded::START,
+            });
+        }
+    }
+    vec![Diagnostic::semantic(
+        crate::bounded::START,
+        error.message(),
+        "canonical bounded cleanup effect evidence is required",
+    )]
+}
+
+fn analyze_with(
+    program: &Program,
+    context: Option<&crate::bounded::Context>,
+) -> Result<Vec<crate::effects::custody::Site>, Vec<Diagnostic>> {
+    use crate::effects::{custody::Custody, EffectSet};
+    use crate::hir::resources::PlanError;
+    let active = program
+        .resources
+        .leaves
+        .iter()
+        .any(|l| l.cleanup_effects != EffectSet::EMPTY)
+        || program
+            .resources
+            .operations
+            .iter()
+            .any(|o| o.effects != EffectSet::EMPTY);
+    let summaries = if active {
+        program
+            .resources
+            .validate(program)
+            .map_err(|e| effect_analysis_error(e, context))?;
+        let plans = program
+            .resources
+            .plans(program)
+            .map_err(|e| effect_analysis_error(e, context))?;
+        program
+            .resources
+            .summaries(program, &plans)
+            .map_err(|e| effect_analysis_error(e, context))?
+    } else {
+        Vec::new()
+    };
+    if !summaries.is_empty() {
+        if let Some(context) = context {
+            let nodes = context.resource_nodes.get()
+                + program.functions.len()
+                + program.locals.len()
+                + program.parameters.len();
+            context
+                .reserve_cleanup_effects(nodes, crate::effects::custody::holder_bound(program))
+                .map_err(|e| {
+                    effect_analysis_error(
+                        match e.kind {
+                            crate::bounded::ResourceKind::Limit => PlanError::Limit(e.resource),
+                            crate::bounded::ResourceKind::Host => PlanError::Host(e.resource),
+                        },
+                        Some(context),
+                    )
+                })?;
+        }
+    }
+    let summaries = Rc::new(summaries);
+    let mut sites = Vec::new();
     for function in program.functions().iter().filter_map(|f| f.as_ordinary()) {
         let mut checker = Checker::new(program, function);
-        checker.context = Some(context);
+        checker.context = context;
+        // Registered stubs are fixed primitive boundaries, never callback bodies.
+        if !summaries.is_empty()
+            && !program
+                .resources
+                .operations
+                .iter()
+                .any(|o| o.function == function.id)
+        {
+            let mut custody = Custody::new(function.id, summaries.clone());
+            for parameter in &function.parameters {
+                if let ParameterType::Value(ty) = program.parameter(*parameter).ty {
+                    custody.initialize(Place::Parameter(*parameter), ty);
+                }
+            }
+            checker.cleanup_custody = Some(custody);
+        }
         checker.body(function).map_err(|e| vec![*e])?;
+        if let Some(custody) = checker.cleanup_custody {
+            let new_sites = custody.into_sites();
+            crate::effects::custody::reserve_output(&mut sites, new_sites.len())
+                .map_err(|e| effect_analysis_error(e, context))?;
+            sites.extend(new_sites);
+        }
     }
-    Ok(())
+    Ok(sites)
 }
 fn checked_place_type(program: &Program, function: FunctionId, place: Place) -> Option<ValueType> {
     match place {
@@ -540,6 +663,7 @@ struct Checker<'a> {
     terminal_return: bool,
     // Operation-local continuity restriction, never a synthetic loan.
     replacement_target: Option<Place>,
+    cleanup_custody: Option<crate::effects::custody::Custody>,
 }
 impl<'a> Checker<'a> {
     fn new(program: &'a Program, function: &'a ValueFunction) -> Self {
@@ -558,6 +682,7 @@ impl<'a> Checker<'a> {
             targets: Vec::new(),
             terminal_return: false,
             replacement_target: None,
+            cleanup_custody: None,
         };
         if checker.initializers.invalid.is_some() {
             return checker;
@@ -594,6 +719,15 @@ impl<'a> Checker<'a> {
         } else {
             assert!(matches!(flow, Flow::Return | Flow::Fallthrough));
             self.complete_no_value(function.span)?;
+            if flow == Flow::Fallthrough {
+                if let Some(custody) = &mut self.cleanup_custody {
+                    custody.retire(
+                        |_| true,
+                        function.span,
+                        crate::effects::custody::Kind::Completion,
+                    );
+                }
+            }
         }
         Ok(())
     }
@@ -694,6 +828,9 @@ impl<'a> Checker<'a> {
             } => {
                 let loan = self.expression(initializer, Transfer::Local(*local))?;
                 let place = Place::Local(*local);
+                if let Some(custody) = &mut self.cleanup_custody {
+                    custody.initialize(place, self.program.local(*local).ty);
+                }
                 if ownership_kind(self.program.local(*local).ty) == OwnershipKind::Move {
                     self.states.insert(place, State::Available);
                 }
@@ -803,6 +940,14 @@ impl<'a> Checker<'a> {
                 return Err(self.diagnostic(span, format!("cannot replace `{}` while it is borrowed", declaration.name), "replacement displaces this whole owner and requires all shared and exclusive target loans to have ended", Some(loan.span)));
             }
             self.replacement_target = before.replacement_target;
+            if let Some(custody) = &mut self.cleanup_custody {
+                custody.retire(
+                    |p| p == place,
+                    span,
+                    crate::effects::custody::Kind::Replacement,
+                );
+                custody.initialize(place, declaration.ty);
+            }
             Ok(())
         })();
         if result.is_err() {
@@ -969,7 +1114,12 @@ impl<'a> Checker<'a> {
         let before = self.clone(); // Empty summary/expiry precede this snapshot.
                                    // No operand, no terminal-expression permission, no local normalization.
         match self.complete_no_value(span) {
-            Ok(()) => Ok(Flow::Return),
+            Ok(()) => {
+                if let Some(custody) = &mut self.cleanup_custody {
+                    custody.retire(|_| true, span, crate::effects::custody::Kind::BareReturn);
+                }
+                Ok(Flow::Return)
+            }
             Err(error) => {
                 *self = before;
                 Err(error)
@@ -1052,6 +1202,9 @@ impl<'a> Checker<'a> {
         match result {
             Ok(flow) => {
                 self.terminal_return = before.terminal_return;
+                if let Some(custody) = &mut self.cleanup_custody {
+                    custody.retire(|_| true, span, crate::effects::custody::Kind::Return);
+                }
                 Ok(flow) // No local successor normalization or ownership-state join.
             }
             Err(error) => {
@@ -1154,10 +1307,23 @@ impl<'a> Checker<'a> {
         });
         if iteration.statements_with(body, function, &outside)? == Flow::Fallthrough {
             iteration.validate_loop_backedge(&header, span)?;
+            if let Some(custody) = &mut iteration.cleanup_custody {
+                custody.retire(
+                    |p| !header.states.contains_key(&p),
+                    span,
+                    crate::effects::custody::Kind::Iteration,
+                );
+            }
         }
         // Every terminal edge was independently checked. No arbitrary exit join:
         // the independently checked false state is the one canonical successor.
-        *self = (*false_exit).clone();
+        let mut exit = (*false_exit).clone();
+        if let (Some(exit_custody), Some(iteration_custody)) =
+            (&mut exit.cleanup_custody, &iteration.cleanup_custody)
+        {
+            exit_custody.merge_sites(iteration_custody);
+        }
+        *self = exit;
         Ok(())
     }
     fn false_exit(&self, outside: &FutureUses, enclosing_scope: Option<LoopScope>) -> Self {
@@ -1181,6 +1347,13 @@ impl<'a> Checker<'a> {
             self.project_break_exit(&target, span)?;
             if !self.same_loop_state(&target.exit) {
                 return Err(self.diagnostic(span, "break exit does not match canonical loop-exit ownership and loan state".into(), "break may clean target-iteration locals and end only its own recurrence; carried availability and surviving provenance cannot be repaired or replaced", None));
+            }
+            if let Some(custody) = &mut self.cleanup_custody {
+                custody.retire(
+                    |p| !target.header.states.contains_key(&p),
+                    span,
+                    crate::effects::custody::Kind::Break,
+                );
             }
             Ok(Flow::Break)
         })();
@@ -1274,7 +1447,16 @@ impl<'a> Checker<'a> {
             .clone();
         // Cleanup and comparison precede (and never perform) frame discharge.
         match self.validate_loop_backedge(&target.header, span) {
-            Ok(()) => Ok(Flow::Continue),
+            Ok(()) => {
+                if let Some(custody) = &mut self.cleanup_custody {
+                    custody.retire(
+                        |p| !target.header.states.contains_key(&p),
+                        span,
+                        crate::effects::custody::Kind::Continue,
+                    );
+                }
+                Ok(Flow::Continue)
+            }
             Err(mut error) => {
                 error.message = format!("continue backedge rejected: {}", error.message);
                 *self = before;
@@ -1351,8 +1533,37 @@ impl<'a> Checker<'a> {
         let mut no = self.clone();
         let yes_flow = yes.statements_with(then_body, function, after)?;
         let no_flow = no.statements_with(else_body, function, after)?;
+        for (branch, flow, body) in [
+            (&mut yes, yes_flow, then_body),
+            (&mut no, no_flow, else_body),
+        ] {
+            if flow == Flow::Fallthrough {
+                if let Some(custody) = &mut branch.cleanup_custody {
+                    let origin = body.last().map(statement_span).unwrap_or(condition.span);
+                    custody.retire(
+                        |p| !self.states.contains_key(&p),
+                        origin,
+                        crate::effects::custody::Kind::Fallthrough,
+                    );
+                }
+            }
+        }
+        let mut merged_custody = self.cleanup_custody.clone();
+        if let (Some(merged), Some(a), Some(b)) = (
+            &mut merged_custody,
+            &yes.cleanup_custody,
+            &no.cleanup_custody,
+        ) {
+            merged.branches(
+                a,
+                b,
+                yes_flow == Flow::Fallthrough,
+                no_flow == Flow::Fallthrough,
+            );
+        }
         match (yes_flow, no_flow) {
             (a, b) if a != Flow::Fallthrough && b != Flow::Fallthrough => {
+                self.cleanup_custody = merged_custody;
                 return Ok(if a == b { a } else { Flow::NoFallthrough });
             }
             (Flow::Fallthrough, Flow::Fallthrough) => {
@@ -1370,6 +1581,7 @@ impl<'a> Checker<'a> {
                 *self = survivor;
             }
         }
+        self.cleanup_custody = merged_custody;
         Ok(Flow::Fallthrough)
     }
     fn split(&self, then_uses: &FutureUses, else_uses: &FutureUses) -> (Self, Self, FutureUses) {
@@ -1396,6 +1608,13 @@ impl<'a> Checker<'a> {
         else_state.validate_incoming_lineage(self, span)?;
         then_state.assert_no_holds();
         else_state.assert_no_holds();
+        if let (Some(merged), Some(a), Some(b)) = (
+            &mut self.cleanup_custody,
+            &then_state.cleanup_custody,
+            &else_state.cleanup_custody,
+        ) {
+            merged.branches(a, b, true, true);
+        }
         // Branch-created loans are scoped away, never merged. An incoming
         // loan's canonical origin/authority must not change on either survivor.
         for (id, original) in &self.loans {
@@ -1532,9 +1751,15 @@ impl<'a> Checker<'a> {
                 self.expression(operand, transfer)?;
                 Ok(None)
             }
-            ExprKind::Binary { left, right, .. } => {
+            ExprKind::Binary { op, left, right } => {
                 self.expression(left, transfer)?;
+                let skip = self.cleanup_custody.clone();
                 self.expression(right, transfer)?;
+                if matches!(op, crate::hir::BinaryOp::And | crate::hir::BinaryOp::Or) {
+                    if let (Some(custody), Some(skip)) = (&mut self.cleanup_custody, &skip) {
+                        custody.retain_skip(skip);
+                    }
+                }
                 Ok(None)
             }
             ExprKind::BoolLiteral(_)
@@ -1925,6 +2150,9 @@ impl<'a> Checker<'a> {
         }
         if ownership_kind(self.metadata(place).1) == OwnershipKind::Move {
             self.states.insert(place, State::Moved { span, transfer });
+            if let Some(custody) = &mut self.cleanup_custody {
+                custody.transfer(place);
+            }
         }
         if let Some(remaining) = self.remaining.get_mut(&place) {
             *remaining -= 1;
@@ -7550,5 +7778,47 @@ mod tests {
             .validate_reference_write_completion(*reference, *record, original, *reference_span)
             .is_err());
         assert_reference_write_atomic(&c, &before);
+    }
+}
+
+#[cfg(test)]
+mod cleanup_effect_transaction_tests {
+    use super::*;
+    use crate::effects::{custody::Custody, Effect, EffectSet};
+
+    #[test]
+    fn complete_expression_failure_restores_cleanup_custody_without_an_approval() {
+        let mut release = EffectSet::EMPTY;
+        release.insert(Effect::Filesystem);
+        let p = crate::hir::resources::fixture_effects(
+            "fn consume(x:Leaf)->bool effects filesystem{return true;} fn receive(a:bool,b:bool)->bool{return true;} fn f(a:Leaf,b:Leaf)->bool effects filesystem{return receive(consume(a),consume(b));}",
+            EffectSet::EMPTY,
+            release,
+        );
+        let f = p.functions()[4].as_ordinary().unwrap();
+        let mut checker = Checker::new(&p, f);
+        let plans = p.resources.plans(&p).unwrap();
+        let summaries = Rc::new(p.resources.summaries(&p, &plans).unwrap());
+        let mut custody = Custody::new(f.id, summaries);
+        for parameter in &f.parameters {
+            custody.initialize(Place::Parameter(*parameter), ValueType::Record(RecordId(0)));
+        }
+        checker.cleanup_custody = Some(custody);
+        let ValueStatement::Return { value, .. } = &f.body[0] else {
+            unreachable!()
+        };
+        let mut value = value.clone();
+        let ExprKind::Call { arguments, .. } = &mut value.kind else {
+            unreachable!()
+        };
+        let ExprKind::Call { arguments, .. } = &mut arguments[1].kind else {
+            unreachable!()
+        };
+        arguments[0].kind = ExprKind::Parameter(f.parameters[0]);
+        let before = checker.clone();
+        assert!(checker.expression(&value, Transfer::Return(f.id)).is_err());
+        assert_eq!(checker.cleanup_custody, before.cleanup_custody);
+        assert_eq!(checker.states, before.states);
+        assert_eq!(checker.remaining, before.remaining);
     }
 }

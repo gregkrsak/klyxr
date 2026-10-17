@@ -60,6 +60,7 @@ pub(crate) struct ResolvedValueFunction {
     pub parameters: Vec<ParameterId>,
     /// None is explicitly NoValue; Some(T) is Value(T), never result inference.
     pub return_type: Option<ResolvedValueType>,
+    pub effects: crate::effects::Declaration,
     pub body: Vec<ResolvedValueStatement>,
     pub span: Span,
 }
@@ -199,6 +200,7 @@ enum Signature {
     Ordinary {
         parameters: Vec<ParameterId>,
         return_type: Option<ResolvedValueType>,
+        effects: crate::effects::Declaration,
     },
     Verified {
         state_param: ParameterId,
@@ -479,9 +481,11 @@ impl Resolver {
                     .as_ref()
                     .map(|ty| self.value_type(ty, f.span))
                     .transpose()?;
+                let effects = crate::effects::Declaration::resolve(f.effects.as_ref())?;
                 Ok(Signature::Ordinary {
                     parameters,
                     return_type,
+                    effects,
                 })
             }
         }
@@ -735,6 +739,7 @@ impl Resolver {
                 Signature::Ordinary {
                     parameters,
                     return_type,
+                    effects,
                 },
             ) => {
                 let mut scope = Scope::default();
@@ -749,6 +754,7 @@ impl Resolver {
                     name: f.name.clone(),
                     parameters,
                     return_type,
+                    effects,
                     body,
                     span: f.span,
                 }))

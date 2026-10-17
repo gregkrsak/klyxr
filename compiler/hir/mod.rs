@@ -316,6 +316,7 @@ pub struct ValueFunction {
     pub parameters: Vec<ParameterId>,
     /// None is explicitly NoValue; Some(T) is Value(T), never result inference.
     pub return_type: Option<ValueType>,
+    pub effects: crate::effects::Declaration,
     pub body: Vec<ValueStatement>,
     pub span: Span,
 }

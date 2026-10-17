@@ -6,7 +6,15 @@ When one is settled, add/update a decision in `LANGUAGE_DECISIONS.md`.
 
 ## OQ-001 — Exact effect syntax
 
-Open: attribute vs clause syntax, inferred vs declared effects, effect polymorphism, groups/aliases, generic interaction, diagnostics.
+Frozen KED-030 Draft 2 settles the first ordinary-function phase: a contextual
+`effects` clause declares an explicit upper bound, absence means empty, and calls
+propagate complete declared contracts. Derived cleanup participates at ownership-
+approved realization sites. See KD-008 and Issue #70; implementation review and
+acceptance remain separate from specification freeze.
+
+Broader effect polymorphism, groups/aliases, generic interaction, project policy,
+effects-aware verified/harness behavior and richer diagnostic presentation remain
+open or deferred. No attribute policy syntax is admitted by this first phase.
 
 ## OQ-002 — Heap-managed ownership vocabulary
 

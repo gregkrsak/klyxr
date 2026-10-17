@@ -132,6 +132,27 @@ Candidate core effects include:
 
 Effects propagate transitively through the call graph.
 
+Frozen KED-030 Draft 2 ([Issue #70](https://github.com/gregkrsak/klyxr/issues/70))
+fixes the first ordinary-function phase: these eight spellings are independent
+canonical audit identities. Ordinary Value and NoValue `fn`/`function` signatures
+may declare `effects io, clock` after the optional result type. Absence means the
+empty set; unknown and duplicate identities reject. A declaration is an explicit
+upper bound, including any legal unused members. Every structurally reachable
+ordinary call contributes the callee's complete declaration without fixed-point
+body inference. Verified and harness declarations remain excluded.
+
+The same bound admits mechanically derived cleanup effects at eligible sites
+produced by the existing ownership checker. Leaf cleanup derives from the complete
+fixed release-operation contract; aggregate cleanup unions child summaries. Moving
+responsibility performs no cleanup, and an empty summary preserves the obligation.
+`unsafe` grants no permission. Ordinary terminal stops add no cleanup edge; private
+approved abort and primitive/protocol evidence have separate sealed domains.
+
+This branch implements the frozen first phase and awaits independent exact-head
+review and Greg's acceptance. KD-008's broader Direction Accepted status is unchanged.
+Production effectful APIs, effects-aware verification, policies, aliases,
+hierarchies and polymorphism are not part of this phase.
+
 ---
 
 ## KD-009 — Trust domains

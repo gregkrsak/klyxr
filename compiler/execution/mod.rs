@@ -3,6 +3,7 @@
 // Keep immediate origins and the wide trap value inline: exhaustion reporting
 // must not require an additional allocation merely to return the error itself.
 #![allow(clippy::result_large_err)]
+mod domain;
 mod machine;
 mod render;
 
@@ -175,6 +176,8 @@ impl std::error::Error for ExecutionError {}
 // numeric-ID-aligned substitutions; this never re-runs ownership at execution.
 struct Approval {
     program: hir::Program,
+    cleanup_sites: Vec<crate::effects::custody::Site>,
+    domain: domain::Domain,
 }
 
 /// No public fields, constructors, mutation, or independent HIR/MIR pairing.
@@ -194,6 +197,8 @@ pub struct CheckedExecutable {
     origin_approval: Rc<Approval>,
     limits: AdmissionLimits,
     cleanup_plans: Vec<Option<hir::resources::CleanupPlan>>,
+    cleanup_effects: Vec<crate::effects::EffectSet>,
+    domain: domain::Domain,
 }
 impl CheckedExecutable {
     pub fn entry(&self, name: &str) -> Result<FunctionId, ExecutionError> {
@@ -258,6 +263,20 @@ impl CheckedExecutable {
         // Admission already bounds this private immutable representation. Check
         // shape before any recursive comparison/re-lowering, including injections.
         validate::program_shape(&self.program, &c)?;
+        self.domain.shape(self.limits)?;
+        if self.domain != self.approval.domain {
+            return Err(ExecutionError::integrity(
+                "private execution domain correspondence",
+            ));
+        }
+        if !self.approval.cleanup_sites.is_empty() {
+            let holders = self.program.locals.len() + self.program.parameters.len();
+            let nodes = c.resource_nodes.get() + self.program.functions.len() + holders;
+            c.reserve_cleanup_effects(nodes, crate::effects::custody::holder_bound(&self.program))?;
+            if self.approval.cleanup_sites.len() > nodes.saturating_mul(holders) {
+                return Err(ExecutionError::integrity("cleanup effect witness shape"));
+            }
+        }
         let plans = if self.program.resources.leaves.is_empty() {
             Vec::new()
         } else {
@@ -269,6 +288,17 @@ impl CheckedExecutable {
         if self.cleanup_plans != plans {
             return Err(ExecutionError::integrity(
                 "canonical cleanup plan correspondence",
+            ));
+        }
+        let summaries = self
+            .program
+            .resources
+            .summaries(&self.program, &plans)
+            .map_err(ExecutionError::from)?;
+        validate::cleanup_site_shape(&self.program, &self.approval.cleanup_sites, &summaries)?;
+        if self.cleanup_effects != summaries {
+            return Err(ExecutionError::integrity(
+                "canonical cleanup effect summary correspondence",
             ));
         }
         if self.program != self.approval.program {
@@ -290,13 +320,16 @@ impl CheckedExecutable {
             })?;
         }
         // Same deterministic lowerer, not a second semantic or ownership pipeline.
-        let (expected, origins) =
+        let (mut expected, origins) =
             mir::lower_with_origins(&self.program).map_err(ExecutionError::from)?;
+        mir::attach_cleanup_effects(&mut expected, &self.approval.cleanup_sites)
+            .map_err(ExecutionError::from)?;
         if self.mir != expected || self.origins != origins {
             return Err(ExecutionError::integrity(
                 "exact HIR/MIR/origin correspondence",
             ));
         }
+        self.domain.validate(self)?;
         Ok(())
     }
     pub fn render_result(
@@ -368,12 +401,15 @@ pub fn prepare_execution(
     })?;
     let resolved = crate::resolve::resolve(&ast).map_err(|e| frontend("resolve", e, &context))?;
     let program = crate::types::check(resolved).map_err(|e| frontend("type", e, &context))?;
-    crate::ownership::check_bounded(&program, &context)
+    let cleanup_sites = crate::ownership::check_bounded(&program, &context)
         .map_err(|e| frontend("ownership", e, &context))?;
     if let Some(e) = context.failure.get() {
         return Err(e.into());
     }
-    seal(program, limits)
+    crate::effects::calls::check(&program).map_err(|e| frontend("effects", e, &context))?;
+    crate::effects::custody::check(&program, &cleanup_sites)
+        .map_err(|e| frontend("effects", e, &context))?;
+    seal(program, limits, cleanup_sites)
 }
 impl From<hir::resources::PlanError> for ExecutionError {
     fn from(error: hir::resources::PlanError) -> Self {
@@ -395,8 +431,18 @@ impl From<hir::resources::PlanError> for ExecutionError {
 fn seal(
     program: hir::Program,
     limits: AdmissionLimits,
+    cleanup_sites: Vec<crate::effects::custody::Site>,
 ) -> Result<CheckedExecutable, ExecutionError> {
-    let (mir, origins) = mir::lower_with_origins(&program).map_err(ExecutionError::from)?;
+    seal_in_domain(program, limits, cleanup_sites, domain::Request::Ordinary)
+}
+fn seal_in_domain(
+    program: hir::Program,
+    limits: AdmissionLimits,
+    cleanup_sites: Vec<crate::effects::custody::Site>,
+    request: domain::Request,
+) -> Result<CheckedExecutable, ExecutionError> {
+    let (mut mir, origins) = mir::lower_with_origins(&program).map_err(ExecutionError::from)?;
+    mir::attach_cleanup_effects(&mut mir, &cleanup_sites).map_err(ExecutionError::from)?;
     let cleanup_plans = if program.resources.leaves.is_empty() {
         Vec::new()
     } else {
@@ -405,8 +451,22 @@ fn seal(
             .plans(&program)
             .map_err(ExecutionError::from)?
     };
+    let cleanup_effects = program
+        .resources
+        .summaries(&program, &cleanup_plans)
+        .map_err(ExecutionError::from)?;
+    let domain = domain::Domain::admit(
+        &program,
+        &mir,
+        &cleanup_plans,
+        &cleanup_effects,
+        limits,
+        request,
+    )?;
     let approval = Rc::new(Approval {
         program: program.clone(),
+        cleanup_sites,
+        domain: domain.clone(),
     });
     let executable = CheckedExecutable {
         program,
@@ -417,6 +477,8 @@ fn seal(
         approval,
         limits,
         cleanup_plans,
+        cleanup_effects,
+        domain,
     };
     executable.validate()?;
     Ok(executable)
@@ -533,6 +595,22 @@ fn prepare_synthetic(
     program: hir::Program,
     limits: AdmissionLimits,
 ) -> Result<CheckedExecutable, ExecutionError> {
+    // Predecessor state-injection fixtures are explicitly protocol evidence.
+    prepare_in_domain(program, limits, domain::Request::Primitive)
+}
+#[cfg(test)]
+fn prepare_ordinary_synthetic(
+    program: hir::Program,
+    limits: AdmissionLimits,
+) -> Result<CheckedExecutable, ExecutionError> {
+    prepare_in_domain(program, limits, domain::Request::Ordinary)
+}
+#[cfg(test)]
+fn prepare_in_domain(
+    program: hir::Program,
+    limits: AdmissionLimits,
+    domain: domain::Request,
+) -> Result<CheckedExecutable, ExecutionError> {
     limits.validate()?;
     let context = Context::new(limits);
     context.reserve_frontend(
@@ -544,12 +622,304 @@ fn prepare_synthetic(
         0,
     )?;
     validate::program_shape(&program, &context)?;
-    crate::ownership::check_bounded(&program, &context)
+    let cleanup_sites = crate::ownership::check_bounded(&program, &context)
         .map_err(|e| frontend("ownership", e, &context))?;
     if let Some(e) = context.failure.get() {
         return Err(e.into());
     }
-    seal(program, limits)
+    crate::effects::calls::check(&program).map_err(|e| frontend("effects", e, &context))?;
+    crate::effects::custody::check(&program, &cleanup_sites)
+        .map_err(|e| frontend("effects", e, &context))?;
+    seal_in_domain(program, limits, cleanup_sites, domain)
+}
+
+#[cfg(test)]
+mod effect_authority_tests {
+    use super::*;
+    use crate::effects::{Effect, EffectSet};
+
+    fn cleanup_fixture(source: &str) -> hir::Program {
+        let mut acquire = EffectSet::EMPTY;
+        acquire.insert(Effect::Io);
+        let mut release = EffectSet::EMPTY;
+        release.insert(Effect::Filesystem);
+        hir::resources::fixture_effects(source, acquire, release)
+    }
+
+    #[test]
+    fn protected_return_owner_cannot_gain_cleanup_authority_from_an_unused_superset() {
+        let mut e = prepare_ordinary_synthetic(cleanup_fixture("fn make()->Leaf effects io,filesystem{let outgoing=acquire();return outgoing;} fn demo() effects io,filesystem{let received=make();}"), AdmissionLimits::default()).unwrap();
+        let f = e.program.functions()[2].as_ordinary().unwrap();
+        let local = e
+            .program
+            .locals()
+            .iter()
+            .find(|l| l.function == f.id)
+            .unwrap()
+            .id;
+        let hir::ValueStatement::Return { span, .. } = f.body.last().unwrap() else {
+            unreachable!()
+        };
+        let mut effects = EffectSet::EMPTY;
+        effects.insert(Effect::Filesystem);
+        assert!(e.mir.functions()[2].cleanup_effect_sites.is_empty());
+        e.mir.test_functions_mut()[2]
+            .cleanup_effect_sites
+            .push(crate::effects::custody::Site {
+                function: f.id,
+                holder: hir::Place::Local(local),
+                record: hir::RecordId(0),
+                effects,
+                kind: crate::effects::custody::Kind::Return,
+                origin: *span,
+            });
+        assert!(e.validate().is_err());
+    }
+
+    #[test]
+    fn cleanup_witness_storage_neighbors_and_host_failure_never_grant_authority() {
+        let p = cleanup_fixture("fn demo() effects io,filesystem{let x=acquire();}");
+        let prepare = |bytes| {
+            prepare_ordinary_synthetic(
+                p.clone(),
+                AdmissionLimits {
+                    working_storage: bytes,
+                    ..AdmissionLimits::default()
+                },
+            )
+        };
+        let mut low = 1;
+        let mut high = AdmissionLimits::default().working_storage;
+        assert!(prepare(high).is_ok());
+        while low < high {
+            let middle = low + (high - low) / 2;
+            if prepare(middle).is_ok() {
+                high = middle;
+            } else {
+                low = middle + 1;
+            }
+        }
+        assert!(prepare(low).is_ok());
+        let error = prepare(low - 1).err().unwrap();
+        assert!(matches!(error.kind, ErrorKind::ConfiguredLimit(_)));
+        struct Restore;
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                crate::effects::custody::FAIL_WITNESS_ALLOCATION.with(|f| f.set(false));
+            }
+        }
+        let _restore = Restore;
+        crate::effects::custody::FAIL_WITNESS_ALLOCATION.with(|f| f.set(true));
+        let error = prepare(high).err().unwrap();
+        assert_eq!(
+            error.kind,
+            ErrorKind::Host("cleanup effect witness allocation")
+        );
+    }
+
+    #[test]
+    fn every_ordinary_exit_and_displacement_requires_its_cleanup_effect() {
+        use crate::effects::custody::Kind;
+        for (result, body, kind) in [
+            ("", "let x=acquire();", Kind::Completion),
+            ("", "let x=acquire();return;", Kind::BareReturn),
+            ("->bool", "let x=acquire();return true;", Kind::Return),
+            ("", "if true{let x=acquire();}", Kind::Fallthrough),
+            (
+                "",
+                "let mut flag=true;while flag{let x=acquire();flag=false;}",
+                Kind::Iteration,
+            ),
+            ("", "while true{let x=acquire();break;}", Kind::Break),
+            (
+                "",
+                "let mut flag=true;while flag{let x=acquire();flag=false;continue;}",
+                Kind::Continue,
+            ),
+            ("", "let mut x=acquire();x=acquire();", Kind::Replacement),
+        ] {
+            let bad = cleanup_fixture(&format!("fn demo(){result} effects io{{{body}}}"));
+            let error = prepare_ordinary_synthetic(bad, AdmissionLimits::default())
+                .err()
+                .unwrap();
+            assert!(
+                matches!(
+                    error.kind,
+                    ErrorKind::Frontend {
+                        phase: "effects",
+                        ..
+                    }
+                ),
+                "{error}"
+            );
+            assert!(error.to_string().contains("filesystem"));
+            let good = cleanup_fixture(&format!(
+                "fn demo(){result} effects io,filesystem{{{body}}}"
+            ));
+            let e = prepare_ordinary_synthetic(good, AdmissionLimits::default()).unwrap();
+            assert!(e.approval.cleanup_sites.iter().any(|s| s.kind == kind));
+            assert!(execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).is_ok());
+        }
+    }
+
+    #[test]
+    fn pass_through_both_path_transfer_and_return_protection_do_not_charge_cleanup() {
+        let source = "fn pass(x:Leaf)->Leaf{return x;} fn branches(x:Leaf,flag:bool)->Leaf{if flag{return x;}else{return x;}} fn make()->Leaf effects io{return acquire();} fn mixed(x:Leaf,flag:bool)->Leaf effects io,filesystem{if flag{return x;}let other=acquire();return other;} fn consume(x:Leaf) effects filesystem{} fn both(x:Leaf,flag:bool) effects filesystem{if flag{consume(x);}else{consume(x);}} fn maybe(x:Leaf,flag:bool) effects filesystem{if flag{consume(x);}} fn demo() effects io,filesystem{let a=acquire();let b=pass(a);let c=branches(b,false);let d=mixed(c,true);let e=make();both(acquire(),true);maybe(acquire(),false);}";
+        let e = prepare_ordinary_synthetic(cleanup_fixture(source), AdmissionLimits::default())
+            .unwrap();
+        for name in ["pass", "branches", "make", "both"] {
+            let id = e
+                .program
+                .functions()
+                .iter()
+                .find(|f| f.name() == name)
+                .unwrap()
+                .id();
+            assert!(
+                !e.approval.cleanup_sites.iter().any(|s| s.function == id),
+                "{name}"
+            );
+        }
+        for name in ["mixed", "maybe"] {
+            let f = e
+                .program
+                .functions()
+                .iter()
+                .find(|f| f.name() == name)
+                .unwrap()
+                .as_ordinary()
+                .unwrap();
+            assert!(e
+                .approval
+                .cleanup_sites
+                .iter()
+                .any(|s| s.function == f.id && s.holder == hir::Place::Parameter(f.parameters[0])));
+        }
+        assert!(execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).is_ok());
+    }
+
+    #[test]
+    fn short_circuit_cleanup_custody_keeps_skip_alternatives_separate_from_usability() {
+        let source = "fn take(x:Leaf)->bool effects filesystem{return true;} fn skipped(x:Leaf) effects filesystem{let seen=false&&take(x);} fn direct(x:Leaf) effects filesystem{let seen=take(x);} fn demo() effects io,filesystem{skipped(acquire());direct(acquire());}";
+        let e = prepare_ordinary_synthetic(cleanup_fixture(source), AdmissionLimits::default())
+            .unwrap();
+        let find = |name| {
+            e.program
+                .functions()
+                .iter()
+                .find(|f| f.name() == name)
+                .unwrap()
+                .id()
+        };
+        assert!(e
+            .approval
+            .cleanup_sites
+            .iter()
+            .any(|s| s.function == find("skipped")));
+        assert!(!e
+            .approval
+            .cleanup_sites
+            .iter()
+            .any(|s| s.function == find("direct")));
+        assert!(execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).is_ok());
+    }
+
+    #[test]
+    fn cleanup_witness_site_function_owner_plan_summary_and_origin_mutations_reject() {
+        for mutation in 0..11 {
+            let mut e = prepare_ordinary_synthetic(
+                cleanup_fixture(
+                    "fn demo() effects io,filesystem{let a=acquire();let b=acquire();}",
+                ),
+                AdmissionLimits::default(),
+            )
+            .unwrap();
+            let sites = &mut e
+                .mir
+                .test_functions_mut()
+                .last_mut()
+                .unwrap()
+                .cleanup_effect_sites;
+            assert_eq!(sites.len(), 2);
+            match mutation {
+                0 => {
+                    sites.pop();
+                }
+                1 => sites.push(sites[0].clone()),
+                2 => sites.swap(0, 1),
+                3 => sites[0].function = FunctionId(0),
+                4 => sites[0].holder = hir::Place::Local(hir::LocalId(999)),
+                5 => sites[0].record = hir::RecordId(1),
+                6 => sites[0].effects = EffectSet::EMPTY,
+                7 => sites[0].origin.start += 1,
+                8 => {
+                    sites[0].effects.insert(Effect::Io);
+                }
+                9 => sites[0].kind = crate::effects::custody::Kind::Replacement,
+                _ => sites[0].holder = sites[1].holder,
+            }
+            assert!(e.validate().is_err(), "mutation {mutation}");
+        }
+    }
+
+    #[test]
+    fn cached_cleanup_effect_summaries_are_bound_to_canonical_derivation() {
+        for mutation in 0..5 {
+            let mut acquire = EffectSet::EMPTY;
+            acquire.insert(Effect::Io);
+            let mut release = EffectSet::EMPTY;
+            release.insert(Effect::Filesystem);
+            release.insert(Effect::Blocking);
+            let p = hir::resources::fixture_effects(
+                "record Plain{x:R} fn demo() effects io,filesystem,blocking {let x=acquire();}",
+                acquire,
+                release,
+            );
+            let mut e = prepare_ordinary_synthetic(p, AdmissionLimits::default()).unwrap();
+            assert_eq!(e.cleanup_effects, vec![release, release, EffectSet::EMPTY]);
+            assert!(e.validate().is_ok());
+            match mutation {
+                0 => e.cleanup_effects[0] = EffectSet::EMPTY,
+                1 => {
+                    e.cleanup_effects[1].insert(Effect::Clock);
+                }
+                2 => {
+                    e.cleanup_effects.pop();
+                }
+                3 => e.cleanup_effects.push(release),
+                _ => e.cleanup_effects.swap(0, 2),
+            }
+            assert!(e.validate().is_err(), "mutation {mutation}");
+        }
+    }
+
+    #[test]
+    fn direct_effect_sites_reject_independent_authority_mutations() {
+        for mutation in 0..9 {
+            let mut e = prepare_execution(
+                "fn leaf() effects clock {} fn demo() effects io,clock {leaf();leaf();}",
+                AdmissionLimits::default(),
+            )
+            .unwrap();
+            let sites = &mut e.mir.test_functions_mut()[1].direct_effects;
+            match mutation {
+                0 => {
+                    sites.pop();
+                }
+                1 => sites.push(sites[0].clone()),
+                2 => sites.swap(0, 1),
+                3 => sites[0].function = FunctionId(0),
+                4 => sites[0].effects = EffectSet::EMPTY,
+                5 => {
+                    sites[0].effects.insert(Effect::Io);
+                }
+                6 => sites[0].origin.start += 1,
+                7 => sites[0].ordinal += 10,
+                _ => sites[0].callee = FunctionId(1),
+            }
+            assert!(e.validate().is_err(), "mutation {mutation}");
+        }
+    }
 }
 
 #[cfg(test)]

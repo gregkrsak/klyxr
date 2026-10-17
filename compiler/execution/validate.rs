@@ -514,6 +514,37 @@ pub(super) fn program_shape(p: &hir::Program, c: &Context) -> Result<(), Executi
     Ok(())
 }
 
+pub(super) fn cleanup_site_shape(
+    p: &hir::Program,
+    sites: &[crate::effects::custody::Site],
+    summaries: &[crate::effects::EffectSet],
+) -> Result<(), ExecutionError> {
+    for (index, site) in sites.iter().enumerate() {
+        let f = p
+            .functions()
+            .get(site.function.0)
+            .filter(|f| f.id() == site.function)
+            .and_then(|f| f.as_ordinary())
+            .ok_or_else(bad)?;
+        if place(p, f.id, site.holder)? != ValueType::Record(site.record)
+            || summaries.get(site.record.0).copied() != Some(site.effects)
+            || site.effects == crate::effects::EffectSet::EMPTY
+            || !site.effects.is_subset(f.effects.set())
+            || site.origin.line == 0
+            || site.origin.column == 0
+            || site.origin.start > site.origin.end
+            || p.resources
+                .operations
+                .iter()
+                .any(|o| o.function == site.function)
+            || index > 0 && sites[index - 1].order() >= site.order()
+        {
+            return Err(bad());
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn mir_shape(
     p: &hir::Program,
     m: &mir::MirProgram,
@@ -530,6 +561,30 @@ pub(super) fn mir_shape(
             .filter(|v| v.id() == f.function())
             .and_then(|v| v.as_ordinary())
             .ok_or_else(bad)?;
+        let holders = p.locals.len() + p.parameters.len();
+        if f.cleanup_effect_sites.len() > c.limits.tokens.saturating_mul(holders) {
+            return Err(ResourceFailure::limit("cleanup effect site count", START).into());
+        }
+        for site in &f.cleanup_effect_sites {
+            let ty = place(p, f.function(), site.holder)?;
+            if site.function != f.function() || ty != ValueType::Record(site.record) {
+                return Err(bad());
+            }
+        }
+        if f.direct_effects.len() > c.limits.tokens {
+            return Err(ResourceFailure::limit("direct effect sites", START).into());
+        }
+        for site in &f.direct_effects {
+            let callee = p
+                .functions()
+                .get(site.callee.0)
+                .filter(|f| f.id() == site.callee)
+                .and_then(|f| f.as_ordinary())
+                .ok_or_else(bad)?;
+            if site.function != f.function() || site.effects != callee.effects.set() {
+                return Err(bad());
+            }
+        }
         if f.blocks().len() > c.limits.tokens.checked_mul(4).ok_or_else(bad)? {
             return Err(bad());
         }

@@ -2,6 +2,8 @@
 use super::*;
 use crate::hir::resources::OperationKind;
 use crate::mir::cleanup::ScopeId;
+#[cfg(test)]
+mod effects;
 mod replacement;
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Event {
@@ -859,7 +861,7 @@ impl<'a> Machine<'a> {
                     self.resources.as_mut().unwrap().fail_field_skip -= 1;
                 } else {
                     self.expression = Some(field.span);
-                    self.pending_abort()?;
+                    self.pending_abort(frame, id, field.field)?;
                     self.resources.as_mut().unwrap().terminal = true;
                     return Err(self.failure(ErrorKind::SyntheticConstructionFailure));
                 }
@@ -983,12 +985,30 @@ impl<'a> Machine<'a> {
         }
         Ok(())
     }
-    fn pending_abort(&mut self) -> Result<(), ExecutionError> {
+    fn pending_abort(
+        &mut self,
+        _frame: u64,
+        _id: u64,
+        _field: hir::FieldId,
+    ) -> Result<(), ExecutionError> {
+        if !self.executable.domain.permits_abort() {
+            return Err(self.integrity("ordinary execution has no synthetic abort authority"));
+        }
+        #[cfg(test)]
+        if let crate::execution::domain::Domain::Abort(templates) = &self.executable.domain {
+            self.validate_pending_abort(templates, _frame, _id, _field)?;
+        }
         while let Some(pending) = self.resources.as_ref().unwrap().pending.last() {
             if pending.complete {
                 return Err(self.integrity("complete aggregate presented as pending"));
             }
             let record = pending.record;
+            #[cfg(test)]
+            if let crate::execution::domain::Domain::Abort(templates) = &self.executable.domain {
+                let template = &templates[self.resources.as_ref().unwrap().pending.len() - 1];
+                self.origin = template.origin;
+                self.expression = Some(template.failure);
+            }
             if let Some(hir::resources::CleanupPlan::Fields(plan)) = self
                 .executable
                 .cleanup_plans
@@ -1023,6 +1043,71 @@ impl<'a> Machine<'a> {
                 }
             }
             self.resources.as_mut().unwrap().pending.pop();
+        }
+        Ok(())
+    }
+    #[cfg(test)]
+    fn validate_pending_abort(
+        &self,
+        templates: &[crate::execution::domain::Abort],
+        frame: u64,
+        id: u64,
+        field: hir::FieldId,
+    ) -> Result<(), ExecutionError> {
+        let pending = &self.resources.as_ref().unwrap().pending;
+        if templates.len() != pending.len()
+            || templates.last().map_or(true, |t| {
+                t.request.frame != frame || t.request.pending != id || t.request.before != field
+            })
+        {
+            return Err(self.integrity("private abort complete pending stack or trigger mismatch"));
+        }
+        // Validate every container before the first attempted release. This loop
+        // is bounded by the sealed scenario; no ownership or effect inference.
+        for (ordinal, (template, pending)) in templates.iter().zip(pending).enumerate() {
+            let request = template.request;
+            let actual = self
+                .frames
+                .get(request.depth)
+                .filter(|f| f.id == request.frame && f.function == request.function)
+                .ok_or_else(|| self.integrity("private abort exact frame binding"))?;
+            if pending.frame != actual.id
+                || pending.id != request.pending
+                || pending.record != template.record
+                || pending.complete
+                || pending.initialized.len() != template.initialized.len()
+                || !pending
+                    .initialized
+                    .iter()
+                    .map(|(id, _)| id)
+                    .eq(template.initialized.iter())
+            {
+                return Err(
+                    self.integrity("private abort construction or initialized membership binding")
+                );
+            }
+            let (activation, site) = pending
+                .temporary_site
+                .ok_or_else(|| self.integrity("private abort missing construction site"))?;
+            if site != request.site
+                || self.temporary_site_origin(activation, site, pending.frame)? != template.origin
+            {
+                return Err(self.integrity("private abort exact origin binding"));
+            }
+            if ordinal + 1 == templates.len() {
+                if pending.child_activation.is_some() {
+                    return Err(self.integrity("private abort trigger has an active field"));
+                }
+            } else {
+                let child = pending.child_activation.ok_or_else(|| {
+                    self.integrity("private abort ancestor has no in-progress field")
+                })?;
+                if self.temporary_site_origin(child, template.before_site, pending.frame)?
+                    != template.before_origin
+                {
+                    return Err(self.integrity("private abort in-progress field binding"));
+                }
+            }
         }
         Ok(())
     }
@@ -2640,9 +2725,16 @@ mod repair_plan_failure_tests {
     fn later_sealing_plan_failure_publishes_no_executable() {
         let p = program();
         p.resources.validate(&p).unwrap();
+        let cleanup_sites = crate::ownership::analyze(&p).unwrap();
+        crate::effects::calls::check(&p).unwrap();
+        crate::effects::custody::check(&p, &cleanup_sites).unwrap();
         for after in 0..8 {
             let result = failing(after, || {
-                super::super::super::seal(p.clone(), AdmissionLimits::default())
+                super::super::super::seal(
+                    p.clone(),
+                    AdmissionLimits::default(),
+                    cleanup_sites.clone(),
+                )
             });
             assert!(matches!(result.err().unwrap().kind, ErrorKind::Host(_)));
         }
@@ -2902,7 +2994,7 @@ mod temporary_aggregate_tests {
                     .sites[site.0]
                     .destination;
                 if destination == Transfer::Pending(hir::RecordId(1), hir::FieldId(1)) {
-                    let u = m.inject_temporary_leaf(*activation);
+                    let u = m.inject_temporary_leaf(*activation).unwrap();
                     m.resources.as_mut().unwrap().failure_at = Some(u);
                     m.tasks.push(task);
                     break;

@@ -123,6 +123,8 @@ pub(crate) struct Context {
     pub failure: Cell<Option<ResourceFailure>>,
     depth: Cell<usize>,
     alias_work: Cell<u64>,
+    envelope_nodes: Cell<usize>,
+    envelope_source: Cell<usize>,
 }
 impl Context {
     pub fn new(limits: AdmissionLimits) -> Self {
@@ -132,8 +134,65 @@ impl Context {
             failure: Cell::new(None),
             depth: Cell::new(0),
             alias_work: Cell::new(0),
+            envelope_nodes: Cell::new(0),
+            envelope_source: Cell::new(0),
         }
     }
+    /// Additional retained cleanup witnesses are bounded before checker snapshots.
+    /// Inactive/all-empty cleanup effects retain the predecessor envelope exactly.
+    pub(crate) fn reserve_cleanup_effects(
+        &self,
+        nodes: usize,
+        holders: usize,
+    ) -> Result<(), ResourceFailure> {
+        self.reserve_cleanup_effects_extra(nodes, holders, 0)
+    }
+    pub(crate) fn reserve_cleanup_effects_extra(
+        &self,
+        nodes: usize,
+        holders: usize,
+        retained: usize,
+    ) -> Result<(), ResourceFailure> {
+        let n = nodes.max(self.envelope_nodes.get()).max(1);
+        let entries = n.checked_mul(holders);
+        let factor = self.limits.traversal_depth.checked_mul(16);
+        let extra = entries
+            .and_then(|e| {
+                factor
+                    .and_then(|d| d.checked_add(16))
+                    .and_then(|d| e.checked_mul(d))
+            })
+            .and_then(|e| e.checked_mul(256))
+            .and_then(|e| e.checked_add(retained));
+        let base = factor
+            .and_then(|d| d.checked_add(32))
+            .and_then(|d| d.checked_mul(n))
+            .and_then(|e| e.checked_mul(self.limits.identifier_bytes + 512))
+            .and_then(|e| {
+                self.envelope_source
+                    .get()
+                    .checked_mul(8)
+                    .and_then(|s| e.checked_add(s))
+            });
+        if base
+            .and_then(|b| extra.and_then(|e| b.checked_add(e)))
+            .map_or(true, |e| e > self.limits.working_storage)
+        {
+            return Err(ResourceFailure::limit(
+                "cleanup effect witness storage",
+                START,
+            ));
+        }
+        let work = (n as u64)
+            .checked_pow(4)
+            .and_then(|e| e.checked_mul(640))
+            .and_then(|e| e.checked_add(self.envelope_source.get() as u64));
+        if work.map_or(true, |w| w > self.limits.frontend_work) {
+            return Err(ResourceFailure::limit("cleanup effect witness work", START));
+        }
+        Ok(())
+    }
+
     pub(crate) fn resource_node(&self, span: Span) -> Result<(), ResourceFailure> {
         let next = self
             .resource_nodes
@@ -220,6 +279,9 @@ impl Context {
                 START,
             ));
         }
+        self.envelope_nodes.set(self.envelope_nodes.get().max(n));
+        self.envelope_source
+            .set(self.envelope_source.get().max(source));
         Ok(())
     }
     pub fn expression(&self, expression: &ast::Expr) -> Result<(), ()> {

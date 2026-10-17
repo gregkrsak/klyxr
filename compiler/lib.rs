@@ -1,6 +1,7 @@
 pub mod ast;
 mod bounded;
 pub mod diagnostics;
+pub mod effects;
 pub mod execution;
 pub mod hir;
 pub mod lexer;
@@ -24,6 +25,7 @@ pub enum FrontendError {
     Resolve(Vec<diagnostics::Diagnostic>),
     Type(Vec<diagnostics::Diagnostic>),
     Ownership(Vec<diagnostics::Diagnostic>),
+    Effects(Vec<diagnostics::Diagnostic>),
 }
 
 impl fmt::Display for FrontendError {
@@ -31,7 +33,10 @@ impl fmt::Display for FrontendError {
         match self {
             Self::Lex(error) => write!(f, "{error}"),
             Self::Parse(error) => write!(f, "{error}"),
-            Self::Resolve(errors) | Self::Type(errors) | Self::Ownership(errors) => {
+            Self::Resolve(errors)
+            | Self::Type(errors)
+            | Self::Ownership(errors)
+            | Self::Effects(errors) => {
                 for (index, error) in errors.iter().enumerate() {
                     if index > 0 {
                         writeln!(f)?;
@@ -62,6 +67,8 @@ pub fn compile_source(source: &str) -> Result<hir::Program, FrontendError> {
     let ast = parse_source(source)?;
     let resolved = resolve::resolve(&ast).map_err(FrontendError::Resolve)?;
     let program = types::check(resolved).map_err(FrontendError::Type)?;
-    ownership::check(&program).map_err(FrontendError::Ownership)?;
+    let cleanup_sites = ownership::analyze(&program).map_err(FrontendError::Ownership)?;
+    effects::calls::check(&program).map_err(FrontendError::Effects)?;
+    effects::custody::check(&program, &cleanup_sites).map_err(FrontendError::Effects)?;
     Ok(program)
 }
