@@ -662,3 +662,14 @@ implicit error conversion, reference payloads, Result public record fields,
 verified/harness Result use, production fallible APIs, panic/unwind/cancellation
 and generalized ownership/dataflow remain excluded or open. Result grants no unsafe
 permission and no tool-stop recovery or rollback.
+
+### KED-032 refinement of propagation questions
+
+Frozen Draft 2 narrows Result propagation to exact contextual `or return` at an
+ordinary local initializer with exact shared failure identity, actual enclosing
+scope, independent initializer typing and protected ordinary return. It does not
+settle `?`, general postfix/nested propagation, implicit conversion, universal
+errors, generalized sums/patterns, verified/harness Result execution, production
+fallible APIs, panic/unwind/cancellation or generalized cyclic ownership.
+Earlier wholly-open propagation references now apply to those deferred extensions.
+Implementation evidence and independent acceptance remain distinct.

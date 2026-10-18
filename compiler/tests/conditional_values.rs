@@ -272,6 +272,9 @@ fn mir_all_paths_initialize_one_canonical_destination_once() {
                 .filter(|s| matches!(s, Statement::Let { local, .. } if *local == destination))
                 .count();
             match b.terminator() {
+                Terminator::Propagate { .. } | Terminator::ForwardError { .. } => {
+                    panic!("conditional-value predecessor contains no propagation")
+                }
                 mir::Terminator::Match { .. } => {
                     panic!("unexpected Result match in predecessor conditional-value fixture")
                 }

@@ -33,14 +33,21 @@ pub(crate) struct Flow {
     pub(crate) protected_return: bool,
 }
 impl Flow {
-    pub(crate) fn validate(&self, function: &MirFunction) -> Result<(), &'static str> {
+    pub(crate) fn validate_bounded(
+        &self,
+        function: &MirFunction,
+    ) -> Result<(), hir::resources::PlanError> {
         if self.blocks.len() != function.blocks.len() {
-            return Err("cleanup block correspondence");
+            return Err("cleanup block correspondence".into());
         }
         let mut entered = Vec::new();
+        #[cfg(test)]
+        if !self.scopes.is_empty() {
+            temporaries::allocation()?;
+        }
         entered
             .try_reserve_exact(self.scopes.len())
-            .map_err(|_| "MIR validation allocation failed")?;
+            .map_err(|_| hir::resources::PlanError::Host("MIR cleanup validation allocation"))?;
         entered.resize(self.scopes.len(), false);
         for (i, s) in self.scopes.iter().enumerate() {
             if s.id != ScopeId(i)
@@ -49,11 +56,11 @@ impl Flow {
                 || s.span.column == 0
                 || s.span.start > s.span.end
             {
-                return Err("invalid cleanup scope identity or parent");
+                return Err("invalid cleanup scope identity or parent".into());
             }
             for (j, owner) in s.owners.iter().enumerate() {
                 if s.owners[..j].contains(owner) {
-                    return Err("duplicate lexical owner declaration");
+                    return Err("duplicate lexical owner declaration".into());
                 }
             }
         }
@@ -64,7 +71,7 @@ impl Flow {
                     || origin.kind != OriginKind::ScopeEntry
                     || self.scopes[scope.0].span != origin.span
                 {
-                    return Err("duplicate scope entry or invalid origin");
+                    return Err("duplicate scope entry or invalid origin".into());
                 }
                 *was = true;
             }
@@ -79,22 +86,22 @@ impl Flow {
                         .iter()
                         .any(|p| p.statement == init.statement)
                 {
-                    return Err("invalid successful owner initialization");
+                    return Err("invalid successful owner initialization".into());
                 }
                 if !matches!(function.blocks[i].statements.get(init.statement), Some(Statement::Let {local, span,..}) if *local == init.local && *span == init.origin.span)
                     && !matches!(function.blocks[i].statements.get(init.statement), Some(Statement::BindResult {local, pattern_origin,..}) if *local == init.local && *pattern_origin == init.origin.span)
                 {
-                    return Err("initialization does not match MIR owner");
+                    return Err("initialization does not match MIR owner".into());
                 }
             }
             for (j, scope) in b.exit.iter().enumerate() {
                 let s = self.scopes.get(scope.0).ok_or("foreign exit scope")?;
                 if b.exit[..j].contains(scope) {
-                    return Err("duplicate scope cleanup");
+                    return Err("duplicate scope cleanup".into());
                 }
                 if let Some(next) = b.exit.get(j + 1) {
                     if s.parent != Some(*next) {
-                        return Err("cleanup exit order is not inner-to-outer");
+                        return Err("cleanup exit order is not inner-to-outer".into());
                     }
                 }
             }
@@ -102,11 +109,11 @@ impl Flow {
                 && b.exit_origin
                     .map_or(true, |o| o.kind != OriginKind::ScopeExit)
             {
-                return Err("cleanup exit origin missing");
+                return Err("cleanup exit origin missing".into());
             }
         }
         if entered.contains(&false) {
-            return Err("missing lexical scope activation");
+            return Err("missing lexical scope activation".into());
         }
         Ok(())
     }

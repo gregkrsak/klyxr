@@ -787,3 +787,24 @@ resource catalog. No conditional Result initializer, raw named-range constructor
 formation, reference/public-record/verified/harness extension, general enum/pattern,
 `?`, conversion, unwind, retry, rollback or production resource API is added.
 The implementation and ledger await independent review and Greg's acceptance.
+
+## Frozen KED-032 implementation boundary
+
+Frozen Issue #75 Draft 2 adds exact lowercase contextual `or return` only at an
+ordinary Result-returning Value function's local initializer. The independently
+typed inner Result and declared outer Result must share exact failure identity;
+their success types may differ. Success initializes the original local in its
+actual lexical scope; failure canonically rewraps the selected payload and uses
+protected ordinary return, actual-scope cleanup and delivery after completion.
+There is no synthetic owning match arm. Existing replacement generations yield
+direct A → C → B versus explicit match A → B → C.
+
+The existing ownership checker retains outcome/effect witnesses and all loop/loan
+restrictions. Tool stops remain distinct from source Error. Contextual `or` remains
+an identifier elsewhere; existing keyword aliases/trivia are preserved. No `?`,
+conversion, nested propagation expression, conditional Result initializer, Result
+replacement, verified/harness extension, unwind or resource API is added. The
+implementation is authorized on its dedicated branch; independent review and
+Greg's acceptance remain pending. Its exact baseline is the human-merged KED-031
+commit 74c1bedc8f847ffaeb38ed4795ee91730e35b949, tree
+2d0cc78b67a8cb69ea8feaff183dbf1b91938e63.

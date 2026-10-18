@@ -1,0 +1,7 @@
+type FirstError = range 1..2;
+type OtherError = range 1..2;
+fn probe() -> Result<success: bool, failure: FirstError> { return Ok(true); }
+fn demo() -> Result<success: bool, failure: OtherError> {
+    let value = probe() or return;
+    return Ok(value);
+}

@@ -379,3 +379,43 @@ syntax traversal also counts its owned leaf: at configured depth 32 it admits
 admits 4,095 nodes and rejects the next well-formed binary-tree size, 4,097,
 against the 4,096-node ceiling. These private controls isolate individual limits
 from earlier token/syntax ceilings; they do not grant execution authority.
+
+## KED-032 propagation protocol and bounds
+
+The local declaration's approved mode retains exact inner/outer/F identities and
+phrase/binding origins. Its success edge establishes the ordinary local in the
+actual scope; Error rewraps into the exact outer Result and takes ordinary protected
+return exits. Source Error does not catch tool stops. Diagnostic text classifies
+no new failure; typed MIR validation preserves Host/Limit/Integrity through sealing
+and revalidation. Existing CLI Host class 2 is retained.
+
+MIR retains two extra blocks per propagation site and stores the suffix once.
+With p sites in a straight-line body the function has 2*p+1 blocks. Actual lexical
+ScopeIds remain separate from CFG blocks. Shared Result/record plans, bounded
+outcome witnesses, origins, cleanup exits and independent approval copies fit
+the checked conservative frontend/outcome envelopes. New fields have fixed size,
+new block/site counts remain within existing token-derived caps, and dynamic
+continuations/cells/history remain capacity-accounted. No source limit is raised.
+
+The same Result cell footprint retains constructor-site versus generated-return
+provenance in one bounded tagged scalar. Source sites/blocks must fit their bounded
+namespace before encoding. On Error, cell and receiving-value capacities are
+prospectively reserved together while the input still owns F; transfer, parent-link
+update, canonical output publication and input consumption then allocate nothing.
+The output is protected by the existing ordinary return machinery before cleanup.
+
+Fuel charges the propagating terminator, evaluated initializer, dispatch, selected
+binding statement/transfer and continuation entry on Ok. Error charges its return
+terminator, outgoing reservation/publication progress and active transfer, then
+existing actual cleanup/return work. Temporary activation, retirement, calls and
+resource initialization retain their existing charges. An unselected alternative
+executes and charges no payload/body/release work; its immutable metadata remains
+bounded. Consumed cell/history capacity remains charged during repeated execution.
+
+The ledger records exact x86_64 Rust 1.80.0 fuel/storage thresholds for all four
+payload classes on both alternatives. Tests check each fuel cut, actual allocation
+growth failure and every byte below the successful peak in representative resource
+and nested cases. Selected failures preserve one physical payload owner and
+completed prefixes, publish no continuation and refuse resume. Separate primitive
+fixtures test sibling retirement before dispatch without claiming ordinary-source
+reachability. See the KED-032 ledger and identity manifest for evidence domains.

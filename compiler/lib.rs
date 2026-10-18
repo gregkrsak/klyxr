@@ -72,3 +72,6 @@ pub fn compile_source(source: &str) -> Result<hir::Program, FrontendError> {
     effects::custody::check(&program, &cleanup_sites).map_err(FrontendError::Effects)?;
     Ok(program)
 }
+
+#[cfg(test)]
+mod propagation_tests;

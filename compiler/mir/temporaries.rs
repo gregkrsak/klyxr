@@ -365,7 +365,18 @@ impl Flow {
                     local,
                     initializer,
                     span,
-                } => self.full(p, &[initializer], Destination::Local(*local), *span, plans)?,
+                    propagation,
+                } => self.full(
+                    p,
+                    &[initializer],
+                    if propagation.is_some() {
+                        Destination::Match
+                    } else {
+                        Destination::Local(*local)
+                    },
+                    *span,
+                    plans,
+                )?,
                 ValueStatement::Assign { local, value, span } => self.full(
                     p,
                     &[value],

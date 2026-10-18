@@ -1803,3 +1803,32 @@ No raw named-range literal formation, Result conditional initializer/replacement
 reference payload, public record Result field, verified/harness Result, `?`, general
 pattern system, implicit conversion or unwind is introduced. Result output and
 runtime custody remain bounded; tool failures are not source Error values.
+
+## KED-032 explicit Result propagation
+
+`let value = produce() or return;` is a local-initializer statement inside an
+ordinary Value function returning canonical Result. The initializer independently
+provides `Result<success: S, failure: F>`; the enclosing signature provides
+`Result<success: T, failure: F>`. F must be exactly identical, including nominal
+and nested identities; S and T may differ. Propagation supplies no expected type
+to a bare constructor. `Error` and `Err` have already normalized to canonical Error.
+
+Ok initializes the original local in its actual enclosing scope. Error transfers
+F into the enclosing Error, protects it and uses ordinary return cleanup before
+caller delivery. The initializer executes once; no success suffix executes on Error.
+A nested Result payload retains its own obligation. Earlier unresolved outcomes
+are checked on the implicit return. Existing borrowing, mutable-local, replacement
+and relative loop boundaries remain unchanged.
+
+The exact lowercase phrase is recognized only at the ordinary Let tail. `or`
+remains an identifier: `let value = or or return;` is valid with an exact Result
+parameter named `or`. Both fn/function and mut/mutable spellings work, as do existing
+whitespace/newline/line-comment trivia and parentheses around the initializer.
+Parenthesizing propagation does not make it an expression. `?`, `try`, malformed
+phrases, nested/expression positions, assignments, verified/harness use and
+Result-valued conditional initializers remain excluded.
+
+Run `examples/result_propagation.klx` with `--function demo` for
+`Ok(Reading(42))`, or `failure_demo` for `Error(ReadError(1))`. The nominally distinct
+failure types in `result_propagation_mismatch.klx` reject. Full authority, scope,
+conservation and bound evidence is recorded in the KED-032 implementation ledger.

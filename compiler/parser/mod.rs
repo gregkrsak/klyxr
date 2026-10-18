@@ -486,14 +486,27 @@ impl Parser<'_> {
                 if mutable {
                     self.advance();
                 }
+                let binding = self.peek().span;
                 let name = self.expect_ident()?;
                 self.expect(&TokenKind::Equal)?;
                 let initializer = self.parse_initializer()?;
+                let propagation = if matches!(self.peek_kind(), TokenKind::Ident(name) if name == "or")
+                {
+                    let phrase = self.advance().span;
+                    let end = self.expect(&TokenKind::Return)?.span.end;
+                    Some(crate::ast::PropagationSyntax {
+                        phrase: Span { end, ..phrase },
+                        binding,
+                    })
+                } else {
+                    None
+                };
                 let end = self.expect(&TokenKind::Semicolon)?.span.end;
                 body.push(ValueStatement::Let {
                     name,
                     mutable,
                     initializer,
+                    propagation,
                     span: Span { end, ..span },
                 });
             } else if self.at(&TokenKind::Star) {

@@ -116,3 +116,36 @@ fn owned_replacement_example_runs_without_claiming_contract_proof() {
         assert!(text.contains("not executed or verified; constrained results are not proven"));
     }
 }
+
+#[test]
+fn propagation_cli_examples_select_success_and_failure() {
+    let path = format!(
+        "{}/../examples/result_propagation.klx",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    for (entry, expected) in [
+        ("demo", "Ok(Reading(42))\n"),
+        ("failure_demo", "Error(ReadError(1))\n"),
+    ] {
+        let output = run(&["run", &path, "--function", entry]);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), expected);
+    }
+}
+#[test]
+fn propagation_cli_nominal_failure_mismatch_is_frontend_class_one() {
+    let path = format!(
+        "{}/../examples/result_propagation_mismatch.klx",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let output = run(&["run", &path, "--function", "demo"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8(output.stderr)
+        .unwrap()
+        .contains("or return failure payload type mismatch"));
+    assert!(output.stdout.is_empty());
+}

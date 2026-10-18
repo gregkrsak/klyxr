@@ -127,6 +127,7 @@ pub(crate) enum ResolvedValueStatement {
         name: String,
         mutable: bool,
         initializer: ResolvedExpr,
+        propagation: Option<ast::PropagationSyntax>,
         span: Span,
     },
     Return {
@@ -778,6 +779,7 @@ impl Resolver<'_> {
                     name,
                     mutable,
                     initializer,
+                    propagation,
                     span,
                 } => {
                     unreserved(name, *span)?;
@@ -795,6 +797,7 @@ impl Resolver<'_> {
                         name: name.clone(),
                         mutable: *mutable,
                         initializer,
+                        propagation: *propagation,
                         span: *span,
                     }
                 }

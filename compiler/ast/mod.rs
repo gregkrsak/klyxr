@@ -131,6 +131,12 @@ pub enum BorrowKind {
     Shared,
     Mutable,
 }
+/// Exact contextual phrase and success binding origins; no runtime name lookup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PropagationSyntax {
+    pub phrase: Span,
+    pub binding: Span,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueStatement {
     Match {
@@ -185,6 +191,7 @@ pub enum ValueStatement {
         name: String,
         mutable: bool,
         initializer: Expr,
+        propagation: Option<PropagationSyntax>,
         span: Span,
     },
     Return {

@@ -1500,3 +1500,41 @@ cleanup prevents delivery. Results add no implicit effect, authority, rollback,
 retry or unwind. Tool stops never become Error. General enums/generics, Option,
 `?`, conversions, reference payloads, fallible cleanup and production effectful
 APIs remain deferred. See the KED-031 ledger for evidence and its limits.
+
+## Frozen KED-032 — Explicit local Result propagation
+
+**Status:** Frozen Draft 2, implementation authorized in Issue #75; independent
+implementation review and Greg's acceptance remain separate. KD-007's broader
+Direction Accepted status is unchanged.
+
+`let value = E or return;` requires independently typed canonical
+`E : Result<success: S, failure: F>` inside an ordinary Value function returning
+`Result<success: T, failure: F>`. Exact canonical F is mandatory; S and T may differ.
+No conversion or constructor expected-type context is inferred from propagation.
+The expression executes once in its statement-local region, its complete Result
+is protected and other initializer temporaries retire before tag selection.
+
+Ok transfers/copies its active payload, consumes the wrapper and establishes the
+original local in the actual enclosing lexical scope, registering only successful
+initialization. Error transfers/copies exact F into canonical outer Error, protects
+that result, consumes the input and uses the existing ordinary return exits.
+Callee scopes/parameters clean before frame retirement and caller delivery; cleanup
+stops retain the outgoing result and unfinished responsibilities without resume.
+Equal complete Result types permit equivalent wrapper reuse, but this implementation
+uses the same canonical rewrapping protocol for both equal and differing types.
+
+The illustrative match in the KED is tag-dependent control flow, not a lexical
+rewrite. No propagation-arm scope exists. KD-042/KD-043 over actual activations
+yield direct A → C → B and unchanged explicit match A → B → C; a failed C release
+retains B without an attempt. The existing ownership checker preserves independent
+nested outcomes, earlier pending obligations, exact nominal types, loans, original
+replacement activations and relative loop restrictions. Initializer evaluation
+gains no terminal-return Move permission. The success path still requires its
+own explicit function return and ordinary break/continue/backedge checks.
+
+The exact lowercase contextual phrase does not reserve `or` globally. Existing
+fn/function, mut/mutable and admitted trivia remain equivalent. Propagation is not
+an expression; `?`, `try`, fallback/abort spellings, conversions, public resource
+APIs, Result replacement, references, verified/harness execution, conditional
+Result initializers, exceptions, unwind, retry and rollback remain excluded.
+All Host, Limit, Integrity, trap and cleanup failures remain tool outcomes.

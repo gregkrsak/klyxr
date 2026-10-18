@@ -32,6 +32,10 @@ pub(super) enum Action {
         result: hir::ResultTypeId,
         bindings: [(hir::ResultTag, LocalId, Span); 2],
     },
+    Propagate {
+        local: LocalId,
+        operation: hir::Propagation,
+    },
     Exit,
 }
 #[cfg(test)]
@@ -135,6 +139,46 @@ impl Checker<'_> {
             ));
         }
         self.witness(span, Action::Exit)
+    }
+
+    pub(super) fn propagating_local(
+        &mut self,
+        local: LocalId,
+        initializer: &TypedExpr,
+        operation: hir::Propagation,
+    ) -> OwnershipResult {
+        // Initializer has ordinary permissions. The Error edge cannot grant
+        // terminal-return permission to pre-existing loop Move owners.
+        self.expression(initializer, Transfer::Propagate(local))?;
+        self.expire();
+        self.witness(
+            operation.syntax.phrase,
+            Action::Propagate { local, operation },
+        )?;
+        let mut failure = self.clone();
+        failure.remaining = FutureUses::new();
+        failure.expire();
+        failure.check_outcome_exit(|_| true, operation.syntax.phrase)?;
+        if failure.loans.values().any(|loan| loan.held != 0) {
+            return Err(failure.diagnostic(
+                operation.syntax.phrase,
+                "propagated return has active reference holds".into(),
+                "ordinary return requires completed operation holds",
+                None,
+            ));
+        }
+        if let Some(custody) = &mut failure.cleanup_custody {
+            custody.retire(
+                |_| true,
+                operation.syntax.phrase,
+                crate::effects::custody::Kind::Return,
+            );
+        }
+        if let (Some(success), Some(failed)) = (&mut self.cleanup_custody, &failure.cleanup_custody)
+        {
+            success.merge_sites(failed);
+        }
+        Ok(())
     }
 
     pub(super) fn match_result(

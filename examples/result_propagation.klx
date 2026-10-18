@@ -1,0 +1,15 @@
+// Local-initializer propagation preserves exact failure identity.
+type Reading = range 0..100;
+type ReadError = range 1..2;
+fn reading() -> Reading { return 42; }
+fn problem() -> ReadError { return 1; }
+fn probe(available: bool) -> Result<success: bool, failure: ReadError> {
+    if available { return Ok(true); }
+    else { return Err(problem()); }
+}
+function forward(available: bool) -> Result<success: Reading, failure: ReadError> {
+    let mutable ready = probe(available) or return;
+    return Ok(reading());
+}
+fn demo() -> Result<success: Reading, failure: ReadError> { return forward(true); }
+fn failure_demo() -> Result<success: Reading, failure: ReadError> { return forward(false); }

@@ -352,10 +352,15 @@ fn statements(
                 }
             }
             ValueStatement::Let {
-                local, initializer, ..
+                local,
+                initializer,
+                propagation,
+                span,
             } => {
-                let expected = ExprType::from(place(p, f, Place::Local(*local))?);
-                if initializer.ty != expected {
+                if let Some(mode) = propagation {
+                    mode.validate(p, f, *local, initializer, *span)
+                        .map_err(|_| bad())?;
+                } else if initializer.ty != ExprType::from(place(p, f, Place::Local(*local))?) {
                     return Err(bad());
                 }
                 expression(p, f, initializer, c, 1, true, true)?;
@@ -813,6 +818,35 @@ pub(super) fn mir_shape(
                 expression(p, f.function(), value, c, 1, true, false)?;
             }
             match b.terminator() {
+                mir::Terminator::Propagate {
+                    operation,
+                    local,
+                    owning_scope,
+                    initializer,
+                    span,
+                    ..
+                } => {
+                    operation
+                        .validate(p, f.function(), *local, initializer, *span)
+                        .map_err(|_| bad())?;
+                    if f.cleanup
+                        .as_ref()
+                        .is_some_and(|flow| flow.scopes.get(*owning_scope).is_none())
+                    {
+                        return Err(bad());
+                    }
+                    expression(p, f.function(), initializer, c, 1, true, false)?;
+                }
+                mir::Terminator::ForwardError { operation } => {
+                    if definition.return_type != Some(ValueType::Result(operation.outer))
+                        || p.result_payload(operation.inner, hir::ResultTag::Error)
+                            != Some(operation.failure)
+                        || p.result_payload(operation.outer, hir::ResultTag::Error)
+                            != Some(operation.failure)
+                    {
+                        return Err(bad());
+                    }
+                }
                 mir::Terminator::Match {
                     result, scrutinee, ..
                 } => {
