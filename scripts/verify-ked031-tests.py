@@ -55,6 +55,13 @@ assert len(additions) == len(set(additions)), "duplicate addition"
 assert all(actual.get(k) == v for k, v in expected.items()), "missing/changed predecessor"
 assert set(actual) - set(expected) == set(additions), "unclassified or missing additions"
 assert len(actual) == sum(summaries) == 1790 + len(additions)
+repair = manifest["repair"]
+reviewed = set(repair["reviewed_additions"])
+new_repair = set(repair["new_identities"])
+assert repair["finding"] == "K31-MR01" and len(reviewed) == 46
+assert len(new_repair) == 10 and len(repair["new_identities"]) == 10
+assert not reviewed & new_repair and set(additions) == reviewed | new_repair
+assert all(actual.get(k) == "ok" for k in reviewed | new_repair)
 assert set(manifest["classifications"]) == set(additions)
 assert set(manifest["classifications"].values()) <= {"ordinary_source", "private_canonical_resources", "primitive_protocol"}
 for adaptation in manifest["fixture_adaptations"]:
@@ -68,3 +75,5 @@ print(f"KED-031 reconciliation: 1,790 predecessors + {len(additions)} additions 
 print("identity migrations: 0; failed/ignored/filtered: 0/0/0")
 print("compile-fail authority doctest: passed; affine cross-check: 1,800 cases passed")
 print("evidence lanes:", {d: list(manifest["classifications"].values()).count(d) for d in sorted(set(manifest["classifications"].values()))})
+
+print(f"K31-MR01 reconciliation: 1,836 reviewed identities + {len(new_repair)} repairs = {len(actual)} passed")

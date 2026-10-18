@@ -1,5 +1,6 @@
 //! Resource envelopes for the existing semantic pipeline. No source semantics.
 use std::cell::Cell;
+pub(crate) mod result_admission;
 
 use crate::{ast, lexer::Span};
 

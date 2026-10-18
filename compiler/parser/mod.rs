@@ -243,8 +243,21 @@ impl Parser<'_> {
         depth: usize,
     ) -> Result<usize, ParseError> {
         let limit = self.context.map_or(32, |c| c.limits.traversal_depth);
-        if depth >= limit || nodes.len() >= 4096 {
-            return Err(self.error("Result type nesting or node limit exhausted".into()));
+        if depth >= limit {
+            return Err(
+                self.result_resource_error(crate::bounded::ResourceFailure::limit(
+                    "Result syntax depth",
+                    self.peek().span,
+                )),
+            );
+        }
+        if nodes.len() >= 4096 {
+            return Err(
+                self.result_resource_error(crate::bounded::ResourceFailure::limit(
+                    "Result syntax nodes",
+                    self.peek().span,
+                )),
+            );
         }
         let node = if self.at(&TokenKind::Result) {
             self.advance();
@@ -273,9 +286,22 @@ impl Parser<'_> {
         } else {
             crate::ast::ResultTypeSyntax::Owned(self.expect_ident()?)
         };
-        nodes
-            .try_reserve(1)
-            .map_err(|_| self.error("Result type syntax allocation failed".into()))?;
+        // A parent may finish after its children fill the flat node budget.
+        if nodes.len() >= 4096 {
+            return Err(
+                self.result_resource_error(crate::bounded::ResourceFailure::limit(
+                    "Result syntax nodes",
+                    self.peek().span,
+                )),
+            );
+        }
+        crate::bounded::result_admission::reserve(
+            nodes,
+            1,
+            crate::bounded::result_admission::Allocation::Syntax,
+            self.peek().span,
+        )
+        .map_err(|failure| self.result_resource_error(failure))?;
         let id = nodes.len();
         nodes.push(node);
         Ok(id)
@@ -1045,6 +1071,16 @@ impl Parser<'_> {
             self.current += 1;
         }
         &self.tokens[index]
+    }
+
+    fn result_resource_error(&self, failure: crate::bounded::ResourceFailure) -> ParseError {
+        if let Some(context) = self.context {
+            context.fail(failure);
+        }
+        ParseError {
+            message: failure.resource.into(),
+            span: failure.span,
+        }
     }
 
     fn error(&self, message: String) -> ParseError {

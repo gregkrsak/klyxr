@@ -31,6 +31,24 @@ impl VariantPlan {
 pub(crate) const MAX_RESULT_DEPTH: usize = 32;
 pub(crate) const MAX_RESULT_TYPES: usize = 4096;
 
+/// Source-shape errors remain diagnostics; tool limits and detected allocation
+/// failures must survive resolution as typed resource failures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AdmissionError {
+    Source(&'static str),
+    Resource(crate::bounded::ResourceFailure),
+}
+impl From<&'static str> for AdmissionError {
+    fn from(message: &'static str) -> Self {
+        Self::Source(message)
+    }
+}
+impl From<crate::bounded::ResourceFailure> for AdmissionError {
+    fn from(failure: crate::bounded::ResourceFailure) -> Self {
+        Self::Resource(failure)
+    }
+}
+
 impl Program {
     pub(crate) fn variant_plans(
         &self,
@@ -102,14 +120,18 @@ impl Program {
         &mut self,
         success: ValueType,
         failure: ValueType,
-    ) -> std::result::Result<ResultTypeId, &'static str> {
+    ) -> std::result::Result<ResultTypeId, AdmissionError> {
         let mut depth = 1;
         for ty in [success, failure] {
             let child = self.result_value_depth(ty, self.results.len())?;
             depth = depth.max(child + 1);
         }
         if depth > MAX_RESULT_DEPTH {
-            return Err("Result type nesting limit exceeded");
+            return Err(crate::bounded::ResourceFailure::limit(
+                "Result type nesting",
+                crate::bounded::START,
+            )
+            .into());
         }
         if let Some(r) = self
             .results
@@ -119,11 +141,18 @@ impl Program {
             return Ok(r.id);
         }
         if self.results.len() >= MAX_RESULT_TYPES {
-            return Err("Result instantiation limit exceeded");
+            return Err(crate::bounded::ResourceFailure::limit(
+                "Result instantiation count",
+                crate::bounded::START,
+            )
+            .into());
         }
-        self.results
-            .try_reserve(1)
-            .map_err(|_| "Result type allocation failed")?;
+        crate::bounded::result_admission::reserve(
+            &mut self.results,
+            1,
+            crate::bounded::result_admission::Allocation::Table,
+            crate::bounded::START,
+        )?;
         let id = ResultTypeId(self.results.len());
         self.results.push(ResultType {
             id,

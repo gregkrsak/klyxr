@@ -444,7 +444,8 @@ pub fn prepare_execution(
                 )
             })
     })?;
-    let resolved = crate::resolve::resolve(&ast).map_err(|e| frontend("resolve", e, &context))?;
+    let resolved = crate::resolve::resolve_bounded(&ast, &context)
+        .map_err(|e| frontend("resolve", e, &context))?;
     let program = crate::types::check(resolved).map_err(|e| frontend("type", e, &context))?;
     let (cleanup_sites, outcomes) = crate::ownership::evidence_bounded(&program, &context)
         .map_err(|e| frontend("ownership", e, &context))?;
@@ -673,6 +674,8 @@ pub fn execute(
     machine::Machine::new(executable, limits).run(entry)
 }
 
+#[cfg(test)]
+mod result_admission_tests;
 #[cfg(test)]
 mod tests;
 mod validate;

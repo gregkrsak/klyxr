@@ -248,7 +248,24 @@ struct Scope {
 
 /// Collect declarations/signatures first, then resolve bodies and ordered harness statements.
 pub fn resolve(ast: &ast::Program) -> Result<ResolvedProgram, Vec<Diagnostic>> {
-    let mut resolver = Resolver::default();
+    resolve_with(ast, None)
+}
+
+pub(crate) fn resolve_bounded(
+    ast: &ast::Program,
+    context: &crate::bounded::Context,
+) -> Result<ResolvedProgram, Vec<Diagnostic>> {
+    resolve_with(ast, Some(context))
+}
+
+fn resolve_with(
+    ast: &ast::Program,
+    context: Option<&crate::bounded::Context>,
+) -> Result<ResolvedProgram, Vec<Diagnostic>> {
+    let mut resolver = Resolver {
+        context,
+        ..Resolver::default()
+    };
     let mut diagnostics = Vec::new();
     let mut types = HashSet::new();
     for range in &ast.ranges {
@@ -377,7 +394,8 @@ pub fn resolve(ast: &ast::Program) -> Result<ResolvedProgram, Vec<Diagnostic>> {
 }
 
 #[derive(Default)]
-struct Resolver {
+struct Resolver<'a> {
+    context: Option<&'a crate::bounded::Context>,
     program: hir::Program,
     parameters: Vec<ResolvedParameter>,
     local_count: usize,
@@ -387,7 +405,17 @@ struct Resolver {
     ordinary: Vec<bool>,
     bindings: HashMap<String, BindingId>,
 }
-impl Resolver {
+impl Resolver<'_> {
+    fn result_resource_error(&self, failure: crate::bounded::ResourceFailure) -> Box<Diagnostic> {
+        if let Some(context) = self.context {
+            context.fail(failure);
+        }
+        error(
+            failure.span,
+            failure.resource,
+            "Result admission stopped; no partial program is published",
+        )
+    }
     fn prototype_field(&self, record: RecordId, span: Span) -> ResolutionResult<FieldId> {
         let fields = &self.program.record(record).fields;
         if fields.len() != 1 {
@@ -422,81 +450,90 @@ impl Resolver {
         ty: &ast::ValueType,
         span: Span,
     ) -> ResolutionResult<ResolvedValueType> {
-        let owned = if ty.result_nodes.is_empty() {
-            self.owned_type(&ty.name, span)?
-        } else {
-            if ty.name != "Result" || !ty.references.is_empty() || ty.result_nodes.len() > 4096 {
-                return Err(error(
-                    span,
-                    "invalid Result type syntax",
-                    "Result interfaces require bounded exact owned payloads",
-                ));
-            }
-            let mut values: Vec<hir::ValueType> = Vec::new();
-            values
-                .try_reserve_exact(ty.result_nodes.len())
-                .map_err(|_| {
-                    error(
+        let owned =
+            if ty.result_nodes.is_empty() {
+                self.owned_type(&ty.name, span)?
+            } else {
+                if ty.result_nodes.len() > 4096 {
+                    return Err(self.result_resource_error(
+                        crate::bounded::ResourceFailure::limit("Result syntax nodes", span),
+                    ));
+                }
+                if ty.name != "Result" || !ty.references.is_empty() {
+                    return Err(error(
                         span,
-                        "Result type syntax allocation failed",
-                        "bounded type resolution cannot publish a partial instantiation",
-                    )
-                })?;
-            for node in &ty.result_nodes {
-                let value = match node {
-                    ast::ResultTypeSyntax::Owned(name) => match self.owned_type(name, span)? {
-                        ResolvedValueType::Bool => hir::ValueType::Bool,
-                        ResolvedValueType::Range(id) => hir::ValueType::Range(id),
-                        ResolvedValueType::Record(id) => hir::ValueType::Record(id),
-                        _ => {
-                            return Err(error(
-                                span,
-                                "invalid Result payload",
-                                "payloads must be ordinary owned values",
-                            ))
-                        }
-                    },
-                    ast::ResultTypeSyntax::Result { success, failure } => {
-                        let success = *values.get(*success).ok_or_else(|| {
-                            error(
-                                span,
-                                "invalid Result success syntax identity",
-                                "type syntax must be finite postorder",
-                            )
-                        })?;
-                        let failure = *values.get(*failure).ok_or_else(|| {
-                            error(
-                                span,
-                                "invalid Result failure syntax identity",
-                                "type syntax must be finite postorder",
-                            )
-                        })?;
-                        let id =
-                            self.program
-                                .intern_result(success, failure)
-                                .map_err(|message| {
-                                    error(
+                        "invalid Result type syntax",
+                        "Result interfaces require bounded exact owned payloads",
+                    ));
+                }
+                let mut values: Vec<hir::ValueType> = Vec::new();
+                crate::bounded::result_admission::reserve(
+                    &mut values,
+                    ty.result_nodes.len(),
+                    crate::bounded::result_admission::Allocation::Scratch,
+                    span,
+                )
+                .map_err(|failure| self.result_resource_error(failure))?;
+                for node in &ty.result_nodes {
+                    let value = match node {
+                        ast::ResultTypeSyntax::Owned(name) => match self.owned_type(name, span)? {
+                            ResolvedValueType::Bool => hir::ValueType::Bool,
+                            ResolvedValueType::Range(id) => hir::ValueType::Range(id),
+                            ResolvedValueType::Record(id) => hir::ValueType::Record(id),
+                            _ => {
+                                return Err(error(
+                                    span,
+                                    "invalid Result payload",
+                                    "payloads must be ordinary owned values",
+                                ))
+                            }
+                        },
+                        ast::ResultTypeSyntax::Result { success, failure } => {
+                            let success = *values.get(*success).ok_or_else(|| {
+                                error(
+                                    span,
+                                    "invalid Result success syntax identity",
+                                    "type syntax must be finite postorder",
+                                )
+                            })?;
+                            let failure = *values.get(*failure).ok_or_else(|| {
+                                error(
+                                    span,
+                                    "invalid Result failure syntax identity",
+                                    "type syntax must be finite postorder",
+                                )
+                            })?;
+                            let id = self.program.intern_result(success, failure).map_err(
+                                |failure| {
+                                    match failure {
+                                hir::results::AdmissionError::Source(message) => error(
                                     span,
                                     message,
                                     "canonical Result identities preserve ordered payload roles",
-                                )
-                                })?;
-                        hir::ValueType::Result(id)
-                    }
-                };
-                values.push(value);
-            }
-            match values.last() {
-                Some(hir::ValueType::Result(id)) => ResolvedValueType::Result(*id),
-                _ => {
-                    return Err(error(
-                        span,
-                        "incomplete Result type syntax",
-                        "a complete Result root is required",
-                    ))
+                                ),
+                                hir::results::AdmissionError::Resource(mut failure) => {
+                                    failure.span = span;
+                                    self.result_resource_error(failure)
+                                }
+                                }
+                                },
+                            )?;
+                            hir::ValueType::Result(id)
+                        }
+                    };
+                    values.push(value);
                 }
-            }
-        };
+                match values.last() {
+                    Some(hir::ValueType::Result(id)) => ResolvedValueType::Result(*id),
+                    _ => {
+                        return Err(error(
+                            span,
+                            "incomplete Result type syntax",
+                            "a complete Result root is required",
+                        ))
+                    }
+                }
+            };
         if ty.references.len() > 1 {
             return Ok(ResolvedValueType::NestedReference);
         }

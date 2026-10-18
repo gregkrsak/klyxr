@@ -260,3 +260,125 @@ baseline and the implementation branch absent. Publication uses Git data objects
 checks every uploaded blob SHA and the complete tree against the locally staged
 validated content, and then creates the dedicated branch. This transport limitation
 is distinct from local Rust validation and from the accepted ps incident.
+
+## K31-MR01 focused merge-readiness repair
+
+Greg authorized this repair after Sarah's review of PR #73. Before editing,
+the connected GitHub API confirmed the existing remote branch
+`ked-031-typed-recoverable-failure` at reviewed commit
+`a48b48fe3f65e32d88bd0628f13849f3289d0e9d`, tree
+`945fa7434bdc96691d20a855232dbcead998f39a`; the local checkout matched and was clean.
+The repair continues that history. Frozen Draft 4 and prod remain unchanged.
+
+Result syntax-node, resolver scratch and canonical-table allocations now return
+shared typed ResourceFailure values. Bounded resolution records those values in
+the existing preparation context, as bounded parsing already can. The public
+preparation boundary prefers that typed failure over its frontend diagnostic
+carrier; it performs no diagnostic-text classification and publishes no
+executable. Canonical interning distinguishes genuine Source errors from Resource
+errors. Configured syntax depth/nodes and canonical count/nesting failures retain
+Limit; detected allocation failures retain Host. The existing CLI Host reporter
+retains exit class 2. Legacy frontend diagnostic API shapes remain unchanged.
+No allocation retry, panic interception, system-OOM experiment, competing
+preparation authority, ownership/effects/cleanup/MIR/runtime redesign or accepted
+syntax expansion is introduced.
+
+Ten new `execution::result_admission_tests` identities are recorded explicitly in
+`ked-031-evidence.json`. Each is sealed primitive/protocol evidence, with private
+AST/canonical controls where an earlier source limit otherwise intervenes. The
+three allocation-boundary tests use public preparation and assert Host with no
+executable; a fourth checks later failures after successful reservation work.
+The CLI control passes each actual preparation failure to its production reporter.
+Other controls cover exact/excessive count, syntax depth, canonical depth and node
+budgets, plus unchanged malformed-source/nominal diagnostic classifications.
+At canonical count 4,096 an existing pair still deduplicates; the next new pair
+is Limit. Canonical depth 32 succeeds and 33 is Limit. Existing configured source
+traversal 32 includes the owned leaf (31 wrappers succeed, 32 fail). The binary
+syntax-tree node boundary is 4,095/4,097 against ceiling 4,096. A late canonical
+depth failure follows 32 successful interning steps and retains Limit.
+
+All 1,790 predecessor identities and the 46 reviewed additions remain mandatory,
+with no weakened assertions, identity migrations or new fixture adaptations.
+The reconciler separately checks their union with the ten repair additions:
+1,846 passing identities are required per complete profile. The evidence manifest
+retains the reviewed exact head/tree and explicitly lists both addition sets.
+Focused development validation passed all ten new tests and warnings-denied
+Clippy. Two new origin assertions were corrected to the resolver's existing
+whole-function origin before that pass; no predecessor assertion changed.
+
+The previously accepted `/usr/bin/ps` `fatal library error, lookup self` incident
+remains an ancillary PID namespace/procfs visibility limitation. No process-table
+discovery or repair was performed during this repair. The accepted toolchain is
+used unchanged. Independent confirmation of K31-MR01 remains Sarah's task against
+the repaired exact head; this ledger records implementation evidence only.
+
+### Completed MR01 local conformance gate
+
+The unchanged accepted Rust 1.80.0 installation under
+`/tmp/rust-clean-vywtlaad/toolchain/bin` and the established target
+`/tmp/klyxr-ked031-target-lrwxlvcf` ran the following complete pass. All seven
+verified tool executable sizes, modes and SHA-256 hashes matched their accepted
+snapshots. Negative CLI controls intentionally return 1.
+
+| Command | Exit |
+| --- | ---: |
+| `rustc -vV` | 0 |
+| `cargo -vV` | 0 |
+| `rustdoc -V` | 0 |
+| `rustfmt --version` | 0 |
+| `clippy-driver --version` | 0 |
+| `cargo check --locked --workspace --all-targets` | 0 |
+| `cargo fmt --all -- --check` | 0 |
+| `cargo clippy --locked --workspace --all-targets -- -D warnings` | 0 |
+| `cargo test --locked --workspace` | 0 |
+| `python3 scripts/verify-ked031-tests.py /tmp/klyxr-mr01-final-gate/debug.log` | 0 |
+| `cargo test --locked --workspace --release` | 0 |
+| `python3 scripts/verify-ked031-tests.py /tmp/klyxr-mr01-final-gate/release.log` | 0 |
+| `RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --no-deps` | 0 |
+| `cargo run --locked --quiet --bin klyxr -- run examples/result_handling.klx --function demo` | 0 |
+| `cargo run --locked --quiet --bin klyxr -- run examples/result_handling.klx --function success_demo` | 0 |
+| `cargo run --locked --quiet --bin klyxr -- check examples/result_unhandled_fail.klx` | 1 |
+| `cargo run --locked --quiet --bin klyxr -- verify examples/battery_ok.klx` | 0 |
+| `cargo run --locked --quiet --bin klyxr -- verify examples/battery_fail.klx` | 1 |
+| `python3 scripts/verify-readme.py` | 0 |
+| `python3 scripts/verify-repo-scaffold.py` | 0 |
+| `python3 scripts/build-ai-context.py` | 0 |
+| `git diff --check` | 0 |
+| `git diff --cached --exit-code` | 0 |
+| `git status --short` | 0 |
+
+Both complete profiles passed **1,846 identities = 1,790 exact predecessors +
+46 reviewed additions + 10 MR01 additions**. The library target is now 549 per
+profile; every other target retains the totals in the original table above.
+The reconciler checks every identity and result, including all reviewed additions,
+with zero failures, ignored/filtered tests or migrations. Both 1,800-case affine
+checks and both authority compile-fail doctests passed. Warnings-denied Rustdoc
+and Clippy passed. Result examples produced `Error(ErrorCode(1))` and
+`Reading(42)`; unresolved outcome and battery rejection diagnostics retained their
+expected exit 1 and exact diagnostic controls. Documentation assets/scaffold
+passed and generated context was byte-identical. No compiler/test/artifact
+integrity or execution anomaly occurred. Pre-staging diff integrity passed,
+the index was unchanged and all current paths belong to this focused repair.
+
+The complete baseline-to-repaired content is inspected as the accepted reviewed
+implementation plus the focused MR01 delta; unchanged files and predecessor
+manifest retain their reviewed blob identities. Publication will fast-forward
+the same branch using GitHub Git data objects, with local/remote blob and whole
+tree identity comparison, and leave PR #73 open. The final engineering reports
+on PR #73 and Issue #72 record the resulting exact commit/tree and all eight
+push/PR workflow URLs; Sarah's independent focused confirmation remains pending.
+
+Additional complete-example controls all exited 0:
+
+| Command | Exit |
+| --- | ---: |
+| `cargo run --locked --quiet --bin klyxr -- check examples/battery_ok.klx` | 0 |
+| `cargo run --locked --quiet --bin klyxr -- run examples/ordinary_run.klx --function demo` | 0 |
+| `cargo run --locked --quiet --bin klyxr -- run examples/owned_replacement.klx --function demo` | 0 |
+| `cargo run --locked --quiet --bin klyxr -- check examples/explicit_effects.klx` | 0 |
+| `cargo run --locked --quiet --bin klyxr -- run examples/explicit_effects.klx --function demo` | 0 |
+
+The compact `verified fn consume` and explicit `verified function consume`
+example-presence checks passed. Final tool integrity comparison again matched all
+seven accepted snapshots. Documentation checks are repeated after this evidence
+appendix; Rust implementation content has not changed since the full gate.

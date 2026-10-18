@@ -358,3 +358,24 @@ or match coverage. All structured errors stop ordinary resume. No trap, limit,
 Host, integrity or cleanup failure becomes Error; protected failure returns cannot
 reach callers after failed cleanup. Whole-wrapper traversal is separately sealed
 primitive/protocol evidence. See the KED-031 ledger and explicit evidence lanes.
+
+### K31-MR01 Result admission classification repair
+
+Result syntax-node storage, resolution scratch and canonical-table reservations
+use fallible reservation and retain typed Host failures through bounded public
+preparation. Configured Result syntax depth/node and canonical count/nesting
+exhaustion retain typed Limit failures. Neither category publishes an executable
+or becomes a source Error. The CLI's existing Host reporting path returns class 2.
+Malformed labels, unknown or excluded payload types and nominal mismatches remain
+frontend diagnostics; no syntax, ownership or runtime representation is changed.
+
+Private test-build injection selects only actual growth at each of the three
+reservation sites, including failure after earlier successful admission work.
+It is absent from production and cannot be selected by source or CLI options.
+The canonical table admits exactly 4,096 distinct ordered pairs and nesting 32;
+its next distinct pair or nesting 33 is a configured Limit. Existing source
+syntax traversal also counts its owned leaf: at configured depth 32 it admits
+31 nested Result wrappers and rejects 32. The separate syntax-node control
+admits 4,095 nodes and rejects the next well-formed binary-tree size, 4,097,
+against the 4,096-node ceiling. These private controls isolate individual limits
+from earlier token/syntax ceilings; they do not grant execution authority.
