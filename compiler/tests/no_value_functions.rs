@@ -683,6 +683,7 @@ fn source_ast_hir_result_kind_and_distinct_forms_preserve_identity_and_spans() {
 fn public_ast_wrong_return_kinds_reject_before_ownership() {
     let mut a = parse_source("fn f() { return; }").unwrap();
     ordinary_mut(&mut a, 0).return_type = Some(ast::ValueType {
+        result_nodes: Vec::new(),
         name: "bool".into(),
         references: vec![],
     });
@@ -699,9 +700,10 @@ fn public_ast_wrong_return_kinds_reject_before_ownership() {
 }
 #[test]
 fn public_ast_call_result_kind_uses_signatures_not_parser_history() {
-    let mut a =
-        parse_source("fn target() -> bool { return true; } fn f() { let result = target(); }")
-            .unwrap();
+    let mut a = parse_source(
+        "fn target() -> bool { return true; } fn f() { let predecessor_result = target(); }",
+    )
+    .unwrap();
     let target = ordinary_mut(&mut a, 0);
     target.return_type = None;
     target.body.clear();
@@ -733,7 +735,7 @@ fn public_ast_bare_return_suffix_rejects_diagnostically() {
 }
 #[test]
 fn public_ast_nested_no_value_expression_and_conditional_positions_reject() {
-    for text in ["fn target() -> bool { return true; } fn f() { let result = if true { target() } else { target() }; }", "fn target() -> bool { return true; } fn sink(value: bool) {} fn f() { sink(target()); }"] {
+    for text in ["fn target() -> bool { return true; } fn f() { let predecessor_result = if true { target() } else { target() }; }", "fn target() -> bool { return true; } fn sink(value: bool) {} fn f() { sink(target()); }"] {
   let mut a=parse_source(text).unwrap(); let target=ordinary_mut(&mut a,0);target.return_type=None;target.body.clear();
   let r=resolve::resolve(&a).unwrap(); assert!(types::check(r).unwrap_err()[0].message.contains("cannot be used as an expression"));
  }

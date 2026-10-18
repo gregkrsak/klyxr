@@ -17,6 +17,13 @@ impl Program {
     }
     // Bounded admission has already checked the catalog with typed failure propagation.
     pub(crate) fn validate_record_expressions_without_resources(&self) -> Result {
+        self.validate_result_tables().map_err(|message| {
+            Box::new(Diagnostic::semantic(
+                crate::bounded::START,
+                message,
+                "Result tables must be bounded, canonical, acyclic, and exact",
+            ))
+        })?;
         self.validate_record_tables()?;
         for function in &self.functions {
             match function {
@@ -64,6 +71,49 @@ impl Program {
     fn record_statements(&self, function: FunctionId, body: &[ValueStatement]) -> Result {
         for statement in body {
             match statement {
+                ValueStatement::Match {
+                    scrutinee,
+                    arms,
+                    span,
+                } => {
+                    let invalid = |message| {
+                        Box::new(Diagnostic::semantic(*span, message, "Result matching requires exact canonical tags, payload bindings, and lexical origins"))
+                    };
+                    let ExprType::Result(result) = scrutinee.ty else {
+                        return Err(invalid("match scrutinee is not a Result"));
+                    };
+                    if arms.len() != 2
+                        || arms[0].tag == arms[1].tag
+                        || arms[0].binding == arms[1].binding
+                    {
+                        return Err(invalid("invalid exhaustive Result arm mapping"));
+                    }
+                    self.record_expression(function, scrutinee, true, false)?;
+                    for arm in arms {
+                        let payload = self
+                            .result_payload(result, arm.tag)
+                            .ok_or_else(|| invalid("invalid Result payload identity"))?;
+                        let local = self
+                            .locals
+                            .get(arm.binding.0)
+                            .filter(|l| {
+                                l.id == arm.binding
+                                    && l.function == function
+                                    && !l.mutable
+                                    && l.ty == payload
+                                    && l.span == arm.pattern_span
+                            })
+                            .ok_or_else(|| invalid("invalid or foreign Result payload binding"))?;
+                        if arm.pattern_span.start < span.start
+                            || arm.span.end > span.end
+                            || arm.pattern_span.end > arm.span.end
+                            || local.name.is_empty()
+                        {
+                            return Err(invalid("invalid Result pattern or scope origin"));
+                        }
+                        self.record_statements(function, &arm.body)?;
+                    }
+                }
                 ValueStatement::CopyReferenceFieldAssign {
                     reference,
                     record,
@@ -216,6 +266,25 @@ impl Program {
             Box::new(Diagnostic::semantic(expression.span, message, "canonical ordinary record relationships and existing expression positions must be preserved at the typed HIR boundary"))
         };
         match &expression.kind {
+            ExprKind::ResultConstruct {
+                result,
+                tag,
+                payload,
+                variant_span,
+            } => {
+                let invalid = |message| {
+                    Box::new(Diagnostic::semantic(expression.span, message, "Result construction requires one canonical active payload and exact origins"))
+                };
+                if !ordinary
+                    || expression.ty != ExprType::Result(*result)
+                    || self.result_payload(*result, *tag).map(ExprType::from) != Some(payload.ty)
+                    || variant_span.start != expression.span.start
+                    || variant_span.end > expression.span.end
+                {
+                    return Err(invalid("invalid canonical Result constructor"));
+                }
+                self.record_expression(function, payload, true, false)?;
+            }
             ExprKind::IntegerLiteral(_) => {
                 if expression.ty != ExprType::IntegerLiteral {
                     return Err(invalid(

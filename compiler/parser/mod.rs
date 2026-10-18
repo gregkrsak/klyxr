@@ -221,13 +221,64 @@ impl Parser<'_> {
             };
             references.push(kind);
         }
-        let name = if self.at(&TokenKind::Bool) {
+        let mut result_nodes = Vec::new();
+        let name = if self.at(&TokenKind::Result) {
+            self.parse_result_type_node(&mut result_nodes, 0)?;
+            "Result".into()
+        } else if self.at(&TokenKind::Bool) {
             self.advance();
             "bool".into()
         } else {
             self.expect_ident()?
         };
-        Ok(crate::ast::ValueType { name, references })
+        Ok(crate::ast::ValueType {
+            name,
+            references,
+            result_nodes,
+        })
+    }
+    fn parse_result_type_node(
+        &mut self,
+        nodes: &mut Vec<crate::ast::ResultTypeSyntax>,
+        depth: usize,
+    ) -> Result<usize, ParseError> {
+        let limit = self.context.map_or(32, |c| c.limits.traversal_depth);
+        if depth >= limit || nodes.len() >= 4096 {
+            return Err(self.error("Result type nesting or node limit exhausted".into()));
+        }
+        let node = if self.at(&TokenKind::Result) {
+            self.advance();
+            self.expect(&TokenKind::Less)?;
+            if self.expect_ident()? != "success" {
+                return Err(self.error(
+                    "Result requires `success:` followed by `failure:` exactly once in that order"
+                        .into(),
+                ));
+            }
+            self.expect(&TokenKind::Colon)?;
+            let success = self.parse_result_type_node(nodes, depth + 1)?;
+            self.expect(&TokenKind::Comma)?;
+            if self.expect_ident()? != "failure" {
+                return Err(
+                    self.error("Result requires `failure:` after its success payload".into())
+                );
+            }
+            self.expect(&TokenKind::Colon)?;
+            let failure = self.parse_result_type_node(nodes, depth + 1)?;
+            self.expect(&TokenKind::Greater)?;
+            crate::ast::ResultTypeSyntax::Result { success, failure }
+        } else if self.at(&TokenKind::Bool) {
+            self.advance();
+            crate::ast::ResultTypeSyntax::Owned("bool".into())
+        } else {
+            crate::ast::ResultTypeSyntax::Owned(self.expect_ident()?)
+        };
+        nodes
+            .try_reserve(1)
+            .map_err(|_| self.error("Result type syntax allocation failed".into()))?;
+        let id = nodes.len();
+        nodes.push(node);
+        Ok(id)
     }
     fn parse_value_function(&mut self) -> Result<ValueFunction, ParseError> {
         let start = self.expect(&TokenKind::Fn)?.span;
@@ -307,7 +358,52 @@ impl Parser<'_> {
         let mut body = Vec::new();
         while !self.at(&TokenKind::RBrace) {
             let span = self.tokens[self.current].span;
-            if self.at(&TokenKind::Break) {
+            if self.at(&TokenKind::Match) {
+                self.advance();
+                let scrutinee = self.parse_condition()?;
+                self.expect(&TokenKind::LBrace)?;
+                let mut arms: Vec<crate::ast::MatchArm> = Vec::new();
+                while !self.at(&TokenKind::RBrace) {
+                    let pattern_start = self.peek().span;
+                    let tag = self.parse_result_tag()?;
+                    if let Some(previous) = arms.iter().find(|arm| arm.tag == tag) {
+                        return Err(self.error(format!("duplicate canonical {tag:?} arm; previous arm at {}:{}; Error and Err denote one failure variant", previous.pattern_span.line, previous.pattern_span.column)));
+                    }
+                    self.expect(&TokenKind::LParen)?;
+                    let binding = self.expect_ident()?;
+                    let pattern_end = self.expect(&TokenKind::RParen)?.span.end;
+                    self.expect(&TokenKind::FatArrow)?;
+                    self.expect(&TokenKind::LBrace)?;
+                    let (body, end) = self.parse_value_block(loop_depth)?;
+                    arms.push(crate::ast::MatchArm {
+                        tag,
+                        binding,
+                        pattern_span: Span {
+                            end: pattern_end,
+                            ..pattern_start
+                        },
+                        body,
+                        span: Span {
+                            end,
+                            ..pattern_start
+                        },
+                    });
+                }
+                if arms.len() != 2 {
+                    let missing = if arms.iter().any(|a| a.tag == crate::ast::ResultTag::Ok) {
+                        "failure arm (Error or Err)"
+                    } else {
+                        "Ok arm"
+                    };
+                    return Err(self.error(format!("Result match is missing its {missing}")));
+                }
+                let end = self.expect(&TokenKind::RBrace)?.span.end;
+                body.push(ValueStatement::Match {
+                    scrutinee,
+                    arms,
+                    span: Span { end, ..span },
+                });
+            } else if self.at(&TokenKind::Break) {
                 if loop_depth == 0 {
                     return Err(
                         self.error("break is permitted only inside an ordinary while loop".into())
@@ -613,6 +709,18 @@ impl Parser<'_> {
             .map_err(|_| self.error("configured parser depth exhausted".into()))?;
         let start = self.tokens[self.current].span;
         let kind = match self.peek_kind() {
+            TokenKind::Ok | TokenKind::Error => {
+                let variant_span = self.peek().span;
+                let tag = self.parse_result_tag()?;
+                self.expect(&TokenKind::LParen)?;
+                let payload = Box::new(self.parse_expression(0)?);
+                self.expect(&TokenKind::RParen)?;
+                ExprKind::ResultConstruct {
+                    tag,
+                    payload,
+                    variant_span,
+                }
+            }
             TokenKind::True | TokenKind::False => {
                 let value = self.at(&TokenKind::True);
                 self.advance();
@@ -854,8 +962,28 @@ impl Parser<'_> {
                 self.advance();
                 Ok(name)
             }
+            TokenKind::Result | TokenKind::Ok | TokenKind::Error | TokenKind::Match | TokenKind::ReservedResult(_) => Err(ParseError { span: self.peek().span, message: "the complete Result, Ok, Error, Err, and match spelling families are reserved and cannot be identifiers".into() }),
             other => Err(self.error(format!("expected identifier, found {other:?}"))),
         }
+    }
+
+    fn parse_result_tag(&mut self) -> Result<crate::ast::ResultTag, ParseError> {
+        let tag = match self.peek_kind() {
+            TokenKind::Ok => crate::ast::ResultTag::Ok,
+            TokenKind::Error => crate::ast::ResultTag::Error,
+            TokenKind::ReservedResult(name) => {
+                let canonical = crate::lexer::reserved_result_family(name).unwrap_or("Result");
+                return Err(self.error(format!(
+                    "noncanonical reserved spelling `{name}`; use exact `{canonical}`"
+                )));
+            }
+            _ => {
+                return Err(self
+                    .error("expected exact Ok(binding), Error(binding), or Err(binding)".into()))
+            }
+        };
+        self.advance();
+        Ok(tag)
     }
 
     fn expect_number(&mut self) -> Result<i64, ParseError> {
@@ -920,6 +1048,11 @@ impl Parser<'_> {
     }
 
     fn error(&self, message: String) -> ParseError {
+        let message = if let TokenKind::ReservedResult(name) = self.peek_kind() {
+            format!("noncanonical reserved spelling `{name}`; use exact `{}` in its intrinsic position; the whole spelling family is unavailable as an identifier", crate::lexer::reserved_result_family(name).unwrap_or("Result"))
+        } else {
+            message
+        };
         ParseError {
             message,
             span: self.tokens[self.current].span,

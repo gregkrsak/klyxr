@@ -1,5 +1,5 @@
 use klyxr_compiler::{compile_source, hir, mir, parse_source, FrontendError};
-const DECL: &str = "type Percent = range 0..100; record Ticket { value: Percent } fn fresh() -> Ticket { return fresh(); } fn consume(ticket: Ticket) -> bool { return true; } fn sink(access: &mut bool) -> bool { return true; } fn read(view: &bool) -> bool { return *view; } fn both(view: &bool, result: bool) -> bool { return result; }";
+const DECL: &str = "type Percent = range 0..100; record Ticket { value: Percent } fn fresh() -> Ticket { return fresh(); } fn consume(ticket: Ticket) -> bool { return true; } fn sink(access: &mut bool) -> bool { return true; } fn read(view: &bool) -> bool { return *view; } fn both(view: &bool, observed: bool) -> bool { return observed; }";
 fn good(body: &str) -> hir::Program {
     let p = compile_source(&format!("{DECL} {body}")).unwrap();
     let m = mir::lower(&p);
@@ -349,6 +349,6 @@ fn public_ast_resolution_enforces_continue_placement_and_structural_suffix() {
         .message
         .contains("no fallthrough"));
 }
-reject!(direct_call_hold_survives_until_nested_argument, "fn f(flag: bool) -> bool { let mut value = false; while flag { let result = both(&value, sink(&mut value)); continue; } return value; }", "Ownership", "shared borrow");
+reject!(direct_call_hold_survives_until_nested_argument, "fn f(flag: bool) -> bool { let mut value = false; while flag { let predecessor_result = both(&value, sink(&mut value)); continue; } return value; }", "Ownership", "shared borrow");
 reject!(write_hold_blocks_rhs_borrow_after_final_target_use, "fn f(flag: bool) -> bool { let mut value = false; while flag { let access = &mut value; *access = read(&value); continue; } return value; }", "Ownership", "exclusive borrow");
 reject!(write_rhs_transfer_is_not_reborrow, "fn f(flag: bool) -> bool { let mut value = false; while flag { let access = &mut value; *access = sink(access); continue; } return value; }", "Ownership", "use of moved value");

@@ -272,6 +272,9 @@ fn mir_all_paths_initialize_one_canonical_destination_once() {
                 .filter(|s| matches!(s, Statement::Let { local, .. } if *local == destination))
                 .count();
             match b.terminator() {
+                mir::Terminator::Match { .. } => {
+                    panic!("unexpected Result match in predecessor conditional-value fixture")
+                }
                 Terminator::Goto { target } => paths(f, *target, destination, initialized),
                 Terminator::Branch {
                     then_target,

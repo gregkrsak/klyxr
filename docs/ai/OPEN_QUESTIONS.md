@@ -648,3 +648,17 @@ public resource admission, arbitrary destructors, recoverable propagation, unwin
 rollback or generalized ownership/dataflow. Existing aggregate field order and
 KD-043 replacement remain authoritative. The accepted implementation introduces no
 new verifier proof claim.
+
+### KED-031 refinement of OQ-006/OQ-022/OQ-023/OQ-026
+
+Frozen Draft 4 settles the first ordinary exact Result family, explicit exhaustive
+two-arm statement matching, independent outcome obligations, active-payload cleanup,
+and manual protected-return propagation. Error and Err are equal exact aliases for
+one failure variant. This implementation awaits independent review and acceptance.
+Historical wholly-open Result statements are narrowed by this fixed phase.
+
+General enums, Option, general patterns and match expressions, propagation sugar,
+implicit error conversion, reference payloads, Result public record fields,
+verified/harness Result use, production fallible APIs, panic/unwind/cancellation
+and generalized ownership/dataflow remain excluded or open. Result grants no unsafe
+permission and no tool-stop recovery or rollback.

@@ -43,7 +43,7 @@ fn example(body: &str) -> String {
 fn shared_direct_and_stored_borrows_do_not_move_the_owner() {
     valid("fn example(ticket: Ticket) -> bool { return inspect(&ticket); }");
     valid(&example(
-        "let view = &ticket; let ok = inspect(view); return consume(ticket);",
+        "let view = &ticket; let predecessor_ok = inspect(view); return consume(ticket);",
     ));
 }
 #[test]
@@ -62,12 +62,12 @@ fn mutable_owned_local_allows_sequential_direct_exclusive_calls() {
 }
 #[test]
 fn stored_exclusive_reference_moves_into_call_then_owner_recovers() {
-    valid(&example("let mut owned = ticket; let access = &mut owned; let ok = exclusive(access); return owned;"));
+    valid(&example("let mut owned = ticket; let access = &mut owned; let predecessor_ok = exclusive(access); return owned;"));
 }
 #[test]
 fn mutable_reference_transfer_preserves_the_exclusive_loan() {
-    valid(&example("let mut owned = ticket; let first = &mut owned; let second = first; let ok = exclusive(second); return owned;"));
-    let error = ownership_error(&example("let mut owned = ticket; let first = &mut owned; let second = first; let moved = owned; let ok = exclusive(second); return moved;"));
+    valid(&example("let mut owned = ticket; let first = &mut owned; let second = first; let predecessor_ok = exclusive(second); return owned;"));
+    let error = ownership_error(&example("let mut owned = ticket; let first = &mut owned; let second = first; let moved = owned; let predecessor_ok = exclusive(second); return moved;"));
     assert!(error.message.contains("exclusively borrowed"));
 }
 #[test]
@@ -82,12 +82,12 @@ fn unused_shared_and_mutable_handles_end_at_the_binding() {
 }
 #[test]
 fn last_shared_use_permits_later_exclusive_borrow() {
-    valid(&example("let mut owned = ticket; let view = &owned; let ok = inspect(view); let access = &mut owned; let result = exclusive(access); return owned;"));
+    valid(&example("let mut owned = ticket; let view = &owned; let predecessor_ok = inspect(view); let access = &mut owned; let predecessor_result = exclusive(access); return owned;"));
 }
 #[test]
 fn future_shared_use_blocks_owner_move_at_the_move_site() {
     let body =
-        example("let view = &ticket;\nlet moved = ticket;\nlet ok = inspect(view); return moved;");
+        example("let view = &ticket;\nlet moved = ticket;\nlet predecessor_ok = inspect(view); return moved;");
     let error = ownership_error(&body);
     assert_eq!(
         error.message,
@@ -100,8 +100,8 @@ fn future_shared_use_blocks_owner_move_at_the_move_site() {
 #[test]
 fn loan_survives_the_last_use_of_only_one_shared_alias() {
     for body in [
-        "let view = &ticket; let first = view; let second = view; let ok = inspect(first); let moved = ticket; let later = inspect(second); return moved;",
-        "let view = &ticket; let first = view; let second = first; let ok = inspect(view); let moved = ticket; let later = inspect(second); return moved;",
+        "let view = &ticket; let first = view; let second = view; let predecessor_ok = inspect(first); let moved = ticket; let later = inspect(second); return moved;",
+        "let view = &ticket; let first = view; let second = first; let predecessor_ok = inspect(view); let moved = ticket; let later = inspect(second); return moved;",
     ] { assert!(ownership_error(&example(body)).message.contains("shared-borrowed")); }
     valid(&example("let view = &ticket; let first = view; let second = first; let a = inspect(view); let b = inspect(second); return ticket;"));
 }
@@ -122,26 +122,26 @@ fn mutable_borrow_requires_a_mutable_owned_local() {
 fn shared_borrow_accepts_immutable_and_mutable_owned_locals() {
     for mutability in ["", "mut "] {
         valid(&example(&format!(
-            "let {mutability}owned = ticket; let ok = inspect(&owned); return owned;"
+            "let {mutability}owned = ticket; let predecessor_ok = inspect(&owned); return owned;"
         )));
     }
 }
 #[test]
 fn overlapping_shared_and_exclusive_loans_conflict_in_both_orders() {
-    let error = ownership_error(&example("let mut owned = ticket; let view = &owned; let access = &mut owned; let ok = inspect(view); return owned;"));
+    let error = ownership_error(&example("let mut owned = ticket; let view = &owned; let access = &mut owned; let predecessor_ok = inspect(view); return owned;"));
     assert!(error
         .message
         .contains("exclusive borrow of `owned` while shared borrow is active"));
-    let error = ownership_error(&example("let mut owned = ticket; let access = &mut owned; let view = &owned; let ok = exclusive(access); return owned;"));
+    let error = ownership_error(&example("let mut owned = ticket; let access = &mut owned; let view = &owned; let predecessor_ok = exclusive(access); return owned;"));
     assert!(error
         .message
         .contains("shared borrow of `owned` while exclusive borrow is active"));
-    let error = ownership_error(&example("let mut owned = ticket; let first = &mut owned; let second = &mut owned; let ok = exclusive(first); return owned;"));
+    let error = ownership_error(&example("let mut owned = ticket; let first = &mut owned; let second = &mut owned; let predecessor_ok = exclusive(first); return owned;"));
     assert!(error.message.contains("second exclusive borrow"));
 }
 #[test]
 fn moved_reference_remains_moved_even_after_its_loan_ends() {
-    let error = ownership_error(&example("let mut owned = ticket; let access = &mut owned; let ok = exclusive(access); let recovered = owned; let bad = exclusive(access); return recovered;"));
+    let error = ownership_error(&example("let mut owned = ticket; let access = &mut owned; let predecessor_ok = exclusive(access); let recovered = owned; let bad = exclusive(access); return recovered;"));
     assert_eq!(error.message, "use of moved value `access`");
     assert!(error.known[0].contains("into by-value parameter `value`"));
     let error = ownership_error(&example("let mut owned = ticket; let first = &mut owned; let second = first; let bad = exclusive(first); return owned;"));
@@ -164,13 +164,13 @@ fn both_kinds_of_borrow_reject_a_moved_owner() {
 fn copy_owners_allow_shared_reads_but_not_exclusive_reads() {
     for ty in ["bool", "Percent"] {
         let decl = format!("fn read(value: &{ty}) -> bool {{ return true; }} fn write(value: &mut {ty}) -> bool {{ return true; }}");
-        valid(&format!("{decl} fn good(value: {ty}) -> {ty} {{ let view = &value; let copy = value; let ok = read(view); return copy; }}"));
-        let error = ownership_error(&format!("{decl} fn bad(value: {ty}) -> {ty} {{ let mut owned = value; let access = &mut owned; let copy = owned; let ok = write(access); return copy; }}"));
+        valid(&format!("{decl} fn good(value: {ty}) -> {ty} {{ let view = &value; let copy = value; let predecessor_ok = read(view); return copy; }}"));
+        let error = ownership_error(&format!("{decl} fn bad(value: {ty}) -> {ty} {{ let mut owned = value; let access = &mut owned; let copy = owned; let predecessor_ok = write(access); return copy; }}"));
         assert_eq!(
             error.message,
             "cannot use `owned` while it is exclusively borrowed"
         );
-        valid(&format!("{decl} fn good(value: {ty}) -> {ty} {{ let mut owned = value; let ok = write(&mut owned); return owned; }}"));
+        valid(&format!("{decl} fn good(value: {ty}) -> {ty} {{ let mut owned = value; let predecessor_ok = write(&mut owned); return owned; }}"));
     }
 }
 #[test]
@@ -249,7 +249,7 @@ fn outer_argument_loans_survive_nested_call_completion() {
 #[test]
 fn completed_inner_call_releases_only_its_own_ephemeral_loans() {
     valid("fn pair(first: bool, second: Ticket) -> Ticket { return second; } fn example(ticket: Ticket) -> Ticket { let mut owned = ticket; return pair(exclusive(&mut owned), owned); }");
-    valid("fn pair(first: bool, second: bool) -> bool { return second; } fn example(ticket: Ticket) -> Ticket { let mut owned = ticket; let ok = pair(exclusive(&mut owned), exclusive(&mut owned)); return owned; }");
+    valid("fn pair(first: bool, second: bool) -> bool { return second; } fn example(ticket: Ticket) -> Ticket { let mut owned = ticket; let predecessor_ok = pair(exclusive(&mut owned), exclusive(&mut owned)); return owned; }");
     valid("fn pair(first: bool, second: Ticket) -> Ticket { return second; } fn example(ticket: Ticket) -> Ticket { let view = &ticket; return pair(inspect(view), ticket); }");
 }
 #[test]
@@ -298,7 +298,7 @@ fn nested_reference_signatures_and_reference_returns_fail_before_ownership() {
                 .contains("reference return")
         );
         // Even forward calls cannot obtain reference-valued call results.
-        assert!(type_error(&format!("fn caller(value: {ty}) -> bool {{ let result = bad(value); return true; }} fn bad(value: {ty}) -> {ty} {{ return value; }}")).message.contains("reference return"));
+        assert!(type_error(&format!("fn caller(value: {ty}) -> bool {{ let predecessor_result = bad(value); return true; }} fn bad(value: {ty}) -> {ty} {{ return value; }}")).message.contains("reference return"));
     }
 }
 #[test]
@@ -381,7 +381,7 @@ fn unsupported_borrow_targets_and_mutation_syntax_remain_rejected() {
 }
 #[test]
 fn hir_borrows_reference_signatures_and_local_mutability_are_canonical() {
-    let program = valid(&example("let mut owned = ticket; let view = &owned; let ok = inspect(view); let access = &mut owned; let result = exclusive(access); return owned;"));
+    let program = valid(&example("let mut owned = ticket; let view = &owned; let predecessor_ok = inspect(view); let access = &mut owned; let predecessor_result = exclusive(access); return owned;"));
     let record = program.records()[0].id;
     let inspect = program.functions()[0].as_ordinary().unwrap();
     assert_eq!(
@@ -448,7 +448,7 @@ fn hir_borrows_reference_signatures_and_local_mutability_are_canonical() {
 }
 #[test]
 fn mut_and_mutable_aliases_preserve_source_syntax_and_normalize_semantics() {
-    let compact = source("fn example(ticket: Ticket) -> Ticket { let mut owned = ticket; let ok = exclusive(&mut owned); return owned; }");
+    let compact = source("fn example(ticket: Ticket) -> Ticket { let mut owned = ticket; let predecessor_ok = exclusive(&mut owned); return owned; }");
     let explicit = compact
         .replace("fn ", "function ")
         .replace("mut ", "mutable ");
@@ -475,7 +475,7 @@ fn mut_and_mutable_aliases_preserve_source_syntax_and_normalize_semantics() {
 }
 #[test]
 fn borrowing_does_not_change_verified_proofs_or_execute_ordinary_functions() {
-    let ordinary = "fn inspect(value: &Battery) -> bool { return true; } fn example(battery: Battery) -> Battery { let ok = inspect(&battery); return battery; }";
+    let ordinary = "fn inspect(value: &Battery) -> bool { return true; } fn example(battery: Battery) -> Battery { let predecessor_ok = inspect(&battery); return battery; }";
     let program = compile_source(&format!(
         "{} {ordinary}",
         include_str!("../../examples/battery_ok.klx")
@@ -485,7 +485,7 @@ fn borrowing_does_not_change_verified_proofs_or_execute_ordinary_functions() {
     assert!(report.diagnostics.is_empty());
     assert_eq!((report.functions_proven, report.calls_checked), (1, 1));
     let report = verify_report(&valid(&example(
-        "let ok = inspect(&ticket); return ticket;",
+        "let predecessor_ok = inspect(&ticket); return ticket;",
     )));
     assert!(report.diagnostics.is_empty());
     assert_eq!((report.functions_proven, report.calls_checked), (0, 0));

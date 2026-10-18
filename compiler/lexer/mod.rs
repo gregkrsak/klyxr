@@ -24,6 +24,14 @@ pub enum TokenKind {
     If,
     Else,
     Bool,
+    Result,
+    Ok,
+    Error,
+    Match,
+    ReservedResult(String),
+    Less,
+    Greater,
+    FatArrow,
     Arrow,
     Requires,
     Ensures,
@@ -80,6 +88,11 @@ impl std::error::Error for LexError {}
 
 pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
     lex_impl(source, None)
+}
+pub(crate) fn reserved_result_family(name: &str) -> Option<&'static str> {
+    ["Result", "Ok", "Error", "Err", "match"]
+        .into_iter()
+        .find(|canonical| name.eq_ignore_ascii_case(canonical))
 }
 pub(crate) fn lex_bounded(
     source: &str,
@@ -228,6 +241,10 @@ fn lex_impl(
                     "old" => TokenKind::Old,
                     "true" => TokenKind::True,
                     "false" => TokenKind::False,
+                    "Result" => TokenKind::Result,
+                    "Ok" => TokenKind::Ok,
+                    "Error" | "Err" => TokenKind::Error,
+                    "match" => TokenKind::Match,
                     _ => {
                         let mut name = String::new();
                         if let Some(c) = context {
@@ -249,7 +266,11 @@ fn lex_impl(
                             }
                         }
                         name.push_str(text);
-                        TokenKind::Ident(name)
+                        if reserved_result_family(text).is_some() {
+                            TokenKind::ReservedResult(name)
+                        } else {
+                            TokenKind::Ident(name)
+                        }
                     }
                 };
 
@@ -283,6 +304,27 @@ fn lex_impl(
             ),
             b'<' if i + 1 < bytes.len() && bytes[i + 1] == b'=' => {
                 push_two(&mut tokens, TokenKind::LessEqual, line, column, i);
+                i += 2;
+                column += 2;
+            }
+            b'<' => push_one(
+                &mut tokens,
+                TokenKind::Less,
+                line,
+                column,
+                &mut i,
+                &mut column,
+            ),
+            b'>' => push_one(
+                &mut tokens,
+                TokenKind::Greater,
+                line,
+                column,
+                &mut i,
+                &mut column,
+            ),
+            b'=' if bytes.get(i + 1) == Some(&b'>') => {
+                push_two(&mut tokens, TokenKind::FatArrow, line, column, i);
                 i += 2;
                 column += 2;
             }

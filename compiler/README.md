@@ -1785,3 +1785,21 @@ No production resource/effectful API, policy attribute, effect hierarchy, alias,
 polymorphism, unsafe construct, unwinding or effects-aware proof behavior is added.
 See the [implementation ledger](../docs/engineering/KED-030-IMPLEMENTATION-LEDGER.md)
 for exact GitHub workflow/commit evidence, predecessor identities and corrections.
+
+## Frozen KED-031 Result phase
+
+Ordinary functions can return and accept `Result<success: S, failure: F>`, with
+finite exact owned bool/range/record/nested Result payloads. `Ok(value)`,
+`Error(problem)` and `Err(problem)` need a complete expected Result type; the two
+failure spellings are equal aliases for one semantic tag. Whole ASCII spelling
+families Result/Ok/Error/Err/match are reserved. The closed statement match requires
+one Ok binding arm and one Error or Err binding arm in either order. Each Result
+must be explicitly matched or transferred on every successful scope exit.
+
+Run `examples/result_handling.klx` with `--function demo` or `success_demo`;
+`examples/result_unhandled_fail.klx` deliberately rejects. Result is always Move,
+including Copy payloads. Matching nested Results leaves independent inner duties.
+No raw named-range literal formation, Result conditional initializer/replacement,
+reference payload, public record Result field, verified/harness Result, `?`, general
+pattern system, implicit conversion or unwind is introduced. Result output and
+runtime custody remain bounded; tool failures are not source Error values.

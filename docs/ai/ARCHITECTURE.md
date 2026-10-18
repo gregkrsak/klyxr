@@ -1106,3 +1106,38 @@ work/storage envelopes; detected fallible allocation failures remain Host.
 
 The implementation ledger and identity manifest record GitHub-executed milestones.
 Specification freeze does not constitute independent implementation acceptance.
+
+## Frozen KED-031 Result identities and custody
+
+Result syntax uses a bounded flat postorder type graph, interned as ordered
+`ResultTypeId` payload pairs. The canonical two-tag enum has no Err alternative;
+both source failure tokens normalize before AST publication. Constructors and
+statement matches have distinct AST/resolved/HIR forms. Result is a ValueType,
+never a RecordId or ReferentType. Complete tables, including unused rows, reject
+invalid IDs, duplicate pairs, cycles, foreign payload categories and depth violations.
+
+The existing ownership checker carries pending outcome facts independently of
+availability and cleanup custody. Its successful analysis retains an append-only
+bounded witness trail across branch snapshots. Transfer destinations, constructor
+and pattern roles, bindings, origins and validated exits are sealed with the
+original HIR. Opaque approval compares independently retained witness copies and
+exact HIR/MIR/origin products; execution reruns neither ownership nor exhaustiveness.
+
+MIR has a canonical Result dispatch terminator and explicit selected-binding
+transfer, with match/pattern origins and normal lexical arm scopes/exits. Temporary
+sites independently retain Result-plan identities even for cleanup-inert wrappers.
+Variant plans reference shared record or nested Result plans in ordered roles;
+resource-bearingness and unioned effects are separate from nested plan identity.
+
+A lazy, flat machine cell table owns actual active Result payloads. Non-cloneable
+operand/slot handles refer to cells and never duplicate payloads. Cells stage before
+payload evaluation, retain constructor correspondence to approved MIR, and pass
+through active, match-protected, consumed or delivered states. Nested cells have
+exact parent links. Reservation precedes detach; dispatch protection precedes
+binding reservation and transfer. Calls and protected returns retain those cells
+through all fallible transitions. Cleanup-inert Results do not activate the resource
+catalog. Ordinary range-field records retain their public representation in Result
+regions through separate inert field staging. The public output is a bounded flat
+active chain with one Bool/range/record leaf; private resource results cannot cross
+the public execution boundary. Only sealed primitive/protocol authority traverses
+a whole wrapper for active-payload cleanup.

@@ -768,3 +768,22 @@ excluded. See the KED-029 implementation ledger for GitHub-executed evidence.
 Greg accepted and human-merged PR #67 as commit
 `5ce5dc5895efab7ba29a7cbc8e980ce58a7b24ab`, tree
 `e95fb9e69d7554719d86d9662cf22cbf5151b84b`.
+
+## Frozen KED-031 implementation boundary
+
+Issue #72 Draft 4 adds exact ordinary `Result<success: S, failure: F>` signatures,
+contextual Ok/Error/Err construction and a fixed exhaustive statement match. Error
+and Err normalize to one canonical Error tag. The full ASCII case-insensitive
+Result/Ok/Error/Err/match families are reserved, while only exact syntax spellings
+are accepted. Every Result is Move and carries an independent unresolved outcome
+obligation through locals, calls, nested payloads, branches and structured exits.
+Cleanup and conditional Move unavailability cannot acknowledge it.
+
+Finite owned bool/range/record/nested payloads, ordered variant plans, structural
+cleanup-effect unions and actual machine-owned cells preserve active-only custody.
+Manual propagation protects the complete outgoing Result before callee cleanup;
+cleanup failure prevents delivery. Resource-free Results do not enable the private
+resource catalog. No conditional Result initializer, raw named-range constructor
+formation, reference/public-record/verified/harness extension, general enum/pattern,
+`?`, conversion, unwind, retry, rollback or production resource API is added.
+The implementation and ledger await independent review and Greg's acceptance.

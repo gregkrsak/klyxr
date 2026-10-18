@@ -65,7 +65,7 @@ thread_local! {
     // Number of actual reservation boundaries to permit before detected failure.
     pub(crate) static FAIL_PLAN_ALLOCATION: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
 }
-fn reserve_plan<T>(
+pub(super) fn reserve_plan<T>(
     values: &mut Vec<T>,
     count: usize,
     message: &'static str,
@@ -317,6 +317,9 @@ impl Catalog {
                 );
             }
             match &e.kind {
+                ExprKind::ResultConstruct { payload, .. } => {
+                    expression(payload, plans, leaves, true)?
+                }
                 ExprKind::RecordConstruct { fields, .. } => {
                     for f in fields {
                         expression(&f.value, plans, leaves, true)?;
@@ -352,6 +355,14 @@ impl Catalog {
         ) -> Result<(), &'static str> {
             for s in body {
                 match s {
+                    ValueStatement::Match {
+                        scrutinee, arms, ..
+                    } => {
+                        expression(scrutinee, plans, leaves, true)?;
+                        for arm in arms {
+                            statements(&arm.body, plans, leaves)?;
+                        }
+                    }
                     ValueStatement::Let { initializer, .. } => {
                         expression(initializer, plans, leaves, true)?
                     }
@@ -556,6 +567,7 @@ pub(crate) fn fixture_with(extra: &str) -> Program {
     }
     fn expression(e: &mut TypedExpr) {
         match &mut e.kind {
+            ExprKind::ResultConstruct { payload, .. } => expression(payload),
             ExprKind::RecordConstruct { fields, .. } => {
                 for f in fields {
                     field(&mut f.field);
@@ -589,6 +601,14 @@ pub(crate) fn fixture_with(extra: &str) -> Program {
     fn statements(body: &mut [ValueStatement]) {
         for s in body {
             match s {
+                ValueStatement::Match {
+                    scrutinee, arms, ..
+                } => {
+                    expression(scrutinee);
+                    for arm in arms {
+                        statements(&mut arm.body);
+                    }
+                }
                 ValueStatement::Let { initializer, .. } => expression(initializer),
                 ValueStatement::Return { value, .. }
                 | ValueStatement::Assign { value, .. }

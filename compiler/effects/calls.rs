@@ -85,6 +85,7 @@ impl Collector<'_> {
             return;
         }
         match &expression.kind {
+            ExprKind::ResultConstruct { payload, .. } => self.expression(payload),
             ExprKind::Call {
                 function,
                 arguments,
@@ -120,6 +121,14 @@ impl Collector<'_> {
                 break;
             }
             match statement {
+                ValueStatement::Match {
+                    scrutinee, arms, ..
+                } => {
+                    self.expression(scrutinee);
+                    for arm in arms {
+                        self.statements(&arm.body);
+                    }
+                }
                 ValueStatement::CallNoValue {
                     function,
                     arguments,

@@ -101,6 +101,30 @@ pub struct ValueParameter {
 pub struct ValueType {
     pub name: String,
     pub references: Vec<BorrowKind>,
+    /// Flat postorder syntax avoids recursive type allocation and destruction.
+    /// Empty for predecessor named types; the last node is the Result root.
+    pub result_nodes: Vec<ResultTypeSyntax>,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResultTypeSyntax {
+    Owned(String),
+    Result { success: usize, failure: usize },
+}
+
+/// The two semantic variants. Both accepted failure spellings normalize here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ResultTag {
+    Ok,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchArm {
+    pub tag: ResultTag,
+    pub binding: String,
+    pub pattern_span: Span,
+    pub body: Vec<ValueStatement>,
+    pub span: Span,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BorrowKind {
@@ -109,6 +133,11 @@ pub enum BorrowKind {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueStatement {
+    Match {
+        scrutinee: Expr,
+        arms: Vec<MatchArm>,
+        span: Span,
+    },
     ReturnNoValue {
         span: Span,
     },
@@ -168,6 +197,9 @@ impl ValueStatement {
     // Narrow structural fallthrough only: a while always retains its false exit.
     pub(crate) fn falls_through(&self) -> bool {
         match self {
+            Self::Match { arms, .. } => arms
+                .iter()
+                .any(|a| a.body.last().map_or(true, Self::falls_through)),
             Self::Continue { .. }
             | Self::Break { .. }
             | Self::Return { .. }
@@ -217,6 +249,11 @@ pub struct Expr {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprKind {
+    ResultConstruct {
+        tag: ResultTag,
+        payload: Box<Expr>,
+        variant_span: Span,
+    },
     RecordConstruct {
         record: String,
         fields: Vec<RecordFieldInit>,

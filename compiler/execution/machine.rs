@@ -3,6 +3,7 @@ use crate::hir::{BinaryOp, BorrowKind, ExprKind, ExprType, Place, ReferentType, 
 use crate::mir::{BasicBlockId, OriginKind, Statement, Terminator};
 use std::mem::size_of;
 mod cleanup;
+mod results;
 mod temporaries;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -12,6 +13,7 @@ struct Location {
 }
 #[derive(Debug, PartialEq, Eq)]
 enum Value {
+    Result(results::OwnerId),
     Temporary(temporaries::OwnerId),
     Leaf {
         resource: hir::resources::ResourceId,
@@ -94,6 +96,10 @@ enum Destination {
     Field(Location, hir::RecordId, hir::FieldId),
 }
 enum Action<'a> {
+    ResultRecordNext(usize, &'a [hir::RecordFieldInit], usize),
+    ResultRecordField(usize, &'a [hir::RecordFieldInit], usize),
+    ResultComplete(results::OwnerId),
+    ResultSelect(hir::ResultTypeId, BasicBlockId, BasicBlockId),
     Drive,
     Eval(&'a TypedExpr, usize),
     SiteEval(&'a TypedExpr, usize, u64, crate::mir::temporaries::SiteId),
@@ -138,6 +144,8 @@ pub(super) struct Machine<'a> {
     expression: Option<Span>,
     resources: Option<cleanup::State>,
     temporaries: Option<temporaries::State>,
+    results: Option<results::State>,
+    terminal: bool,
     site: Option<(u64, crate::mir::temporaries::SiteId)>,
     staged_return: Option<u64>,
     #[cfg(test)]
@@ -153,6 +161,8 @@ impl<'a> Machine<'a> {
             values: Vec::new(),
             resources: None,
             temporaries: None,
+            results: None,
+            terminal: false,
             site: None,
             staged_return: None,
             #[cfg(test)]
@@ -223,6 +233,9 @@ impl<'a> Machine<'a> {
         if let Some(s) = &self.temporaries {
             n = n.checked_add(s.storage()?)?;
         }
+        if let Some(s) = &self.results {
+            n = n.checked_add(s.storage()?)?;
+        }
         Some(n)
     }
     fn reserve(&self, bytes: usize) -> Result<(), ExecutionError> {
@@ -260,12 +273,24 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     fn resource_bearing(&self, value: &Value) -> bool {
+        if let Value::Result(id) = value {
+            return self
+                .results
+                .as_ref()
+                .and_then(|s| s.cells.get(id.0))
+                .and_then(|c| self.executable.result_plans.get(c.ty.0))
+                .is_some_and(hir::results::VariantPlan::bearing);
+        }
         matches!(value, Value::Leaf { record, .. } | Value::Aggregate { record, .. }
             if self.executable.cleanup_plans.get(record.0).is_some_and(Option::is_some))
     }
     // Hold ownership in an already reserved machine slot before any fallible
     // receiving-container operation. The caller takes it only after reservation.
     fn retain_publication(&mut self, value: Value) -> Result<Option<Value>, ExecutionError> {
+        // The actual Result payload remains in its independent custody cell.
+        if matches!(value, Value::Result(_)) {
+            return Ok(Some(value));
+        }
         if self.resource_bearing(&value) {
             let state = self.resources.as_mut().ok_or_else(|| {
                 ExecutionError::integrity("resource publication without runtime state")
@@ -364,7 +389,7 @@ impl<'a> Machine<'a> {
         let (f, i) = self.slot_index(at)?;
         let vacant = if matches!(
             self.frames[f].slots[i].1,
-            Slot::Available(Value::Leaf { .. } | Value::Aggregate { .. })
+            Slot::Available(Value::Leaf { .. } | Value::Aggregate { .. } | Value::Result(_))
         ) {
             Slot::Transferred
         } else {
@@ -486,6 +511,26 @@ impl<'a> Machine<'a> {
         {
             return Err(self.integrity("runtime call signature mismatch"));
         }
+        for (value, parameter) in self.values[self.values.len() - count..]
+            .iter()
+            .zip(&definition.parameters)
+        {
+            if let hir::ParameterType::Value(ty @ ValueType::Result(_)) =
+                self.executable.program.parameter(*parameter).ty
+            {
+                let actual = match value {
+                    Value::Temporary(owner) => self
+                        .temporaries
+                        .as_ref()
+                        .and_then(|s| s.owned_value(*owner))
+                        .ok_or_else(|| self.integrity("missing Result argument custody"))?,
+                    v => v,
+                };
+                if !self.result_value_matches(actual, ty) {
+                    return Err(self.integrity("runtime Result argument type mismatch"));
+                }
+            }
+        }
         let mir = self.executable.function(function)?;
         if mir.cleanup.is_some() {
             self.enable_resources()?;
@@ -574,6 +619,7 @@ impl<'a> Machine<'a> {
         let origin = self.executable.origin(function, block_id)?;
         if let Some(statement) = block.statements().get(statement_index) {
             let span = match statement {
+                Statement::BindResult { pattern_origin, .. } => *pattern_origin,
                 Statement::CallNoValue { span, .. }
                 | Statement::CopyReferenceFieldAssign { span, .. }
                 | Statement::CopyFieldAssign { span, .. }
@@ -592,6 +638,15 @@ impl<'a> Machine<'a> {
             self.frames[index].statement += 1;
             self.task(id, self.origin, None, Action::Drive)?;
             match statement {
+                Statement::BindResult {
+                    result,
+                    tag,
+                    local,
+                    match_origin,
+                    ..
+                } => {
+                    self.result_bind(id, *result, *tag, *local, *match_origin)?;
+                }
                 Statement::CallNoValue {
                     function,
                     arguments,
@@ -737,6 +792,20 @@ impl<'a> Machine<'a> {
             self.charge()?;
             let context = self.temporary_point(id, function, block_id, statement_index)?;
             match block.terminator() {
+                Terminator::Match {
+                    result,
+                    scrutinee,
+                    ok_target,
+                    error_target,
+                } => {
+                    self.task(
+                        id,
+                        origin,
+                        None,
+                        Action::ResultSelect(*result, *ok_target, *error_target),
+                    )?;
+                    self.eval_region(id, scrutinee, 1, context)?;
+                }
                 Terminator::Goto { target } => {
                     self.cleanup_exit(id)?;
                     self.cleanup_next_block(id)?;
@@ -776,6 +845,26 @@ impl<'a> Machine<'a> {
             return Err(self.failure(ErrorKind::ConfiguredLimit("expression depth")));
         }
         match &e.kind {
+            ExprKind::ResultConstruct {
+                result,
+                tag,
+                payload,
+                ..
+            } => {
+                let owner = self.result_start(frame, *result, *tag)?;
+                self.task(
+                    frame,
+                    self.origin,
+                    Some(e.span),
+                    Action::ResultComplete(owner),
+                )?;
+                self.eval_at(
+                    frame,
+                    payload,
+                    depth + 1,
+                    self.temporary_child(self.site, 0)?,
+                )?;
+            }
             ExprKind::BoolLiteral(v) => self.value(Value::Public(RuntimeValue::Bool(*v)))?,
             ExprKind::IntegerLiteral(v) => self.value(Value::Raw(*v))?,
             ExprKind::FormedRangeLiteral(v) => {
@@ -862,6 +951,20 @@ impl<'a> Machine<'a> {
                 self.value(v)?;
             }
             ExprKind::RecordConstruct { record, fields } => {
+                if self.site.is_some()
+                    && !self.executable.program.result_types().is_empty()
+                    && !self.executable.program.resources.is_leaf(*record)
+                    && self
+                        .executable
+                        .program
+                        .record(*record)
+                        .fields
+                        .iter()
+                        .all(|id| self.executable.program.field(*id).range_type().is_some())
+                {
+                    self.result_record_start(frame, *record, fields, depth)?;
+                    return Ok(());
+                }
                 if !self.executable.program.resources.is_leaf(*record)
                     && (self.site.is_some()
                         || self
@@ -1057,6 +1160,9 @@ impl<'a> Machine<'a> {
             .ok_or_else(|| self.integrity("return function"))?
             .return_type;
         let matches = match (value, declared) {
+            (Value::Result(_), Some(ty @ ValueType::Result(_))) => {
+                self.result_value_matches(value, ty)
+            }
             (
                 Value::Leaf { record, .. } | Value::Aggregate { record, .. },
                 Some(ValueType::Record(t)),
@@ -1090,6 +1196,22 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     fn step(&mut self, task: Task<'a>) -> Result<(), ExecutionError> {
+        if self.terminal {
+            return Err(
+                self.integrity(if self.resources.as_ref().is_some_and(|s| s.terminal) {
+                    "resource execution is terminal"
+                } else {
+                    "execution is terminal"
+                }),
+            );
+        }
+        let result = self.step_inner(task);
+        if result.is_err() {
+            self.terminal = true;
+        }
+        result
+    }
+    fn step_inner(&mut self, task: Task<'a>) -> Result<(), ExecutionError> {
         if self.resources.as_ref().is_some_and(|s| s.terminal) {
             return Err(self.integrity("resource execution is terminal"));
         }
@@ -1097,6 +1219,14 @@ impl<'a> Machine<'a> {
         self.expression = task.expression;
         self.site = None;
         match task.action {
+            Action::ResultRecordNext(id, fields, depth) => {
+                self.result_record_next(task.frame, id, fields, depth)?
+            }
+            Action::ResultRecordField(id, fields, depth) => {
+                self.result_record_field(task.frame, id, fields, depth)?
+            }
+            Action::ResultComplete(id) => self.result_complete(id)?,
+            Action::ResultSelect(ty, ok, error) => self.result_select(task.frame, ty, ok, error)?,
             Action::Drive => self.drive(task.frame)?,
             Action::Eval(e, d) => self.expression(task.frame, e, d)?,
             Action::SiteEval(e, d, activation, site) => {
@@ -1187,6 +1317,22 @@ impl<'a> Machine<'a> {
         self.task(frame, self.origin, None, Action::Drive)
     }
     fn resume(&mut self) -> Result<ExecutionResult, ExecutionError> {
+        let outcome = self.resume_inner();
+        if outcome.is_err() {
+            self.terminal = true;
+        }
+        outcome
+    }
+    fn resume_inner(&mut self) -> Result<ExecutionResult, ExecutionError> {
+        if self.terminal {
+            return Err(
+                self.integrity(if self.resources.as_ref().is_some_and(|s| s.terminal) {
+                    "resource execution is terminal"
+                } else {
+                    "execution is terminal"
+                }),
+            );
+        }
         if self.resources.as_ref().is_some_and(|s| s.terminal) {
             return Err(self.integrity("resource execution is terminal"));
         }
@@ -1210,6 +1356,7 @@ impl<'a> Machine<'a> {
             return Err(self.integrity("incomplete execution state"));
         }
         match self.pop()? {
+            Value::Result(id) => self.result_export(id).map(ExecutionResult::Value),
             Value::Completion => Ok(ExecutionResult::NoValue),
             Value::Public(v) => Ok(ExecutionResult::Value(v)),
             _ => Err(self.integrity("ineligible public result")),
@@ -1355,7 +1502,7 @@ mod tests {
             "fn take(a:R,b:R)->R{let moved=b;return moved;}",
             "fn wrap(a:R)->R{let moved=a;return moved;}",
             "fn demo()->R{let a=R{x:80,y:70};let b=R{x:60,y:50};",
-            "let result=take(wrap(a),b);return result;}"
+            "let predecessor_result=take(wrap(a),b);return predecessor_result;}"
         ));
         let mut peak = 0;
         for budget in [ExecutionLimits::default().working_storage, 0] {

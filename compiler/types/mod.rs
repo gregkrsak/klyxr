@@ -172,6 +172,9 @@ fn call_arguments(
 }
 fn falls_through(body: &[ResolvedValueStatement]) -> bool {
     match body.last() {
+        Some(ResolvedValueStatement::Match { arms, .. }) => {
+            arms.iter().any(|arm| falls_through(&arm.body))
+        }
         Some(
             ResolvedValueStatement::Return { .. }
             | ResolvedValueStatement::ReturnNoValue { .. }
@@ -220,6 +223,60 @@ fn value_statements(
     let mut body = Vec::new();
     for statement in statements {
         let statement = match statement {
+            ResolvedValueStatement::Match {
+                scrutinee,
+                arms,
+                span,
+            } => {
+                let scrutinee = expression(program, functions, scrutinee)?;
+                let ExprType::Result(result) = scrutinee.ty else {
+                    return Err(Diagnostic::semantic(
+                        scrutinee.span,
+                        "match requires a Result value",
+                        "only exhaustive two-variant statement Result matching is admitted",
+                    )
+                    .into());
+                };
+                let mut typed_arms = Vec::new();
+                for arm in arms {
+                    let ty = program.result_payload(result, arm.tag).ok_or_else(|| {
+                        Box::new(Diagnostic::semantic(
+                            arm.pattern_span,
+                            "invalid Result payload identity",
+                            "canonical Result type required",
+                        ))
+                    })?;
+                    if arm.binding.0 != program.locals.len() {
+                        return Err(Diagnostic::semantic(
+                            arm.pattern_span,
+                            "invalid Result arm binding identity",
+                            "fresh lexical LocalIds must follow source order",
+                        )
+                        .into());
+                    }
+                    program.locals.push(hir::Local {
+                        id: arm.binding,
+                        function: arm.function,
+                        name: arm.name.clone(),
+                        mutable: false,
+                        ty,
+                        span: arm.pattern_span,
+                    });
+                    let body = value_statements(program, functions, &arm.body, return_type)?;
+                    typed_arms.push(hir::MatchArm {
+                        tag: arm.tag,
+                        binding: arm.binding,
+                        pattern_span: arm.pattern_span,
+                        body,
+                        span: arm.span,
+                    });
+                }
+                hir::ValueStatement::Match {
+                    scrutinee,
+                    arms: typed_arms,
+                    span: *span,
+                }
+            }
             ResolvedValueStatement::Break { span } => hir::ValueStatement::Break { span: *span },
             ResolvedValueStatement::Continue { span } => {
                 hir::ValueStatement::Continue { span: *span }
@@ -285,6 +342,7 @@ fn value_statements(
             } => {
                 let initializer = expression(program, functions, initializer)?;
                 let ty = match initializer.ty {
+                    ExprType::Result(id) => ValueType::Result(id),
                     ExprType::Bool => ValueType::Bool,
                     ExprType::Range(id) => ValueType::Range(id),
                     ExprType::Record(id) => ValueType::Record(id),
@@ -412,6 +470,9 @@ fn value_statements(
                     }
                 };
                 let target = program.local(local);
+                if matches!(target.ty, ValueType::Result(_)) {
+                    return Err(Diagnostic::semantic(*span, "Result replacement is not admitted", "match, return, or transfer the complete Result; no outcome may be overwritten").into());
+                }
                 if matches!(
                     target.ty,
                     ValueType::SharedRef(_) | ValueType::MutableRef(_)
@@ -491,6 +552,7 @@ fn value_statements(
 }
 fn value_type(ty: ResolvedValueType, span: crate::lexer::Span) -> TypeResult<ValueType> {
     Ok(match ty {
+        ResolvedValueType::Result(id) => ValueType::Result(id),
         ResolvedValueType::Bool => ValueType::Bool,
         ResolvedValueType::Range(id) => ValueType::Range(id),
         ResolvedValueType::Record(id) => ValueType::Record(id),
@@ -507,6 +569,45 @@ fn check_value(
     expected: ValueType,
     boundary: &str,
 ) -> TypeResult<TypedExpr> {
+    if let ResolvedExprKind::ResultConstruct {
+        tag,
+        payload,
+        variant_span,
+    } = &expression.kind
+    {
+        let ValueType::Result(id) = expected else {
+            return Err(Diagnostic::semantic(expression.span, "cannot infer complete Result type", "the constructor requires an independently established complete Result type, including both payload types; intrinsic recognition never falls back to ordinary lookup").into());
+        };
+        let payload_type = program.result_payload(id, *tag).ok_or_else(|| {
+            Box::new(Diagnostic::semantic(
+                expression.span,
+                "invalid Result type",
+                "canonical Result identity required",
+            ))
+        })?;
+        let boundary = match tag {
+            hir::ResultTag::Ok => "Result success payload",
+            hir::ResultTag::Error => "Result error payload",
+        };
+        let payload = if matches!(payload.kind, ResolvedExprKind::ResultConstruct { .. }) {
+            check_value(program, functions, payload, payload_type, boundary)?
+        } else {
+            // KD-037 does not form a named-range literal at a Result boundary.
+            let value = self::expression(program, functions, payload)?;
+            exact_value(program, &value, payload_type, boundary)?;
+            value
+        };
+        return Ok(TypedExpr {
+            kind: ExprKind::ResultConstruct {
+                result: id,
+                tag: *tag,
+                payload: Box::new(payload),
+                variant_span: *variant_span,
+            },
+            ty: ExprType::Result(id),
+            span: expression.span,
+        });
+    }
     if let (ValueType::Range(id), ResolvedExprKind::IntegerLiteral(value)) =
         (expected, &expression.kind)
     {
@@ -577,6 +678,7 @@ fn contract(expression: &TypedExpr, name: &str) -> TypeResult<()> {
 }
 fn display_type(program: &Program, ty: ExprType) -> String {
     match ty {
+        ExprType::Result(id) => format!("Result type #{}", id.0),
         ExprType::Bool => "Bool".into(),
         ExprType::IntegerLiteral => "IntegerLiteral".into(),
         ExprType::Range(id) => format!("range `{}`", program.range(id).name),
@@ -694,6 +796,7 @@ fn expression(
 ) -> TypeResult<TypedExpr> {
     let span = input.span;
     let (kind, ty) = match &input.kind {
+        ResolvedExprKind::ResultConstruct { .. } => return Err(Diagnostic::semantic(span, "cannot infer complete Result type", "including both success and failure types: use an exact ordinary Result return or parameter boundary").into()),
         ResolvedExprKind::IfValue {
             condition,
             then_value,
@@ -712,6 +815,7 @@ fn expression(
             let else_value = expression(program, functions, else_value)?;
             for value in [&then_value, &else_value] {
                 match value.ty {
+                    ExprType::Result(_) => return Err(Diagnostic::semantic(value.span, "conditional initializer cannot produce a Result value", "KD-025 permits only bool, named-range, and record conditional results").into()),
                     ExprType::SharedRef(_) | ExprType::MutableRef(_) => {
                         return Err(Diagnostic::semantic(
                             value.span,
@@ -878,7 +982,8 @@ fn expression(
                 hir::Place::Local(id) => program.local(*id).ty,
             };
             let referent = match ty {
-                ValueType::Bool => hir::ReferentType::Bool,
+                    ValueType::Result(_) => return Err(Diagnostic::semantic(span, "borrowing a Result is excluded in this phase", "match, return, or transfer the owned Result; Result is not a reference referent").into()),
+                    ValueType::Bool => hir::ReferentType::Bool,
                 ValueType::Range(id) => hir::ReferentType::Range(id),
                 ValueType::Record(id) => hir::ReferentType::Record(id),
                 ValueType::SharedRef(_) | ValueType::MutableRef(_) => return Err(Diagnostic::semantic(span, "cannot borrow an existing reference value", "nested references and reborrowing are not supported; borrow an owned non-reference parameter or local").into()),
@@ -1030,7 +1135,7 @@ mod tests {
     }
     #[test]
     fn value_flow_typing_uses_function_parameter_and_local_ids_after_metadata_renaming() {
-        let source = "type Percent = range 0..100; type Other = range 0..100; fn identity(value: Percent) -> Percent { let result = value; return result; } fn wrapped(value: Percent) -> Percent { let first = identity(value); let second = first - 0; return second; }";
+        let source = "type Percent = range 0..100; type Other = range 0..100; fn identity(value: Percent) -> Percent { let predecessor_result = value; return predecessor_result; } fn wrapped(value: Percent) -> Percent { let first = identity(value); let second = first - 0; return second; }";
         fn rename(resolved: &mut ResolvedProgram) {
             for range in &mut resolved.declarations.ranges {
                 range.name = "display".into();

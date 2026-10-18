@@ -125,6 +125,9 @@ pub(crate) struct Context {
     alias_work: Cell<u64>,
     envelope_nodes: Cell<usize>,
     envelope_source: Cell<usize>,
+    outcome_extra: Cell<usize>,
+    cleanup_extra: Cell<usize>,
+    pub(crate) outcome_limit: Cell<usize>,
 }
 impl Context {
     pub fn new(limits: AdmissionLimits) -> Self {
@@ -136,6 +139,9 @@ impl Context {
             alias_work: Cell::new(0),
             envelope_nodes: Cell::new(0),
             envelope_source: Cell::new(0),
+            outcome_extra: Cell::new(0),
+            cleanup_extra: Cell::new(0),
+            outcome_limit: Cell::new(0),
         }
     }
     /// Additional retained cleanup witnesses are bounded before checker snapshots.
@@ -175,7 +181,11 @@ impl Context {
                     .and_then(|s| e.checked_add(s))
             });
         if base
-            .and_then(|b| extra.and_then(|e| b.checked_add(e)))
+            .and_then(|b| {
+                extra
+                    .and_then(|e| b.checked_add(e))
+                    .and_then(|b| b.checked_add(self.outcome_extra.get()))
+            })
             .map_or(true, |e| e > self.limits.working_storage)
         {
             return Err(ResourceFailure::limit(
@@ -185,14 +195,75 @@ impl Context {
         }
         let work = (n as u64)
             .checked_pow(4)
-            .and_then(|e| e.checked_mul(640))
+            .and_then(|e| {
+                e.checked_mul(if self.outcome_extra.get() == 0 {
+                    640
+                } else {
+                    896
+                })
+            })
             .and_then(|e| e.checked_add(self.envelope_source.get() as u64));
         if work.map_or(true, |w| w > self.limits.frontend_work) {
             return Err(ResourceFailure::limit("cleanup effect witness work", START));
         }
+        self.cleanup_extra
+            .set(self.cleanup_extra.get().max(extra.unwrap_or(0)));
         Ok(())
     }
 
+    // Reserve the additional finite Result DAG, checker snapshots, and retained
+    // event products before ownership analysis. The existing envelope covers the
+    // syntax and HIR; this reservation explicitly covers outcome-only machinery.
+    pub(crate) fn reserve_outcomes(&self, holders: usize) -> Result<(), ResourceFailure> {
+        let n = self.envelope_nodes.get().max(holders).max(1);
+        let storage = n
+            .checked_mul(n)
+            .and_then(|v| v.checked_mul(512))
+            .and_then(|v| {
+                self.limits
+                    .traversal_depth
+                    .checked_mul(holders)
+                    .and_then(|h| h.checked_mul(128))
+                    .and_then(|h| v.checked_add(h))
+            });
+        let base = (self.limits.traversal_depth * 16 + 32)
+            .checked_mul(n)
+            .and_then(|v| v.checked_mul(self.limits.identifier_bytes + 512))
+            .and_then(|v| v.checked_add(self.envelope_source.get() * 8));
+        if base
+            .and_then(|b| {
+                storage
+                    .and_then(|v| b.checked_add(v))
+                    .and_then(|v| v.checked_add(self.cleanup_extra.get()))
+            })
+            .map_or(true, |v| v > self.limits.working_storage)
+        {
+            return Err(ResourceFailure::limit(
+                "Result outcome storage reservation",
+                START,
+            ));
+        }
+        if (n as u64)
+            .checked_pow(4)
+            .and_then(|v| {
+                v.checked_mul(if self.cleanup_extra.get() == 0 {
+                    256
+                } else {
+                    896
+                })
+            })
+            .and_then(|v| v.checked_add(self.envelope_source.get() as u64))
+            .map_or(true, |v| v > self.limits.frontend_work)
+        {
+            return Err(ResourceFailure::limit(
+                "Result outcome work reservation",
+                START,
+            ));
+        }
+        self.outcome_extra.set(storage.unwrap());
+        self.outcome_limit.set(n.checked_mul(n).unwrap());
+        Ok(())
+    }
     pub(crate) fn resource_node(&self, span: Span) -> Result<(), ResourceFailure> {
         let next = self
             .resource_nodes
@@ -299,6 +370,7 @@ impl Context {
                     visit(right, d + 1, c)?;
                 }
                 ast::ExprKind::Unary { operand, .. } => visit(operand, d + 1, c)?,
+                ast::ExprKind::ResultConstruct { payload, .. } => visit(payload, d + 1, c)?,
                 ast::ExprKind::Call { arguments, .. } => {
                     for e in arguments {
                         visit(e, d + 1, c)?;

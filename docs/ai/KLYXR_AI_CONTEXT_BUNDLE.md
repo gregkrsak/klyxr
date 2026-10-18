@@ -782,6 +782,25 @@ Greg accepted and human-merged PR #67 as commit
 `5ce5dc5895efab7ba29a7cbc8e980ce58a7b24ab`, tree
 `e95fb9e69d7554719d86d9662cf22cbf5151b84b`.
 
+## Frozen KED-031 implementation boundary
+
+Issue #72 Draft 4 adds exact ordinary `Result<success: S, failure: F>` signatures,
+contextual Ok/Error/Err construction and a fixed exhaustive statement match. Error
+and Err normalize to one canonical Error tag. The full ASCII case-insensitive
+Result/Ok/Error/Err/match families are reserved, while only exact syntax spellings
+are accepted. Every Result is Move and carries an independent unresolved outcome
+obligation through locals, calls, nested payloads, branches and structured exits.
+Cleanup and conditional Move unavailability cannot acknowledge it.
+
+Finite owned bool/range/record/nested payloads, ordered variant plans, structural
+cleanup-effect unions and actual machine-owned cells preserve active-only custody.
+Manual propagation protects the complete outgoing Result before callee cleanup;
+cleanup failure prevents delivery. Resource-free Results do not enable the private
+resource catalog. No conditional Result initializer, raw named-range constructor
+formation, reference/public-record/verified/harness extension, general enum/pattern,
+`?`, conversion, unwind, retry, rollback or production resource API is added.
+The implementation and ledger await independent review and Greg's acceptance.
+
 <!-- END KLYXR_CONTEXT.md -->
 
 ---
@@ -2329,6 +2348,57 @@ rollback, retry, arbitrary destructor, public resource API, ownership inference 
 second ownership checker is added. See the KED-029 implementation ledger and
 accepted exact-head review for evidence. OQ-022/OQ-023/OQ-025/OQ-026 retain their broader questions.
 
+## Frozen KED-031 — Typed recoverable failure and explicit handling
+
+**Status:** Frozen Draft 4, implementation authorized in [Issue #72](https://github.com/gregkrsak/klyxr/issues/72).
+This implementation awaits independent review and Greg's acceptance. KD-007's
+broader Direction Accepted status is unchanged.
+
+The fixed built-in `Result<success: S, failure: F>` is one mutually exclusive
+ordinary owned Move value, including when both payloads are Copy. Payloads are
+exact `bool`, named ranges, records, or finite nested Results. The labels are
+mandatory in that order. `Ok(...)` constructs success; `Error(...)` and `Err(...)`
+are equal official aliases normalized immediately to one canonical Error variant.
+Only those exact syntax spellings and `Result`/`match` are accepted. Their complete
+ASCII case-insensitive spelling families are reserved in every identifier context;
+nearby names such as `ErrorCode` remain available. The labels are contextual.
+
+Construction requires an independently established complete expected Result at
+an exact ordinary return, parameter, or recursively established payload boundary.
+The active payload cannot infer the inactive type. Constructor payloads create no
+new KD-037 named-range literal boundary. KD-025 Result-valued conditional
+initializers, Result replacement, Result references, public record Result fields,
+verified functions and harness Result use remain excluded.
+
+The closed statement `match value { Ok(binding) => { ... } Error(binding) => { ... } }`
+accepts either written arm order and either failure alias. Exactly one canonical
+arm of each kind is required. No wildcard, guard, nested/ref/alternative pattern,
+match expression, or value-producing arm is added. Each arm has a fresh lexical
+LocalId, exact payload type, and no visible-name shadowing. Matching consumes the
+wrapper once, copies a Copy payload or transfers a Move payload, and executes
+only the selected arm. Both bodies are statically checked. An inner Result in the
+selected binding carries its own independent obligation.
+
+The existing ownership checker tracks unresolved outcomes separately from Move
+availability, loans, cleanup, effects, and vacancy. Every successful exit must
+match, return, pass to an exact Result parameter, or transfer to another owner.
+Checks precede scope reduction, break/continue projection and backedges; unioned
+pending facts preserve unhandled branch and short-circuit alternatives. Cleanup
+cannot acknowledge an outcome. Existing conservative loop Move rules remain.
+
+Resource-bearingness is the structural disjunction of both declared payloads;
+only the active payload owns responsibility. Shared bounded variant plans preserve
+ordered roles and nested identities, with cleanup effects unioned over both
+alternatives. Whole-wrapper cleanup has only independently sealed primitive/protocol
+authority. Ordinary matching transfers cleanup to the selected binding.
+
+Manual propagation uses explicit matching and exact Result return. The outgoing
+value is protected before other temporaries and callee owners retire; failed
+cleanup prevents delivery. Results add no implicit effect, authority, rollback,
+retry or unwind. Tool stops never become Error. General enums/generics, Option,
+`?`, conversions, reference payloads, fallible cleanup and production effectful
+APIs remain deferred. See the KED-031 ledger for evidence and its limits.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -3444,6 +3514,41 @@ work/storage envelopes; detected fallible allocation failures remain Host.
 The implementation ledger and identity manifest record GitHub-executed milestones.
 Specification freeze does not constitute independent implementation acceptance.
 
+## Frozen KED-031 Result identities and custody
+
+Result syntax uses a bounded flat postorder type graph, interned as ordered
+`ResultTypeId` payload pairs. The canonical two-tag enum has no Err alternative;
+both source failure tokens normalize before AST publication. Constructors and
+statement matches have distinct AST/resolved/HIR forms. Result is a ValueType,
+never a RecordId or ReferentType. Complete tables, including unused rows, reject
+invalid IDs, duplicate pairs, cycles, foreign payload categories and depth violations.
+
+The existing ownership checker carries pending outcome facts independently of
+availability and cleanup custody. Its successful analysis retains an append-only
+bounded witness trail across branch snapshots. Transfer destinations, constructor
+and pattern roles, bindings, origins and validated exits are sealed with the
+original HIR. Opaque approval compares independently retained witness copies and
+exact HIR/MIR/origin products; execution reruns neither ownership nor exhaustiveness.
+
+MIR has a canonical Result dispatch terminator and explicit selected-binding
+transfer, with match/pattern origins and normal lexical arm scopes/exits. Temporary
+sites independently retain Result-plan identities even for cleanup-inert wrappers.
+Variant plans reference shared record or nested Result plans in ordered roles;
+resource-bearingness and unioned effects are separate from nested plan identity.
+
+A lazy, flat machine cell table owns actual active Result payloads. Non-cloneable
+operand/slot handles refer to cells and never duplicate payloads. Cells stage before
+payload evaluation, retain constructor correspondence to approved MIR, and pass
+through active, match-protected, consumed or delivered states. Nested cells have
+exact parent links. Reservation precedes detach; dispatch protection precedes
+binding reservation and transfer. Calls and protected returns retain those cells
+through all fallible transitions. Cleanup-inert Results do not activate the resource
+catalog. Ordinary range-field records retain their public representation in Result
+regions through separate inert field staging. The public output is a bounded flat
+active chain with one Bool/range/record leaf; private resource results cannot cross
+the public execution boundary. Only sealed primitive/protocol authority traverses
+a whole wrapper for active-payload cleanup.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -4100,5 +4205,19 @@ public resource admission, arbitrary destructors, recoverable propagation, unwin
 rollback or generalized ownership/dataflow. Existing aggregate field order and
 KD-043 replacement remain authoritative. The accepted implementation introduces no
 new verifier proof claim.
+
+### KED-031 refinement of OQ-006/OQ-022/OQ-023/OQ-026
+
+Frozen Draft 4 settles the first ordinary exact Result family, explicit exhaustive
+two-arm statement matching, independent outcome obligations, active-payload cleanup,
+and manual protected-return propagation. Error and Err are equal exact aliases for
+one failure variant. This implementation awaits independent review and acceptance.
+Historical wholly-open Result statements are narrowed by this fixed phase.
+
+General enums, Option, general patterns and match expressions, propagation sugar,
+implicit error conversion, reference payloads, Result public record fields,
+verified/harness Result use, production fallible APIs, panic/unwind/cancellation
+and generalized ownership/dataflow remain excluded or open. Result grants no unsafe
+permission and no tool-stop recovery or rollback.
 
 <!-- END OPEN_QUESTIONS.md -->

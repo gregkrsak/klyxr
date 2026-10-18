@@ -82,7 +82,7 @@ fn owned_parameters_and_locals_move_through_bindings_and_returns() {
 #[test]
 fn copy_parameters_and_locals_remain_reusable_after_bindings_and_calls() {
     for ty in ["bool", "Percent"] {
-        compile(&format!("fn identity(value: {ty}) -> {ty} {{ return value; }} fn repeat(value: {ty}) -> {ty} {{ let first = value; let second = value; let third = first; let fourth = first; let result = identity(value); let again = identity(value); return value; }} fn local_repeat(value: {ty}) -> {ty} {{ let first = value; let a = identity(first); let b = identity(first); return first; }}"));
+        compile(&format!("fn identity(value: {ty}) -> {ty} {{ return value; }} fn repeat(value: {ty}) -> {ty} {{ let first = value; let second = value; let third = first; let fourth = first; let predecessor_result = identity(value); let again = identity(value); return value; }} fn local_repeat(value: {ty}) -> {ty} {{ let first = value; let a = identity(first); let b = identity(first); return first; }}"));
     }
 }
 
@@ -127,9 +127,9 @@ fn record_arguments_are_consumed_even_when_the_result_is_copy() {
     let diagnostic = moved(&format!("{INSPECT} fn bad(ticket: Ticket) -> bool {{ let first = inspect(ticket); let second = inspect(ticket); return first; }}"));
     assert_eq!(diagnostic.message, "use of moved value `ticket`");
     assert!(diagnostic.known[0].contains("into by-value parameter `ticket`"));
-    let diagnostic = moved(&format!("{INSPECT} fn bad(ticket: Ticket) -> Ticket {{ let first = ticket; let result = inspect(first); return first; }}"));
+    let diagnostic = moved(&format!("{INSPECT} fn bad(ticket: Ticket) -> Ticket {{ let first = ticket; let predecessor_result = inspect(first); return first; }}"));
     assert_eq!(diagnostic.message, "use of moved value `first`");
-    compile(&format!("{INSPECT} fn once(ticket: Ticket) -> bool {{ let result = inspect(ticket); return result; }}"));
+    compile(&format!("{INSPECT} fn once(ticket: Ticket) -> bool {{ let predecessor_result = inspect(ticket); return predecessor_result; }}"));
 }
 
 #[test]

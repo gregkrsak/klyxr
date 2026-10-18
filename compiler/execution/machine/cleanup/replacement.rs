@@ -706,7 +706,7 @@ mod conformance_tests {
     }
     #[test]
     fn value_return_moves_new_generation_before_cleaning_remainder() {
-        let e = artifact("fn make()->Leaf{while true{let mut a=acquire();let b=acquire();a=acquire();return a;}return acquire();}fn demo(){let result=make();}");
+        let e = artifact("fn make()->Leaf{while true{let mut a=acquire();let b=acquire();a=acquire();return a;}return acquire();}fn demo(){let predecessor_result=make();}");
         assert_eq!(completed(&run(&e)), vec![0, 1, 2]);
     }
     #[test]

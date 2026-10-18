@@ -4,9 +4,12 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     rc::Rc,
 };
+pub(crate) mod outcomes;
+use outcomes::Outcome;
 
 use crate::{
     diagnostics::Diagnostic,
+    hir,
     hir::{
         BorrowKind, ExprKind, ExprType, FieldId, FunctionId, LocalId, ParameterId, ParameterType,
         Place, Program, RecordId, ReferentType, TypedExpr, ValueFunction, ValueStatement,
@@ -24,6 +27,7 @@ fn statement_span(statement: &ValueStatement) -> Span {
         | ValueStatement::CopyReferenceFieldAssign { span, .. }
         | ValueStatement::CallNoValue { span, .. }
         | ValueStatement::If { span, .. }
+        | ValueStatement::Match { span, .. }
         | ValueStatement::While { span, .. }
         | ValueStatement::Return { span, .. }
         | ValueStatement::ReturnNoValue { span }
@@ -66,6 +70,14 @@ fn count_statements(statements: &[ValueStatement], uses: &mut FutureUses) {
                 count_statements(then_body, uses);
                 count_statements(else_body, uses);
             }
+            ValueStatement::Match {
+                scrutinee, arms, ..
+            } => {
+                count_expression(scrutinee, uses);
+                for arm in arms {
+                    count_statements(&arm.body, uses);
+                }
+            }
             ValueStatement::CallNoValue { arguments, .. } => {
                 for argument in arguments {
                     count_expression(argument, uses);
@@ -89,6 +101,7 @@ fn count_statements(statements: &[ValueStatement], uses: &mut FutureUses) {
 }
 fn count_expression(expression: &TypedExpr, uses: &mut FutureUses) {
     match &expression.kind {
+        ExprKind::ResultConstruct { payload, .. } => count_expression(payload, uses),
         ExprKind::IfValue {
             condition,
             then_value,
@@ -163,6 +176,19 @@ fn statement_future(
     continuing: &FutureUses,
 ) -> FutureUses {
     match statement {
+        ValueStatement::Match {
+            scrutinee, arms, ..
+        } => {
+            let mut future = FutureUses::new();
+            for arm in arms {
+                for (place, count) in block_future(&arm.body, after, continuing) {
+                    let entry = future.entry(place).or_default();
+                    *entry = (*entry).max(count);
+                }
+            }
+            count_expression(scrutinee, &mut future);
+            future
+        }
         ValueStatement::ReturnNoValue { .. } => FutureUses::new(),
         ValueStatement::Return { value, .. } => {
             let mut uses = FutureUses::new();
@@ -205,6 +231,7 @@ enum Flow {
 fn reference_uses(body: &[ValueStatement]) -> BTreeSet<Place> {
     fn expression(expr: &TypedExpr, uses: &mut BTreeSet<Place>) {
         match &expr.kind {
+            ExprKind::ResultConstruct { payload, .. } => expression(payload, uses),
             ExprKind::Parameter(id) => {
                 uses.insert(Place::Parameter(*id));
             }
@@ -250,6 +277,14 @@ fn reference_uses(body: &[ValueStatement]) -> BTreeSet<Place> {
     fn statements(body: &[ValueStatement], uses: &mut BTreeSet<Place>) {
         for statement in body {
             match statement {
+                ValueStatement::Match {
+                    scrutinee, arms, ..
+                } => {
+                    expression(scrutinee, uses);
+                    for arm in arms {
+                        statements(&arm.body, uses);
+                    }
+                }
                 ValueStatement::Continue { .. }
                 | ValueStatement::Break { .. }
                 | ValueStatement::ReturnNoValue { .. } => {}
@@ -303,11 +338,15 @@ enum OwnershipKind {
 fn ownership_kind(ty: ValueType) -> OwnershipKind {
     match ty {
         ValueType::Bool | ValueType::Range(_) | ValueType::SharedRef(_) => OwnershipKind::Copy,
-        ValueType::Record(_) | ValueType::MutableRef(_) => OwnershipKind::Move,
+        ValueType::Record(_) | ValueType::MutableRef(_) | ValueType::Result(_) => {
+            OwnershipKind::Move
+        }
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Transfer {
+    Match,
+    ResultPayload(hir::ResultTypeId, hir::ResultTag),
     Local(LocalId),
     Argument(ParameterId),
     Return(FunctionId),
@@ -347,13 +386,13 @@ pub fn check(program: &Program) -> Result<(), Vec<Diagnostic>> {
 pub(crate) fn analyze(
     program: &Program,
 ) -> Result<Vec<crate::effects::custody::Site>, Vec<Diagnostic>> {
-    analyze_with(program, None)
+    analyze_with(program, None).map(|a| a.0)
 }
 
-pub(crate) fn check_bounded(
+pub(crate) fn evidence_bounded(
     program: &Program,
     context: &crate::bounded::Context,
-) -> Result<Vec<crate::effects::custody::Site>, Vec<Diagnostic>> {
+) -> Result<(Vec<crate::effects::custody::Site>, Vec<outcomes::Witness>), Vec<Diagnostic>> {
     analyze_with(program, Some(context))
 }
 
@@ -386,7 +425,7 @@ fn effect_analysis_error(
 fn analyze_with(
     program: &Program,
     context: Option<&crate::bounded::Context>,
-) -> Result<Vec<crate::effects::custody::Site>, Vec<Diagnostic>> {
+) -> Result<(Vec<crate::effects::custody::Site>, Vec<outcomes::Witness>), Vec<Diagnostic>> {
     use crate::effects::{custody::Custody, EffectSet};
     use crate::hir::resources::PlanError;
     let active = program
@@ -434,11 +473,33 @@ fn analyze_with(
                 })?;
         }
     }
+    let trail =
+        (!program.result_types().is_empty()).then(|| Rc::new(std::cell::RefCell::new(Vec::new())));
+    if trail.is_some() {
+        if let Some(c) = context {
+            c.reserve_outcomes(
+                program.locals.len()
+                    + program.parameters.len()
+                    + program.result_types().len()
+                    + program.functions.len(),
+            )
+            .map_err(|e| effect_analysis_error(PlanError::Limit(e.resource), Some(c)))?;
+        }
+    }
     let summaries = Rc::new(summaries);
     let mut sites = Vec::new();
     for function in program.functions().iter().filter_map(|f| f.as_ordinary()) {
         let mut checker = Checker::new(program, function);
         checker.context = context;
+        checker.outcome_trail = trail.clone();
+        for (place, fact) in checker.outcomes.clone() {
+            checker
+                .witness(
+                    fact.origin,
+                    outcomes::Action::Initialize(place, fact.result),
+                )
+                .map_err(|e| vec![*e])?;
+        }
         // Registered stubs are fixed primitive boundaries, never callback bodies.
         if !summaries.is_empty()
             && !program
@@ -463,7 +524,14 @@ fn analyze_with(
             sites.extend(new_sites);
         }
     }
-    Ok(sites)
+    let witnesses = trail
+        .map(|t| {
+            Rc::try_unwrap(t)
+                .expect("ownership trail retained after analysis")
+                .into_inner()
+        })
+        .unwrap_or_default();
+    Ok((sites, witnesses))
 }
 fn checked_place_type(program: &Program, function: FunctionId, place: Place) -> Option<ValueType> {
     match place {
@@ -487,6 +555,7 @@ fn checked_place_type(program: &Program, function: FunctionId, place: Place) -> 
 struct Initializers<'a> {
     function: FunctionId,
     entries: BTreeMap<LocalId, &'a TypedExpr>,
+    arm_bindings: BTreeSet<LocalId>,
     invalid: Option<Span>,
 }
 impl<'a> Initializers<'a> {
@@ -494,6 +563,7 @@ impl<'a> Initializers<'a> {
         let mut index = Self {
             function: function.id,
             entries: BTreeMap::new(),
+            arm_bindings: BTreeSet::new(),
             invalid: None,
         };
         let result = (|| {
@@ -510,7 +580,9 @@ impl<'a> Initializers<'a> {
             // including locals not reached by an actual reference use.
             for (position, local) in program.locals().iter().enumerate() {
                 if local.function == function.id
-                    && (local.id != LocalId(position) || !index.entries.contains_key(&local.id))
+                    && (local.id != LocalId(position)
+                        || (!index.entries.contains_key(&local.id)
+                            && !index.arm_bindings.contains(&local.id)))
                 {
                     return Err(local.span);
                 }
@@ -525,6 +597,34 @@ impl<'a> Initializers<'a> {
             #[cfg(test)]
             initializer_probe::update(|c| c.construction_visits += 1);
             match statement {
+                ValueStatement::Match {
+                    scrutinee,
+                    arms,
+                    span,
+                } => {
+                    let ExprType::Result(result) = scrutinee.ty else {
+                        return Err(*span);
+                    };
+                    if arms.len() != 2 || arms[0].tag == arms[1].tag {
+                        return Err(*span);
+                    }
+                    for arm in arms {
+                        let local = program
+                            .locals()
+                            .get(arm.binding.0)
+                            .ok_or(arm.pattern_span)?;
+                        if local.id != arm.binding
+                            || local.function != self.function
+                            || local.mutable
+                            || Some(local.ty) != program.result_payload(result, arm.tag)
+                            || self.entries.contains_key(&arm.binding)
+                            || !self.arm_bindings.insert(arm.binding)
+                        {
+                            return Err(arm.pattern_span);
+                        }
+                        self.statements(program, &arm.body)?;
+                    }
+                }
                 ValueStatement::Let {
                     local,
                     initializer,
@@ -664,6 +764,8 @@ struct Checker<'a> {
     // Operation-local continuity restriction, never a synthetic loan.
     replacement_target: Option<Place>,
     cleanup_custody: Option<crate::effects::custody::Custody>,
+    outcomes: BTreeMap<Place, Outcome>,
+    outcome_trail: Option<Rc<std::cell::RefCell<Vec<outcomes::Witness>>>>,
 }
 impl<'a> Checker<'a> {
     fn new(program: &'a Program, function: &'a ValueFunction) -> Self {
@@ -683,6 +785,8 @@ impl<'a> Checker<'a> {
             terminal_return: false,
             replacement_target: None,
             cleanup_custody: None,
+            outcomes: BTreeMap::new(),
+            outcome_trail: None,
         };
         if checker.initializers.invalid.is_some() {
             return checker;
@@ -690,6 +794,7 @@ impl<'a> Checker<'a> {
         for id in &function.parameters {
             if let ParameterType::Value(ty) = program.parameter(*id).ty {
                 let place = Place::Parameter(*id);
+                checker.initialize_outcome(place, ty, program.parameter(*id).span);
                 if ownership_kind(ty) == OwnershipKind::Move {
                     checker.states.insert(place, State::Available);
                 }
@@ -718,6 +823,9 @@ impl<'a> Checker<'a> {
             assert_eq!(flow, Flow::Return);
         } else {
             assert!(matches!(flow, Flow::Return | Flow::Fallthrough));
+            if flow == Flow::Fallthrough {
+                self.check_outcome_exit(|_| true, function.span)?;
+            }
             self.complete_no_value(function.span)?;
             if flow == Flow::Fallthrough {
                 if let Some(custody) = &mut self.cleanup_custody {
@@ -798,6 +906,11 @@ impl<'a> Checker<'a> {
         after: &FutureUses,
     ) -> OwnershipResult<Flow> {
         match statement {
+            ValueStatement::Match {
+                scrutinee,
+                arms,
+                span,
+            } => return self.match_result(scrutinee, arms, *span, function, after),
             ValueStatement::ReturnNoValue { span } => return self.bare_return(*span),
             ValueStatement::CallNoValue {
                 function,
@@ -828,6 +941,10 @@ impl<'a> Checker<'a> {
             } => {
                 let loan = self.expression(initializer, Transfer::Local(*local))?;
                 let place = Place::Local(*local);
+                self.initialize_outcome(place, self.program.local(*local).ty, initializer.span);
+                if let ValueType::Result(ty) = self.program.local(*local).ty {
+                    self.witness(initializer.span, outcomes::Action::Initialize(place, ty))?;
+                }
                 if let Some(custody) = &mut self.cleanup_custody {
                     custody.initialize(place, self.program.local(*local).ty);
                 }
@@ -1113,7 +1230,10 @@ impl<'a> Checker<'a> {
         self.expire();
         let before = self.clone(); // Empty summary/expiry precede this snapshot.
                                    // No operand, no terminal-expression permission, no local normalization.
-        match self.complete_no_value(span) {
+        let completed = self
+            .check_outcome_exit(|_| true, span)
+            .and_then(|_| self.complete_no_value(span));
+        match completed {
             Ok(()) => {
                 if let Some(custody) = &mut self.cleanup_custody {
                     custody.retire(|_| true, span, crate::effects::custody::Kind::BareReturn);
@@ -1190,6 +1310,7 @@ impl<'a> Checker<'a> {
         self.terminal_return = true;
         let result = (|| {
             self.expression(value, Transfer::Return(function))?;
+            self.check_outcome_exit(|_| true, span)?;
             // Fallible final validation belongs in the same transaction. Never
             // discharge recurrence, reset provenance/allocator or clear holds.
             if self.loans.values().any(|loan| loan.held != 0) {
@@ -1231,7 +1352,7 @@ impl<'a> Checker<'a> {
         {
             match ty {
                 ExprType::SharedRef(_) | ExprType::MutableRef(_) => return Err(self.loop_reference_error(span)),
-                ExprType::Record(_) => return Err(self.diagnostic(span, "non-Copy ownership activity is unsupported in while conditions".into(), "recurring condition ownership requires future generalized cyclic ownership analysis; only the loop body permits iteration-local Move values", None)),
+                ExprType::Record(_) | ExprType::Result(_) => return Err(self.diagnostic(span, "non-Copy ownership activity is unsupported in while conditions".into(), "recurring condition ownership requires future generalized cyclic ownership analysis; only the loop body permits iteration-local Move values", None)),
                 _ => {}
             }
         }
@@ -1243,6 +1364,7 @@ impl<'a> Checker<'a> {
         // edge cleanup; display names and finite FutureUses are not loop state.
         let availability = |state: &State| std::mem::discriminant(state);
         self.function == header.function
+            && self.outcomes == header.outcomes
             && self
                 .states
                 .iter()
@@ -1430,6 +1552,7 @@ impl<'a> Checker<'a> {
     fn project_break_exit(&mut self, target: &LoopTarget<'a>, span: Span) -> OwnershipResult {
         // Restricted, non-repairing projection of THIS candidate, never a copy of
         // the canonical exit. The integrity gate must precede these reductions.
+        self.check_outcome_exit(|p| !target.header.states.contains_key(&p), span)?;
         self.remaining = target.outside.clone();
         self.scope_loop_locals(&target.header);
         self.recurrent.pop().expect("validated exact target frame");
@@ -1487,6 +1610,7 @@ impl<'a> Checker<'a> {
         Ok(())
     }
     fn finish_loop_provenance(&mut self, header: &Self, span: Span) -> OwnershipResult {
+        self.check_outcome_exit(|p| !header.states.contains_key(&p), span)?;
         self.scope_loop_locals(header);
         self.expire();
         self.normalize_loop_allocator(header, span, "while backedge")
@@ -1533,13 +1657,40 @@ impl<'a> Checker<'a> {
         let mut no = self.clone();
         let yes_flow = yes.statements_with(then_body, function, after)?;
         let no_flow = no.statements_with(else_body, function, after)?;
+        self.finish_branches(
+            yes,
+            no,
+            yes_flow,
+            no_flow,
+            then_body,
+            else_body,
+            after,
+            condition.span,
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn finish_branches(
+        &mut self,
+        mut yes: Self,
+        mut no: Self,
+        yes_flow: Flow,
+        no_flow: Flow,
+        then_body: &[ValueStatement],
+        else_body: &[ValueStatement],
+        after: &FutureUses,
+        span: Span,
+    ) -> OwnershipResult<Flow> {
         for (branch, flow, body) in [
             (&mut yes, yes_flow, then_body),
             (&mut no, no_flow, else_body),
         ] {
             if flow == Flow::Fallthrough {
+                branch.check_outcome_exit(
+                    |p| !self.states.contains_key(&p),
+                    body.last().map(statement_span).unwrap_or(span),
+                )?;
                 if let Some(custody) = &mut branch.cleanup_custody {
-                    let origin = body.last().map(statement_span).unwrap_or(condition.span);
+                    let origin = body.last().map(statement_span).unwrap_or(span);
                     custody.retire(
                         |p| !self.states.contains_key(&p),
                         origin,
@@ -1566,9 +1717,7 @@ impl<'a> Checker<'a> {
                 self.cleanup_custody = merged_custody;
                 return Ok(if a == b { a } else { Flow::NoFallthrough });
             }
-            (Flow::Fallthrough, Flow::Fallthrough) => {
-                self.join(yes, no, after.clone(), condition.span)?
-            }
+            (Flow::Fallthrough, Flow::Fallthrough) => self.join(yes, no, after.clone(), span)?,
             _ => {
                 let mut survivor = if yes_flow == Flow::Fallthrough {
                     yes
@@ -1604,6 +1753,19 @@ impl<'a> Checker<'a> {
         continuation: FutureUses,
         span: Span,
     ) -> OwnershipResult {
+        self.outcomes = then_state
+            .outcomes
+            .iter()
+            .chain(&else_state.outcomes)
+            .filter(|(p, _)| self.states.contains_key(p))
+            .map(|(p, o)| {
+                let mut fact = *o;
+                if !then_state.outcomes.contains_key(p) || !else_state.outcomes.contains_key(p) {
+                    fact.conditional = Some(span);
+                }
+                (*p, fact)
+            })
+            .collect();
         then_state.validate_incoming_lineage(self, span)?;
         else_state.validate_incoming_lineage(self, span)?;
         then_state.assert_no_holds();
@@ -1680,7 +1842,10 @@ impl<'a> Checker<'a> {
         transfer: Transfer,
     ) -> OwnershipResult<Option<LoanId>> {
         if self.loop_scope.as_ref().is_some_and(|s| s.condition)
-            && matches!(expression.kind, ExprKind::RecordConstruct { .. })
+            && matches!(
+                expression.kind,
+                ExprKind::RecordConstruct { .. } | ExprKind::ResultConstruct { .. }
+            )
         {
             return Err(self.diagnostic(expression.span, "record construction is unsupported in recurring while conditions".into(), "construction produces a non-Copy record; use construction only outside the recurring condition", None));
         }
@@ -1688,6 +1853,23 @@ impl<'a> Checker<'a> {
             self.loop_type(expression.ty, expression.span)?;
         }
         match &expression.kind {
+            ExprKind::ResultConstruct {
+                result,
+                tag,
+                payload,
+                ..
+            } => {
+                self.witness(
+                    expression.span,
+                    outcomes::Action::Construct {
+                        result: *result,
+                        tag: *tag,
+                        payload: payload.span,
+                    },
+                )?;
+                self.expression(payload, Transfer::ResultPayload(*result, *tag))?;
+                Ok(None)
+            }
             ExprKind::RecordConstruct { fields, .. } => {
                 for entry in fields {
                     self.expression(&entry.value, transfer)?;
@@ -1753,9 +1935,16 @@ impl<'a> Checker<'a> {
             }
             ExprKind::Binary { op, left, right } => {
                 self.expression(left, transfer)?;
+                let skip_outcomes = self.outcomes.clone();
                 let skip = self.cleanup_custody.clone();
                 self.expression(right, transfer)?;
                 if matches!(op, crate::hir::BinaryOp::And | crate::hir::BinaryOp::Or) {
+                    for (place, mut fact) in skip_outcomes {
+                        if !self.outcomes.contains_key(&place) {
+                            fact.conditional = Some(expression.span);
+                        }
+                        self.outcomes.insert(place, fact);
+                    }
                     if let (Some(custody), Some(skip)) = (&mut self.cleanup_custody, &skip) {
                         custody.retain_skip(skip);
                     }
@@ -2127,7 +2316,10 @@ impl<'a> Checker<'a> {
             .loop_scope
             .as_ref()
             .is_some_and(|scope| scope.header_places.contains(&place))
-            && matches!(self.metadata(place).1, ValueType::Record(_))
+            && matches!(
+                self.metadata(place).1,
+                ValueType::Record(_) | ValueType::Result(_)
+            )
             && !self.terminal_return
         {
             return Err(self.diagnostic(span, format!("cannot move pre-existing non-Copy value `{}` in while loop", self.metadata(place).0), "the conservative pre-existing-state boundary applies to loop backedges and canonical exits alike; terminal break paths do not relax it; outside the actual return-expression tree, only iteration-local Move values may transfer in the loop body; future generalized cyclic ownership analysis remains unresolved", None));
@@ -2150,6 +2342,28 @@ impl<'a> Checker<'a> {
         }
         if ownership_kind(self.metadata(place).1) == OwnershipKind::Move {
             self.states.insert(place, State::Moved { span, transfer });
+            if matches!(self.metadata(place).1, ValueType::Result(_)) {
+                let ty = match self.metadata(place).1 {
+                    ValueType::Result(ty) => ty,
+                    _ => unreachable!(),
+                };
+                self.witness(
+                    span,
+                    outcomes::Action::Transfer {
+                        place,
+                        result: ty,
+                        destination: transfer,
+                    },
+                )?;
+                if self.outcomes.remove(&place).is_none() {
+                    return Err(self.diagnostic(
+                        span,
+                        "missing Result outcome authority".into(),
+                        "a successful transfer must carry its independent unresolved duty",
+                        None,
+                    ));
+                }
+            }
             if let Some(custody) = &mut self.cleanup_custody {
                 custody.transfer(place);
             }
@@ -2212,6 +2426,8 @@ impl<'a> Checker<'a> {
         }) = self.states.get(&place)
         {
             let destination = match previous {
+                Transfer::Match => "by exhaustive Result match".into(),
+                Transfer::ResultPayload(_, _) => "into a Result payload".into(),
                 Transfer::WriteThrough(reference) => {
                     format!("through reference `{}`", self.metadata(*reference).0)
                 }
@@ -2456,9 +2672,9 @@ mod tests {
             check(&program).unwrap();
         }
         for body in [
-            "let view = &ticket; let alias = view; let moved = ticket; let ok = inspect(alias); return moved;",
-            "let mut owned = ticket; let access = &mut owned; let next = access; let view = &owned; let ok = exclusive(next); return owned;",
-            "let mut owned = ticket; let access = &mut owned; let ok = exclusive(access); let bad = exclusive(access); return owned;",
+            "let view = &ticket; let alias = view; let moved = ticket; let predecessor_ok = inspect(alias); return moved;",
+            "let mut owned = ticket; let access = &mut owned; let next = access; let view = &owned; let predecessor_ok = exclusive(next); return owned;",
+            "let mut owned = ticket; let access = &mut owned; let predecessor_ok = exclusive(access); let bad = exclusive(access); return owned;",
         ] {
             let mut program = typed(&format!("{declarations} fn example(ticket: Ticket) -> Ticket {{ {body} }}"));
             let original = check(&program).unwrap_err();
@@ -5739,7 +5955,7 @@ mod tests {
     }
     #[test]
     fn multi_construction_failure_never_publishes_destination_or_fields() {
-        let p=multiple_typed("fn f(t: Ticket,p: Percent) -> Triple { let result = Triple { middle: consume(t), first: p, last: consume(t) }; return result; }");
+        let p=multiple_typed("fn f(t: Ticket,p: Percent) -> Triple { let predecessor_result = Triple { middle: consume(t), first: p, last: consume(t) }; return predecessor_result; }");
         let f = return_function(&p);
         let ValueStatement::Let {
             local, initializer, ..
@@ -7017,7 +7233,7 @@ mod tests {
     }
     #[test]
     fn initializer_index_borrows_direct_reference_and_unrelated_initializers() {
-        let p = typed("fn f(t: Ticket, flag: bool) -> Percent {let other = flag; let view = &t; let result = view.value; return result;}");
+        let p = typed("fn f(t: Ticket, flag: bool) -> Percent {let other = flag; let view = &t; let predecessor_result = view.value; return predecessor_result;}");
         let f = p.functions()[0].as_ordinary().unwrap();
         let c = Checker::new(&p, f);
         assert!(c.initializers.invalid.is_none());
@@ -7249,6 +7465,7 @@ mod tests {
         c.initializers = Rc::new(Initializers {
             function: f.id,
             entries: BTreeMap::new(),
+            arm_bindings: BTreeSet::new(),
             invalid: None,
         });
         initializer_probe::reset();

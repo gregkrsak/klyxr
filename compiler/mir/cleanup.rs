@@ -82,6 +82,7 @@ impl Flow {
                     return Err("invalid successful owner initialization");
                 }
                 if !matches!(function.blocks[i].statements.get(init.statement), Some(Statement::Let {local, span,..}) if *local == init.local && *span == init.origin.span)
+                    && !matches!(function.blocks[i].statements.get(init.statement), Some(Statement::BindResult {local, pattern_origin,..}) if *local == init.local && *pattern_origin == init.origin.span)
                 {
                     return Err("initialization does not match MIR owner");
                 }

@@ -1449,3 +1449,54 @@ stops retain actual unfinished responsibilities and completed prefixes; no unwin
 rollback, retry, arbitrary destructor, public resource API, ownership inference or
 second ownership checker is added. See the KED-029 implementation ledger and
 accepted exact-head review for evidence. OQ-022/OQ-023/OQ-025/OQ-026 retain their broader questions.
+
+## Frozen KED-031 — Typed recoverable failure and explicit handling
+
+**Status:** Frozen Draft 4, implementation authorized in [Issue #72](https://github.com/gregkrsak/klyxr/issues/72).
+This implementation awaits independent review and Greg's acceptance. KD-007's
+broader Direction Accepted status is unchanged.
+
+The fixed built-in `Result<success: S, failure: F>` is one mutually exclusive
+ordinary owned Move value, including when both payloads are Copy. Payloads are
+exact `bool`, named ranges, records, or finite nested Results. The labels are
+mandatory in that order. `Ok(...)` constructs success; `Error(...)` and `Err(...)`
+are equal official aliases normalized immediately to one canonical Error variant.
+Only those exact syntax spellings and `Result`/`match` are accepted. Their complete
+ASCII case-insensitive spelling families are reserved in every identifier context;
+nearby names such as `ErrorCode` remain available. The labels are contextual.
+
+Construction requires an independently established complete expected Result at
+an exact ordinary return, parameter, or recursively established payload boundary.
+The active payload cannot infer the inactive type. Constructor payloads create no
+new KD-037 named-range literal boundary. KD-025 Result-valued conditional
+initializers, Result replacement, Result references, public record Result fields,
+verified functions and harness Result use remain excluded.
+
+The closed statement `match value { Ok(binding) => { ... } Error(binding) => { ... } }`
+accepts either written arm order and either failure alias. Exactly one canonical
+arm of each kind is required. No wildcard, guard, nested/ref/alternative pattern,
+match expression, or value-producing arm is added. Each arm has a fresh lexical
+LocalId, exact payload type, and no visible-name shadowing. Matching consumes the
+wrapper once, copies a Copy payload or transfers a Move payload, and executes
+only the selected arm. Both bodies are statically checked. An inner Result in the
+selected binding carries its own independent obligation.
+
+The existing ownership checker tracks unresolved outcomes separately from Move
+availability, loans, cleanup, effects, and vacancy. Every successful exit must
+match, return, pass to an exact Result parameter, or transfer to another owner.
+Checks precede scope reduction, break/continue projection and backedges; unioned
+pending facts preserve unhandled branch and short-circuit alternatives. Cleanup
+cannot acknowledge an outcome. Existing conservative loop Move rules remain.
+
+Resource-bearingness is the structural disjunction of both declared payloads;
+only the active payload owns responsibility. Shared bounded variant plans preserve
+ordered roles and nested identities, with cleanup effects unioned over both
+alternatives. Whole-wrapper cleanup has only independently sealed primitive/protocol
+authority. Ordinary matching transfers cleanup to the selected binding.
+
+Manual propagation uses explicit matching and exact Result return. The outgoing
+value is protected before other temporaries and callee owners retire; failed
+cleanup prevents delivery. Results add no implicit effect, authority, rollback,
+retry or unwind. Tool stops never become Error. General enums/generics, Option,
+`?`, conversions, reference payloads, fallible cleanup and production effectful
+APIs remain deferred. See the KED-031 ledger for evidence and its limits.

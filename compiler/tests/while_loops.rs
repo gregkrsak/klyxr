@@ -183,10 +183,10 @@ fn unsupported_loop_grammar_boundaries() {
         "for flag {} return flag;",
         "loop {} return flag;",
         "label: while flag {} return flag;",
-        "let result = while flag {}; return flag;",
+        "let predecessor_result = while flag {}; return flag;",
         "return while flag {};",
-        "let result = id(while flag {}); return flag;",
-        "let mut result = flag; result = while flag {}; return flag;",
+        "let predecessor_result = id(while flag {}); return flag;",
+        "let mut predecessor_result = flag; predecessor_result = while flag {}; return flag;",
     ] {
         bad(&format!("fn id(value: bool) -> bool {{ return value; }} fn f(flag: bool) -> bool {{ {body} }}"), "Parse", "");
     }
