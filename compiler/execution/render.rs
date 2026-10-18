@@ -85,6 +85,91 @@ fn range(out: &mut Output, e: &CheckedExecutable, v: &RangeValue) -> Result<(), 
     let _ = write!(out, "{}({})", r.name, v.value);
     Ok(())
 }
+fn record_value(
+    out: &mut Output,
+    e: &CheckedExecutable,
+    record: hir::RecordId,
+    fields: &[(hir::FieldId, RangeValue)],
+) -> Result<(), ExecutionError> {
+    let r = e
+        .program
+        .records()
+        .get(record.0)
+        .filter(|r| r.id == record && r.fields.len() == fields.len())
+        .ok_or_else(|| ExecutionError::integrity("render record identity"))?;
+    let _ = write!(out, "{} {{ ", r.name);
+    for (i, id) in r.fields.iter().enumerate() {
+        let f = e
+            .program
+            .fields()
+            .get(id.0)
+            .filter(|f| f.id == *id && f.record == record)
+            .ok_or_else(|| ExecutionError::integrity("render field identity"))?;
+        let mut found = fields.iter().filter(|(id, _)| *id == f.id);
+        let (_, v) = found
+            .next()
+            .ok_or_else(|| ExecutionError::integrity("render field missing"))?;
+        if found.next().is_some() || Some(v.ty) != f.range_type() {
+            return Err(ExecutionError::integrity("render field nominal mismatch"));
+        }
+        if i != 0 {
+            let _ = write!(out, ", ");
+        }
+        let _ = write!(out, "{}: ", f.name);
+        range(out, e, v)?;
+        if out.failure.is_some() {
+            break;
+        }
+    }
+    let _ = write!(out, " }}");
+    Ok(())
+}
+fn result_value(
+    out: &mut Output,
+    e: &CheckedExecutable,
+    layers: &[ResultLayer],
+) -> Result<(), ExecutionError> {
+    if layers.is_empty() || layers.len() > hir::results::MAX_RESULT_DEPTH {
+        return Err(ExecutionError::integrity("render Result chain bounds"));
+    }
+    for (index, layer) in layers.iter().enumerate() {
+        let expected = e
+            .program
+            .result_payload(layer.ty, layer.tag)
+            .ok_or_else(|| ExecutionError::integrity("render Result identity"))?;
+        let _ = write!(
+            out,
+            "{}(",
+            match layer.tag {
+                hir::ResultTag::Ok => "Ok",
+                hir::ResultTag::Error => "Error",
+            }
+        );
+        match (&layer.payload, layers.get(index + 1), expected) {
+            (None, Some(child), ValueType::Result(ty)) if child.ty == ty => {}
+            (Some(ResultPayload::Bool(v)), None, ValueType::Bool) => {
+                let _ = write!(out, "Bool({v})");
+            }
+            (Some(ResultPayload::Range(v)), None, ValueType::Range(ty)) if v.ty == ty => {
+                range(out, e, v)?
+            }
+            (Some(ResultPayload::Record { record, fields }), None, ValueType::Record(ty))
+                if *record == ty =>
+            {
+                record_value(out, e, *record, fields)?
+            }
+            _ => {
+                return Err(ExecutionError::integrity(
+                    "render Result active payload correspondence",
+                ))
+            }
+        }
+    }
+    for _ in layers {
+        let _ = write!(out, ")");
+    }
+    Ok(())
+}
 pub(super) fn result(
     e: &CheckedExecutable,
     r: &ExecutionResult,
@@ -92,6 +177,7 @@ pub(super) fn result(
 ) -> Result<String, ExecutionError> {
     let mut out = Output::new(limit)?;
     match r {
+        ExecutionResult::Value(RuntimeValue::Result(layers)) => result_value(&mut out, e, layers)?,
         ExecutionResult::NoValue => {
             let _ = write!(out, "NoValue");
         }
@@ -100,37 +186,7 @@ pub(super) fn result(
         }
         ExecutionResult::Value(RuntimeValue::Range(v)) => range(&mut out, e, v)?,
         ExecutionResult::Value(RuntimeValue::Record { record, fields }) => {
-            let r = e
-                .program
-                .records()
-                .get(record.0)
-                .filter(|r| r.id == *record && r.fields.len() == fields.len())
-                .ok_or_else(|| ExecutionError::integrity("render record identity"))?;
-            let _ = write!(out, "{} {{ ", r.name);
-            for (i, id) in r.fields.iter().enumerate() {
-                let f = e
-                    .program
-                    .fields()
-                    .get(id.0)
-                    .filter(|f| f.id == *id && f.record == *record)
-                    .ok_or_else(|| ExecutionError::integrity("render field identity"))?;
-                let mut found = fields.iter().filter(|(id, _)| *id == f.id);
-                let (_, v) = found
-                    .next()
-                    .ok_or_else(|| ExecutionError::integrity("render field missing"))?;
-                if found.next().is_some() || Some(v.ty) != f.range_type() {
-                    return Err(ExecutionError::integrity("render field nominal mismatch"));
-                }
-                if i != 0 {
-                    let _ = write!(out, ", ");
-                }
-                let _ = write!(out, "{}: ", f.name);
-                range(&mut out, e, v)?;
-                if out.failure.is_some() {
-                    break;
-                }
-            }
-            let _ = write!(out, " }}");
+            record_value(&mut out, e, *record, fields)?;
         }
     }
     out.finish()

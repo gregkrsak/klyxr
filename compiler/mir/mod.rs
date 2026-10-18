@@ -10,6 +10,13 @@ pub struct BasicBlockId(pub(crate) usize);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
+    BindResult {
+        result: hir::ResultTypeId,
+        tag: hir::ResultTag,
+        local: LocalId,
+        match_origin: Span,
+        pattern_origin: Span,
+    },
     CallNoValue {
         function: FunctionId,
         arguments: Vec<TypedExpr>,
@@ -62,6 +69,12 @@ pub enum Statement {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Terminator {
+    Match {
+        result: hir::ResultTypeId,
+        scrutinee: TypedExpr,
+        ok_target: BasicBlockId,
+        error_target: BasicBlockId,
+    },
     ReturnNoValue,
     Goto {
         target: BasicBlockId,
@@ -163,6 +176,30 @@ impl MirFunction {
                 }
                 *mark = 1;
                 match &f.block(id).terminator {
+                    Terminator::Match {
+                        result,
+                        scrutinee,
+                        ok_target,
+                        error_target,
+                    } => {
+                        if scrutinee.ty != hir::ExprType::Result(*result)
+                            || ok_target == error_target
+                        {
+                            return Err("invalid Result dispatch");
+                        }
+                        for (target, tag) in [
+                            (*ok_target, hir::ResultTag::Ok),
+                            (*error_target, hir::ResultTag::Error),
+                        ] {
+                            if !matches!(f.blocks.get(target.0).and_then(|b| b.statements.first()), Some(Statement::BindResult { result: r, tag: t, .. }) if r == result && *t == tag)
+                            {
+                                return Err(
+                                    "Result arm does not begin with its canonical payload transfer",
+                                );
+                            }
+                            pending.push(target);
+                        }
+                    }
                     Terminator::Goto { target } => pending.push(*target),
                     Terminator::Branch {
                         condition,
@@ -182,6 +219,10 @@ impl MirFunction {
         }
         fn expression_valid(expression: &TypedExpr) -> Result<(), &'static str> {
             match &expression.kind {
+                hir::ExprKind::ResultConstruct { result, payload, .. } => {
+                    if expression.ty != hir::ExprType::Result(*result) { return Err("invalid Result constructor type"); }
+                    expression_valid(payload)?;
+                }
                 hir::ExprKind::IntegerLiteral(_) => {
                     if expression.ty != hir::ExprType::IntegerLiteral { return Err("raw integer literal has invalid type"); }
                 }
@@ -204,6 +245,17 @@ impl MirFunction {
         for block in &self.blocks {
             for statement in &block.statements {
                 match statement {
+                    Statement::BindResult {
+                        match_origin,
+                        pattern_origin,
+                        ..
+                    } => {
+                        if pattern_origin.start < match_origin.start
+                            || pattern_origin.end > match_origin.end
+                        {
+                            return Err("invalid Result transfer origin");
+                        }
+                    }
                     Statement::CallNoValue { arguments, .. } => {
                         for argument in arguments {
                             expression_valid(argument)?;
@@ -247,6 +299,7 @@ impl MirFunction {
             }
             match &block.terminator {
                 Terminator::Branch { condition, .. } => expression_valid(condition)?,
+                Terminator::Match { scrutinee, .. } => expression_valid(scrutinee)?,
                 Terminator::Return { value } => expression_valid(value)?,
                 Terminator::Goto { .. } | Terminator::ReturnNoValue => {}
             }
@@ -327,6 +380,8 @@ pub(crate) fn attach_cleanup_effects(
 /// Produced by the same lowering, never reconstructed by the runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OriginKind {
+    ResultMatch,
+    ResultPayloadTransfer,
     TemporaryRegion,
     TemporaryCreation,
     TemporaryTransfer,
@@ -361,7 +416,7 @@ pub(crate) fn lower_with_origins(
         .functions()
         .iter()
         .filter_map(|f| f.as_ordinary())
-        .filter(|_| plans.iter().any(Option::is_some))
+        .filter(|_| plans.iter().any(Option::is_some) || !program.result_types().is_empty())
     {
         #[cfg(test)]
         temporaries::allocation()?;
@@ -378,6 +433,12 @@ fn lower_internal(
     plans: &[Option<hir::resources::CleanupPlan>],
     flows: Vec<Option<temporaries::Flow>>,
 ) -> Result<(MirProgram, Vec<Vec<Origin>>), hir::resources::PlanError> {
+    let result_plans = if program.result_types().is_empty() {
+        Vec::new()
+    } else {
+        let record_effects = program.resources.summaries(program, plans)?;
+        program.variant_plans(plans, &record_effects)?
+    };
     fn replacements(body: &[ValueStatement]) -> bool {
         body.iter().any(|s| match s {
             ValueStatement::Assign { value, .. } => matches!(value.ty, hir::ExprType::Record(_)),
@@ -387,6 +448,7 @@ fn lower_internal(
                 ..
             } => replacements(then_body) || replacements(else_body),
             ValueStatement::While { body, .. } => replacements(body),
+            ValueStatement::Match { arms, .. } => arms.iter().any(|a| replacements(&a.body)),
             _ => false,
         })
     }
@@ -396,7 +458,11 @@ fn lower_internal(
         .iter()
         .filter_map(|f| f.as_ordinary())
         .map(|f| {
-            let bearing = |ty| matches!(ty, hir::ValueType::Record(id) if plans.get(id.0).is_some_and(Option::is_some));
+            let bearing = |ty| match ty {
+                hir::ValueType::Record(id) => plans.get(id.0).is_some_and(Option::is_some),
+                hir::ValueType::Result(id) => result_plans.get(id.0).is_some_and(hir::results::VariantPlan::bearing),
+                _ => false,
+            };
             let resource_locals:Vec<_> = program.locals.iter().filter(|l| l.function==f.id && bearing(l.ty)).map(|l|l.id).collect();
             let parameters:Vec<_> = f.parameters.iter().rev().copied().filter(|id| matches!(program.parameter(*id).ty,hir::ParameterType::Value(ty) if bearing(ty))).collect();
             let protected_return=f.return_type.is_some_and(bearing);
@@ -462,6 +528,7 @@ fn value_statement_span(statement: &ValueStatement) -> Span {
         | ValueStatement::CopyFieldAssign { span, .. }
         | ValueStatement::CopyReferenceFieldAssign { span, .. }
         | ValueStatement::If { span, .. }
+        | ValueStatement::Match { span, .. }
         | ValueStatement::While { span, .. } => *span,
     }
 }
@@ -647,6 +714,15 @@ impl Builder {
         body: &[ValueStatement],
         scope_span: Span,
     ) -> Option<(BasicBlockId, Vec<Statement>)> {
+        self.body_with_binding(current, body, scope_span, None)
+    }
+    fn body_with_binding(
+        &mut self,
+        current: BasicBlockId,
+        body: &[ValueStatement],
+        scope_span: Span,
+        binding: Option<Statement>,
+    ) -> Option<(BasicBlockId, Vec<Statement>)> {
         let scope = self.cleanup.as_mut().map(|flow| {
             let id = cleanup::ScopeId(flow.scopes.len());
             flow.scopes.push(cleanup::Scope {
@@ -666,7 +742,19 @@ impl Builder {
             self.active_scopes.push(id);
             id
         });
-        let result = self.body_inner(current, body);
+        let mut prefix = Vec::new();
+        if let Some(binding) = binding {
+            if let Statement::BindResult {
+                local,
+                pattern_origin,
+                ..
+            } = &binding
+            {
+                self.initialization(current, 0, *local, *pattern_origin);
+            }
+            prefix.push(binding);
+        }
+        let result = self.body_inner(current, body, prefix);
         if let Some(scope) = scope {
             if let Some((tail, _)) = &result {
                 let flow = self.cleanup.as_mut().unwrap();
@@ -725,8 +813,8 @@ impl Builder {
         &mut self,
         mut current: BasicBlockId,
         body: &[ValueStatement],
+        mut statements: Vec<Statement>,
     ) -> Option<(BasicBlockId, Vec<Statement>)> {
-        let mut statements = Vec::new();
         for statement in body {
             let span = match statement {
                 ValueStatement::ReturnNoValue { span }
@@ -740,6 +828,7 @@ impl Builder {
                 | ValueStatement::DerefAssign { span, .. }
                 | ValueStatement::While { span, .. }
                 | ValueStatement::If { span, .. }
+                | ValueStatement::Match { span, .. }
                 | ValueStatement::Return { span, .. } => *span,
             };
             let origin = Origin {
@@ -778,6 +867,60 @@ impl Builder {
                 );
             }
             match statement {
+                ValueStatement::Match {
+                    scrutinee, arms, ..
+                } => {
+                    let hir::ExprType::Result(result) = scrutinee.ty else {
+                        unreachable!("checked Result match");
+                    };
+                    let targets = [self.reserve(), self.reserve()];
+                    let join = arms
+                        .iter()
+                        .any(|a| falls_through(&a.body))
+                        .then(|| self.reserve());
+                    let ok = arms
+                        .iter()
+                        .position(|a| a.tag == hir::ResultTag::Ok)
+                        .expect("checked Ok arm");
+                    let error = 1 - ok;
+                    let origin = Origin {
+                        span,
+                        kind: OriginKind::ResultMatch,
+                    };
+                    self.finish(
+                        current,
+                        std::mem::take(&mut statements),
+                        Terminator::Match {
+                            result,
+                            scrutinee: scrutinee.clone(),
+                            ok_target: targets[ok],
+                            error_target: targets[error],
+                        },
+                        origin,
+                    );
+                    for (arm, target) in arms.iter().zip(targets) {
+                        let binding = Statement::BindResult {
+                            result,
+                            tag: arm.tag,
+                            local: arm.binding,
+                            match_origin: span,
+                            pattern_origin: arm.pattern_span,
+                        };
+                        if let Some((end, body)) =
+                            self.body_with_binding(target, &arm.body, arm.span, Some(binding))
+                        {
+                            self.finish(
+                                end,
+                                body,
+                                Terminator::Goto {
+                                    target: join.expect("match arm fallthrough"),
+                                },
+                                origin,
+                            );
+                        }
+                    }
+                    current = join?;
+                }
                 ValueStatement::ReturnNoValue { .. } => {
                     self.exiting(current, 0, span);
                     self.finish(current, statements, Terminator::ReturnNoValue, origin);
@@ -1038,6 +1181,7 @@ fn falls_through(body: &[ValueStatement]) -> bool {
             | ValueStatement::Return { .. }
             | ValueStatement::ReturnNoValue { .. },
         ) => false,
+        Some(ValueStatement::Match { arms, .. }) => arms.iter().any(|a| falls_through(&a.body)),
         Some(ValueStatement::If {
             then_body,
             else_body,
@@ -2210,5 +2354,118 @@ impl BasicBlock {
 impl BasicBlock {
     pub(crate) fn test_statements_mut(&mut self) -> &mut Vec<Statement> {
         &mut self.statements
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn mutate_result_mir(program: &mut MirProgram, mutation: usize) {
+    let f = program
+        .functions
+        .iter_mut()
+        .find(|f| {
+            f.blocks
+                .iter()
+                .any(|b| matches!(b.terminator, Terminator::Match { .. }))
+        })
+        .unwrap();
+    match mutation {
+        0..=4 => {
+            let b = f
+                .blocks
+                .iter_mut()
+                .find(|b| matches!(b.terminator, Terminator::Match { .. }))
+                .unwrap();
+            let Terminator::Match {
+                result,
+                scrutinee,
+                ok_target,
+                error_target,
+            } = &mut b.terminator
+            else {
+                unreachable!()
+            };
+            match mutation {
+                0 => std::mem::swap(ok_target, error_target),
+                1 => *error_target = *ok_target,
+                2 => *ok_target = BasicBlockId(999),
+                3 => *result = hir::ResultTypeId(999),
+                4 => scrutinee.ty = hir::ExprType::Bool,
+                _ => unreachable!(),
+            }
+        }
+        5..=12 => {
+            let b = f
+                .blocks
+                .iter_mut()
+                .find(|b| matches!(b.statements.first(), Some(Statement::BindResult { .. })))
+                .unwrap();
+            match mutation {
+                5 => {
+                    b.statements.remove(0);
+                }
+                6 => b.statements.insert(1, b.statements[0].clone()),
+                7..=12 => {
+                    let Statement::BindResult {
+                        result,
+                        tag,
+                        local,
+                        match_origin,
+                        pattern_origin,
+                    } = &mut b.statements[0]
+                    else {
+                        unreachable!()
+                    };
+                    match mutation {
+                        7 => *result = hir::ResultTypeId(999),
+                        8 => *tag = hir::ResultTag::Error,
+                        9 => *local = LocalId(999),
+                        10 => match_origin.start += 1,
+                        11 => pattern_origin.end += 1,
+                        12 => std::mem::swap(match_origin, pattern_origin),
+                        _ => unreachable!(),
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+        13..=18 => {
+            let flow = f.temporaries.as_mut().unwrap();
+            let site = flow
+                .sites
+                .iter_mut()
+                .find(|s| s.result_plan.is_some())
+                .unwrap();
+            match mutation {
+                13 => site.result_plan = None,
+                14 => site.result_plan = Some(hir::ResultTypeId(999)),
+                15 => site.plan = Some(hir::RecordId(0)),
+                16 => site.destination = temporaries::Destination::Return,
+                17 => site.transfer.span.start += 1,
+                18 => site.region = temporaries::RegionId(999),
+                _ => unreachable!(),
+            }
+        }
+        19..=23 => {
+            let flow = f.cleanup.as_mut().unwrap();
+            match mutation {
+                19 => flow.scopes[1].parent = None,
+                20 => flow.scopes[1].parent = Some(cleanup::ScopeId(999)),
+                21 => {
+                    flow.blocks
+                        .iter_mut()
+                        .flat_map(|b| &mut b.initialize)
+                        .next()
+                        .unwrap()
+                        .scope = cleanup::ScopeId(0)
+                }
+                22 => {
+                    let b = flow.blocks.iter_mut().find(|b| !b.exit.is_empty()).unwrap();
+                    b.exit.push(b.exit[0]);
+                }
+                23 => flow.protected_return = !flow.protected_return,
+                _ => unreachable!(),
+            }
+        }
+        _ => unreachable!(),
     }
 }

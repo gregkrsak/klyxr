@@ -146,9 +146,9 @@ fn condition_requires_exact_bool_before_ownership() {
 #[test]
 fn conditional_value_syntax_is_rejected() {
     for body in [
-        "let result = if flag {} else {}; return true;",
+        "let predecessor_result = if flag {} else {}; return true;",
         "return if flag {} else {};",
-        "let result = consume(if flag {} else {}); return true;",
+        "let predecessor_result = consume(if flag {} else {}); return true;",
     ] {
         error(&format!("fn consume(value: bool) -> bool {{ return value; }} fn bad(flag: bool) -> bool {{ {body} }}"), "Parse", "expression");
     }
@@ -349,6 +349,9 @@ fn nested_and_sequential_mir_is_deterministic_acyclic_and_has_only_one_return() 
     for (_, b) in f.blocks() {
         for s in b.statements() {
             match s {
+                mir::Statement::BindResult { .. } => {
+                    panic!("unexpected Result binding in predecessor conditional fixture")
+                }
                 mir::Statement::ReplaceOwned { .. } => {
                     panic!("Copy-only fixture has no replacement")
                 }

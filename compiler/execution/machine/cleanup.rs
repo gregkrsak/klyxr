@@ -188,6 +188,15 @@ struct Activation {
     initialized: Vec<Generation>,
 }
 impl State {
+    pub(super) fn work_is_full(&self) -> bool {
+        self.work.len() == self.work.capacity()
+    }
+    pub(super) fn reserve_work(&mut self) -> Result<(), ()> {
+        self.work.try_reserve_exact(1).map_err(|_| ())
+    }
+    pub(super) fn push_reserved_work(&mut self, value: Value) {
+        self.work.push(value);
+    }
     pub(super) fn storage(&self) -> Option<usize> {
         let mut n = size_of::<Self>()
             .checked_add(self.events.capacity().checked_mul(size_of::<Event>())?)?
@@ -593,6 +602,7 @@ impl<'a> Machine<'a> {
             self.charge()?;
             let value = self.resources.as_mut().unwrap().current.take().unwrap();
             match value {
+                Value::Result(id) => self.result_cleanup(id)?,
                 Value::Leaf { .. } => self.release_leaf(value)?,
                 Value::Aggregate { record, fields } => {
                     let Some(hir::resources::CleanupPlan::Fields(plan)) = self
@@ -2208,6 +2218,13 @@ pub(super) mod conservation_tests {
         if let Some(s) = &m.temporaries {
             s.visit_holders(|v, label| append(v, label, &mut out));
         }
+        if let Some(s) = &m.results {
+            for (index, cell) in s.cells.iter().enumerate() {
+                if let Some(v) = &cell.payload {
+                    append(v, format!("Result-cell:{index}"), &mut out);
+                }
+            }
+        }
         out
     }
     fn leaves(value: &Value, ids: &mut Vec<u64>) {
@@ -2264,6 +2281,13 @@ pub(super) mod conservation_tests {
         }
         if let Some(temporaries) = &m.temporaries {
             temporaries.visit_values(|v| leaves(v, &mut owned));
+        }
+        if let Some(results) = &m.results {
+            for cell in &results.cells {
+                if let Some(v) = &cell.payload {
+                    leaves(v, &mut owned);
+                }
+            }
         }
         let mut labelled: Vec<_> = holders(m).iter().map(|(id, _)| *id).collect();
         let mut physical = owned.clone();
@@ -2734,6 +2758,7 @@ mod repair_plan_failure_tests {
                     p.clone(),
                     AdmissionLimits::default(),
                     cleanup_sites.clone(),
+                    Vec::new(),
                 )
             });
             assert!(matches!(result.err().unwrap().kind, ErrorKind::Host(_)));

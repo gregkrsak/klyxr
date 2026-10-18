@@ -30,6 +30,8 @@ pub(crate) struct SiteId(pub(crate) usize);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Destination {
+    Match,
+    ResultPayload(hir::ResultTypeId, hir::ResultTag),
     Local(LocalId),
     Assign(LocalId),
     Field(LocalId, RecordId, FieldId),
@@ -64,6 +66,7 @@ pub(crate) struct Site {
     pub(crate) region: RegionId,
     pub(crate) ty: ExprType,
     pub(crate) plan: Option<RecordId>,
+    pub(crate) result_plan: Option<hir::ResultTypeId>,
     pub(crate) destination: Destination,
     pub(crate) origin: Origin,
     pub(crate) transfer: Origin,
@@ -95,7 +98,7 @@ impl Flow {
         body: &[ValueStatement],
         plans: &[Option<hir::resources::CleanupPlan>],
     ) -> Result<Option<Self>, PlanError> {
-        if plans.iter().all(Option::is_none) {
+        if plans.iter().all(Option::is_none) && p.result_types().is_empty() {
             return Ok(None);
         }
         let mut flow = Self::default();
@@ -113,6 +116,9 @@ impl Flow {
     }
 
     fn bearing(e: &TypedExpr, plans: &[Option<hir::resources::CleanupPlan>]) -> bool {
+        if matches!(e.ty, ExprType::Result(_)) {
+            return true;
+        }
         if matches!(e.ty, ExprType::Record(id) if plans.get(id.0).is_some_and(Option::is_some)) {
             return true;
         }
@@ -198,6 +204,10 @@ impl Flow {
             region,
             ty: e.ty,
             plan,
+            result_plan: match e.ty {
+                ExprType::Result(id) => Some(id),
+                _ => None,
+            },
             destination,
             origin: Origin {
                 span: e.span,
@@ -215,6 +225,7 @@ impl Flow {
         });
         let mut children = Vec::new();
         let count = match &e.kind {
+            ExprKind::ResultConstruct { .. } => 1,
             ExprKind::Call { arguments, .. } => arguments.len(),
             ExprKind::RecordConstruct { fields, .. } => fields.len(),
             ExprKind::IfValue { .. } => 3,
@@ -230,6 +241,20 @@ impl Flow {
             .try_reserve_exact(count)
             .map_err(|_| PlanError::Host("temporary child allocation"))?;
         match &e.kind {
+            ExprKind::ResultConstruct {
+                result,
+                tag,
+                payload,
+                ..
+            } => {
+                children.push(self.expression(
+                    p,
+                    payload,
+                    region,
+                    Destination::ResultPayload(*result, *tag),
+                    plans,
+                )?);
+            }
             ExprKind::Call {
                 function,
                 arguments,
@@ -326,6 +351,16 @@ impl Flow {
     ) -> Result<(), PlanError> {
         for s in body {
             match s {
+                ValueStatement::Match {
+                    scrutinee,
+                    arms,
+                    span,
+                } => {
+                    self.full(p, &[scrutinee], Destination::Match, *span, plans)?;
+                    for arm in arms {
+                        self.body(p, &arm.body, plans)?;
+                    }
+                }
                 ValueStatement::Let {
                     local,
                     initializer,

@@ -33,7 +33,7 @@ fn resolve_error(text: &str) -> Diagnostic {
 
 #[test]
 fn parser_preserves_ordinary_signatures_lets_returns_calls_and_spans() {
-    let text = "function wrapped(current: Percent, used: Percent, enabled: bool) -> bool {\n let result = remaining(current, identity(used));\n return enabled && result == current;\n}";
+    let text = "function wrapped(current: Percent, used: Percent, enabled: bool) -> bool {\n let predecessor_result = remaining(current, identity(used));\n return enabled && predecessor_result == current;\n}";
     let source = format!("{RANGE}\n{text}");
     let parsed = parse_source(&source).unwrap();
     let ast::FunctionDecl::Ordinary(f) = &parsed.functions[0] else {
@@ -53,10 +53,10 @@ fn parser_preserves_ordinary_signatures_lets_returns_calls_and_spans() {
     else {
         panic!("local expected")
     };
-    assert_eq!(name, "result");
+    assert_eq!(name, "predecessor_result");
     assert_eq!(
         &source[span.start..span.end],
-        "let result = remaining(current, identity(used));"
+        "let predecessor_result = remaining(current, identity(used));"
     );
     let ast::ExprKind::Call { callee, arguments } = &initializer.kind else {
         panic!("call expected")
@@ -70,7 +70,7 @@ fn parser_preserves_ordinary_signatures_lets_returns_calls_and_spans() {
     };
     assert_eq!(
         &source[span.start..span.end],
-        "return enabled && result == current;"
+        "return enabled && predecessor_result == current;"
     );
     assert!(matches!(
         value.kind,
@@ -139,7 +139,7 @@ fn ordinary_value_interfaces_accept_records_and_references_with_exact_results() 
 
 #[test]
 fn explicit_returns_are_required_and_cannot_be_implicit_tails() {
-    for body in ["", "let result = value;"] {
+    for body in ["", "let predecessor_result = value;"] {
         assert!(
             type_error(&format!("fn bad(value: Percent) -> Percent {{ {body} }}"))
                 .message
@@ -168,7 +168,7 @@ fn explicit_returns_are_required_and_cannot_be_implicit_tails() {
 fn mutable_copy_assignment_does_not_enable_annotations_or_expression_statements() {
     for spelling in ["mut", "mutable"] {
         compile(&format!(
-            "fn ok(value: Percent) -> Percent {{ let {spelling} x = value; x = value; return x; }}"
+            "fn predecessor_ok(value: Percent) -> Percent {{ let {spelling} x = value; x = value; return x; }}"
         ));
     }
     for body in [
@@ -228,7 +228,7 @@ fn local_initializers_propagate_range_and_boolean_types_by_ids() {
 
 #[test]
 fn function_scope_is_ordered_has_no_self_reference_and_does_not_leak() {
-    for text in ["fn bad(value: Percent) -> Percent { return missing; }", "fn bad(value: Percent) -> Percent { let result = later; let later = value; return result; }", "fn bad(value: Percent) -> Percent { let result = result - 1; return result; }", "fn first(value: Percent) -> Percent { let result = value; return result; } fn second(other: Percent) -> Percent { return result; }", "fn first(value: Percent) -> Percent { return value; } fn second(other: Percent) -> Percent { return value; }"] {
+    for text in ["fn bad(value: Percent) -> Percent { return missing; }", "fn bad(value: Percent) -> Percent { let predecessor_result = later; let later = value; return predecessor_result; }", "fn bad(value: Percent) -> Percent { let predecessor_result = predecessor_result - 1; return predecessor_result; }", "fn first(value: Percent) -> Percent { let predecessor_result = value; return predecessor_result; } fn second(other: Percent) -> Percent { return predecessor_result; }", "fn first(value: Percent) -> Percent { return value; } fn second(other: Percent) -> Percent { return value; }"] {
         assert!(resolve_error(text).message.contains("unknown value"), "{text}");
     }
 }
@@ -244,7 +244,7 @@ fn duplicate_parameters_locals_and_shadowing_are_resolution_errors() {
             .message
             .contains("duplicate declaration"));
     }
-    let program = compile("fn first(value: Percent) -> Percent { let result = value; return result; } fn second(value: Percent) -> Percent { let result = value; return result; }");
+    let program = compile("fn first(value: Percent) -> Percent { let predecessor_result = value; return predecessor_result; } fn second(value: Percent) -> Percent { let predecessor_result = value; return predecessor_result; }");
     assert_ne!(program.locals()[0].id, program.locals()[1].id);
     assert_ne!(
         ordinary(&program, 0).parameters[0],
@@ -280,7 +280,7 @@ fn forward_calls_and_direct_and_indirect_recursion_resolve() {
 
 #[test]
 fn nested_calls_binary_calls_and_call_initializers_carry_declared_result_types() {
-    let program = compile(&format!("{IDENTITY} fn wrapped(current: Percent, used: Percent) -> Percent {{ let result = identity(identity(current - used)); return result; }} fn same(value: Percent) -> bool {{ return identity(value) == value; }} fn enabled(value: bool) -> bool {{ return value; }} fn yes() -> bool {{ return enabled(true); }}"));
+    let program = compile(&format!("{IDENTITY} fn wrapped(current: Percent, used: Percent) -> Percent {{ let predecessor_result = identity(identity(current - used)); return predecessor_result; }} fn same(value: Percent) -> bool {{ return identity(value) == value; }} fn enabled(value: bool) -> bool {{ return value; }} fn yes() -> bool {{ return enabled(true); }}"));
     let range = program.ranges()[0].id;
     let ValueStatement::Let { initializer, .. } = &ordinary(&program, 1).body[0] else {
         panic!("let")
@@ -317,7 +317,7 @@ fn calls_require_exact_arity_and_boolean_or_nominal_argument_types() {
         assert!(error.span.end > error.span.start);
     }
     compile(&format!(
-        "{IDENTITY} fn ok(value: Percent) -> Percent {{ return identity(value - 5); }}"
+        "{IDENTITY} fn predecessor_ok(value: Percent) -> Percent {{ return identity(value - 5); }}"
     ));
     compile(&format!(
         "{IDENTITY} fn formed() -> Percent {{ return identity(5); }}"
@@ -356,8 +356,8 @@ fn literal_locals_remain_untyped_while_range_return_forms() {
     ] {
         assert!(type_error(text).message.contains("return type mismatch"));
     }
-    compile("fn ok() -> Percent { return 0; }");
-    compile("fn ok(value: Percent) -> Percent { let result = value - 5; return result; }");
+    compile("fn predecessor_ok() -> Percent { return 0; }");
+    compile("fn predecessor_ok(value: Percent) -> Percent { let predecessor_result = value - 5; return predecessor_result; }");
 }
 
 #[test]

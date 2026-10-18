@@ -39,7 +39,7 @@ fn newly_valid_different_exclusive_borrow_on_else_edge() {
 }
 #[test]
 fn newly_valid_shared_reference_vs_non_copy_owner_move() {
-    good("fn inspect(value: &Ticket) -> bool { return true; } fn consume(value: Ticket) -> bool { return true; } fn example(flag: bool, ticket: Ticket) -> bool { let view = &ticket; if flag { let result = inspect(view); } else { let result = consume(ticket); } return true; }");
+    good("fn inspect(value: &Ticket) -> bool { return true; } fn consume(value: Ticket) -> bool { return true; } fn example(flag: bool, ticket: Ticket) -> bool { let view = &ticket; if flag { let predecessor_result = inspect(view); } else { let predecessor_result = consume(ticket); } return true; }");
 }
 
 #[test]
@@ -142,20 +142,20 @@ fn conditional_move_join_rule_and_condition_side_moves_are_unchanged() {
 }
 #[test]
 fn direct_shared_call_hold_blocks_later_move_inside_branch() {
-    reject("fn receive(view: &Ticket, ticket: Ticket) -> bool { return true; } fn bad(flag: bool, ticket: Ticket) -> bool { if flag { let result = receive(&ticket, ticket); } return true; }", "shared-borrowed");
+    reject("fn receive(view: &Ticket, ticket: Ticket) -> bool { return true; } fn bad(flag: bool, ticket: Ticket) -> bool { if flag { let predecessor_result = receive(&ticket, ticket); } return true; }", "shared-borrowed");
 }
 #[test]
 fn direct_mutable_call_hold_blocks_later_owner_access_inside_branch() {
-    reject("fn receive(access: &mut Percent, value: Percent) -> bool { return true; } fn bad(flag: bool, value: Percent) -> Percent { let mut owned = value; if flag { let result = receive(&mut owned, owned); } return owned; }", "exclusively borrowed");
+    reject("fn receive(access: &mut Percent, value: Percent) -> bool { return true; } fn bad(flag: bool, value: Percent) -> Percent { let mut owned = value; if flag { let predecessor_result = receive(&mut owned, owned); } return owned; }", "exclusively borrowed");
 }
 #[test]
 fn final_shared_reference_argument_remains_call_held_through_nested_arguments() {
-    reject("fn receive(view: &Ticket, ticket: Ticket) -> bool { return true; } fn identity(ticket: Ticket) -> Ticket { return ticket; } fn bad(flag: bool, ticket: Ticket) -> bool { let view = &ticket; if flag { let result = receive(view, identity(ticket)); } return true; }", "shared-borrowed");
+    reject("fn receive(view: &Ticket, ticket: Ticket) -> bool { return true; } fn identity(ticket: Ticket) -> Ticket { return ticket; } fn bad(flag: bool, ticket: Ticket) -> bool { let view = &ticket; if flag { let predecessor_result = receive(view, identity(ticket)); } return true; }", "shared-borrowed");
 }
 #[test]
 fn final_mutable_argument_remains_call_held_and_inner_calls_release_only_their_holds() {
-    reject("fn receive(access: &mut Percent, value: Percent) -> bool { return true; } fn identity(value: Percent) -> Percent { return value; } fn bad(flag: bool, value: Percent) -> Percent { let mut owned = value; let access = &mut owned; if flag { let result = receive(access, identity(owned)); } return owned; }", "exclusively borrowed");
-    good("fn inspect(view: &Percent) -> bool { return true; } fn receive(first: bool, second: bool) -> bool { return true; } fn exclusive(access: &mut Percent) -> bool { return true; } fn example(flag: bool, value: Percent) -> Percent { let mut owned = value; if flag { let result = receive(inspect(&owned), exclusive(&mut owned)); } return owned; }");
+    reject("fn receive(access: &mut Percent, value: Percent) -> bool { return true; } fn identity(value: Percent) -> Percent { return value; } fn bad(flag: bool, value: Percent) -> Percent { let mut owned = value; let access = &mut owned; if flag { let predecessor_result = receive(access, identity(owned)); } return owned; }", "exclusively borrowed");
+    good("fn inspect(view: &Percent) -> bool { return true; } fn receive(first: bool, second: bool) -> bool { return true; } fn exclusive(access: &mut Percent) -> bool { return true; } fn example(flag: bool, value: Percent) -> Percent { let mut owned = value; if flag { let predecessor_result = receive(inspect(&owned), exclusive(&mut owned)); } return owned; }");
 }
 #[test]
 fn writes_hold_loans_through_rhs_and_do_not_allow_target_handle_transfer() {

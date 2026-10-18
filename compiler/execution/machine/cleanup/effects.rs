@@ -116,7 +116,7 @@ fn short_circuit_skip_and_execution_release_the_actual_owner_once() {
 
 #[test]
 fn nonempty_effects_conserve_partial_call_entry_at_every_fuel_stop() {
-    let e = artifact("fn choose(a:Leaf,b:Leaf)->Leaf effects filesystem{return a;}fn demo() effects io,filesystem{let result=choose(acquire(),acquire());}");
+    let e = artifact("fn choose(a:Leaf,b:Leaf)->Leaf effects filesystem{return a;}fn demo() effects io,filesystem{let predecessor_result=choose(acquire(),acquire());}");
     let full = run(&e);
     let mut partial_entry = false;
     for steps in 1..full.steps {
@@ -299,7 +299,7 @@ fn abort_run(e: &CheckedExecutable) -> Machine<'_> {
 #[test]
 fn ordinary_approved_abort_and_primitive_protocol_have_separate_sealed_authority() {
     use crate::execution::{prepare_ordinary_synthetic, prepare_synthetic};
-    let p=aggregate("fn build()->Pair effects io{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
+    let p=aggregate("fn build()->Pair effects io{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let predecessor_result=build();}");
     let ordinary = prepare_ordinary_synthetic(p.clone(), AdmissionLimits::default()).unwrap();
     assert!(matches!(
         ordinary.domain,
@@ -329,7 +329,7 @@ fn ordinary_approved_abort_and_primitive_protocol_have_separate_sealed_authority
         crate::execution::domain::Domain::Primitive
     ));
     assert_eq!(completed(&abort_run(&primitive)), vec![0, 1]);
-    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
+    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let predecessor_result=build();}");
     let request = abort_request(&p, "build", 1, 1, 0);
     let e = approved(p, vec![request]).unwrap();
     let mut m = abort_run(&e);
@@ -342,7 +342,7 @@ fn ordinary_approved_abort_and_primitive_protocol_have_separate_sealed_authority
 
 #[test]
 fn ordinary_trap_during_pending_construction_adds_no_cleanup_edge() {
-    let p=aggregate("fn zero()->R{return 0;}fn boom()->R{let mut n=zero();n=n-1;return n;}fn build()->Pair effects io{return Pair{last:0,first:0,inert:boom()};}fn demo() effects io,filesystem{let result=build();}");
+    let p=aggregate("fn zero()->R{return 0;}fn boom()->R{let mut n=zero();n=n-1;return n;}fn build()->Pair effects io{return Pair{last:0,first:0,inert:boom()};}fn demo() effects io,filesystem{let predecessor_result=build();}");
     let e = crate::execution::prepare_ordinary_synthetic(p, AdmissionLimits::default()).unwrap();
     let build = e
         .program
@@ -371,7 +371,7 @@ fn ordinary_trap_during_pending_construction_adds_no_cleanup_edge() {
 #[test]
 fn approved_abort_rejects_independent_template_and_domain_mutations() {
     use crate::execution::domain::Domain;
-    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
+    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let predecessor_result=build();}");
     let request = abort_request(&p, "build", 1, 1, 0);
     for mutation in 0..14 {
         let mut e = approved(p.clone(), vec![request]).unwrap();
@@ -417,7 +417,7 @@ fn approved_abort_rejects_independent_template_and_domain_mutations() {
 
 #[test]
 fn approved_abort_binds_actual_frame_pending_membership_and_origin_before_attempt() {
-    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
+    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let predecessor_result=build();}");
     let request = abort_request(&p, "build", 1, 1, 0);
     for mutation in 0..7 {
         let e = approved(p.clone(), vec![request]).unwrap();
@@ -469,7 +469,7 @@ fn ordinary_temporary_injection_is_rejected_before_acquisition() {
 
 #[test]
 fn approved_nested_abort_admits_and_binds_every_affected_frame_before_release() {
-    let mut p=aggregate("fn inner()->Leaf effects io,filesystem{let pending=Pair{last:0,first:0,inert:0};return acquire();}fn outer()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=outer();}");
+    let mut p=aggregate("fn inner()->Leaf effects io,filesystem{let pending=Pair{last:0,first:0,inert:0};return acquire();}fn outer()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let predecessor_result=outer();}");
     let inner = p
         .functions()
         .iter()
@@ -543,7 +543,7 @@ fn approved_nested_abort_admits_and_binds_every_affected_frame_before_release() 
 #[test]
 fn private_abort_metadata_has_exact_admission_neighbors_and_typed_host_failure() {
     use crate::execution::{domain, prepare_in_domain};
-    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
+    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let predecessor_result=build();}");
     let request = abort_request(&p, "build", 1, 1, 0);
     for work in [false, true] {
         let prepare = |bound| {
@@ -611,7 +611,7 @@ fn private_abort_metadata_has_exact_admission_neighbors_and_typed_host_failure()
 
 #[test]
 fn approved_abort_release_failure_keeps_its_observable_prefix_and_stops() {
-    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
+    let p=aggregate("fn build()->Pair effects io,filesystem{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let predecessor_result=build();}");
     let request = abort_request(&p, "build", 1, 1, 0);
     let e = approved(p, vec![request]).unwrap();
     let mut m = Machine::new(&e, ExecutionLimits::default());
@@ -693,7 +693,7 @@ fn empty_cleanup_summary_preserves_owner_but_does_not_own_references_or_inert_mo
 
 #[test]
 fn ordinary_pending_limits_keep_payloads_without_adding_abort_cleanup() {
-    let p=aggregate("fn build()->Pair effects io{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let result=build();}");
+    let p=aggregate("fn build()->Pair effects io{return Pair{last:0,first:0,inert:0};}fn demo() effects io,filesystem{let predecessor_result=build();}");
     let e = crate::execution::prepare_ordinary_synthetic(p, AdmissionLimits::default()).unwrap();
     let full = run(&e);
     let mut pending_stops = 0;
@@ -734,7 +734,7 @@ fn ordinary_pending_limits_keep_payloads_without_adding_abort_cleanup() {
 
 #[test]
 fn recursive_abort_templates_distinguish_identical_sites_in_distinct_frames() {
-    let mut p=aggregate("fn recurse(n:R)->Leaf effects io,filesystem{let pending=Pair{last:0,first:0,inert:0};return acquire();}fn select(n:R)->Leaf effects io,filesystem{let chosen=if n==0{acquire()}else{recurse(n-1)};return chosen;}fn demo() effects io,filesystem{let result=recurse(1);}");
+    let mut p=aggregate("fn recurse(n:R)->Leaf effects io,filesystem{let pending=Pair{last:0,first:0,inert:0};return acquire();}fn select(n:R)->Leaf effects io,filesystem{let chosen=if n==0{acquire()}else{recurse(n-1)};return chosen;}fn demo() effects io,filesystem{let predecessor_result=recurse(1);}");
     let select = p
         .functions()
         .iter()

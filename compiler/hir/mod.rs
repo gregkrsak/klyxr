@@ -4,6 +4,7 @@
 //! and reference invariants. Names and spans are diagnostic metadata.
 use crate::lexer::Span;
 pub(crate) mod resources;
+pub(crate) mod results;
 mod validate;
 
 macro_rules! id {
@@ -19,9 +20,19 @@ id!(FunctionId);
 id!(ParameterId);
 id!(BindingId);
 id!(LocalId);
+id!(ResultTypeId);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResultType {
+    pub id: ResultTypeId,
+    pub success: ValueType,
+    pub failure: ValueType,
+    pub depth: usize,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Program {
+    pub(crate) results: Vec<ResultType>,
     pub(crate) resources: resources::Catalog,
     pub(crate) ranges: Vec<RangeType>,
     pub(crate) records: Vec<Record>,
@@ -140,9 +151,10 @@ pub struct FieldAccess {
     pub ty: RangeTypeId,
     pub span: Span,
 }
-pub use crate::ast::{BinaryOp, BorrowKind, UnaryOp};
+pub use crate::ast::{BinaryOp, BorrowKind, ResultTag, UnaryOp};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExprType {
+    Result(ResultTypeId),
     Bool,
     Range(RangeTypeId),
     Record(RecordId),
@@ -165,6 +177,12 @@ pub struct RecordFieldInit {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprKind {
+    ResultConstruct {
+        result: ResultTypeId,
+        tag: ResultTag,
+        payload: Box<TypedExpr>,
+        variant_span: Span,
+    },
     RecordConstruct {
         record: RecordId,
         fields: Vec<RecordFieldInit>,
@@ -223,6 +241,7 @@ pub struct Subtract {
 /// Declared/materialized values deliberately exclude IntegerLiteral.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValueType {
+    Result(ResultTypeId),
     Bool,
     Range(RangeTypeId),
     Record(RecordId),
@@ -254,6 +273,7 @@ pub enum Place {
 impl From<ValueType> for ExprType {
     fn from(ty: ValueType) -> Self {
         match ty {
+            ValueType::Result(id) => Self::Result(id),
             ValueType::Bool => Self::Bool,
             ValueType::Range(id) => Self::Range(id),
             ValueType::Record(id) => Self::Record(id),
@@ -322,6 +342,11 @@ pub struct ValueFunction {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueStatement {
+    Match {
+        scrutinee: TypedExpr,
+        arms: Vec<MatchArm>,
+        span: Span,
+    },
     ReturnNoValue {
         span: Span,
     },
@@ -384,6 +409,15 @@ pub enum ValueStatement {
         value: TypedExpr,
         span: Span,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchArm {
+    pub tag: ResultTag,
+    pub binding: LocalId,
+    pub pattern_span: Span,
+    pub body: Vec<ValueStatement>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

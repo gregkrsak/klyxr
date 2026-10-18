@@ -16,6 +16,12 @@ fn duplicate(span: Span, name: &str) -> Box<Diagnostic> {
         "names must be unique in this prototype scope",
     )
 }
+fn unreserved(name: &str, span: Span) -> ResolutionResult<()> {
+    if crate::lexer::reserved_result_family(name).is_some() {
+        return Err(error(span, format!("reserved Result-family identifier `{name}`"), "complete Result, Ok, Error, Err, and match spelling families are unavailable as user identifiers"));
+    }
+    Ok(())
+}
 
 /// Resolved names before expression/value-flow typing. No partial program is published.
 #[derive(Debug)]
@@ -27,6 +33,7 @@ pub struct ResolvedProgram {
 /// Source type names are resolved here; the type layer decides legal value types.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ResolvedValueType {
+    Result(hir::ResultTypeId),
     Bool,
     Range(RangeTypeId),
     Record(RecordId),
@@ -66,6 +73,11 @@ pub(crate) struct ResolvedValueFunction {
 }
 #[derive(Debug)]
 pub(crate) enum ResolvedValueStatement {
+    Match {
+        scrutinee: ResolvedExpr,
+        arms: Vec<ResolvedMatchArm>,
+        span: Span,
+    },
     ReturnNoValue {
         span: Span,
     },
@@ -123,6 +135,16 @@ pub(crate) enum ResolvedValueStatement {
     },
 }
 #[derive(Debug)]
+pub(crate) struct ResolvedMatchArm {
+    pub tag: hir::ResultTag,
+    pub binding: LocalId,
+    pub function: FunctionId,
+    pub name: String,
+    pub pattern_span: Span,
+    pub body: Vec<ResolvedValueStatement>,
+    pub span: Span,
+}
+#[derive(Debug)]
 pub(crate) struct ResolvedVerifiedFunction {
     pub id: FunctionId,
     pub name: String,
@@ -147,6 +169,11 @@ pub(crate) struct ResolvedExpr {
 }
 #[derive(Debug)]
 pub(crate) enum ResolvedExprKind {
+    ResultConstruct {
+        tag: hir::ResultTag,
+        payload: Box<ResolvedExpr>,
+        variant_span: Span,
+    },
     RecordConstruct {
         record: RecordId,
         fields: Vec<ResolvedRecordFieldInit>,
@@ -221,10 +248,28 @@ struct Scope {
 
 /// Collect declarations/signatures first, then resolve bodies and ordered harness statements.
 pub fn resolve(ast: &ast::Program) -> Result<ResolvedProgram, Vec<Diagnostic>> {
-    let mut resolver = Resolver::default();
+    resolve_with(ast, None)
+}
+
+pub(crate) fn resolve_bounded(
+    ast: &ast::Program,
+    context: &crate::bounded::Context,
+) -> Result<ResolvedProgram, Vec<Diagnostic>> {
+    resolve_with(ast, Some(context))
+}
+
+fn resolve_with(
+    ast: &ast::Program,
+    context: Option<&crate::bounded::Context>,
+) -> Result<ResolvedProgram, Vec<Diagnostic>> {
+    let mut resolver = Resolver {
+        context,
+        ..Resolver::default()
+    };
     let mut diagnostics = Vec::new();
     let mut types = HashSet::new();
     for range in &ast.ranges {
+        unreserved(&range.name, range.span).map_err(|e| vec![*e])?;
         if !types.insert(&range.name) {
             diagnostics.push(*duplicate(range.span, &range.name));
         }
@@ -249,6 +294,7 @@ pub fn resolve(ast: &ast::Program) -> Result<ResolvedProgram, Vec<Diagnostic>> {
         });
     }
     for (index, record) in ast.records.iter().enumerate() {
+        unreserved(&record.name, record.span).map_err(|e| vec![*e])?;
         if !types.insert(&record.name) {
             diagnostics.push(*duplicate(record.span, &record.name));
         }
@@ -257,6 +303,18 @@ pub fn resolve(ast: &ast::Program) -> Result<ResolvedProgram, Vec<Diagnostic>> {
             .insert(record.name.clone(), RecordId(index));
     }
     for (index, function) in ast.functions.iter().enumerate() {
+        unreserved(function.name(), function.span()).map_err(|e| vec![*e])?;
+        match function {
+            ast::FunctionDecl::Ordinary(f) => {
+                for p in &f.parameters {
+                    unreserved(&p.name, p.span).map_err(|e| vec![*e])?;
+                }
+            }
+            ast::FunctionDecl::Verified(f) => {
+                unreserved(&f.state_param, f.span).map_err(|e| vec![*e])?;
+                unreserved(&f.amount_param, f.span).map_err(|e| vec![*e])?;
+            }
+        }
         if resolver
             .functions
             .insert(function.name().into(), FunctionId(index))
@@ -283,6 +341,7 @@ pub fn resolve(ast: &ast::Program) -> Result<ResolvedProgram, Vec<Diagnostic>> {
             )]);
         }
         for declaration in &record.fields {
+            unreserved(&declaration.name, declaration.span).map_err(|e| vec![*e])?;
             if !names.insert(&declaration.name) {
                 return Err(vec![*duplicate(declaration.span, &declaration.name)]);
             }
@@ -335,7 +394,8 @@ pub fn resolve(ast: &ast::Program) -> Result<ResolvedProgram, Vec<Diagnostic>> {
 }
 
 #[derive(Default)]
-struct Resolver {
+struct Resolver<'a> {
+    context: Option<&'a crate::bounded::Context>,
     program: hir::Program,
     parameters: Vec<ResolvedParameter>,
     local_count: usize,
@@ -345,7 +405,17 @@ struct Resolver {
     ordinary: Vec<bool>,
     bindings: HashMap<String, BindingId>,
 }
-impl Resolver {
+impl Resolver<'_> {
+    fn result_resource_error(&self, failure: crate::bounded::ResourceFailure) -> Box<Diagnostic> {
+        if let Some(context) = self.context {
+            context.fail(failure);
+        }
+        error(
+            failure.span,
+            failure.resource,
+            "Result admission stopped; no partial program is published",
+        )
+    }
     fn prototype_field(&self, record: RecordId, span: Span) -> ResolutionResult<FieldId> {
         let fields = &self.program.record(record).fields;
         if fields.len() != 1 {
@@ -375,8 +445,95 @@ impl Resolver {
             )
         })
     }
-    fn value_type(&self, ty: &ast::ValueType, span: Span) -> ResolutionResult<ResolvedValueType> {
-        let owned = self.owned_type(&ty.name, span)?;
+    fn value_type(
+        &mut self,
+        ty: &ast::ValueType,
+        span: Span,
+    ) -> ResolutionResult<ResolvedValueType> {
+        let owned =
+            if ty.result_nodes.is_empty() {
+                self.owned_type(&ty.name, span)?
+            } else {
+                if ty.result_nodes.len() > 4096 {
+                    return Err(self.result_resource_error(
+                        crate::bounded::ResourceFailure::limit("Result syntax nodes", span),
+                    ));
+                }
+                if ty.name != "Result" || !ty.references.is_empty() {
+                    return Err(error(
+                        span,
+                        "invalid Result type syntax",
+                        "Result interfaces require bounded exact owned payloads",
+                    ));
+                }
+                let mut values: Vec<hir::ValueType> = Vec::new();
+                crate::bounded::result_admission::reserve(
+                    &mut values,
+                    ty.result_nodes.len(),
+                    crate::bounded::result_admission::Allocation::Scratch,
+                    span,
+                )
+                .map_err(|failure| self.result_resource_error(failure))?;
+                for node in &ty.result_nodes {
+                    let value = match node {
+                        ast::ResultTypeSyntax::Owned(name) => match self.owned_type(name, span)? {
+                            ResolvedValueType::Bool => hir::ValueType::Bool,
+                            ResolvedValueType::Range(id) => hir::ValueType::Range(id),
+                            ResolvedValueType::Record(id) => hir::ValueType::Record(id),
+                            _ => {
+                                return Err(error(
+                                    span,
+                                    "invalid Result payload",
+                                    "payloads must be ordinary owned values",
+                                ))
+                            }
+                        },
+                        ast::ResultTypeSyntax::Result { success, failure } => {
+                            let success = *values.get(*success).ok_or_else(|| {
+                                error(
+                                    span,
+                                    "invalid Result success syntax identity",
+                                    "type syntax must be finite postorder",
+                                )
+                            })?;
+                            let failure = *values.get(*failure).ok_or_else(|| {
+                                error(
+                                    span,
+                                    "invalid Result failure syntax identity",
+                                    "type syntax must be finite postorder",
+                                )
+                            })?;
+                            let id = self.program.intern_result(success, failure).map_err(
+                                |failure| {
+                                    match failure {
+                                hir::results::AdmissionError::Source(message) => error(
+                                    span,
+                                    message,
+                                    "canonical Result identities preserve ordered payload roles",
+                                ),
+                                hir::results::AdmissionError::Resource(mut failure) => {
+                                    failure.span = span;
+                                    self.result_resource_error(failure)
+                                }
+                                }
+                                },
+                            )?;
+                            hir::ValueType::Result(id)
+                        }
+                    };
+                    values.push(value);
+                }
+                match values.last() {
+                    Some(hir::ValueType::Result(id)) => ResolvedValueType::Result(*id),
+                    _ => {
+                        return Err(error(
+                            span,
+                            "incomplete Result type syntax",
+                            "a complete Result root is required",
+                        ))
+                    }
+                }
+            };
         if ty.references.len() > 1 {
             return Ok(ResolvedValueType::NestedReference);
         }
@@ -387,6 +544,13 @@ impl Resolver {
             ResolvedValueType::Bool => hir::ReferentType::Bool,
             ResolvedValueType::Range(id) => hir::ReferentType::Range(id),
             ResolvedValueType::Record(id) => hir::ReferentType::Record(id),
+            ResolvedValueType::Result(_) => {
+                return Err(error(
+                    span,
+                    "Result reference interfaces are excluded",
+                    "Result parameters and returns must be owned",
+                ))
+            }
             _ => unreachable!("owned name resolution produces a non-reference type"),
         };
         Ok(match kind {
@@ -535,6 +699,25 @@ impl Resolver {
         let mut body = Vec::new();
         for (index, statement) in statements.iter().enumerate() {
             body.push(match statement {
+                ast::ValueStatement::Match { scrutinee, arms, span } => {
+                    if arms.len() != 2 || arms[0].tag == arms[1].tag {
+                        return Err(error(*span, "Result match requires one Ok and one failure arm (Error or Err)", "duplicate or missing canonical variants are forbidden"));
+                    }
+                    let scrutinee = self.expression(scrutinee, scope, false)?;
+                    let mut resolved_arms = Vec::new();
+                    for arm in arms {
+                        if crate::lexer::reserved_result_family(&arm.binding).is_some() || scope.values.contains_key(&arm.binding) {
+                            return Err(error(arm.pattern_span, "invalid Result arm binding", "bindings must be unreserved and cannot shadow a visible name"));
+                        }
+                        let binding = LocalId(self.local_count);
+                        self.local_count += 1;
+                        let mut child = scope.clone();
+                        child.values.insert(arm.binding.clone(), Reference::Local(binding));
+                        let body = self.value_statements(function, &arm.body, &mut child, loop_depth)?;
+                        resolved_arms.push(ResolvedMatchArm { tag: arm.tag, binding, function, name: arm.binding.clone(), pattern_span: arm.pattern_span, body, span: arm.span });
+                    }
+                    ResolvedValueStatement::Match { scrutinee, arms: resolved_arms, span: *span }
+                }
                 ast::ValueStatement::Break { span } => {
                     if loop_depth == 0 {
                         return Err(error(
@@ -597,6 +780,7 @@ impl Resolver {
                     initializer,
                     span,
                 } => {
+                    unreserved(name, *span)?;
                     if scope.values.contains_key(name) {
                         return Err(duplicate(*span, name));
                     }
@@ -674,7 +858,8 @@ impl Resolver {
                     | ast::ValueStatement::Break { span }
                     | ast::ValueStatement::Return { span, .. }
                     | ast::ValueStatement::ReturnNoValue { span }
-                    | ast::ValueStatement::If { span, .. } => *span,
+                    | ast::ValueStatement::If { span, .. }
+                    | ast::ValueStatement::Match { span, .. } => *span,
                     _ => unreachable!("only return/break/continue/conditional can terminate here"),
                 };
                 return Err(error(span, "statements after a terminal path with no fallthrough are unsupported", "return/break/continue must terminate its lexical block; only real fallthrough paths can have a suffix"));
@@ -804,6 +989,12 @@ impl Resolver {
                 Some(Reference::Local(id)) => ResolvedExprKind::Local(*id),
                 None => return Err(error(expression.span, format!("unknown {} `{name}`", if scope.state.is_some() { "parameter" } else { "value" }), "parameters are visible at entry; locals must be declared before use in this function")),
             },
+            ast::ExprKind::ResultConstruct { tag, payload, variant_span } => {
+                if scope.state.is_some() {
+                    return Err(error(expression.span, "Result construction is ordinary-only", "verified and harness Result forms are excluded"));
+                }
+                ResolvedExprKind::ResultConstruct { tag: *tag, payload: Box::new(self.expression(payload, scope, false)?), variant_span: *variant_span }
+            }
             ast::ExprKind::Deref { reference } => ResolvedExprKind::Deref {
                 reference: self.reference_place(reference, scope, expression.span)?,
             },
@@ -862,6 +1053,7 @@ impl Resolver {
     fn statement(&mut self, statement: &ast::Statement) -> ResolutionResult<hir::Statement> {
         match statement {
             ast::Statement::Binding(binding) => {
+                unreserved(&binding.name, binding.span)?;
                 if self.bindings.contains_key(&binding.name) {
                     return Err(duplicate(binding.span, &binding.name));
                 }

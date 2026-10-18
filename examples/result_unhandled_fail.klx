@@ -1,0 +1,3 @@
+// Intentional Ownership error: scope cleanup cannot acknowledge an outcome.
+fn produce() -> Result<success: bool, failure: bool> { return Err(false); }
+fn demo() { let pending = produce(); }

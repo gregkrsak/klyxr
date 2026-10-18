@@ -85,7 +85,7 @@ fn shared_and_mutable_copy_reads_work_repeatedly() {
 }
 #[test]
 fn dereference_has_exact_canonical_referent_type_and_place() {
-    let program = valid("fn example(value: Percent) -> Percent { let view = &value; let result = *view; return result; } fn set(value: &mut Percent, replacement: Percent) -> Percent { *value = replacement; return *value; }");
+    let program = valid("fn example(value: Percent) -> Percent { let view = &value; let predecessor_result = *view; return predecessor_result; } fn set(value: &mut Percent, replacement: Percent) -> Percent { *value = replacement; return *value; }");
     let range = program.ranges()[0].id;
     let example = program.functions()[4].as_ordinary().unwrap();
     let ValueStatement::Let {
@@ -185,7 +185,7 @@ fn transferred_mutable_parameters_cannot_be_read_or_written() {
 }
 #[test]
 fn moved_from_local_reference_cannot_be_read_or_written() {
-    for operation in ["let result = *first;", "*first = replacement;"] {
+    for operation in ["let predecessor_result = *first;", "*first = replacement;"] {
         let error = ownership_error(&format!("fn bad(value: Percent, replacement: Percent) -> Percent {{ let mut owned = value; let first = &mut owned; let second = first; {operation} return owned; }}"));
         assert_eq!(error.message, "use of moved value `first`");
         assert!(error.known[0].contains("into local `second`"));
@@ -273,7 +273,7 @@ fn arbitrary_dereference_operands_and_field_projection_remain_unsupported() {
 #[test]
 fn assignment_expressions_compound_assignment_and_reference_projected_writes_stay_absent() {
     for body in [
-        "let result = (*value = true); return result;",
+        "let predecessor_result = (*value = true); return predecessor_result;",
         "return (*value = true);",
         "*value = *value = true; return true;",
         "*value -= true; return true;",
@@ -308,7 +308,10 @@ fn future_shared_read_and_alias_read_keep_shared_loans_live() {
 }
 #[test]
 fn final_mutable_read_or_write_allows_owner_recovery() {
-    for last in ["let result = *access;", "*access = replacement;"] {
+    for last in [
+        "let predecessor_result = *access;",
+        "*access = replacement;",
+    ] {
         valid(&format!("fn example(value: Percent, replacement: Percent) -> Percent {{ let mut owned = value; let access = &mut owned; {last} return owned; }}"));
     }
     valid("fn example(value: Percent, replacement: Percent) -> Percent { let mut owned = value; let access = &mut owned; *access = replacement; let observed = *access; return owned; }");

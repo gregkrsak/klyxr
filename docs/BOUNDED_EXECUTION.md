@@ -320,3 +320,62 @@ The [KED-030 ledger](engineering/KED-030-IMPLEMENTATION-LEDGER.md) records compl
 debug/release identity reconciliation, all corrections and authoritative GitHub
 workflows. Specification freeze is separate from independent implementation review
 and acceptance. No local Rust executable evidence is claimed.
+
+## Frozen KED-031 typed outcomes
+
+`cargo run --locked --bin klyxr -- run examples/result_handling.klx --function demo`
+prints `Error(ErrorCode(1))`; `success_demo` prints `Reading(42)`. Both Error and
+Err are accepted source aliases. Public Result output uses a flat active chain
+and one Bool/range/ordinary-record leaf, avoiding recursively owned output trees.
+Depth, canonical nominal identities, selected types and output allowance are checked.
+Private resource-bearing Result entries reject before execution/acquisition.
+
+Type syntax and canonical tables have finite postorder identities and maximum
+nesting 32, additionally bounded by configured admission depth/token limits.
+Result programs reserve the existing frontend envelope plus `512*n^2 + 128*d*h`
+bytes for outcome facts/snapshots and immutable witness copies, and a checked
+`256*n^4` work ceiling; n is the larger existing node envelope or canonical holder
+count, d is configured traversal depth, and h is the holder/type/function count.
+When nonempty cleanup evidence is also present, both storage reservations combine
+and the work ceiling is `896*n^4` plus source bytes.
+The retained event count cannot exceed the reserved quadratic bound. Non-Result
+programs retain their predecessor envelope. Variant tables and exact correspondence
+include ordered payload roles, nested identities, effects, arms, bindings and origins.
+
+Lazy cell, match-protection and inert record-staging capacities are prospectively
+charged, including physical payload storage once. Cells retain actual payloads
+through fallible publication, call entry, protected return and selected binding
+reservation; handles and history never count as second payloads. Nested payload
+links remain flat. Each Result cell binds the approved constructor's tag/type/origin,
+including equal-typed alternatives. Fuel charges constructor evaluation/publication,
+dispatch, active transfer and arm entry, plus existing region/call/cleanup work.
+No unselected body or inactive payload executes. Consumed cells remain bounded
+accounted metadata; long-running loops can exhaust storage without an unwind.
+
+Outcome obligations are compile-time evidence from the one ownership checker.
+Runtime enforces approved custody transitions rather than reconstructing ownership
+or match coverage. All structured errors stop ordinary resume. No trap, limit,
+Host, integrity or cleanup failure becomes Error; protected failure returns cannot
+reach callers after failed cleanup. Whole-wrapper traversal is separately sealed
+primitive/protocol evidence. See the KED-031 ledger and explicit evidence lanes.
+
+### K31-MR01 Result admission classification repair
+
+Result syntax-node storage, resolution scratch and canonical-table reservations
+use fallible reservation and retain typed Host failures through bounded public
+preparation. Configured Result syntax depth/node and canonical count/nesting
+exhaustion retain typed Limit failures. Neither category publishes an executable
+or becomes a source Error. The CLI's existing Host reporting path returns class 2.
+Malformed labels, unknown or excluded payload types and nominal mismatches remain
+frontend diagnostics; no syntax, ownership or runtime representation is changed.
+
+Private test-build injection selects only actual growth at each of the three
+reservation sites, including failure after earlier successful admission work.
+It is absent from production and cannot be selected by source or CLI options.
+The canonical table admits exactly 4,096 distinct ordered pairs and nesting 32;
+its next distinct pair or nesting 33 is a configured Limit. Existing source
+syntax traversal also counts its owned leaf: at configured depth 32 it admits
+31 nested Result wrappers and rejects 32. The separate syntax-node control
+admits 4,095 nodes and rejects the next well-formed binary-tree size, 4,097,
+against the 4,096-node ceiling. These private controls isolate individual limits
+from earlier token/syntax ceilings; they do not grant execution authority.

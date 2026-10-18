@@ -92,6 +92,23 @@ pub struct RangeValue {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeValue {
+    /// Flat outer-to-inner active chain, with one non-Result leaf payload.
+    Result(Vec<ResultLayer>),
+    Bool(bool),
+    Range(RangeValue),
+    Record {
+        record: hir::RecordId,
+        fields: Vec<(hir::FieldId, RangeValue)>,
+    },
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResultLayer {
+    pub ty: hir::ResultTypeId,
+    pub tag: hir::ResultTag,
+    pub payload: Option<ResultPayload>,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResultPayload {
     Bool(bool),
     Range(RangeValue),
     Record {
@@ -175,6 +192,7 @@ impl std::error::Error for ExecutionError {}
 // catches compiler-internal replacement with a merely typed program as well as
 // numeric-ID-aligned substitutions; this never re-runs ownership at execution.
 struct Approval {
+    outcomes: Vec<crate::ownership::outcomes::Witness>,
     program: hir::Program,
     cleanup_sites: Vec<crate::effects::custody::Site>,
     domain: domain::Domain,
@@ -187,6 +205,7 @@ struct Approval {
 /// let executable = CheckedExecutable { program };
 /// ```
 pub struct CheckedExecutable {
+    outcomes: Vec<crate::ownership::outcomes::Witness>,
     program: hir::Program,
     mir: mir::MirProgram,
     origins: Vec<Vec<Origin>>,
@@ -198,6 +217,7 @@ pub struct CheckedExecutable {
     limits: AdmissionLimits,
     cleanup_plans: Vec<Option<hir::resources::CleanupPlan>>,
     cleanup_effects: Vec<crate::effects::EffectSet>,
+    result_plans: Vec<hir::results::VariantPlan>,
     domain: domain::Domain,
 }
 impl CheckedExecutable {
@@ -301,6 +321,31 @@ impl CheckedExecutable {
                 "canonical cleanup effect summary correspondence",
             ));
         }
+        if self.result_plans
+            != self
+                .program
+                .variant_plans(&plans, &summaries)
+                .map_err(ExecutionError::from)?
+        {
+            return Err(ExecutionError::integrity(
+                "canonical Result variant plan/effect correspondence",
+            ));
+        }
+        if !self.program.result_types().is_empty() {
+            c.reserve_outcomes(
+                self.program.locals.len()
+                    + self.program.parameters.len()
+                    + self.program.result_types().len()
+                    + self.program.functions.len(),
+            )?;
+        }
+        if self.outcomes.len() > self.limits.tokens.saturating_mul(self.limits.tokens)
+            || self.outcomes != self.approval.outcomes
+        {
+            return Err(ExecutionError::integrity(
+                "immutable Result outcome witness correspondence",
+            ));
+        }
         if self.program != self.approval.program {
             return Err(ExecutionError::integrity(
                 "frontend ownership approval mismatch",
@@ -399,9 +444,10 @@ pub fn prepare_execution(
                 )
             })
     })?;
-    let resolved = crate::resolve::resolve(&ast).map_err(|e| frontend("resolve", e, &context))?;
+    let resolved = crate::resolve::resolve_bounded(&ast, &context)
+        .map_err(|e| frontend("resolve", e, &context))?;
     let program = crate::types::check(resolved).map_err(|e| frontend("type", e, &context))?;
-    let cleanup_sites = crate::ownership::check_bounded(&program, &context)
+    let (cleanup_sites, outcomes) = crate::ownership::evidence_bounded(&program, &context)
         .map_err(|e| frontend("ownership", e, &context))?;
     if let Some(e) = context.failure.get() {
         return Err(e.into());
@@ -409,7 +455,7 @@ pub fn prepare_execution(
     crate::effects::calls::check(&program).map_err(|e| frontend("effects", e, &context))?;
     crate::effects::custody::check(&program, &cleanup_sites)
         .map_err(|e| frontend("effects", e, &context))?;
-    seal(program, limits, cleanup_sites)
+    seal(program, limits, cleanup_sites, outcomes)
 }
 impl From<hir::resources::PlanError> for ExecutionError {
     fn from(error: hir::resources::PlanError) -> Self {
@@ -432,13 +478,21 @@ fn seal(
     program: hir::Program,
     limits: AdmissionLimits,
     cleanup_sites: Vec<crate::effects::custody::Site>,
+    outcomes: Vec<crate::ownership::outcomes::Witness>,
 ) -> Result<CheckedExecutable, ExecutionError> {
-    seal_in_domain(program, limits, cleanup_sites, domain::Request::Ordinary)
+    seal_in_domain(
+        program,
+        limits,
+        cleanup_sites,
+        outcomes,
+        domain::Request::Ordinary,
+    )
 }
 fn seal_in_domain(
     program: hir::Program,
     limits: AdmissionLimits,
     cleanup_sites: Vec<crate::effects::custody::Site>,
+    outcomes: Vec<crate::ownership::outcomes::Witness>,
     request: domain::Request,
 ) -> Result<CheckedExecutable, ExecutionError> {
     let (mut mir, origins) = mir::lower_with_origins(&program).map_err(ExecutionError::from)?;
@@ -463,12 +517,34 @@ fn seal_in_domain(
         limits,
         request,
     )?;
+    let result_plans = program
+        .variant_plans(&cleanup_plans, &cleanup_effects)
+        .map_err(ExecutionError::from)?;
+    #[cfg(test)]
+    if !outcomes.is_empty() && crate::ownership::outcomes::allocation_fails() {
+        return Err(ExecutionError::new(
+            ErrorKind::Host("immutable Result witness allocation"),
+            START,
+        ));
+    }
+    let mut approved_outcomes = Vec::new();
+    approved_outcomes
+        .try_reserve_exact(outcomes.len())
+        .map_err(|_| {
+            ExecutionError::new(
+                ErrorKind::Host("immutable Result witness allocation"),
+                START,
+            )
+        })?;
+    approved_outcomes.extend_from_slice(&outcomes);
     let approval = Rc::new(Approval {
+        outcomes: approved_outcomes,
         program: program.clone(),
         cleanup_sites,
         domain: domain.clone(),
     });
     let executable = CheckedExecutable {
+        outcomes,
         program,
         mir,
         origins,
@@ -478,6 +554,7 @@ fn seal_in_domain(
         limits,
         cleanup_plans,
         cleanup_effects,
+        result_plans,
         domain,
     };
     executable.validate()?;
@@ -583,9 +660,22 @@ pub fn execute(
             ));
         }
     }
+    if let Some(ValueType::Result(id)) = f.return_type {
+        if executable
+            .result_plans
+            .get(id.0)
+            .is_some_and(hir::results::VariantPlan::bearing)
+        {
+            return Err(ExecutionError::integrity(
+                "live resource Result cannot cross public boundary",
+            ));
+        }
+    }
     machine::Machine::new(executable, limits).run(entry)
 }
 
+#[cfg(test)]
+mod result_admission_tests;
 #[cfg(test)]
 mod tests;
 mod validate;
@@ -599,7 +689,7 @@ fn prepare_synthetic(
     prepare_in_domain(program, limits, domain::Request::Primitive)
 }
 #[cfg(test)]
-fn prepare_ordinary_synthetic(
+pub(crate) fn prepare_ordinary_synthetic(
     program: hir::Program,
     limits: AdmissionLimits,
 ) -> Result<CheckedExecutable, ExecutionError> {
@@ -622,7 +712,7 @@ fn prepare_in_domain(
         0,
     )?;
     validate::program_shape(&program, &context)?;
-    let cleanup_sites = crate::ownership::check_bounded(&program, &context)
+    let (cleanup_sites, outcomes) = crate::ownership::evidence_bounded(&program, &context)
         .map_err(|e| frontend("ownership", e, &context))?;
     if let Some(e) = context.failure.get() {
         return Err(e.into());
@@ -630,7 +720,7 @@ fn prepare_in_domain(
     crate::effects::calls::check(&program).map_err(|e| frontend("effects", e, &context))?;
     crate::effects::custody::check(&program, &cleanup_sites)
         .map_err(|e| frontend("effects", e, &context))?;
-    seal_in_domain(program, limits, cleanup_sites, domain)
+    seal_in_domain(program, limits, cleanup_sites, outcomes, domain)
 }
 
 #[cfg(test)]
@@ -1118,6 +1208,192 @@ mod temporary_authority_tests {
                 prepare_synthetic(p.clone(), limits).err().unwrap().kind,
                 ErrorKind::ConfiguredLimit(_)
             ));
+        }
+    }
+}
+
+#[cfg(test)]
+mod result_authority_tests {
+    use super::*;
+    const SOURCE: &str = "fn make()->Result<success:bool,failure:bool>{return Ok(true);}fn demo()->bool{let pending=make();match pending{Ok(value)=>{return value;}Err(problem)=>{return problem;}}}";
+    #[test]
+    fn independent_result_hir_witness_plan_and_origin_mutations_reject_opaque_approval() {
+        for mutation in 0..19 {
+            let mut e = prepare_execution(SOURCE, AdmissionLimits::default()).unwrap();
+            match mutation {
+                0 => e.outcomes.clear(),
+                1 => {
+                    let last = e.outcomes.last().unwrap().clone();
+                    e.outcomes.push(last);
+                }
+                2 => e.outcomes.swap(0, 1),
+                3 => e.result_plans.clear(),
+                4 => e.result_plans[0].result = hir::ResultTypeId(99),
+                5 => {
+                    e.result_plans[0].success =
+                        Some(hir::results::VariantChild::Result(hir::ResultTypeId(0)))
+                }
+                6 => e.result_plans[0].resource_bearing = true,
+                7 => {
+                    e.result_plans[0].effects.insert(crate::effects::Effect::Io);
+                }
+                8 => e.origins[1][0].span.start += 1,
+                9 => {
+                    let hir::Function::Ordinary(f) = &mut e.program.functions[0] else {
+                        panic!()
+                    };
+                    let hir::ValueStatement::Return { value, .. } = &mut f.body[0] else {
+                        panic!()
+                    };
+                    let hir::ExprKind::ResultConstruct { tag, .. } = &mut value.kind else {
+                        panic!()
+                    };
+                    *tag = hir::ResultTag::Error;
+                }
+                10..=17 => {
+                    let hir::Function::Ordinary(f) = &mut e.program.functions[1] else {
+                        panic!()
+                    };
+                    let hir::ValueStatement::Match { arms, .. } = &mut f.body[1] else {
+                        panic!()
+                    };
+                    match mutation {
+                        10 => {
+                            arms.pop();
+                        }
+                        11 => arms.push(arms[0].clone()),
+                        12 => arms.swap(0, 1),
+                        13 => arms[0].binding = arms[1].binding,
+                        14 => arms[0].binding = hir::LocalId(99),
+                        15 => arms[0].pattern_span.start += 1,
+                        16 => arms[0].span.end += 1,
+                        17 => arms[0].tag = hir::ResultTag::Error,
+                        _ => unreachable!(),
+                    }
+                }
+                18 => e.program.locals[1].function = hir::FunctionId(0),
+                _ => unreachable!(),
+            }
+            assert!(e.validate().is_err(), "mutation {mutation}");
+            assert!(
+                execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).is_err(),
+                "mutation {mutation}"
+            );
+        }
+    }
+    #[test]
+    fn independent_mir_result_dispatch_binding_transfer_scope_and_temporary_mutations_reject() {
+        for mutation in 0..19 {
+            let mut e = prepare_execution(SOURCE, AdmissionLimits::default()).unwrap();
+            mir::mutate_result_mir(&mut e.mir, mutation);
+            assert!(e.validate().is_err(), "mutation {mutation}");
+            assert!(execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).is_err());
+        }
+    }
+    #[test]
+    fn result_outcome_admission_has_exact_storage_and_work_neighbors() {
+        for work in [false, true] {
+            let mut low = 1u64;
+            let mut high = if work {
+                AdmissionLimits::default().frontend_work
+            } else {
+                AdmissionLimits::default().working_storage as u64
+            };
+            let prepare = |bound| {
+                let mut limits = AdmissionLimits::default();
+                if work {
+                    limits.frontend_work = bound;
+                } else {
+                    limits.working_storage = bound as usize;
+                }
+                prepare_execution(SOURCE, limits)
+            };
+            assert!(prepare(high).is_ok());
+            while low < high {
+                let mid = low + (high - low) / 2;
+                if prepare(mid).is_ok() {
+                    high = mid;
+                } else {
+                    low = mid + 1;
+                }
+            }
+            assert!(prepare(low).is_ok());
+            let error = prepare(low - 1).err().unwrap();
+            assert!(
+                matches!(
+                    error.kind,
+                    ErrorKind::ConfiguredLimit(
+                        "Result outcome storage reservation" | "Result outcome work reservation"
+                    )
+                ),
+                "{work}: {error:?}"
+            );
+        }
+    }
+    #[test]
+    fn detected_result_witness_and_variant_plan_allocation_failures_publish_no_artifact() {
+        for witness in [true, false] {
+            let mut succeeded = false;
+            for cut in 0..256 {
+                if witness {
+                    crate::ownership::outcomes::FAIL_ALLOCATION.with(|f| f.set(Some(cut)));
+                } else {
+                    hir::resources::FAIL_PLAN_ALLOCATION.with(|f| f.set(Some(cut)));
+                }
+                let outcome = prepare_execution(SOURCE, AdmissionLimits::default());
+                crate::ownership::outcomes::FAIL_ALLOCATION.with(|f| f.set(None));
+                hir::resources::FAIL_PLAN_ALLOCATION.with(|f| f.set(None));
+                match outcome {
+                    Ok(_) => {
+                        succeeded = true;
+                        break;
+                    }
+                    Err(error) => assert!(
+                        matches!(error.kind, ErrorKind::Host(_)),
+                        "{witness}/{cut}: {error:?}"
+                    ),
+                }
+            }
+            assert!(succeeded);
+        }
+    }
+    #[test]
+    fn result_rendering_rejects_forged_flat_payloads_and_enforces_output_limits() {
+        let e = prepare_execution(
+            "fn demo()->Result<success:bool,failure:bool>{return Err(false);}",
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        let actual = execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).unwrap();
+        for limit in 1..18 {
+            assert!(e.render_result(&actual, limit).is_err());
+        }
+        assert_eq!(e.render_result(&actual, 18).unwrap(), "Error(Bool(false))");
+        assert!(render::with_allocation_failure(|| e.render_result(&actual, 100)).is_err());
+        for layers in [
+            vec![],
+            vec![ResultLayer {
+                ty: hir::ResultTypeId(0),
+                tag: hir::ResultTag::Error,
+                payload: None,
+            }],
+            vec![ResultLayer {
+                ty: hir::ResultTypeId(99),
+                tag: hir::ResultTag::Ok,
+                payload: Some(ResultPayload::Bool(true)),
+            }],
+            vec![
+                ResultLayer {
+                    ty: hir::ResultTypeId(0),
+                    tag: hir::ResultTag::Ok,
+                    payload: Some(ResultPayload::Bool(true))
+                };
+                33
+            ],
+        ] {
+            assert!(e
+                .render_result(&ExecutionResult::Value(RuntimeValue::Result(layers)), 100)
+                .is_err());
         }
     }
 }

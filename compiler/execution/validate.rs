@@ -13,6 +13,11 @@ fn bad() -> ExecutionError {
 }
 fn ty(p: &hir::Program, t: ExprType) -> Result<(), ExecutionError> {
     match t {
+        ExprType::Result(id) => {
+            if p.result_type(id).is_none() {
+                return Err(bad());
+            }
+        }
         ExprType::Range(id) => {
             if p.ranges()
                 .get(id.0)
@@ -82,11 +87,27 @@ pub(super) fn expression(
     if depth > c.limits.traversal_depth {
         return Err(ResourceFailure::limit("admission expression depth", e.span).into());
     }
-    if !p.resources.leaves.is_empty() {
+    if !p.resources.leaves.is_empty() || !p.result_types().is_empty() {
         c.resource_node(e.span)?;
     }
     ty(p, e.ty)?;
     match &e.kind {
+        ExprKind::ResultConstruct {
+            result,
+            tag,
+            payload,
+            variant_span,
+        } => {
+            if !ordinary
+                || e.ty != ExprType::Result(*result)
+                || p.result_payload(*result, *tag).map(ExprType::from) != Some(payload.ty)
+                || variant_span.start != e.span.start
+                || variant_span.end > e.span.end
+            {
+                return Err(bad());
+            }
+            expression(p, f, payload, c, depth + 1, true, false)?;
+        }
         ExprKind::Parameter(id) if ordinary => {
             if ExprType::from(place(p, f, Place::Parameter(*id))?) != e.ty {
                 return Err(bad());
@@ -304,10 +325,32 @@ fn statements(
         return Err(ResourceFailure::limit("admission statement depth", START).into());
     }
     for s in body {
-        if !p.resources.leaves.is_empty() {
+        if !p.resources.leaves.is_empty() || !p.result_types().is_empty() {
             c.resource_node(START)?;
         }
         match s {
+            ValueStatement::Match {
+                scrutinee, arms, ..
+            } => {
+                expression(p, f, scrutinee, c, 1, true, false)?;
+                let ExprType::Result(result) = scrutinee.ty else {
+                    return Err(bad());
+                };
+                if arms.len() != 2
+                    || arms[0].tag == arms[1].tag
+                    || arms[0].binding == arms[1].binding
+                {
+                    return Err(bad());
+                }
+                for arm in arms {
+                    if Some(place(p, f, Place::Local(arm.binding))?)
+                        != p.result_payload(result, arm.tag)
+                    {
+                        return Err(bad());
+                    }
+                    statements(p, f, &arm.body, c, depth + 1)?;
+                }
+            }
             ValueStatement::Let {
                 local, initializer, ..
             } => {
@@ -395,6 +438,14 @@ fn statements(
     Ok(())
 }
 pub(super) fn program_shape(p: &hir::Program, c: &Context) -> Result<(), ExecutionError> {
+    if p.result_types().len() > c.limits.tokens
+        || p.result_types()
+            .iter()
+            .any(|r| r.depth > c.limits.traversal_depth)
+    {
+        return Err(ResourceFailure::limit("Result canonical type bounds", START).into());
+    }
+    p.validate_result_tables().map_err(|_| bad())?;
     if !p.resources.leaves.is_empty()
         && (p
             .records
@@ -481,7 +532,7 @@ pub(super) fn program_shape(p: &hir::Program, c: &Context) -> Result<(), Executi
             }
         }
     }
-    if !p.resources.leaves.is_empty() {
+    if !p.resources.leaves.is_empty() || !p.result_types().is_empty() {
         p.resources
             .plans_bounded(p, c.limits.traversal_depth)
             .map_err(ExecutionError::from)?;
@@ -496,7 +547,8 @@ pub(super) fn program_shape(p: &hir::Program, c: &Context) -> Result<(), Executi
                     + p.parameters.len()
                     + p.ranges.len()
                     + p.resources.leaves.len()
-                    + p.resources.operations.len(),
+                    + p.resources.operations.len()
+                    + p.result_types().len(),
             )
             .ok_or_else(|| {
                 ExecutionError::from(ResourceFailure::limit(
@@ -654,6 +706,10 @@ pub(super) fn mir_shape(
                     || site.transfer.kind != mir::OriginKind::TemporaryTransfer
                     || site.cleanup.kind != mir::OriginKind::TemporaryCleanup
                     || site.plan.is_some_and(|r| site.ty != ExprType::Record(r))
+                    || site
+                        .result_plan
+                        .is_some_and(|r| site.ty != ExprType::Result(r))
+                    || matches!(site.ty, ExprType::Result(r) if site.result_plan != Some(r) || site.plan.is_some())
                 {
                     return Err(bad());
                 }
@@ -716,6 +772,16 @@ pub(super) fn mir_shape(
             }
             for s in b.statements() {
                 let value = match s {
+                    mir::Statement::BindResult {
+                        result, tag, local, ..
+                    } => {
+                        if Some(place(p, f.function(), Place::Local(*local))?)
+                            != p.result_payload(*result, *tag)
+                        {
+                            return Err(bad());
+                        }
+                        continue;
+                    }
                     mir::Statement::CallNoValue {
                         function,
                         arguments,
@@ -747,6 +813,14 @@ pub(super) fn mir_shape(
                 expression(p, f.function(), value, c, 1, true, false)?;
             }
             match b.terminator() {
+                mir::Terminator::Match {
+                    result, scrutinee, ..
+                } => {
+                    if scrutinee.ty != ExprType::Result(*result) {
+                        return Err(bad());
+                    }
+                    expression(p, f.function(), scrutinee, c, 1, true, false)?;
+                }
                 mir::Terminator::Branch { condition, .. } => {
                     expression(p, f.function(), condition, c, 1, true, false)?;
                 }

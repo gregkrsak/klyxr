@@ -1,0 +1,29 @@
+// Both official failure aliases normalize to Error before semantics.
+type Reading = range 0..100;
+type ErrorCode = range 0..2;
+
+fn sample() -> Reading { return 42; }
+fn read_error_code() -> ErrorCode { return 1; }
+
+fn read_sensor(succeeds: bool) -> Result<success: Reading, failure: ErrorCode> {
+    if succeeds { return Ok(sample()); }
+    else { return Err(read_error_code()); }
+}
+
+fn forward(succeeds: bool) -> Result<success: Reading, failure: ErrorCode> {
+    match read_sensor(succeeds) {
+        Error(problem) => { return Error(problem); }
+        Ok(value) => { return Ok(value); }
+    }
+}
+
+fn demo() -> Result<success: Reading, failure: ErrorCode> {
+    return forward(false);
+}
+
+fn success_demo() -> Reading {
+    match forward(true) {
+        Ok(value) => { return value; }
+        Err(problem) => { return sample(); }
+    }
+}

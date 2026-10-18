@@ -63,6 +63,16 @@ pub(super) struct Context {
 }
 
 impl State {
+    pub(super) fn owned_value(&self, id: OwnerId) -> Option<&Value> {
+        self.frames
+            .iter()
+            .find(|f| f.id == id.activation)?
+            .owners
+            .get(id.ordinal)
+            .filter(|o| o.custody == Custody::Owned)?
+            .value
+            .as_ref()
+    }
     pub(super) fn storage(&self) -> Option<usize> {
         let mut n = size_of::<Self>()
             .checked_add(
@@ -225,7 +235,9 @@ impl<'a> Machine<'a> {
         }
         let parent = parent.map(|p| p.id);
         self.origin = description.origin;
-        self.enable_resources()?;
+        if self.executable.cleanup_plans.iter().any(Option::is_some) {
+            self.enable_resources()?;
+        }
         if self.temporaries.is_none() {
             self.reserve(
                 size_of::<State>()
@@ -346,11 +358,19 @@ impl<'a> Machine<'a> {
             .as_ref()
             .unwrap()
             .sites[site.0];
+        let record_valid = metadata.result_plan.is_none()
+            && metadata.plan.is_some()
+            && matches!(self.values.last(), Some(Value::Leaf {record,..} | Value::Aggregate {record,..}) if Some(*record) == metadata.plan);
+        let result_valid = metadata.plan.is_none()
+            && metadata.result_plan.is_some_and(|ty| {
+                self.values
+                    .last()
+                    .is_some_and(|value| self.result_value_matches(value, ValueType::Result(ty)))
+            });
         if i + 1 != self.temporaries.as_ref().unwrap().frames.len()
             || f.phase != Phase::Active
             || f.region != metadata.region
-            || metadata.plan.is_none()
-            || !matches!(self.values.last(), Some(Value::Leaf {record,..} | Value::Aggregate {record,..}) if Some(*record) == metadata.plan)
+            || !(record_valid || result_valid)
         {
             return Err(self.integrity("invalid temporary creation type, region or plan"));
         }
@@ -494,16 +514,14 @@ impl<'a> Machine<'a> {
         if let Some((activation, site)) = site {
             let i = self.temporary_index(activation)?;
             let function = self.temporaries.as_ref().unwrap().frames[i].function;
-            if self
+            let metadata = &self
                 .executable
                 .function(function)?
                 .temporaries
                 .as_ref()
                 .unwrap()
-                .sites[site.0]
-                .plan
-                .is_some()
-            {
+                .sites[site.0];
+            if metadata.plan.is_some() || metadata.result_plan.is_some() {
                 self.task(
                     frame,
                     self.origin,
@@ -650,15 +668,19 @@ impl<'a> Machine<'a> {
         if let Transfer::Replacement(local) = destination {
             self.replacement_accepts_result(frame, local)?;
         }
-        if destination == Transfer::Return
+        let resource_return = destination == Transfer::Return && self.resources.is_some();
+        if resource_return
             && (self.staged_return.is_some()
-                || self.resources.as_ref().unwrap().protected.is_some())
+                || self
+                    .resources
+                    .as_ref()
+                    .is_some_and(|s| s.protected.is_some()))
         {
             return Err(self.integrity("protected return already occupied"));
         }
         let value = self.pop_to(Some(destination))?;
         match destination {
-            Transfer::Return => {
+            Transfer::Return if resource_return => {
                 self.resources.as_mut().unwrap().protected = Some(value);
                 self.staged_return = Some(frame);
             }
@@ -668,7 +690,7 @@ impl<'a> Machine<'a> {
         self.reserve(0)?;
         self.temporary_retire(activation)?;
         self.reserve(0)?;
-        if !matches!(destination, Transfer::Return | Transfer::Replacement(_)) {
+        if !resource_return && !matches!(destination, Transfer::Replacement(_)) {
             // Reserved destination staging receives R only after retirement.
             let value = self.temporaries.as_mut().unwrap().frames[i]
                 .protected
