@@ -70,6 +70,7 @@ fn propagation_malformed_and_nested_source_positions_reject() {
     }
     for body in [
         "let x=(produce() or return);return Ok(true);",
+        "let x=try produce();return Ok(true);",
         "return produce() or return;",
         "produce() or return;",
         "if produce() or return {}return Ok(true);",

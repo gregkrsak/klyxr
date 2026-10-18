@@ -170,7 +170,7 @@ Exact successful thresholds on x86_64 Rust 1.80.0 are:
 | resource failure | 72 | 4624 |
 | nested Result failure | 95 | 5504 |
 
-Tests assert all eight frozen implementation fuel totals and every smaller fuel
+Tests assert all eight implementation fuel and storage totals and every smaller fuel
 cut. Every byte through the exact sufficient storage threshold is tested for
 resource/nested success and failure; immediately insufficient neighbors stop with
 retained holders. Actual growth-boundary Host injection covers all four payload
@@ -285,3 +285,12 @@ historical shell proxy is unavailable. The complete local gate above is not
 replaced by remote CI. Final commit/tree, clean post-commit index/worktree and all
 eight workflow URLs are recorded in the PR and Issue #75 engineering reports.
 Independent review, Greg's acceptance and human merge remain pending.
+
+
+A final evidence-only follow-up adds an explicit `try` rejection case and hard
+assertions for the eight already-recorded working-storage totals. The complete
+30-command local gate was rerun successfully after those assertions: unchanged
+1,875 debug and 1,875 release identities, exact predecessor reconciliation and
+all ancillary checks. The initial implementation commit's four push workflows
+also passed; the engineering report identifies eight runs at the final reviewed
+head separately. No implementation behavior or predecessor expectation changed.

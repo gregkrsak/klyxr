@@ -152,9 +152,10 @@ fn propagation_every_fuel_cut_and_exact_neighbor_preserve_custody() {
             [53, 59, 65, 88, 58, 64, 72, 95][scenario],
             "published KED-032 protocol fuel"
         );
-        eprintln!(
-            "K32 boundary scenario {scenario}: fuel={steps}, storage={}",
-            complete.max_storage.get().max(complete.storage().unwrap())
+        assert_eq!(
+            complete.max_storage.get().max(complete.storage().unwrap()),
+            [3904, 4344, 4392, 5232, 4080, 4544, 4624, 5504][scenario],
+            "published KED-032 protocol working storage"
         );
         for budget in 1..=steps {
             let mut m = Machine::new(
