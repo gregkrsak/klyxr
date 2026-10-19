@@ -115,8 +115,9 @@ Each row requires independent controls, not one compound corrupted artifact.
 ## Milestone status
 
 M0: baseline and branch established; ledger created before semantic changes.
-M1-M3: catalog admission, canonical Resource eligibility and trusted-call typing
-are implemented; milestone validation below. M4-M9 remain pending. No KED-033 invocation path is enabled at
+M1-M4: catalog admission, canonical Resource eligibility, trusted-call typing and
+explicit invocation/root/runtime approval are implemented; validation below.
+M5-M9 remain pending. No KED-033 invocation path is enabled at
 this checkpoint. In particular selected trusted calls still reject explicitly;
 they cannot route to an ordinary function or fixture before M5.
 
@@ -293,6 +294,57 @@ were changed.
 
 M4 exact invocation/root/runtime-binding approval and M5 joint receipt/session
 custody are still required before any deterministic or external acquisition.
+
+### M3 published checkpoint
+
+Commit `2820c59510bbc6dd39ddfa44a4447d0bc35f16f3`, tree
+`dc89ad71fd38c676f9eea312bb20ac5260b710b1`. All four push workflows and every
+job/step passed:
+
+| Workflow | Run | Job |
+| --- | --- | --- |
+| build | [39192956029](https://github.com/gregkrsak/klyxr/actions/runs/39192956029) | 117869523553 |
+| tests | [39192956034](https://github.com/gregkrsak/klyxr/actions/runs/39192956034) | 117869523578 |
+| verify | [39192956047](https://github.com/gregkrsak/klyxr/actions/runs/39192956047) | 117869523717 |
+| docs | [39192956021](https://github.com/gregkrsak/klyxr/actions/runs/39192956021) | 117869523659 |
+
+[Issue progress record](https://github.com/gregkrsak/klyxr/issues/78#issuecomment-6258781592).
+
+### M4 implementation details and evidence
+
+Opaque approval now independently retains a runtime contract separate from HIR,
+including exact target/compiler/catalog/profile/assumption identities, selected
+configuration and grants, Resource/release/binding descriptors, imported range
+descriptors and approved entry roots. The existing MIR TrustedCall nodes are
+indexed by explicit invocation plans: function/block/statement, temporary site and
+region, operation/Result identity, argument sites, typed receiver, source origin
+and catalog origin. Plans derive from actual MIR and existing custody metadata,
+not a second semantic analysis or an ordinary-function stub.
+
+Preparation validates exact root names as zero-argument ordinary functions. Entry
+selection and public execution enforce the sealed root set. A separate structural
+edge inventory includes every ordinary/trusted call, empty-effect helpers and
+both alternatives. It is independent of filtered effect sites; M8 will derive
+the rooted audit account from it. No call dispatch searches names or another
+profile. Execution remains disabled pending M5.
+
+Sixteen additional identities bring the manifest to 53. Independent mutations
+cover target/compiler/catalog/profile/configuration, grants, bindings, release
+pairing, Resource identity/payload bound, cleanup-only source authority,
+signatures, effects, origins, imported range identity/bounds, assumptions,
+invocation omission/duplication/reordering/foreign IDs, receiver/region/argument
+sites, roots, graph edges and authority copies. Even consistently changed runtime
+approval copies must match exact MIR derivation. Shape bounds precede deep
+comparison. Deterministic test-only failures at four actual growth boundaries
+(root, edge, argument and invocation reservations) each propagate as Host and
+publish no executable; zero-sized reservations do not trigger injection.
+
+The complete local M4 gate passed: **1,928 exact debug identities and 1,928
+release identities**, all 1,875 predecessors, authority doctest, both 1,800-case
+affine checks, check/fmt/Clippy/Rustdoc, CLI/examples/rejection diagnostics, assets,
+scaffold, byte-identical context and diff integrity. Numeric protocol oracles
+remain unchanged. No deterministic or external acquisition has executed.
+No semantic deviation, new checker, fallback or implementation blocker is reported.
 
 Future entries must record meaningful changes, validation and exact remote evidence,
 ordinary development corrections, any K33-I escalation, predecessor adaptations,

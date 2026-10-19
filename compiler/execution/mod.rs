@@ -196,6 +196,7 @@ struct Approval {
     program: hir::Program,
     cleanup_sites: Vec<crate::effects::custody::Site>,
     domain: domain::Domain,
+    trusted: Option<crate::trusted::approval::Approved>,
 }
 
 /// No public fields, constructors, mutation, or independent HIR/MIR pairing.
@@ -219,6 +220,7 @@ pub struct CheckedExecutable {
     cleanup_effects: Vec<crate::effects::EffectSet>,
     result_plans: Vec<hir::results::VariantPlan>,
     domain: domain::Domain,
+    trusted: Option<crate::trusted::approval::Approved>,
 }
 impl CheckedExecutable {
     pub fn entry(&self, name: &str) -> Result<FunctionId, ExecutionError> {
@@ -239,6 +241,13 @@ impl CheckedExecutable {
                 ErrorKind::Integrity("selected entry must have zero parameters"),
                 ordinary.span,
             ));
+        }
+        if let Some(trusted) = &self.trusted {
+            if !trusted.roots.contains(&ordinary.id) {
+                return Err(ExecutionError::integrity(
+                    "selected entry is outside the sealed trusted roots",
+                ));
+            }
         }
         Ok(ordinary.id)
     }
@@ -289,6 +298,12 @@ impl CheckedExecutable {
         // Admission already bounds this private immutable representation. Check
         // shape before any recursive comparison/re-lowering, including injections.
         validate::program_shape(&self.program, &c)?;
+        for trusted in [self.trusted.as_ref(), self.approval.trusted.as_ref()]
+            .into_iter()
+            .flatten()
+        {
+            trusted.shape(self.limits)?;
+        }
         self.domain.shape(self.limits)?;
         if self.domain != self.approval.domain {
             return Err(ExecutionError::integrity(
@@ -361,6 +376,18 @@ impl CheckedExecutable {
             return Err(ExecutionError::integrity("origin/function correspondence"));
         }
         validate::mir_shape(&self.program, &self.mir, &c)?;
+        if self.trusted != self.approval.trusted
+            || self.trusted
+                != crate::trusted::approval::Approved::derive(
+                    &self.program,
+                    &self.mir,
+                    self.limits,
+                )?
+        {
+            return Err(ExecutionError::integrity(
+                "trusted runtime/invocation/root authority correspondence",
+            ));
+        }
         for f in self.mir.functions() {
             f.validate_bounded().map_err(ExecutionError::from)?;
         }
@@ -518,6 +545,7 @@ fn seal_in_domain(
 ) -> Result<CheckedExecutable, ExecutionError> {
     let (mut mir, origins) = mir::lower_with_origins(&program).map_err(ExecutionError::from)?;
     mir::attach_cleanup_effects(&mut mir, &cleanup_sites).map_err(ExecutionError::from)?;
+    let trusted = crate::trusted::approval::Approved::derive(&program, &mir, limits)?;
     let cleanup_plans = if program.resources.leaves.is_empty() {
         Vec::new()
     } else {
@@ -563,6 +591,7 @@ fn seal_in_domain(
         program: program.clone(),
         cleanup_sites,
         domain: domain.clone(),
+        trusted: trusted.clone(),
     });
     let executable = CheckedExecutable {
         outcomes,
@@ -577,6 +606,7 @@ fn seal_in_domain(
         cleanup_effects,
         result_plans,
         domain,
+        trusted,
     };
     executable.validate()?;
     Ok(executable)
@@ -661,6 +691,15 @@ pub fn execute(
             f.span,
         ));
     }
+    if executable
+        .trusted
+        .as_ref()
+        .is_some_and(|t| !t.roots.contains(&entry))
+    {
+        return Err(ExecutionError::integrity(
+            "selected entry is outside the sealed trusted roots",
+        ));
+    }
     if matches!(
         f.return_type,
         Some(ValueType::SharedRef(_) | ValueType::MutableRef(_))
@@ -709,6 +748,8 @@ pub fn execute(
 mod result_admission_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod trusted_authority_tests;
 mod validate;
 
 #[cfg(test)]

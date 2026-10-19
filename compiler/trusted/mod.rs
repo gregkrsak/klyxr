@@ -1,6 +1,7 @@
 //! The one compiler-supplied demonstration catalog. Selection is explicit build
 //! configuration, never authority supplied by source or discovered at runtime.
 use std::sync::atomic::{AtomicUsize, Ordering};
+pub(crate) mod approval;
 
 use crate::{
     bounded::{Context, ResourceFailure, START},
@@ -12,6 +13,7 @@ pub const CATALOG: &str = "klyxr.sensor-demo.catalog.v1";
 pub const PROFILE: &str = "klyxr.sensor-demo.profile.v1";
 pub const TARGET: &str = "klyxr.ordinary-mir.v1";
 pub const COMPILER: &str = concat!("klyxr-compiler/", env!("CARGO_PKG_VERSION"));
+pub const ASSUMPTIONS: &str = "klyxr.sensor-demo.assumptions.v1";
 
 /// Indices from distinct collections never authenticate one another. A checked,
 /// process-local serial is packed with the small row index without enlarging
