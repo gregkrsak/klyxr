@@ -150,7 +150,7 @@ pub(super) fn render(
             let _=writeln!(out,"possible cleanup: function={} holder={:?} plan={:?} kind={:?} effects={} source={:?}",site.function.0,site.holder,site.plan,site.kind,site.effects,site.origin);
             if site.kind == crate::effects::custody::Kind::CompletionRelease {
                 let _=writeln!(out,"possible completion cleanup: both protected Ok and Error require exact fixed release before inner delivery; release failure is terminal non-delivery; cleanup-only authority is not source-callable");
-            } else if matches!(site.plan,hir::resources::CleanupType::Resource(_)) {
+            } else if matches!(site.plan, hir::resources::CleanupType::Resource(_)) {
                 let _=writeln!(out,"possible release-only cleanup: no completion event and no automatically produced FinishReceipt; independently formed status data proves no completion");
             }
         }
@@ -168,6 +168,6 @@ pub(super) fn render(
 }
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod completion_tests;
+#[cfg(test)]
+mod tests;
