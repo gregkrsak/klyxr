@@ -1,0 +1,65 @@
+{
+  "stage": "M1",
+  "baseline_commit": "372230df1d359b13d28f5c136130ac031507716a",
+  "baseline_tree": "a646e9576a9b7650ff9a95275f1080b591d06986",
+  "predecessor_count": 1981,
+  "expected_per_profile": 1993,
+  "additions": [
+    "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific",
+    "lib.rs::trusted::completion_tests::finish_direct_and_relay_arguments_prepare_without_reference_coercion",
+    "lib.rs::trusted::completion_tests::finish_match_and_local_propagation_reuse_existing_outcomes",
+    "lib.rs::trusted::completion_tests::finish_and_receipt_names_obey_existing_namespace_selection",
+    "lib.rs::trusted::completion_tests::denied_finish_keeps_occupancy_without_source_fallback",
+    "lib.rs::trusted::completion_tests::finish_requires_release_even_on_unrooted_owned_helper",
+    "lib.rs::trusted::completion_tests::receipt_is_source_formable_copy_field_status_without_finish",
+    "lib.rs::trusted::completion_tests::receipt_literal_neighbors_and_foreign_nominal_values_reject",
+    "lib.rs::trusted::completion_tests::finish_rejects_reference_wrong_arity_and_unselected_payload",
+    "lib.rs::trusted::completion_tests::finish_complete_direct_effect_is_required",
+    "lib.rs::trusted::completion_tests::unused_finish_descriptor_and_error_subset_are_independently_validated",
+    "lib.rs::trusted::completion_tests::m1_completion_dispatch_is_disabled_and_retains_the_sensor"
+  ],
+  "classifications": {
+    "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific": "ordinary_source",
+    "lib.rs::trusted::completion_tests::finish_direct_and_relay_arguments_prepare_without_reference_coercion": "ordinary_source",
+    "lib.rs::trusted::completion_tests::finish_match_and_local_propagation_reuse_existing_outcomes": "ordinary_source",
+    "lib.rs::trusted::completion_tests::finish_and_receipt_names_obey_existing_namespace_selection": "ordinary_source",
+    "lib.rs::trusted::completion_tests::denied_finish_keeps_occupancy_without_source_fallback": "ordinary_source",
+    "lib.rs::trusted::completion_tests::finish_requires_release_even_on_unrooted_owned_helper": "ordinary_source",
+    "lib.rs::trusted::completion_tests::receipt_is_source_formable_copy_field_status_without_finish": "ordinary_source",
+    "lib.rs::trusted::completion_tests::receipt_literal_neighbors_and_foreign_nominal_values_reject": "ordinary_source",
+    "lib.rs::trusted::completion_tests::finish_rejects_reference_wrong_arity_and_unselected_payload": "ordinary_source",
+    "lib.rs::trusted::completion_tests::finish_complete_direct_effect_is_required": "ordinary_source",
+    "lib.rs::trusted::completion_tests::unused_finish_descriptor_and_error_subset_are_independently_validated": "private_malformed_authority",
+    "lib.rs::trusted::completion_tests::m1_completion_dispatch_is_disabled_and_retains_the_sensor": "trusted_boundary"
+  },
+  "migrations": {},
+  "contract_corrections": [],
+  "fixture_adaptations": [
+    {
+      "identity": "lib.rs::trusted::tests::selected_ranges_precede_signatures_and_have_honest_catalog_origins",
+      "reason": "Frozen KED-034 explicitly adds FinishReceipt: extend exact catalog cardinality from two to three and verify all three. Original Reading/SensorError identities/domains/origins remain asserted; this is feature inventory growth, no identity migration or weakened assertion."
+    }
+  ],
+  "semantic_obligations": {},
+  "malformed_controls": {},
+  "constraints": {},
+  "milestones": {
+    "M0": "Fresh same-tree Actions gate, reports 6275856224 and 6275856656",
+    "M1": [
+      "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific",
+      "lib.rs::trusted::completion_tests::finish_direct_and_relay_arguments_prepare_without_reference_coercion",
+      "lib.rs::trusted::completion_tests::finish_match_and_local_propagation_reuse_existing_outcomes",
+      "lib.rs::trusted::completion_tests::finish_and_receipt_names_obey_existing_namespace_selection",
+      "lib.rs::trusted::completion_tests::denied_finish_keeps_occupancy_without_source_fallback",
+      "lib.rs::trusted::completion_tests::finish_requires_release_even_on_unrooted_owned_helper",
+      "lib.rs::trusted::completion_tests::receipt_is_source_formable_copy_field_status_without_finish",
+      "lib.rs::trusted::completion_tests::receipt_literal_neighbors_and_foreign_nominal_values_reject",
+      "lib.rs::trusted::completion_tests::finish_rejects_reference_wrong_arity_and_unselected_payload",
+      "lib.rs::trusted::completion_tests::finish_complete_direct_effect_is_required",
+      "lib.rs::trusted::completion_tests::unused_finish_descriptor_and_error_subset_are_independently_validated",
+      "lib.rs::trusted::completion_tests::m1_completion_dispatch_is_disabled_and_retains_the_sensor"
+    ]
+  },
+  "authority_doctests": 1,
+  "affine_cases_per_profile": 1800
+}

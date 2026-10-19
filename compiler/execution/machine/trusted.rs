@@ -389,6 +389,11 @@ impl<'a> Machine<'a> {
         {
             return Err(self.integrity("trusted invocation signature/origin/authority mismatch"));
         }
+        // M1-M3: the catalog can be checked, but completion cannot dispatch
+        // before the sealed receiving, protection and release protocol exists.
+        if op.class == OperationClass::Completion {
+            return Err(self.integrity("completion invocation disabled before custody protocol"));
+        }
         let open = op.class == OperationClass::Acquisition;
         if open && !approved.catalog.granted(approved.catalog.resource.release) {
             return Err(self.integrity("Sensor acquisition lacks exact release authority"));

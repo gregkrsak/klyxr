@@ -275,16 +275,19 @@ fn run_execution(mut args: impl Iterator<Item = String>, audit: bool) -> Result<
                 open: true,
                 read: false,
                 release: true,
+                finish: false,
             },
             "read-release" => Grants {
                 open: false,
                 read: true,
                 release: true,
+                finish: false,
             },
             "release" => Grants {
                 open: false,
                 read: false,
                 release: true,
+                finish: false,
             },
             _ => {
                 eprintln!("error: unknown fixed grant selection");

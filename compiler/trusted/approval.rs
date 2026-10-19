@@ -87,7 +87,7 @@ pub(crate) struct Approved {
     pub profile_identity: &'static str,
     pub assumptions: &'static str,
     pub catalog: Catalog,
-    pub ranges: [hir::RangeType; 2],
+    pub ranges: [hir::RangeType; 3],
     pub roots: Vec<FunctionId>,
     pub invocations: Vec<Invocation>,
     /// Every structural edge, including empty-effect ordinary calls and both
@@ -112,7 +112,7 @@ impl Approved {
             profile_identity: PROFILE,
             assumptions: ASSUMPTIONS,
             catalog: catalog.clone(),
-            ranges: [program.ranges[0].clone(), program.ranges[1].clone()],
+            ranges: [program.ranges[0].clone(), program.ranges[1].clone(), program.ranges[2].clone()],
             roots: Vec::new(),
             invocations: Vec::new(),
             edges: Vec::new(),
@@ -236,6 +236,7 @@ impl Approved {
             if invocation.ordinal != index
                 || invocation.operation != self.catalog.operations[0].id
                     && invocation.operation != self.catalog.operations[1].id
+                    && invocation.operation != self.catalog.operations[3].id
             {
                 return Err(PlanError::Integrity(
                     "trusted invocation identity or cleanup-only target",

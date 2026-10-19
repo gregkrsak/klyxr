@@ -293,7 +293,7 @@ fn resolve_with(
                 "catalog admission stopped before signature collection",
             )]
         })?;
-        resolver.program.ranges.try_reserve_exact(2).map_err(|_| {
+        resolver.program.ranges.try_reserve_exact(3).map_err(|_| {
             let failure = crate::bounded::ResourceFailure::host(
                 "imported range table",
                 crate::bounded::START,
@@ -305,7 +305,7 @@ fn resolve_with(
                 "no catalog is published",
             )]
         })?;
-        for (index, (name, min, max)) in [("Reading", 0, 4095), ("SensorError", 1, 3)]
+        for (index, (name, min, max)) in [("Reading", 0, 4095), ("SensorError", 1, 3), ("FinishReceipt", 1, 1)]
             .into_iter()
             .enumerate()
         {
@@ -317,7 +317,7 @@ fn resolve_with(
                 name: name.into(),
                 min,
                 max,
-                origin: hir::DeclarationOrigin::Catalog(catalog.origin(index)),
+                origin: hir::DeclarationOrigin::Catalog(catalog.origin(if index == 2 { 6 } else { index })),
             });
         }
         types.insert("Sensor");
@@ -326,6 +326,7 @@ fn resolve_with(
         for success in [
             hir::ValueType::Resource(sensor),
             hir::ValueType::Range(RangeTypeId(0)),
+            hir::ValueType::Range(RangeTypeId(2)),
         ] {
             resolver
                 .program
@@ -502,7 +503,7 @@ impl Resolver<'_> {
         if let Some(catalog) = &self.program.trusted {
             if let Some(op) = catalog.callable(name) {
                 if !catalog.granted(op.id)
-                    || (op.class == crate::trusted::OperationClass::Acquisition
+                    || (matches!(op.class, crate::trusted::OperationClass::Acquisition | crate::trusted::OperationClass::Completion)
                         && !catalog.granted(catalog.operations[2].id))
                 {
                     return Err(error(span, format!("trusted operation `{name}` is not granted"), "the exact selected operation and its fixed cleanup-only release require authority"));

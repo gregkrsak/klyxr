@@ -77,7 +77,7 @@ pub(super) fn render(
             break;
         }
     }
-    let mut used = [false; 3];
+    let mut used = [false; 4];
     for edge in &t.edges {
         work.charge(1)?;
         if reachable[edge.caller.0] != 0 {
