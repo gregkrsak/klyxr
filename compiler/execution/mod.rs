@@ -3,6 +3,7 @@
 // Keep immediate origins and the wide trap value inline: exhaustion reporting
 // must not require an additional allocation merely to return the error itself.
 #![allow(clippy::result_large_err)]
+mod audit;
 mod domain;
 mod machine;
 mod render;
@@ -224,6 +225,10 @@ pub struct CheckedExecutable {
     trusted: Option<crate::trusted::approval::Approved>,
 }
 impl CheckedExecutable {
+    /// Static rooted authority, requiring no binding invocation or source lookup.
+    pub fn render_authority(&self, limits: ExecutionLimits) -> Result<String, ExecutionError> {
+        audit::render(self, limits, 0)
+    }
     pub fn entry(&self, name: &str) -> Result<FunctionId, ExecutionError> {
         let f = self
             .program
@@ -635,8 +640,24 @@ fn frontend(
 /// Reads at most source_bytes + one lookahead byte; oversized input is never
 /// accumulated. The fixed read buffer also bounds rejected-input housekeeping.
 pub fn prepare_execution_from_reader(
+    input: impl Read,
+    limits: AdmissionLimits,
+) -> Result<CheckedExecutable, ExecutionError> {
+    prepare_from_reader(input, limits, None)
+}
+
+/// The same bounded input path with one explicit immutable profile selection.
+pub fn prepare_execution_from_reader_with_profile(
+    input: impl Read,
+    limits: AdmissionLimits,
+    selection: &crate::trusted::Selection,
+) -> Result<CheckedExecutable, ExecutionError> {
+    prepare_from_reader(input, limits, Some(selection))
+}
+fn prepare_from_reader(
     mut input: impl Read,
     limits: AdmissionLimits,
+    selection: Option<&crate::trusted::Selection>,
 ) -> Result<CheckedExecutable, ExecutionError> {
     limits.validate()?;
     let mut source = Vec::new();
@@ -669,7 +690,10 @@ pub fn prepare_execution_from_reader(
     }
     let source = std::str::from_utf8(&source)
         .map_err(|_| ExecutionError::new(ErrorKind::Host("source UTF-8 decoding"), START))?;
-    prepare_execution(source, limits)
+    match selection {
+        Some(selection) => prepare_execution_with_profile(source, limits, selection),
+        None => prepare_execution(source, limits),
+    }
 }
 
 pub fn execute(

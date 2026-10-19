@@ -2,10 +2,15 @@
   "baseline_commit": "62023217b3f93e53cae302731643cbcea1fb3d17",
   "baseline_tree": "3998bcad9b34d66e960b863eb20b7b78680da07d",
   "predecessor_count": 1875,
-  "milestone": "M7: failure cuts and malformed receipt authority",
+  "milestone": "M8: deterministic bounded rooted authority account and explicit profile CLI",
   "migrations": {},
   "contract_corrections": [],
   "additions": [
+    "lib.rs::execution::audit::tests::actual_reachability_and_renderer_allocation_failures_stay_host",
+    "lib.rs::execution::audit::tests::audit_exact_output_storage_and_work_neighbors_are_bounded",
+    "lib.rs::execution::audit::tests::audit_is_deterministic_and_distinguishes_unused_grants_from_rooted_use",
+    "lib.rs::execution::audit::tests::no_profile_and_mutated_approval_cannot_gain_authority_from_audit",
+    "lib.rs::execution::audit::tests::structural_audit_includes_both_alternatives_zero_effect_helpers_and_cleanup_sites",
     "lib.rs::execution::machine::trusted::tests::composition::branch_local_custody_cleans_before_protected_ok_and_error_delivery",
     "lib.rs::execution::machine::trusted::tests::composition::early_return_from_loop_retires_iteration_local_before_error_delivery",
     "lib.rs::execution::machine::trusted::tests::composition::explicit_matches_normalize_err_and_keep_open_and_read_outcomes",
@@ -20,6 +25,7 @@
     "lib.rs::execution::machine::trusted::tests::every_fuel_stop_keeps_the_real_effect_prefix_and_all_live_responsibilities",
     "lib.rs::execution::machine::trusted::tests::failure_before_binding_has_no_attempt_or_responsibility",
     "lib.rs::execution::machine::trusted::tests::failures::all_fuel_cuts_through_partial_argument_entry_and_completed_release_prefix_conserve_tokens",
+    "lib.rs::execution::machine::trusted::tests::failures::bounded_authority_rendering_failure_preserves_stopped_session_and_writer_failure_is_host",
     "lib.rs::execution::machine::trusted::tests::failures::cleanup_host_keeps_protected_ok_and_cli_host_exit_class_two",
     "lib.rs::execution::machine::trusted::tests::failures::duplicate_identity_after_an_earlier_success_retains_both_actual_responsibilities",
     "lib.rs::execution::machine::trusted::tests::failures::each_actual_receiving_allocation_failure_is_host_before_any_external_attempt",
@@ -97,9 +103,18 @@
     "lib.rs::trusted::tests::trusted_propagation_cleanup_witnesses_come_from_residual_sensor_custody",
     "lib.rs::trusted::tests::trusted_result_and_error_payloads_keep_nominal_identity_and_literal_rules",
     "lib.rs::trusted::tests::trusted_result_cannot_be_discarded_or_left_as_an_unresolved_outcome",
-    "lib.rs::trusted::tests::trusted_shared_alias_calls_reuse_existing_loan_and_outcome_transactions"
+    "lib.rs::trusted::tests::trusted_shared_alias_calls_reuse_existing_loan_and_outcome_transactions",
+    "tests/trusted_cli.rs::audit_reports_roots_grants_pairing_and_origins_without_execution",
+    "tests/trusted_cli.rs::explicit_profile_executes_all_five_fixed_outcomes_as_source_results",
+    "tests/trusted_cli.rs::invalid_profile_configuration_is_class_two_and_limits_are_terminal_class_one",
+    "tests/trusted_cli.rs::profile_is_never_implicit_and_io_does_not_grant_denied_read"
   ],
   "classifications": {
+    "lib.rs::execution::audit::tests::actual_reachability_and_renderer_allocation_failures_stay_host": "private_catalog_envelope",
+    "lib.rs::execution::audit::tests::audit_exact_output_storage_and_work_neighbors_are_bounded": "private_catalog_envelope",
+    "lib.rs::execution::audit::tests::audit_is_deterministic_and_distinguishes_unused_grants_from_rooted_use": "private_catalog_envelope",
+    "lib.rs::execution::audit::tests::no_profile_and_mutated_approval_cannot_gain_authority_from_audit": "private_catalog_envelope",
+    "lib.rs::execution::audit::tests::structural_audit_includes_both_alternatives_zero_effect_helpers_and_cleanup_sites": "private_catalog_envelope",
     "lib.rs::execution::machine::trusted::tests::composition::branch_local_custody_cleans_before_protected_ok_and_error_delivery": "ordinary_source",
     "lib.rs::execution::machine::trusted::tests::composition::early_return_from_loop_retires_iteration_local_before_error_delivery": "ordinary_source",
     "lib.rs::execution::machine::trusted::tests::composition::explicit_matches_normalize_err_and_keep_open_and_read_outcomes": "ordinary_source",
@@ -114,6 +129,7 @@
     "lib.rs::execution::machine::trusted::tests::every_fuel_stop_keeps_the_real_effect_prefix_and_all_live_responsibilities": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failure_before_binding_has_no_attempt_or_responsibility": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failures::all_fuel_cuts_through_partial_argument_entry_and_completed_release_prefix_conserve_tokens": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::tests::failures::bounded_authority_rendering_failure_preserves_stopped_session_and_writer_failure_is_host": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failures::cleanup_host_keeps_protected_ok_and_cli_host_exit_class_two": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failures::duplicate_identity_after_an_earlier_success_retains_both_actual_responsibilities": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failures::each_actual_receiving_allocation_failure_is_host_before_any_external_attempt": "trusted_boundary",
@@ -191,7 +207,11 @@
     "lib.rs::trusted::tests::trusted_propagation_cleanup_witnesses_come_from_residual_sensor_custody": "ordinary_source",
     "lib.rs::trusted::tests::trusted_result_and_error_payloads_keep_nominal_identity_and_literal_rules": "ordinary_source",
     "lib.rs::trusted::tests::trusted_result_cannot_be_discarded_or_left_as_an_unresolved_outcome": "ordinary_source",
-    "lib.rs::trusted::tests::trusted_shared_alias_calls_reuse_existing_loan_and_outcome_transactions": "ordinary_source"
+    "lib.rs::trusted::tests::trusted_shared_alias_calls_reuse_existing_loan_and_outcome_transactions": "ordinary_source",
+    "tests/trusted_cli.rs::audit_reports_roots_grants_pairing_and_origins_without_execution": "ordinary_source",
+    "tests/trusted_cli.rs::explicit_profile_executes_all_five_fixed_outcomes_as_source_results": "ordinary_source",
+    "tests/trusted_cli.rs::invalid_profile_configuration_is_class_two_and_limits_are_terminal_class_one": "ordinary_source",
+    "tests/trusted_cli.rs::profile_is_never_implicit_and_io_does_not_grant_denied_read": "ordinary_source"
   },
   "fixture_adaptations": [
     {

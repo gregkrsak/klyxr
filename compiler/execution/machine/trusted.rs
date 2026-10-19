@@ -209,6 +209,14 @@ impl<'a> ExecutionSession<'a> {
             Status::Stopped(_)
         )
     }
+    /// Rendering shares the configured storage allowance with retained custody.
+    pub fn render_authority(&self, limits: ExecutionLimits) -> Result<String, ExecutionError> {
+        let retained = self
+            .machine
+            .storage()
+            .ok_or_else(|| ExecutionError::integrity("session storage overflow"))?;
+        crate::execution::audit::render(self.machine.executable, limits, retained)
+    }
 }
 
 impl<'a> Machine<'a> {

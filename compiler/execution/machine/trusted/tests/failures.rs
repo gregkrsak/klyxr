@@ -375,3 +375,70 @@ fn all_fuel_cuts_through_partial_argument_entry_and_completed_release_prefix_con
     }
     assert!(partial_release);
 }
+
+#[test]
+fn bounded_authority_rendering_failure_preserves_stopped_session_and_writer_failure_is_host() {
+    let e = artifact(Scenario::Sample);
+    let mut s = session(&e);
+    s.machine.trusted.as_mut().unwrap().fault = Some((Fault::AfterReceiptHost, 0));
+    assert!(s.advance().is_err());
+    let prefix = s.events().to_vec();
+    let steps = s.machine.steps;
+    assert!(matches!(
+        s.render_authority(ExecutionLimits {
+            rendered_output: 1,
+            ..ExecutionLimits::default()
+        })
+        .unwrap_err()
+        .kind,
+        ErrorKind::ConfiguredLimit(_)
+    ));
+    assert_eq!(
+        crate::execution::render::with_allocation_failure(
+            || s.render_authority(ExecutionLimits::default())
+        )
+        .unwrap_err()
+        .kind,
+        ErrorKind::Host("render allocation")
+    );
+    let bytes = s.machine.storage().unwrap();
+    let output = e.render_authority(ExecutionLimits::default()).unwrap();
+    let audit_bytes =
+        e.program.functions().len() + size_of::<crate::execution::render::Output>() + output.len();
+    assert!(s
+        .render_authority(ExecutionLimits {
+            working_storage: bytes + audit_bytes,
+            rendered_output: output.len(),
+            ..ExecutionLimits::default()
+        })
+        .is_ok());
+    assert_eq!(
+        s.render_authority(ExecutionLimits {
+            working_storage: bytes + audit_bytes - 1,
+            rendered_output: output.len(),
+            ..ExecutionLimits::default()
+        })
+        .unwrap_err()
+        .kind,
+        ErrorKind::ConfiguredLimit("authority audit storage")
+    );
+    struct Broken;
+    impl std::io::Write for Broken {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("injected writer"))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    assert_eq!(
+        crate::execution::write_output(Broken, &output)
+            .unwrap_err()
+            .kind,
+        ErrorKind::Host("output write")
+    );
+    assert_eq!(s.events(), prefix);
+    assert_eq!(s.live_sensors(), 1);
+    assert!(s.advance().is_err());
+    assert_eq!(s.machine.steps, steps);
+}

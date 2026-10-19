@@ -26,8 +26,8 @@ fn run() -> Result<(), i32> {
         return Ok(());
     }
 
-    if command == "run" {
-        return run_execution(args);
+    if command == "run" || command == "audit" {
+        return run_execution(args, command == "audit");
     }
 
     if command != "check" && command != "verify" {
@@ -150,7 +150,7 @@ fn print_usage() {
     eprintln!("usage: klyxr <check|verify> <file.klx>");
 }
 
-fn run_execution(mut args: impl Iterator<Item = String>) -> Result<(), i32> {
+fn run_execution(mut args: impl Iterator<Item = String>, audit: bool) -> Result<(), i32> {
     use execution::{AdmissionLimits, ExecutionLimits};
     let Some(path) = args.next() else {
         eprintln!("usage: klyxr run <file.klx> --function <name> [limit overrides]");
@@ -159,6 +159,10 @@ fn run_execution(mut args: impl Iterator<Item = String>) -> Result<(), i32> {
     let mut admission = AdmissionLimits::default();
     let mut execution = ExecutionLimits::default();
     let mut entry = None;
+    let mut profile = None;
+    let mut scenario = None;
+    let mut grants = None;
+    let mut sensor_limit = None;
     let mut flags = std::collections::BTreeSet::new();
     for _ in 0..32 {
         let Some(flag) = args.next() else {
@@ -172,6 +176,22 @@ fn run_execution(mut args: impl Iterator<Item = String>) -> Result<(), i32> {
             eprintln!("error: missing run option value");
             return Err(2);
         };
+        if matches!(
+            flag.as_str(),
+            "--profile" | "--scenario" | "--grants" | "--sensor-limit"
+        ) {
+            if value.len() > 128 {
+                eprintln!("error: profile option too long");
+                return Err(2);
+            }
+            match flag.as_str() {
+                "--profile" => profile = Some(value),
+                "--scenario" => scenario = Some(value),
+                "--grants" => grants = Some(value),
+                _ => sensor_limit = Some(value),
+            }
+            continue;
+        }
         if flag == "--function" {
             if value.len() > AdmissionLimits::MAX.identifier_bytes {
                 eprintln!("error: selected function name exceeds supported maximum");
@@ -231,6 +251,69 @@ fn run_execution(mut args: impl Iterator<Item = String>) -> Result<(), i32> {
         eprintln!("error: configured run limit is zero or exceeds supported maximum");
         return Err(2);
     }
+    let selection = if let Some(profile) = profile {
+        use klyxr_compiler::trusted::{Grants, Scenario, Selection};
+        if profile != "sensor-demo" {
+            eprintln!("error: unknown profile");
+            return Err(2);
+        }
+        let scenario = match scenario.as_deref().unwrap_or("sample") {
+            "sample" => Scenario::Sample,
+            "no-sensor" => Scenario::NoSensor,
+            "open-io-failure" => Scenario::OpenIoFailure,
+            "no-sample" => Scenario::NoSample,
+            "read-io-failure" => Scenario::ReadIoFailure,
+            _ => {
+                eprintln!("error: unknown fixed fixture scenario");
+                return Err(2);
+            }
+        };
+        let grants = match grants.as_deref().unwrap_or("all") {
+            "all" => Grants::ALL,
+            "none" => Grants::NONE,
+            "open-release" => Grants {
+                open: true,
+                read: false,
+                release: true,
+            },
+            "read-release" => Grants {
+                open: false,
+                read: true,
+                release: true,
+            },
+            "release" => Grants {
+                open: false,
+                read: false,
+                release: true,
+            },
+            _ => {
+                eprintln!("error: unknown fixed grant selection");
+                return Err(2);
+            }
+        };
+        let limit = match sensor_limit.as_deref().unwrap_or("16").parse::<usize>() {
+            Ok(n) => n,
+            Err(_) => {
+                eprintln!("error: invalid Sensor limit");
+                return Err(2);
+            }
+        };
+        match Selection::sensor_demo(scenario, grants, &[&entry])
+            .and_then(|s| s.with_sensor_limit(limit))
+        {
+            Ok(s) => Some(s),
+            Err(_) => {
+                eprintln!("error: invalid bounded profile configuration");
+                return Err(2);
+            }
+        }
+    } else {
+        if audit || scenario.is_some() || grants.is_some() || sensor_limit.is_some() {
+            eprintln!("error: profile options and audit require --profile sensor-demo");
+            return Err(2);
+        }
+        None
+    };
     let file = match fs::File::open(&path) {
         Ok(f) => f,
         Err(_) => {
@@ -238,7 +321,13 @@ fn run_execution(mut args: impl Iterator<Item = String>) -> Result<(), i32> {
             return Err(2);
         }
     };
-    let artifact = match execution::prepare_execution_from_reader(file, admission) {
+    let prepared = match &selection {
+        Some(selection) => {
+            execution::prepare_execution_from_reader_with_profile(file, admission, selection)
+        }
+        None => execution::prepare_execution_from_reader(file, admission),
+    };
+    let artifact = match prepared {
         Ok(e) => e,
         Err(e) => {
             return run_reporting::preparation_error(
@@ -248,6 +337,52 @@ fn run_execution(mut args: impl Iterator<Item = String>) -> Result<(), i32> {
             );
         }
     };
+    if selection.is_some() {
+        if audit {
+            return match artifact.render_authority(execution) {
+                Ok(text) => execution::write_output(std::io::stdout().lock(), &text).map_err(|_| 2),
+                Err(e) => run_reporting::execution_error(
+                    &artifact,
+                    &e,
+                    execution.rendered_output,
+                    std::io::stderr().lock(),
+                ),
+            };
+        }
+        let mut session = match artifact
+            .entry(&entry)
+            .and_then(|entry| execution::ExecutionSession::new(&artifact, entry, execution))
+        {
+            Ok(s) => s,
+            Err(e) => {
+                return run_reporting::execution_error(
+                    &artifact,
+                    &e,
+                    execution.rendered_output,
+                    std::io::stderr().lock(),
+                )
+            }
+        };
+        // The session owns binding state and all terminal custody through result,
+        // diagnostic rendering and the final writer operation.
+        return match session.advance() {
+            Ok(result) => match artifact.render_result(result, execution.rendered_output) {
+                Ok(text) => execution::write_output(std::io::stdout().lock(), &text).map_err(|_| 2),
+                Err(e) => run_reporting::execution_error(
+                    &artifact,
+                    &e,
+                    execution.rendered_output,
+                    std::io::stderr().lock(),
+                ),
+            },
+            Err(e) => run_reporting::execution_error(
+                &artifact,
+                e,
+                execution.rendered_output,
+                std::io::stderr().lock(),
+            ),
+        };
+    }
     let result = artifact
         .entry(&entry)
         .and_then(|entry| execution::execute(&artifact, entry, execution))

@@ -118,7 +118,7 @@ M0: baseline and branch established; ledger created before semantic changes.
 M1-M4: catalog admission, canonical Resource eligibility, trusted-call typing and
 explicit invocation/root/runtime approval are implemented; validation below.
 M5 joint receipt/session custody is implemented and source fixture execution is
-enabled only through that seam. M6 composition and M7 failures are implemented; M8-M9 remain pending. The consuming convenience
+enabled only through that seam. M6 composition and M7 failures are implemented; M8 audit/CLI is implemented; M9 final evidence remains pending. The consuming convenience
 executor still rejects profile artifacts, and no ordinary/host fallback exists.
 
 ### M0 published checkpoint
@@ -506,3 +506,57 @@ M7 complete local gate: **1,967 exact debug identities and 1,967 release identit
 (1,875 predecessors plus 92 additions). All established gates including both affine
 checks, authority doctest, warnings-denied tools and byte-identical context passed.
 No compiler, executable or integrity anomaly occurred.
+
+### M7 published checkpoint
+
+Commit `d710972441e279f7e5af205163dd43c9f29e2b2f`, tree
+`60a0cf355047250cccff4d69b4cbcabd80a81292`. Every push job/step passed:
+
+| Workflow | Run | Job |
+| --- | --- | --- |
+| build | [39208052932](https://github.com/gregkrsak/klyxr/actions/runs/39208052932) | 117915093110 |
+| tests | [39208052949](https://github.com/gregkrsak/klyxr/actions/runs/39208052949) | 117915092986 |
+| verify | [39208052948](https://github.com/gregkrsak/klyxr/actions/runs/39208052948) | 117915092934 |
+| docs | [39208052983](https://github.com/gregkrsak/klyxr/actions/runs/39208052983) | 117915093515 |
+
+### M8 deterministic authority account and profile CLI
+
+The read-only audit validates opaque approval and computes structural reachability
+from exactly the sealed roots through the complete canonical edge table. It uses
+a bounded visited array and at most one pass per function, including recursion,
+zero-effect calls and both alternatives. It never executes the fixture or infers
+authority from effects filtering or observed events. Every fixed catalog row,
+grant, binding, signature, effect, range contract, scenario, live-count limit,
+root, reachable trusted site, source/catalog origin, opaque Resource pairing and
+possible lexical/temporary cleanup site is disclosed. Immutable v1 contract and
+assumption identities accompany the complete fixed contract. Cleanup-only release
+is distinguished from source-callable use, and unused grants remain visible.
+
+Audit scratch plus the full output allowance and builder header share a conservative
+storage envelope. The session method adds retained machine storage to that same
+envelope. Output bytes and metadata/graph scans are charged against audit work;
+opaque revalidation retains its established bounded admission envelope. Scratch
+and output growth remain fallible Host boundaries; exact work/storage/output
+neighbors and both allocation controls are tested. Rendering is read-only: even
+allocation, output allowance or writer failure cannot mutate the recorded external
+outcome, release an owner, resume a stopped session or deliver a protected Result.
+
+The existing bounded reader now accepts optional explicit immutable selection;
+the resource-free path remains unchanged. CLI `run` and static `audit` take
+`--profile sensor-demo`, one `--function` root, optional fixed `--scenario`,
+`--sensor-limit`, and closed `--grants` selections. No profile is implicit. The
+profile run path keeps its opaque session alive through result/diagnostic rendering
+and writing. All five fixture outcomes have CLI evidence; denied read remains a
+frontend failure despite io, malformed configuration is class 2, terminal limits
+are class 1, and legitimate source Error remains successful execution. The defining
+source is now `examples/trusted_sensor.klx`. There is no general manifest language,
+runtime lookup, second profile, device driver or production fault switch.
+
+M8 complete local gate: **1,977 exact debug identities and 1,977 release identities**
+(1,875 predecessors plus 102 additions), authority doctest, both 1,800-case affine
+checks and every established ancillary gate passed, including actual sensor CLI
+success/Error/audit/denied controls. One supplementary harness expected the word
+“denied”; the unchanged correct diagnostic is “not granted”. The expected substring
+was corrected against the preserved exit-1 log, then the remaining documentation
+and integrity gates completed. No implementation diagnostic was weakened, no test
+identity or numeric oracle changed, and no artifact anomaly occurred.
