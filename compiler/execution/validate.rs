@@ -239,8 +239,11 @@ pub(super) fn expression(
             if !ordinary
                 || op.result.map(ExprType::Result) != Some(e.ty)
                 || arguments.len() != usize::from(op.parameter.is_some())
-                || (matches!(op.class, crate::trusted::OperationClass::Acquisition | crate::trusted::OperationClass::Completion)
-                    && !catalog.granted(catalog.resource.release))
+                || (matches!(
+                    op.class,
+                    crate::trusted::OperationClass::Acquisition
+                        | crate::trusted::OperationClass::Completion
+                ) && !catalog.granted(catalog.resource.release))
             {
                 return Err(bad());
             }

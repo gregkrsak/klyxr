@@ -8,7 +8,10 @@ fn selection(grants: Grants) -> Selection {
     Selection::sensor_demo(Scenario::Sample, grants, &["demo"]).unwrap()
 }
 
-fn prepare(source: &str, grants: Grants) -> Result<crate::execution::CheckedExecutable, crate::execution::ExecutionError> {
+fn prepare(
+    source: &str,
+    grants: Grants,
+) -> Result<crate::execution::CheckedExecutable, crate::execution::ExecutionError> {
     prepare_execution_with_profile(source, AdmissionLimits::default(), &selection(grants))
 }
 
@@ -16,7 +19,8 @@ fn prepare(source: &str, grants: Grants) -> Result<crate::execution::CheckedExec
 fn finish_contract_is_exact_owned_nominal_and_operation_specific() {
     let context = Context::new(AdmissionLimits::default());
     let ast = crate::parse_source("fn demo(){}").unwrap();
-    let resolved = crate::resolve::resolve_profile(&ast, &context, &selection(Grants::ALL)).unwrap();
+    let resolved =
+        crate::resolve::resolve_profile(&ast, &context, &selection(Grants::ALL)).unwrap();
     let program = crate::types::check(resolved).unwrap();
     let catalog = program.trusted.as_ref().unwrap();
     catalog.validate(&program).unwrap();
@@ -27,9 +31,15 @@ fn finish_contract_is_exact_owned_nominal_and_operation_specific() {
     assert_eq!(finish.errors, 0b1000);
     assert_eq!(finish.failure, Some(catalog.error));
     let receipt = &program.ranges[catalog.finish_receipt.0];
-    assert_eq!((receipt.name.as_str(), receipt.min, receipt.max), ("FinishReceipt", 1, 1));
+    assert_eq!(
+        (receipt.name.as_str(), receipt.min, receipt.max),
+        ("FinishReceipt", 1, 1)
+    );
     let result = program.result_type(finish.result.unwrap()).unwrap();
-    assert_eq!(result.success, hir::ValueType::Range(catalog.finish_receipt));
+    assert_eq!(
+        result.success,
+        hir::ValueType::Range(catalog.finish_receipt)
+    );
     assert_eq!(result.failure, hir::ValueType::Range(catalog.error));
     let release = &catalog.operations[2];
     assert_eq!(release.source_name, None);
@@ -64,16 +74,27 @@ fn finish_and_receipt_names_obey_existing_namespace_selection() {
     ] {
         assert!(prepare(source, Grants::ALL).is_err());
     }
-    prepare_execution("fn sensor_finish()->bool{return true;}fn demo()->bool{return sensor_finish();}", AdmissionLimits::default()).unwrap();
+    prepare_execution(
+        "fn sensor_finish()->bool{return true;}fn demo()->bool{return sensor_finish();}",
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     prepare("record Sample{FinishReceipt:FinishReceipt,sensor_finish:Reading}fn demo()->Sample{let sensor_finish=true;return Sample{FinishReceipt:1,sensor_finish:42};}", Grants::ALL).unwrap();
 }
 
 #[test]
 fn denied_finish_keeps_occupancy_without_source_fallback() {
-    let grants = Grants { finish: false, ..Grants::ALL };
+    let grants = Grants {
+        finish: false,
+        ..Grants::ALL
+    };
     let failure = prepare("fn demo(sensor:Sensor)->Result<success:FinishReceipt,failure:SensorError>effects io{return sensor_finish(sensor);}", grants).err().unwrap();
     assert!(matches!(failure.kind, ErrorKind::Frontend { .. }));
-    assert!(prepare("fn sensor_finish(sensor:Sensor)->bool{return true;}fn demo(){}", grants).is_err());
+    assert!(prepare(
+        "fn sensor_finish(sensor:Sensor)->bool{return true;}fn demo(){}",
+        grants
+    )
+    .is_err());
 }
 
 #[test]
@@ -100,7 +121,12 @@ fn receipt_literal_neighbors_and_foreign_nominal_values_reject() {
 
 #[test]
 fn finish_rejects_reference_wrong_arity_and_unselected_payload() {
-    for expression in ["sensor_finish(&sensor)", "sensor_finish()", "sensor_finish(sensor,sensor)", "sensor_finish(sensor_open())"] {
+    for expression in [
+        "sensor_finish(&sensor)",
+        "sensor_finish()",
+        "sensor_finish(sensor,sensor)",
+        "sensor_finish(sensor_open())",
+    ] {
         assert!(prepare(&format!("fn demo()->Result<success:FinishReceipt,failure:SensorError>effects io{{let sensor=sensor_open()or return;return {expression};}}"), Grants::ALL).is_err());
     }
 }
@@ -114,7 +140,8 @@ fn finish_complete_direct_effect_is_required() {
 fn unused_finish_descriptor_and_error_subset_are_independently_validated() {
     let context = Context::new(AdmissionLimits::default());
     let ast = crate::parse_source("fn demo(){}").unwrap();
-    let resolved = crate::resolve::resolve_profile(&ast, &context, &selection(Grants::NONE)).unwrap();
+    let resolved =
+        crate::resolve::resolve_profile(&ast, &context, &selection(Grants::NONE)).unwrap();
     let program = crate::types::check(resolved).unwrap();
     for mutation in 0..4 {
         let mut changed = program.clone();
@@ -132,11 +159,25 @@ fn unused_finish_descriptor_and_error_subset_are_independently_validated() {
 #[test]
 fn m1_completion_dispatch_is_disabled_and_retains_the_sensor() {
     let executable = prepare("fn demo()->Result<success:FinishReceipt,failure:SensorError>effects io{let sensor=sensor_open()or return;return sensor_finish(sensor);}", Grants::ALL).unwrap();
-    let mut session = ExecutionSession::new(&executable, executable.entry("demo").unwrap(), ExecutionLimits::default()).unwrap();
-    assert!(matches!(session.advance().unwrap_err().kind, ErrorKind::Integrity(_)));
+    let mut session = ExecutionSession::new(
+        &executable,
+        executable.entry("demo").unwrap(),
+        ExecutionLimits::default(),
+    )
+    .unwrap();
+    assert!(matches!(
+        session.advance().unwrap_err().kind,
+        ErrorKind::Integrity(_)
+    ));
     assert_eq!(session.live_sensors(), 1);
     let prefix = session.events().to_vec();
-    assert_eq!(prefix.iter().filter(|e| matches!(e, crate::execution::TrustedEvent::Attempt(..))).count(), 1);
+    assert_eq!(
+        prefix
+            .iter()
+            .filter(|e| matches!(e, crate::execution::TrustedEvent::Attempt(..)))
+            .count(),
+        1
+    );
     assert!(session.advance().is_err());
     assert_eq!(session.events(), prefix);
 }

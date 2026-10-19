@@ -342,9 +342,13 @@ impl Catalog {
         {
             return Err("invalid trusted catalog identity");
         }
-        for (index, (name, min, max)) in [("Reading", 0, 4095), ("SensorError", 1, 3), ("FinishReceipt", 1, 1)]
-            .into_iter()
-            .enumerate()
+        for (index, (name, min, max)) in [
+            ("Reading", 0, 4095),
+            ("SensorError", 1, 3),
+            ("FinishReceipt", 1, 1),
+        ]
+        .into_iter()
+        .enumerate()
         {
             let Some(range) = program.ranges.get(index) else {
                 return Err("missing imported range");
@@ -353,7 +357,12 @@ impl Catalog {
                 || range.name != name
                 || range.min != min
                 || range.max != max
-                || range.origin != hir::DeclarationOrigin::Catalog(self.origin(if index == 2 { 6 } else { index }))
+                || range.origin
+                    != hir::DeclarationOrigin::Catalog(self.origin(if index == 2 {
+                        6
+                    } else {
+                        index
+                    }))
             {
                 return Err("altered imported range descriptor");
             }
@@ -413,17 +422,19 @@ impl Catalog {
                 || op.parameter != parameter
                 || op.success != success
                 || op.failure != failure
-                || op.result != match index {
-                    0 | 1 => Some(hir::ResultTypeId(index)),
-                    3 => Some(hir::ResultTypeId(2)),
-                    _ => None,
-                }
-                || op.errors != match index {
-                    0 => 0b1010,
-                    1 => 0b1100,
-                    3 => 0b1000,
-                    _ => 0,
-                }
+                || op.result
+                    != match index {
+                        0 | 1 => Some(hir::ResultTypeId(index)),
+                        3 => Some(hir::ResultTypeId(2)),
+                        _ => None,
+                    }
+                || op.errors
+                    != match index {
+                        0 => 0b1010,
+                        1 => 0b1100,
+                        3 => 0b1000,
+                        _ => 0,
+                    }
                 || op.class != class
                 || op.binding != binding
                 || op.resource != self.sensor

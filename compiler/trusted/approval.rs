@@ -112,7 +112,11 @@ impl Approved {
             profile_identity: PROFILE,
             assumptions: ASSUMPTIONS,
             catalog: catalog.clone(),
-            ranges: [program.ranges[0].clone(), program.ranges[1].clone(), program.ranges[2].clone()],
+            ranges: [
+                program.ranges[0].clone(),
+                program.ranges[1].clone(),
+                program.ranges[2].clone(),
+            ],
             roots: Vec::new(),
             invocations: Vec::new(),
             edges: Vec::new(),

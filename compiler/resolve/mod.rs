@@ -305,9 +305,13 @@ fn resolve_with(
                 "no catalog is published",
             )]
         })?;
-        for (index, (name, min, max)) in [("Reading", 0, 4095), ("SensorError", 1, 3), ("FinishReceipt", 1, 1)]
-            .into_iter()
-            .enumerate()
+        for (index, (name, min, max)) in [
+            ("Reading", 0, 4095),
+            ("SensorError", 1, 3),
+            ("FinishReceipt", 1, 1),
+        ]
+        .into_iter()
+        .enumerate()
         {
             let id = RangeTypeId(index);
             types.insert(name);
@@ -317,7 +321,11 @@ fn resolve_with(
                 name: name.into(),
                 min,
                 max,
-                origin: hir::DeclarationOrigin::Catalog(catalog.origin(if index == 2 { 6 } else { index })),
+                origin: hir::DeclarationOrigin::Catalog(catalog.origin(if index == 2 {
+                    6
+                } else {
+                    index
+                })),
             });
         }
         types.insert("Sensor");
@@ -503,8 +511,11 @@ impl Resolver<'_> {
         if let Some(catalog) = &self.program.trusted {
             if let Some(op) = catalog.callable(name) {
                 if !catalog.granted(op.id)
-                    || (matches!(op.class, crate::trusted::OperationClass::Acquisition | crate::trusted::OperationClass::Completion)
-                        && !catalog.granted(catalog.operations[2].id))
+                    || (matches!(
+                        op.class,
+                        crate::trusted::OperationClass::Acquisition
+                            | crate::trusted::OperationClass::Completion
+                    ) && !catalog.granted(catalog.operations[2].id))
                 {
                     return Err(error(span, format!("trusted operation `{name}` is not granted"), "the exact selected operation and its fixed cleanup-only release require authority"));
                 }
