@@ -118,7 +118,7 @@ M0: baseline and branch established; ledger created before semantic changes.
 M1-M4: catalog admission, canonical Resource eligibility, trusted-call typing and
 explicit invocation/root/runtime approval are implemented; validation below.
 M5 joint receipt/session custody is implemented and source fixture execution is
-enabled only through that seam. M6 composition is implemented; M7-M9 remain pending. The consuming convenience
+enabled only through that seam. M6 composition and M7 failures are implemented; M8-M9 remain pending. The consuming convenience
 executor still rejects profile artifacts, and no ordinary/host fallback exists.
 
 ### M0 published checkpoint
@@ -462,3 +462,47 @@ M6 complete local gate: **1,951 exact debug identities and 1,951 release identit
 (1,875 predecessors plus 76 additions); all established check/fmt/Clippy/Rustdoc,
 authority doctest, both 1,800-case affine checks, CLI/examples/rejections, assets,
 scaffold, context reproducibility and diff integrity passed. No artifact anomaly.
+
+### M6 published checkpoint
+
+Commit `13646882875e9abb09df9b12ca69c83eaee585fa`, tree
+`4cecd62406a64826fb599260bba353eaf69fe1b4`. Every push job/step passed:
+
+| Workflow | Run | Job |
+| --- | --- | --- |
+| build | [39207717304](https://github.com/gregkrsak/klyxr/actions/runs/39207717304) | 117914078187 |
+| tests | [39207717416](https://github.com/gregkrsak/klyxr/actions/runs/39207717416) | 117914078464 |
+| verify | [39207717308](https://github.com/gregkrsak/klyxr/actions/runs/39207717308) | 117914078129 |
+| docs | [39207717272](https://github.com/gregkrsak/klyxr/actions/runs/39207717272) | 117914077916 |
+
+### M7 actual failure cuts and malformed receipts
+
+Sixteen additional boundary identities independently exercise seven actual
+receiving allocation growth boundaries (identity, provenance, invocation audit,
+operand, Result cell, temporary owner and temporary event) and release-audit
+growth. Each detected allocation failure is Host; receiving failure precedes any
+external attempt, while release-audit failure retains the owner without a release
+attempt. Faults are sealed cfg(test), only fire on actual growth and never retry.
+No source/production switch, real OOM experiment or caught panic is used.
+
+Malformed receipts independently cover foreign and duplicate fresh identity,
+Error carrying a Sensor, wrong imported nominal range, in-bounds but unenumerated
+operation Error and wrong invocation provenance. Actual tokens stay in their
+machine-owned receipt; the duplicate control retains two physical responsibilities
+rather than collapsing them by equal numeric ID. Receipt invocation must now equal
+the immediately realized invocation, not merely an earlier number in the prefix.
+Opaque approval mutation coverage from M4 remains in force before session entry.
+
+Exact combined runtime storage/fuel neighbors, tiny-source session header plus
+stopped diagnostics, the live-Sensor count neighbor, legitimate Error followed by
+Limit, protected Ok/Error after cleanup Host, CLI class 2, range traps and rendering
+failure are covered. Every fuel cut through partial owned-argument entry and the
+completed release prefix conserves acquired minus released tokens; repeat advance
+never changes steps or events. No terminal result is delivered as source Error,
+and no failed release is reported complete. Whole-Result cleanup authority and all
+predecessor protocol constants remain unchanged.
+
+M7 complete local gate: **1,967 exact debug identities and 1,967 release identities**
+(1,875 predecessors plus 92 additions). All established gates including both affine
+checks, authority doctest, warnings-denied tools and byte-identical context passed.
+No compiler, executable or integrity anomaly occurred.

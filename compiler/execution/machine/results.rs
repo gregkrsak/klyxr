@@ -111,6 +111,8 @@ impl<'a> Machine<'a> {
             == self.results.as_ref().unwrap().cells.capacity()
         {
             self.reserve(size_of::<Cell>())?;
+            #[cfg(test)]
+            self.trusted_allocation(super::trusted::Allocation::ResultCell, true)?;
             self.results
                 .as_mut()
                 .unwrap()

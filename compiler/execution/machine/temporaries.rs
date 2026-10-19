@@ -433,12 +433,16 @@ impl<'a> Machine<'a> {
         if owner_growth > 0 {
             self.reserve(size_of::<Owner>())?;
             #[cfg(test)]
+            self.trusted_allocation(super::trusted::Allocation::TemporaryOwner, true)?;
+            #[cfg(test)]
             self.temporary_allocation()?;
             self.temporaries.as_mut().unwrap().frames[i]
                 .owners
                 .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("temporary owner allocation")))?;
         }
+        #[cfg(test)]
+        self.trusted_allocation(super::trusted::Allocation::TemporaryEvent, event_growth > 0)?;
         self.temporary_event_reserve()?;
         Ok(())
     }

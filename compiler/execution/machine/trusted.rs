@@ -53,6 +53,25 @@ enum Fault {
     BadRange,
     PublicationLimit,
     ReleaseFailure,
+    ForeignSensor,
+    DuplicateSensor,
+    ErrorWithSensor,
+    WrongRangeIdentity,
+    WrongErrorCode,
+    WrongInvocation,
+    Allocation(Allocation),
+}
+#[cfg(test)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Allocation {
+    Identity,
+    Provenance,
+    Audit,
+    Operand,
+    ResultCell,
+    TemporaryOwner,
+    TemporaryEvent,
+    ReleaseAudit,
 }
 enum Status {
     Pending,
@@ -193,9 +212,27 @@ impl<'a> ExecutionSession<'a> {
 }
 
 impl<'a> Machine<'a> {
+    #[cfg(test)]
+    pub(super) fn trusted_allocation(
+        &self,
+        site: Allocation,
+        growth: bool,
+    ) -> Result<(), ExecutionError> {
+        if growth
+            && self
+                .trusted
+                .as_ref()
+                .is_some_and(|s| s.fault == Some((Fault::Allocation(site), s.next_invocation)))
+        {
+            return Err(self.failure(ErrorKind::Host("injected trusted allocation boundary")));
+        }
+        Ok(())
+    }
     fn reserve_trusted_operand(&mut self) -> Result<(), ExecutionError> {
         if self.values.len() == self.values.capacity() {
             self.reserve(size_of::<Value>())?;
+            #[cfg(test)]
+            self.trusted_allocation(Allocation::Operand, true)?;
             self.values
                 .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("trusted Result operand reservation")))?;
@@ -224,6 +261,8 @@ impl<'a> Machine<'a> {
             .ok_or_else(|| self.integrity("trusted reservation overflow"))?;
         self.reserve(bytes)?;
         if entry_growth > 0 {
+            #[cfg(test)]
+            self.trusted_allocation(Allocation::Identity, true)?;
             self.trusted
                 .as_mut()
                 .unwrap()
@@ -232,6 +271,8 @@ impl<'a> Machine<'a> {
                 .map_err(|_| self.failure(ErrorKind::Host("Sensor identity reservation")))?;
         }
         if production_growth > 0 {
+            #[cfg(test)]
+            self.trusted_allocation(Allocation::Provenance, true)?;
             self.trusted
                 .as_mut()
                 .unwrap()
@@ -241,6 +282,8 @@ impl<'a> Machine<'a> {
                     self.failure(ErrorKind::Host("trusted Result provenance reservation"))
                 })?;
         }
+        #[cfg(test)]
+        self.trusted_allocation(Allocation::Audit, events > 0)?;
         self.trusted
             .as_mut()
             .unwrap()
@@ -447,6 +490,37 @@ impl<'a> Machine<'a> {
                         value.value = 4096;
                     }
                 }
+                Fault::ForeignSensor | Fault::DuplicateSensor => {
+                    if let Some(Payload::Sensor(token)) =
+                        state.receipt.as_mut().unwrap().payload.as_mut()
+                    {
+                        if fault == Fault::ForeignSensor {
+                            token.realm += 1;
+                        } else {
+                            token.identity = 0;
+                        }
+                    }
+                }
+                Fault::ErrorWithSensor => state.receipt.as_mut().unwrap().tag = 1,
+                Fault::WrongRangeIdentity => {
+                    if let Some(Payload::Range(value)) =
+                        state.receipt.as_mut().unwrap().payload.as_mut()
+                    {
+                        value.ty = if value.ty == approved.ranges[0].id {
+                            approved.ranges[1].id
+                        } else {
+                            approved.ranges[0].id
+                        };
+                    }
+                }
+                Fault::WrongErrorCode => {
+                    if let Some(Payload::Range(value)) =
+                        state.receipt.as_mut().unwrap().payload.as_mut()
+                    {
+                        value.value = if open { 2 } else { 1 };
+                    }
+                }
+                Fault::WrongInvocation => state.receipt.as_mut().unwrap().plan = usize::MAX,
                 _ => {}
             }
         }
@@ -522,7 +596,9 @@ impl<'a> Machine<'a> {
             .receipt
             .as_ref()
             .ok_or_else(|| self.integrity("missing owned trusted receipt"))?;
-        if receipt.plan != plan.ordinal || receipt.invocation >= state.next_invocation {
+        if receipt.plan != plan.ordinal
+            || receipt.invocation.checked_add(1) != Some(state.next_invocation)
+        {
             return Err(self.integrity("trusted receipt operation provenance mismatch"));
         }
         match (receipt.tag, receipt.payload.as_ref()) {
@@ -656,6 +732,8 @@ impl<'a> Machine<'a> {
                 .checked_mul(size_of::<Event>())
                 .ok_or_else(|| self.integrity("Sensor release audit overflow"))?,
         )?;
+        #[cfg(test)]
+        self.trusted_allocation(Allocation::ReleaseAudit, needed > 0)?;
         self.trusted
             .as_mut()
             .unwrap()
