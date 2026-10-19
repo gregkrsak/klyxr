@@ -13,6 +13,147 @@ pub(super) struct Pending {
     pub(super) protected: Option<results::OwnerId>,
 }
 
+impl<'a> Machine<'a> {
+    pub(super) fn completion_prepare(
+        &mut self,
+        index: usize,
+        activation: u64,
+        frame: u64,
+    ) -> Result<(), ExecutionError> {
+        let approved = self.executable.trusted.as_ref().unwrap();
+        let invocation = &approved.invocations[index];
+        let plan = invocation
+            .completion
+            .as_ref()
+            .ok_or_else(|| self.integrity("completion lacks sealed protocol"))?;
+        let (input, ty, sensor) = self.completion_input(plan.input, invocation.operation)?;
+        let state = self.trusted.as_ref().unwrap();
+        if state.completion.is_some()
+            || state.receipt.is_some()
+            || ty != plan.resource
+            || self.frames[self.frame_index(frame)?].function != invocation.function
+            || !state.entries.iter().any(|entry| {
+                entry
+                    .token
+                    .as_ref()
+                    .is_some_and(|token| token.realm == state.realm && token.identity == sensor)
+            })
+        {
+            return Err(self.integrity("completion holder/payload correspondence"));
+        }
+        state.next_invocation.checked_add(1).ok_or_else(|| {
+            self.failure(ErrorKind::ConfiguredLimit("trusted invocation identities"))
+        })?;
+        let production = state.productions.len();
+        let events = 7usize.saturating_sub(state.events.capacity() - state.events.len());
+        let provenance =
+            usize::from(production == state.productions.capacity()) * size_of::<Production>();
+        let operands =
+            usize::from(self.values.len() == self.values.capacity()) * size_of::<Value>();
+        let tasks = 2usize
+            .saturating_sub(self.tasks.capacity() - self.tasks.len())
+            .checked_mul(size_of::<Task<'_>>())
+            .ok_or_else(|| self.integrity("completion continuation overflow"))?;
+        let total = [
+            provenance,
+            events
+                .checked_mul(size_of::<Event>())
+                .ok_or_else(|| self.integrity("completion events overflow"))?,
+            operands,
+            tasks,
+            self.completion_result_growth(),
+            self.completion_temporary_growth(activation, invocation.site)?,
+            self.completion_cleanup_growth()?,
+        ]
+        .into_iter()
+        .try_fold(0usize, usize::checked_add)
+        .ok_or_else(|| self.integrity("completion combined envelope overflow"))?;
+        // This is one simultaneous bound, before any receiving allocation or
+        // current-holder transfer. Diagnostics are already charged by State.
+        self.reserve(total)?;
+        #[cfg(test)]
+        self.trusted_allocation(Allocation::Provenance, provenance > 0)?;
+        self.trusted
+            .as_mut()
+            .unwrap()
+            .productions
+            .try_reserve_exact(1)
+            .map_err(|_| self.failure(ErrorKind::Host("completion provenance")))?;
+        #[cfg(test)]
+        self.trusted_allocation(Allocation::Audit, events > 0)?;
+        self.trusted
+            .as_mut()
+            .unwrap()
+            .events
+            .try_reserve_exact(7)
+            .map_err(|_| self.failure(ErrorKind::Host("completion protocol events")))?;
+        let ticket = self.trusted_result_prepare(production)?;
+        self.reserve_trusted_operand()?;
+        self.completion_temporary_reserve(activation, invocation.site)?;
+        self.completion_cleanup_reserve()?;
+        #[cfg(test)]
+        self.trusted_allocation(Allocation::CompletionContinuation, tasks > 0)?;
+        self.tasks
+            .try_reserve_exact(2)
+            .map_err(|_| self.failure(ErrorKind::Host("completion continuations")))?;
+        if self.trusted.as_ref().unwrap().diagnostic.borrow().is_none() {
+            #[cfg(test)]
+            self.trusted_allocation(
+                Allocation::CompletionDiagnostic,
+                self.limits.trace_depth > 0,
+            )?;
+            let mut trace = Vec::new();
+            trace
+                .try_reserve_exact(self.limits.trace_depth)
+                .map_err(|_| self.failure(ErrorKind::Host("completion diagnostic envelope")))?;
+            *self.trusted.as_ref().unwrap().diagnostic.borrow_mut() = Some(trace);
+        }
+        self.reserve(0)?;
+        let state = self.trusted.as_mut().unwrap();
+        state.completion = Some(Pending {
+            invocation: state.next_invocation,
+            plan: index,
+            input,
+            sensor,
+            phase: CompletionPhase::Reserved,
+            ticket: Some(ticket),
+            value: None,
+            protected: None,
+        });
+        self.completion_reserved()
+    }
+
+    fn completion_reserved(&self) -> Result<(), ExecutionError> {
+        let state = self.trusted.as_ref().unwrap();
+        let pending = state
+            .completion
+            .as_ref()
+            .ok_or_else(|| self.integrity("missing completion envelope"))?;
+        let plan = self
+            .executable
+            .trusted
+            .as_ref()
+            .unwrap()
+            .invocations
+            .get(pending.plan)
+            .ok_or_else(|| self.integrity("foreign pending completion plan"))?;
+        let (holder, _, sensor) =
+            self.completion_input(plan.completion.as_ref().unwrap().input, plan.operation)?;
+        if pending.phase != CompletionPhase::Reserved
+            || pending.invocation != state.next_invocation
+            || pending.input != holder
+            || pending.sensor != sensor
+            || pending.value.is_some()
+            || pending.protected.is_some()
+            || pending.ticket.as_ref().map(|t| t.owner.0)
+                != self.results.as_ref().map(|r| r.cells.len())
+        {
+            return Err(self.integrity("inconsistent reserved completion custody"));
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,146 +312,5 @@ mod tests {
         } else {
             panic!("disabled dispatch must be terminal");
         }
-    }
-}
-
-impl<'a> Machine<'a> {
-    pub(super) fn completion_prepare(
-        &mut self,
-        index: usize,
-        activation: u64,
-        frame: u64,
-    ) -> Result<(), ExecutionError> {
-        let approved = self.executable.trusted.as_ref().unwrap();
-        let invocation = &approved.invocations[index];
-        let plan = invocation
-            .completion
-            .as_ref()
-            .ok_or_else(|| self.integrity("completion lacks sealed protocol"))?;
-        let (input, ty, sensor) = self.completion_input(plan.input, invocation.operation)?;
-        let state = self.trusted.as_ref().unwrap();
-        if state.completion.is_some()
-            || state.receipt.is_some()
-            || ty != plan.resource
-            || self.frames[self.frame_index(frame)?].function != invocation.function
-            || !state.entries.iter().any(|entry| {
-                entry
-                    .token
-                    .as_ref()
-                    .is_some_and(|token| token.realm == state.realm && token.identity == sensor)
-            })
-        {
-            return Err(self.integrity("completion holder/payload correspondence"));
-        }
-        state.next_invocation.checked_add(1).ok_or_else(|| {
-            self.failure(ErrorKind::ConfiguredLimit("trusted invocation identities"))
-        })?;
-        let production = state.productions.len();
-        let events = 7usize.saturating_sub(state.events.capacity() - state.events.len());
-        let provenance =
-            usize::from(production == state.productions.capacity()) * size_of::<Production>();
-        let operands =
-            usize::from(self.values.len() == self.values.capacity()) * size_of::<Value>();
-        let tasks = 2usize
-            .saturating_sub(self.tasks.capacity() - self.tasks.len())
-            .checked_mul(size_of::<Task<'_>>())
-            .ok_or_else(|| self.integrity("completion continuation overflow"))?;
-        let total = [
-            provenance,
-            events
-                .checked_mul(size_of::<Event>())
-                .ok_or_else(|| self.integrity("completion events overflow"))?,
-            operands,
-            tasks,
-            self.completion_result_growth(),
-            self.completion_temporary_growth(activation, invocation.site)?,
-            self.completion_cleanup_growth()?,
-        ]
-        .into_iter()
-        .try_fold(0usize, usize::checked_add)
-        .ok_or_else(|| self.integrity("completion combined envelope overflow"))?;
-        // This is one simultaneous bound, before any receiving allocation or
-        // current-holder transfer. Diagnostics are already charged by State.
-        self.reserve(total)?;
-        #[cfg(test)]
-        self.trusted_allocation(Allocation::Provenance, provenance > 0)?;
-        self.trusted
-            .as_mut()
-            .unwrap()
-            .productions
-            .try_reserve_exact(1)
-            .map_err(|_| self.failure(ErrorKind::Host("completion provenance")))?;
-        #[cfg(test)]
-        self.trusted_allocation(Allocation::Audit, events > 0)?;
-        self.trusted
-            .as_mut()
-            .unwrap()
-            .events
-            .try_reserve_exact(7)
-            .map_err(|_| self.failure(ErrorKind::Host("completion protocol events")))?;
-        let ticket = self.trusted_result_prepare(production)?;
-        self.reserve_trusted_operand()?;
-        self.completion_temporary_reserve(activation, invocation.site)?;
-        self.completion_cleanup_reserve()?;
-        #[cfg(test)]
-        self.trusted_allocation(Allocation::CompletionContinuation, tasks > 0)?;
-        self.tasks
-            .try_reserve_exact(2)
-            .map_err(|_| self.failure(ErrorKind::Host("completion continuations")))?;
-        if self.trusted.as_ref().unwrap().diagnostic.borrow().is_none() {
-            #[cfg(test)]
-            self.trusted_allocation(
-                Allocation::CompletionDiagnostic,
-                self.limits.trace_depth > 0,
-            )?;
-            let mut trace = Vec::new();
-            trace
-                .try_reserve_exact(self.limits.trace_depth)
-                .map_err(|_| self.failure(ErrorKind::Host("completion diagnostic envelope")))?;
-            *self.trusted.as_ref().unwrap().diagnostic.borrow_mut() = Some(trace);
-        }
-        self.reserve(0)?;
-        let state = self.trusted.as_mut().unwrap();
-        state.completion = Some(Pending {
-            invocation: state.next_invocation,
-            plan: index,
-            input,
-            sensor,
-            phase: CompletionPhase::Reserved,
-            ticket: Some(ticket),
-            value: None,
-            protected: None,
-        });
-        self.completion_reserved()
-    }
-
-    fn completion_reserved(&self) -> Result<(), ExecutionError> {
-        let state = self.trusted.as_ref().unwrap();
-        let pending = state
-            .completion
-            .as_ref()
-            .ok_or_else(|| self.integrity("missing completion envelope"))?;
-        let plan = self
-            .executable
-            .trusted
-            .as_ref()
-            .unwrap()
-            .invocations
-            .get(pending.plan)
-            .ok_or_else(|| self.integrity("foreign pending completion plan"))?;
-        let (holder, _, sensor) =
-            self.completion_input(plan.completion.as_ref().unwrap().input, plan.operation)?;
-        if pending.phase != CompletionPhase::Reserved
-            || pending.invocation != state.next_invocation
-            || pending.input != holder
-            || pending.sensor != sensor
-            || pending.value.is_some()
-            || pending.protected.is_some()
-            || pending.ticket.as_ref().map(|t| t.owner.0)
-                != self.results.as_ref().map(|r| r.cells.len())
-        {
-            return Err(self.integrity("inconsistent reserved completion custody"));
-        }
-        Ok(())
     }
 }
