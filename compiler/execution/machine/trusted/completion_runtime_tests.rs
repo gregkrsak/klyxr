@@ -344,3 +344,18 @@ fn m9_coordinated_protected_payload_and_production_forgery_cannot_widen_finish_e
         assert_eq!(s.events(), prefix);
     }
 }
+
+#[test]
+fn m9_input_activation_frame_corruption_rejects_before_handoff_and_attempt() {
+    let e = artifact(Scenario::Sample);
+    let mut session = ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).unwrap();
+    session.machine.trusted.as_mut().unwrap().fault = Some((Fault::CompletionInputFrame,1));
+    assert_eq!(session.advance().unwrap_err().kind, ErrorKind::Integrity("completion receiving region mismatch"));
+    assert_eq!(session.live_sensors(),1);
+    super::completion_bound_tests::conserved(&session.machine);
+    assert!(session.machine.trusted.as_ref().unwrap().completion.is_none());
+    assert_eq!(session.events().iter().filter(|event| matches!(event,Event::Attempt(..))).count(),1);
+    let prefix = session.events().to_vec();
+    assert!(session.advance().is_err());
+    assert_eq!(session.events(),prefix);
+}

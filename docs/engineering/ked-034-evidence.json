@@ -3,7 +3,7 @@
   "baseline_commit": "372230df1d359b13d28f5c136130ac031507716a",
   "baseline_tree": "a646e9576a9b7650ff9a95275f1080b591d06986",
   "predecessor_count": 1981,
-  "expected_per_profile": 2044,
+  "expected_per_profile": 2045,
   "additions": [
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific",
     "lib.rs::trusted::completion_tests::finish_direct_and_relay_arguments_prepare_without_reference_coercion",
@@ -67,7 +67,8 @@
     "tests/completion_cli.rs::completion_cli_audit_reports_static_protocol_without_executing_a_scenario",
     "lib.rs::execution::completion_authority_tests::m9_finish_only_approval_allocations_are_host_and_publish_no_executable",
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_coordinated_protected_payload_and_production_forgery_cannot_widen_finish_errors",
-    "lib.rs::execution::machine::trusted::completion_bound_tests::m9_stopped_completion_report_neighbors_preserve_cursor_outcome_and_prefix"
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m9_stopped_completion_report_neighbors_preserve_cursor_outcome_and_prefix",
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_input_activation_frame_corruption_rejects_before_handoff_and_attempt"
   ],
   "classifications": {
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific": "private_canonical_catalog",
@@ -132,7 +133,8 @@
     "tests/completion_cli.rs::completion_cli_audit_reports_static_protocol_without_executing_a_scenario": "trusted_boundary",
     "lib.rs::execution::completion_authority_tests::m9_finish_only_approval_allocations_are_host_and_publish_no_executable": "private_malformed_authority",
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_coordinated_protected_payload_and_production_forgery_cannot_widen_finish_errors": "private_malformed_authority",
-    "lib.rs::execution::machine::trusted::completion_bound_tests::m9_stopped_completion_report_neighbors_preserve_cursor_outcome_and_prefix": "trusted_boundary"
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m9_stopped_completion_report_neighbors_preserve_cursor_outcome_and_prefix": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_input_activation_frame_corruption_rejects_before_handoff_and_attempt": "private_malformed_authority"
   },
   "migrations": {},
   "contract_corrections": [],
@@ -208,7 +210,8 @@
     ],
     "13.12": [
       "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects",
-      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_post_response_host_preserves_protected_outcome_and_completion_owner"
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_post_response_host_preserves_protected_outcome_and_completion_owner",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_input_activation_frame_corruption_rejects_before_handoff_and_attempt"
     ],
     "13.13": [
       "lib.rs::execution::machine::trusted::completion::tests::m3_receiving_capacities_coexist_before_handoff",
@@ -263,7 +266,8 @@
       "lib.rs::execution::completion_authority_tests::completion_all_authority_copies_still_require_exact_mir_derivation",
       "lib.rs::execution::completion_authority_tests::m6_each_completion_event_identity_is_sealed_even_across_all_authority_copies",
       "lib.rs::execution::completion_authority_tests::m6_invocation_argument_order_arity_result_source_mir_and_catalog_origins_reject",
-      "lib.rs::execution::completion_authority_tests::completion_mir_cleanup_witness_omission_duplicate_wrong_holder_and_kind_reject"
+      "lib.rs::execution::completion_authority_tests::completion_mir_cleanup_witness_omission_duplicate_wrong_holder_and_kind_reject",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_input_activation_frame_corruption_rejects_before_handoff_and_attempt"
     ],
     "13.24": [
       "lib.rs::execution::machine::trusted::completion_bound_tests::m7_completion_catalog_has_explicit_terms_and_exact_combined_neighbors",
@@ -314,7 +318,8 @@
     "14.07": [
       "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_holder_and_continuation_mutations",
       "lib.rs::execution::completion_authority_tests::m6_invocation_argument_order_arity_result_source_mir_and_catalog_origins_reject",
-      "lib.rs::execution::completion_authority_tests::completion_mir_cleanup_witness_omission_duplicate_wrong_holder_and_kind_reject"
+      "lib.rs::execution::completion_authority_tests::completion_mir_cleanup_witness_omission_duplicate_wrong_holder_and_kind_reject",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_input_activation_frame_corruption_rejects_before_handoff_and_attempt"
     ],
     "14.08": [
       "lib.rs::execution::completion_authority_tests::m6_each_completion_event_identity_is_sealed_even_across_all_authority_copies"
@@ -322,11 +327,13 @@
     "14.09": [
       "lib.rs::execution::completion_authority_tests::m6_invocation_argument_order_arity_result_source_mir_and_catalog_origins_reject",
       "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_holder_and_continuation_mutations",
-      "lib.rs::execution::completion_authority_tests::completion_all_authority_copies_still_require_exact_mir_derivation"
+      "lib.rs::execution::completion_authority_tests::completion_all_authority_copies_still_require_exact_mir_derivation",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_input_activation_frame_corruption_rejects_before_handoff_and_attempt"
     ],
     "14.10": [
       "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_bad_ticket_realm_fresh_identity_and_frame_reject_before_finish_attempt",
-      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_invocation_counter_overflow_stops_before_consumption_or_attempt"
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_invocation_counter_overflow_stops_before_consumption_or_attempt",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_input_activation_frame_corruption_rejects_before_handoff_and_attempt"
     ],
     "14.11": [
       "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_late_protected_tag_payload_realm_production_and_receiver_corruptions_keep_prefix",
@@ -342,7 +349,8 @@
     "K34-P01": [
       "lib.rs::execution::machine::trusted::completion::tests::m3_diagnostic_host_cut_keeps_relay_returned_owner_without_attempt",
       "lib.rs::execution::machine::trusted::completion_composition_tests::owned_helper_parameter_protected_return_and_temporary_finish_once",
-      "lib.rs::execution::machine::trusted::completion_composition_tests::nested_protected_sensor_returns_feed_completion_after_existing_outcome_selection"
+      "lib.rs::execution::machine::trusted::completion_composition_tests::nested_protected_sensor_returns_feed_completion_after_existing_outcome_selection",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_input_activation_frame_corruption_rejects_before_handoff_and_attempt"
     ],
     "K34-P02": [
       "lib.rs::execution::machine::trusted::completion_bound_tests::m7_each_container_fits_but_combined_envelope_rejects_before_handoff",
@@ -368,7 +376,8 @@
       "lib.rs::execution::completion_authority_tests::completion_all_authority_copies_still_require_exact_mir_derivation",
       "lib.rs::execution::completion_authority_tests::m6_each_completion_event_identity_is_sealed_even_across_all_authority_copies",
       "lib.rs::execution::completion_authority_tests::m6_invocation_argument_order_arity_result_source_mir_and_catalog_origins_reject",
-      "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_late_protected_tag_payload_realm_production_and_receiver_corruptions_keep_prefix"
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_late_protected_tag_payload_realm_production_and_receiver_corruptions_keep_prefix",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_input_activation_frame_corruption_rejects_before_handoff_and_attempt"
     ],
     "K34-P07": [
       "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific",
@@ -471,7 +480,8 @@
     "M9": [
       "lib.rs::execution::completion_authority_tests::m9_finish_only_approval_allocations_are_host_and_publish_no_executable",
       "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_coordinated_protected_payload_and_production_forgery_cannot_widen_finish_errors",
-      "lib.rs::execution::machine::trusted::completion_bound_tests::m9_stopped_completion_report_neighbors_preserve_cursor_outcome_and_prefix"
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m9_stopped_completion_report_neighbors_preserve_cursor_outcome_and_prefix",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_input_activation_frame_corruption_rejects_before_handoff_and_attempt"
     ]
   },
   "authority_doctests": 1,

@@ -140,7 +140,10 @@ impl<'a> Machine<'a> {
             .as_ref()
             .unwrap()
             .sites[site.0];
-        if frame.phase != Phase::Active || frame.region != metadata.region {
+        if frame.phase != Phase::Active
+            || frame.region != metadata.region
+            || self.frames.last().map(|current| current.id) != Some(frame.frame)
+        {
             return Err(self.integrity("completion receiving region mismatch"));
         }
         let owners =
@@ -184,6 +187,13 @@ impl<'a> Machine<'a> {
             return Err(self.integrity("completion input lacks exact Sensor ticket"));
         };
         Ok((*id, *ty, *identity))
+    }
+
+    #[cfg(test)]
+    pub(super) fn corrupt_completion_input_frame(&mut self) {
+        let Some(Value::Temporary(id)) = self.values.last() else { unreachable!("owned completion argument") };
+        let index = self.temporary_index(id.activation).unwrap();
+        self.temporaries.as_mut().unwrap().frames[index].frame = u64::MAX;
     }
 
     pub(super) fn completion_temporary_reserve(

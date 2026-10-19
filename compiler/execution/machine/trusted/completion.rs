@@ -401,6 +401,8 @@ impl<'a> Machine<'a> {
         if state.completion.is_some()
             || state.receipt.is_some()
             || ty != plan.resource
+            || input.activation != activation
+            || self.frames.last().map(|current| current.id) != Some(frame)
             || self.frames[self.frame_index(frame)?].function != invocation.function
             || !state.entries.iter().any(|entry| {
                 entry

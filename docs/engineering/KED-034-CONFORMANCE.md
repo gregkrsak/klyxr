@@ -82,3 +82,5 @@ manifest explicitly records source-place wrapper and imported-range inventory
 adaptations. Original predicates remain; new receipt inventory is additionally
 asserted. The larger Result fixture uses a declared existing supported allowance.
 No production default, proof rule or frozen semantic clause is relaxed.
+
+The final review adds `m9_input_activation_frame_corruption_rejects_before_handoff_and_attempt`: the live input activation/frame must match the current invocation before any transfer or external attempt. The manifest links this control to holder, origin and fresh-runtime correspondence.
