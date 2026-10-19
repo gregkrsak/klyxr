@@ -425,7 +425,24 @@ impl<'a> Machine<'a> {
         .try_fold(0usize, usize::checked_add)
         .ok_or_else(|| self.integrity("completion combined envelope overflow"))?;
         #[cfg(test)]
-        ENVELOPE.with(|record| record.set(Some((self.storage().unwrap(), total, [provenance, events * size_of::<Event>(), operands, self.completion_result_growth(), self.completion_temporary_growth(activation, invocation.site).unwrap(), self.completion_cleanup_growth().unwrap()].into_iter().max().unwrap()))));
+        ENVELOPE.with(|record| {
+            record.set(Some((
+                self.storage().unwrap(),
+                total,
+                [
+                    provenance,
+                    events * size_of::<Event>(),
+                    operands,
+                    self.completion_result_growth(),
+                    self.completion_temporary_growth(activation, invocation.site)
+                        .unwrap(),
+                    self.completion_cleanup_growth().unwrap(),
+                ]
+                .into_iter()
+                .max()
+                .unwrap(),
+            )))
+        });
         // This is one simultaneous bound, before any receiving allocation or
         // current-holder transfer. Diagnostics are already charged by State.
         self.reserve(total)?;

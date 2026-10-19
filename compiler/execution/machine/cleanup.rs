@@ -190,7 +190,13 @@ struct Activation {
 impl State {
     #[cfg(test)]
     pub(super) fn visit_completion_custody(&self, mut visit: impl FnMut(&Value)) {
-        for value in [&self.protected,&self.current,&self.detached].into_iter().flatten().chain(self.work.iter()) { visit(value); }
+        for value in [&self.protected, &self.current, &self.detached]
+            .into_iter()
+            .flatten()
+            .chain(self.work.iter())
+        {
+            visit(value);
+        }
     }
     pub(super) fn work_is_full(&self) -> bool {
         self.work.len() == self.work.capacity()

@@ -179,21 +179,34 @@ impl Context {
     /// Additional retained cleanup witnesses are bounded before checker snapshots.
     /// KED-034 adds explicit descriptor, sealed protocol copies, traversal and
     /// diagnostic terms on top of the unchanged predecessor catalog envelope.
-    pub(crate) fn reserve_completion_catalog(&self, roots: usize, names: usize) -> Result<(), ResourceFailure> {
+    pub(crate) fn reserve_completion_catalog(
+        &self,
+        roots: usize,
+        names: usize,
+    ) -> Result<(), ResourceFailure> {
         self.reserve_catalog(roots, names)?;
         let per_site = std::mem::size_of::<crate::trusted::approval::CompletionPlan>()
             .checked_mul(3)
-            .and_then(|n| n.checked_add(std::mem::size_of::<crate::trusted::approval::Invocation>()))
+            .and_then(|n| {
+                n.checked_add(std::mem::size_of::<crate::trusted::approval::Invocation>())
+            })
             .ok_or_else(|| ResourceFailure::limit("completion approval storage", START))?;
-        let storage = self.limits.tokens.checked_mul(per_site)
+        let storage = self
+            .limits
+            .tokens
+            .checked_mul(per_site)
             .and_then(|n| n.checked_add(8192))
             .and_then(|n| n.checked_add(self.catalog_storage.get()))
             .ok_or_else(|| ResourceFailure::limit("completion catalog storage", START))?;
-        let work = (self.limits.tokens as u64).checked_mul(32)
+        let work = (self.limits.tokens as u64)
+            .checked_mul(32)
             .and_then(|n| n.checked_add(128))
             .and_then(|n| n.checked_add(self.catalog_work.get()))
             .ok_or_else(|| ResourceFailure::limit("completion catalog work", START))?;
-        let diagnostics = self.catalog_diagnostics.get().checked_add(4096)
+        let diagnostics = self
+            .catalog_diagnostics
+            .get()
+            .checked_add(4096)
             .ok_or_else(|| ResourceFailure::limit("completion catalog diagnostics", START))?;
         self.catalog_storage.set(storage);
         self.catalog_work.set(work);
