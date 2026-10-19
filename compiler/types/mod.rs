@@ -385,6 +385,7 @@ fn value_statements(
                         ExprType::Bool => ValueType::Bool,
                         ExprType::Range(id) => ValueType::Range(id),
                         ExprType::Record(id) => ValueType::Record(id),
+                        ExprType::Resource(id) => ValueType::Resource(id),
                         ExprType::SharedRef(ty) => ValueType::SharedRef(ty),
                         ExprType::MutableRef(ty) => ValueType::MutableRef(ty),
                         ExprType::IntegerLiteral => {
@@ -597,6 +598,7 @@ fn value_type(ty: ResolvedValueType, span: crate::lexer::Span) -> TypeResult<Val
         ResolvedValueType::Bool => ValueType::Bool,
         ResolvedValueType::Range(id) => ValueType::Range(id),
         ResolvedValueType::Record(id) => ValueType::Record(id),
+        ResolvedValueType::Resource(id) => ValueType::Resource(id),
         ResolvedValueType::SharedRef(ty) => ValueType::SharedRef(ty),
         ResolvedValueType::MutableRef(ty) => ValueType::MutableRef(ty),
         ResolvedValueType::NestedReference => return Err(Diagnostic::semantic(span, "nested reference types are not supported", "reference referents must be bool, a named range, or a record; reborrowing remains unsupported").into()),
@@ -724,6 +726,7 @@ fn display_type(program: &Program, ty: ExprType) -> String {
         ExprType::IntegerLiteral => "IntegerLiteral".into(),
         ExprType::Range(id) => format!("range `{}`", program.range(id).name),
         ExprType::Record(id) => format!("record `{}`", program.record(id).name),
+        ExprType::Resource(_) => "resource `Sensor`".into(),
         ExprType::SharedRef(ty) => format!("&{}", display_referent(program, ty)),
         ExprType::MutableRef(ty) => format!("&mut {}", display_referent(program, ty)),
     }
@@ -733,6 +736,7 @@ fn display_referent(program: &Program, ty: hir::ReferentType) -> String {
         hir::ReferentType::Bool => "bool".into(),
         hir::ReferentType::Range(id) => program.range(id).name.clone(),
         hir::ReferentType::Record(id) => program.record(id).name.clone(),
+        hir::ReferentType::Resource(_) => "Sensor".into(),
     }
 }
 fn incompatible(
@@ -856,6 +860,7 @@ fn expression(
             let else_value = expression(program, functions, else_value)?;
             for value in [&then_value, &else_value] {
                 match value.ty {
+                    ExprType::Resource(_) => return Err(Diagnostic::semantic(value.span, "conditional initializer cannot produce an opaque Resource", "Sensor conditional initialization is excluded").into()),
                     ExprType::Result(_) => return Err(Diagnostic::semantic(value.span, "conditional initializer cannot produce a Result value", "KD-025 permits only bool, named-range, and record conditional results").into()),
                     ExprType::SharedRef(_) | ExprType::MutableRef(_) => {
                         return Err(Diagnostic::semantic(
@@ -1000,6 +1005,9 @@ fn expression(
         ResolvedExprKind::Local(id) => (ExprKind::Local(*id), program.local(*id).ty.into()),
         ResolvedExprKind::Deref { reference } => {
             let (_, referent) = reference_type(program, *reference, span)?;
+            if matches!(referent, hir::ReferentType::Resource(_)) {
+                return Err(Diagnostic::semantic(span, "opaque resources cannot be read through dereference", "shared observation cannot copy or move the Sensor owner").into());
+            }
             (
                 ExprKind::Deref {
                     reference: *reference,
@@ -1027,6 +1035,12 @@ fn expression(
                     ValueType::Bool => hir::ReferentType::Bool,
                 ValueType::Range(id) => hir::ReferentType::Range(id),
                 ValueType::Record(id) => hir::ReferentType::Record(id),
+                ValueType::Resource(id) => {
+                    if *kind == hir::BorrowKind::Mutable {
+                        return Err(Diagnostic::semantic(span, "mutable Sensor references are excluded", "opaque resources permit shared observation only").into());
+                    }
+                    hir::ReferentType::Resource(id)
+                }
                 ValueType::SharedRef(_) | ValueType::MutableRef(_) => return Err(Diagnostic::semantic(span, "cannot borrow an existing reference value", "nested references and reborrowing are not supported; borrow an owned non-reference parameter or local").into()),
             };
             let ty = match kind {

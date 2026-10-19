@@ -1,6 +1,7 @@
 //! Cleanup may-realization evidence emitted inside the existing ownership checker.
 //! This product grants no move, loan, borrowing or replacement permission.
 use super::EffectSet;
+use crate::hir::resources::CleanupType;
 use crate::{
     diagnostics::Diagnostic,
     hir::{FunctionId, Place, Program, RecordId, ValueType},
@@ -24,7 +25,7 @@ pub(crate) enum Kind {
 pub(crate) struct Site {
     pub(crate) function: FunctionId,
     pub(crate) holder: Place,
-    pub(crate) record: RecordId,
+    pub(crate) plan: CleanupType,
     pub(crate) effects: EffectSet,
     pub(crate) kind: Kind,
     pub(crate) origin: Span,
@@ -51,15 +52,21 @@ type Key = (usize, usize, usize, usize, Kind, Place);
 pub(crate) struct Custody {
     function: FunctionId,
     summaries: Rc<Vec<EffectSet>>,
-    live: BTreeMap<Place, RecordId>,
+    live: BTreeMap<Place, CleanupType>,
+    resource: Option<(crate::hir::ResourceTypeId, EffectSet)>,
     sites: BTreeMap<Key, Site>,
 }
 
 impl Custody {
-    pub(crate) fn new(function: FunctionId, summaries: Rc<Vec<EffectSet>>) -> Self {
+    pub(crate) fn new(
+        function: FunctionId,
+        summaries: Rc<Vec<EffectSet>>,
+        resource: Option<(crate::hir::ResourceTypeId, EffectSet)>,
+    ) -> Self {
         Self {
             function,
             summaries,
+            resource,
             live: BTreeMap::new(),
             sites: BTreeMap::new(),
         }
@@ -72,7 +79,14 @@ impl Custody {
                 .get(record.0)
                 .is_some_and(|s| *s != EffectSet::EMPTY)
             {
-                self.live.insert(place, record);
+                self.live.insert(place, CleanupType::Record(record));
+            }
+        } else if let ValueType::Resource(id) = ty {
+            if self
+                .resource
+                .is_some_and(|(resource, effects)| resource == id && effects != EffectSet::EMPTY)
+            {
+                self.live.insert(place, CleanupType::Resource(id));
             }
         }
     }
@@ -91,6 +105,7 @@ impl Custody {
         let sites = &mut self.sites;
         let function = self.function;
         let summaries = &self.summaries;
+        let resource = self.resource;
         self.live.retain(|place, record| {
             if !eligible(*place) {
                 return true;
@@ -108,8 +123,16 @@ impl Custody {
                 Site {
                     function,
                     holder: *place,
-                    record: *record,
-                    effects: summaries[record.0],
+                    plan: *record,
+                    effects: match *record {
+                        CleanupType::Record(id) => summaries[id.0],
+                        CleanupType::Resource(id) => {
+                            resource
+                                .filter(|(r, _)| *r == id)
+                                .expect("custody retains checked resource summary")
+                                .1
+                        }
+                    },
                     kind,
                     origin,
                 },
@@ -203,7 +226,20 @@ pub(crate) fn check(program: &Program, sites: &[Site]) -> Result<(), Vec<Diagnos
             .iter()
             .find(|e| !function.effects.set().contains(*e))
             .unwrap();
-        let record = program.record(site.record);
+        if let CleanupType::Resource(id) = site.plan {
+            let catalog = program
+                .trusted
+                .as_ref()
+                .filter(|c| c.sensor == id)
+                .expect("checked resource cleanup witness");
+            return Err(vec![Diagnostic::semantic(site.origin,
+                format!("unadmitted effect `{}` in `{}`: {:?} cleanup of `Sensor` derives from its complete canonical release contract (catalog {} row {}; no source declaration)", missing.name(), function.name, site.kind, crate::trusted::CATALOG, catalog.resource.origin.row),
+                "admit the canonical cleanup summary at this realization; transferred and protected results remain excluded")]);
+        }
+        let CleanupType::Record(record_id) = site.plan else {
+            unreachable!()
+        };
+        let record = program.record(record_id);
         fn release_origin(
             program: &Program,
             record: RecordId,
@@ -238,18 +274,18 @@ pub(crate) fn check(program: &Program, sites: &[Site]) -> Result<(), Vec<Diagnos
             }
             None
         }
-        let trace =
-            if let Some((id, origin)) = release_origin(program, site.record, missing, &mut 16) {
-                format!(
-                    "release declaration `{}` at {}:{}",
-                    program.function(id).name(),
-                    origin.line,
-                    origin.column
-                )
-            } else {
-                "canonical type cleanup origin; ancestry truncated at the bounded diagnostic budget"
-                    .into()
-            };
+        let trace = if let Some((id, origin)) = release_origin(program, record_id, missing, &mut 16)
+        {
+            format!(
+                "release declaration `{}` at {}:{}",
+                program.function(id).name(),
+                origin.line,
+                origin.column
+            )
+        } else {
+            "canonical type cleanup origin; ancestry truncated at the bounded diagnostic budget"
+                .into()
+        };
         return Err(vec![Diagnostic::semantic(
             site.origin,
             format!(

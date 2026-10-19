@@ -115,8 +115,8 @@ Each row requires independent controls, not one compound corrupted artifact.
 ## Milestone status
 
 M0: baseline and branch established; ledger created before semantic changes.
-M1: immutable selection, namespace/range/origin admission implemented; milestone
-validation below. M2-M9 remain pending. No KED-033 invocation path is enabled at
+M1 and M2: catalog/range/origin admission and canonical Resource eligibility are
+implemented; milestone validation below. M3-M9 remain pending. No KED-033 invocation path is enabled at
 this checkpoint. In particular selected trusted calls still reject explicitly;
 they cannot route to an ordinary function or fixture before M5.
 
@@ -182,6 +182,62 @@ reconfirmed at the published checkpoint.
 
 M1 does not claim typed Sensor eligibility, trusted execution, stopped custody,
 structural audit, or completion of P02-P09. Those remain later milestones.
+
+### M1 published checkpoint
+
+Commit `dfc63bb22166eb3335d4ae870977b69ca393caec`, tree
+`34116e0ffc71c91c03fc7b6a90a4abcda161a10b`. All four push workflows and every
+job/step passed:
+
+| Workflow | Run | Job |
+| --- | --- | --- |
+| build | [39191315743](https://github.com/gregkrsak/klyxr/actions/runs/39191315743) | 117864549739 |
+| tests | [39191315678](https://github.com/gregkrsak/klyxr/actions/runs/39191315678) | 117864549494 |
+| verify | [39191315629](https://github.com/gregkrsak/klyxr/actions/runs/39191315629) | 117864549001 |
+| docs | [39191315649](https://github.com/gregkrsak/klyxr/actions/runs/39191315649) | 117864549143 |
+
+[Issue progress record](https://github.com/gregkrsak/klyxr/issues/78#issuecomment-6258579732).
+
+### M2 implementation details and evidence
+
+Sensor now has its own canonical Resource type in value, expression, referent,
+resolution and Result-child vocabularies. It has no RecordId, public fields or
+representation constructor. The fixed descriptor records its exact cleanup-only
+operation, io contract, catalog origin and conservative 64-byte binding-payload
+bound. Typed cleanup references distinguish Record from Resource without changing
+the private synthetic catalog or enabling its record-field permissions.
+
+The existing ownership checker treats Resource owners as Move and shared handles
+as Copy, preserves last-use/held-argument behavior and rejects duplicate moves.
+Canonical resource interface validation checks unused/foreign types and excludes
+mutable Resource references. Mutable borrows, conditional initialization,
+replacement, fields, representation inspection, arithmetic, comparison and
+dereference cannot construct or duplicate Sensor. Resource-bearing public Result
+egress rejects before machine entry, even on an inactive resource alternative.
+Ordinary owned helper transfers, non-escaping shared helpers and Resource Result
+payloads pass through the existing pipeline.
+
+The existing custody product now carries typed plans. Its actual successful
+transfer gate removes a relayed Sensor before parameter retirement; a retained
+Sensor instead emits io cleanup evidence. Thus retire requires io while relay
+does not, already proven without invoking a fixture or introducing a second
+ownership/effect checker. MIR cleanup and temporary plans preserve Resource
+identity. The private runtime value shape is present but deliberately cannot be
+constructed yet; receipt/session dispatch remains disabled until M5.
+
+Nine additional identities bring the inventory to 25 KED-033 additions. Complete
+local validation passed: **1,900 exact debug identities and 1,900 release
+identities**, all 1,875 predecessors, authority doctest, both 1,800-case affine
+checks, check/fmt/Clippy/Rustdoc, CLI/examples/rejection diagnostics, assets,
+scaffold, context reproducibility and diff integrity. Numeric protocol oracles
+remain unchanged. Existing malformed Record-plan fixtures receive only the typed
+Record wrapper, retaining their original corrupt IDs, expectations and outcomes.
+
+Ordinary development corrections included extending the canonical borrow
+validator for shared Resource referents and checking foreign Resource interfaces
+at the typed-HIR publication boundary rather than adding type inference to the
+ownership checker. No frozen source behavior was revised. M3-M9, actual trusted
+calls/receipts/binding, structural audit and independent acceptance remain open.
 
 Future entries must record meaningful changes, validation and exact remote evidence,
 ordinary development corrections, any K33-I escalation, predecessor adaptations,

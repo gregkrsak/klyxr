@@ -32,6 +32,16 @@ fn ty(p: &hir::Program, t: ExprType) -> Result<(), ExecutionError> {
                 return Err(bad());
             }
         }
+        ExprType::Resource(id) => {
+            if !p
+                .trusted
+                .as_ref()
+                .is_some_and(|catalog| catalog.sensor == id)
+            {
+                return Err(bad());
+            }
+        }
+        ExprType::MutableRef(hir::ReferentType::Resource(_)) => return Err(bad()),
         ExprType::SharedRef(r) | ExprType::MutableRef(r) => ty(p, r.value_type().into())?,
         ExprType::Bool | ExprType::IntegerLiteral => {}
     }
@@ -164,7 +174,8 @@ pub(super) fn expression(
                 ValueType::SharedRef(r) | ValueType::MutableRef(r) => r,
                 _ => return Err(bad()),
             };
-            if ExprType::from(r.value_type()) != e.ty {
+            if matches!(r, hir::ReferentType::Resource(_)) || ExprType::from(r.value_type()) != e.ty
+            {
                 return Err(bad());
             }
         }
@@ -174,6 +185,9 @@ pub(super) fn expression(
                 ValueType::Bool => hir::ReferentType::Bool,
                 ValueType::Range(r) => hir::ReferentType::Range(r),
                 ValueType::Record(r) => hir::ReferentType::Record(r),
+                ValueType::Resource(r) if *kind == hir::BorrowKind::Shared => {
+                    hir::ReferentType::Resource(r)
+                }
                 _ => return Err(bad()),
             };
             let expected = match kind {
@@ -283,6 +297,7 @@ pub(super) fn expression(
         } => {
             if !conditional
                 || !ordinary
+                || matches!(e.ty, ExprType::Resource(_))
                 || condition.ty != ExprType::Bool
                 || then_value.ty != e.ty
                 || else_value.ty != e.ty
@@ -583,8 +598,16 @@ pub(super) fn cleanup_site_shape(
             .filter(|f| f.id() == site.function)
             .and_then(|f| f.as_ordinary())
             .ok_or_else(bad)?;
-        if place(p, f.id, site.holder)? != ValueType::Record(site.record)
-            || summaries.get(site.record.0).copied() != Some(site.effects)
+        let effects = match site.plan {
+            hir::resources::CleanupType::Record(id) => summaries.get(id.0).copied(),
+            hir::resources::CleanupType::Resource(id) => p
+                .trusted
+                .as_ref()
+                .filter(|c| c.sensor == id)
+                .map(|c| c.resource.effects),
+        };
+        if place(p, f.id, site.holder)? != site.plan.value_type()
+            || effects != Some(site.effects)
             || site.effects == crate::effects::EffectSet::EMPTY
             || !site.effects.is_subset(f.effects.set())
             || site.origin.line == 0
@@ -624,7 +647,7 @@ pub(super) fn mir_shape(
         }
         for site in &f.cleanup_effect_sites {
             let ty = place(p, f.function(), site.holder)?;
-            if site.function != f.function() || ty != ValueType::Record(site.record) {
+            if site.function != f.function() || ty != site.plan.value_type() {
                 return Err(bad());
             }
         }
@@ -710,7 +733,9 @@ pub(super) fn mir_shape(
                     || site.origin.kind != mir::OriginKind::TemporaryCreation
                     || site.transfer.kind != mir::OriginKind::TemporaryTransfer
                     || site.cleanup.kind != mir::OriginKind::TemporaryCleanup
-                    || site.plan.is_some_and(|r| site.ty != ExprType::Record(r))
+                    || site
+                        .plan
+                        .is_some_and(|r| site.ty != ExprType::from(r.value_type()))
                     || site
                         .result_plan
                         .is_some_and(|r| site.ty != ExprType::Result(r))

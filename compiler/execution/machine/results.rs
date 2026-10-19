@@ -483,6 +483,9 @@ impl<'a> Machine<'a> {
 
     pub(super) fn result_value_matches(&self, value: &Value, expected: ValueType) -> bool {
         match (value, expected) {
+            (Value::Resource { ty: actual, .. }, ValueType::Resource(expected)) => {
+                *actual == expected
+            }
             (Value::Result(id), ValueType::Result(ty)) => self.result_cell(*id).is_ok_and(|cell| {
                 cell.ty == ty
                     && cell.payload.is_some()

@@ -65,7 +65,7 @@ pub(crate) struct Site {
     pub(crate) id: SiteId,
     pub(crate) region: RegionId,
     pub(crate) ty: ExprType,
-    pub(crate) plan: Option<RecordId>,
+    pub(crate) plan: Option<hir::resources::CleanupType>,
     pub(crate) result_plan: Option<hir::ResultTypeId>,
     pub(crate) destination: Destination,
     pub(crate) origin: Origin,
@@ -98,7 +98,7 @@ impl Flow {
         body: &[ValueStatement],
         plans: &[Option<hir::resources::CleanupPlan>],
     ) -> Result<Option<Self>, PlanError> {
-        if plans.iter().all(Option::is_none) && p.result_types().is_empty() {
+        if plans.iter().all(Option::is_none) && p.result_types().is_empty() && p.trusted.is_none() {
             return Ok(None);
         }
         let mut flow = Self::default();
@@ -116,7 +116,7 @@ impl Flow {
     }
 
     fn bearing(e: &TypedExpr, plans: &[Option<hir::resources::CleanupPlan>]) -> bool {
-        if matches!(e.ty, ExprType::Result(_)) {
+        if matches!(e.ty, ExprType::Result(_) | ExprType::Resource(_)) {
             return true;
         }
         if matches!(e.ty, ExprType::Record(id) if plans.get(id.0).is_some_and(Option::is_some)) {
@@ -191,7 +191,10 @@ impl Flow {
     ) -> Result<SiteId, PlanError> {
         let id = SiteId(self.sites.len());
         let plan = match e.ty {
-            ExprType::Record(r) if plans.get(r.0).is_some_and(Option::is_some) => Some(r),
+            ExprType::Record(r) if plans.get(r.0).is_some_and(Option::is_some) => {
+                Some(hir::resources::CleanupType::Record(r))
+            }
+            ExprType::Resource(r) => Some(hir::resources::CleanupType::Resource(r)),
             _ => None,
         };
         #[cfg(test)]

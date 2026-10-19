@@ -3,6 +3,7 @@
 //! Public inspection is read-only; compiler-internal mutation must preserve identity
 //! and reference invariants. Names and spans are diagnostic metadata.
 use crate::lexer::Span;
+pub use crate::trusted::{ResourceTypeId, TrustedOperationId};
 pub(crate) mod propagation;
 pub(crate) mod resources;
 pub(crate) mod results;
@@ -166,6 +167,7 @@ pub enum ExprType {
     Bool,
     Range(RangeTypeId),
     Record(RecordId),
+    Resource(ResourceTypeId),
     IntegerLiteral,
     SharedRef(ReferentType),
     MutableRef(ReferentType),
@@ -253,6 +255,7 @@ pub enum ValueType {
     Bool,
     Range(RangeTypeId),
     Record(RecordId),
+    Resource(ResourceTypeId),
     SharedRef(ReferentType),
     MutableRef(ReferentType),
 }
@@ -262,6 +265,7 @@ pub enum ReferentType {
     Bool,
     Range(RangeTypeId),
     Record(RecordId),
+    Resource(ResourceTypeId),
 }
 impl ReferentType {
     pub(crate) fn value_type(self) -> ValueType {
@@ -269,6 +273,7 @@ impl ReferentType {
             Self::Bool => ValueType::Bool,
             Self::Range(id) => ValueType::Range(id),
             Self::Record(id) => ValueType::Record(id),
+            Self::Resource(id) => ValueType::Resource(id),
         }
     }
 }
@@ -285,6 +290,7 @@ impl From<ValueType> for ExprType {
             ValueType::Bool => Self::Bool,
             ValueType::Range(id) => Self::Range(id),
             ValueType::Record(id) => Self::Record(id),
+            ValueType::Resource(id) => Self::Resource(id),
             ValueType::SharedRef(ty) => Self::SharedRef(ty),
             ValueType::MutableRef(ty) => Self::MutableRef(ty),
         }

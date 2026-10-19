@@ -4,6 +4,21 @@
 //! no spelling, source declaration or public constructor registers authority.
 use super::*;
 
+/// A public Resource never acquires a RecordId or activates synthetic field rules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum CleanupType {
+    Record(super::RecordId),
+    Resource(super::ResourceTypeId),
+}
+impl CleanupType {
+    pub(crate) fn value_type(self) -> super::ValueType {
+        match self {
+            Self::Record(id) => super::ValueType::Record(id),
+            Self::Resource(id) => super::ValueType::Resource(id),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ResourceId(pub(crate) usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

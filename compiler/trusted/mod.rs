@@ -135,6 +135,15 @@ pub(crate) enum Passing {
     Owned(ResourceTypeId),
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Resource {
+    pub id: ResourceTypeId,
+    pub name: &'static str,
+    pub release: TrustedOperationId,
+    pub effects: EffectSet,
+    pub payload_bytes: usize,
+    pub origin: CatalogOrigin,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Operation {
     pub id: TrustedOperationId,
     pub source_name: Option<&'static str>,
@@ -155,6 +164,7 @@ pub(crate) struct Catalog {
     pub sensor: ResourceTypeId,
     pub reading: RangeTypeId,
     pub error: RangeTypeId,
+    pub resource: Resource,
     pub operations: [Operation; 3],
 }
 
@@ -201,6 +211,17 @@ impl Catalog {
             sensor,
             reading,
             error,
+            resource: Resource {
+                id: sensor,
+                name: "Sensor",
+                release: TrustedOperationId(compilation * 4 + 2),
+                effects,
+                payload_bytes: 64,
+                origin: CatalogOrigin {
+                    compilation,
+                    row: 2,
+                },
+            },
             operations: [
                 row(
                     0,
@@ -283,6 +304,18 @@ impl Catalog {
         }
         let mut effects = EffectSet::EMPTY;
         effects.insert(Effect::Io);
+        if self.resource
+            != (Resource {
+                id: self.sensor,
+                name: "Sensor",
+                release: self.operations[2].id,
+                effects,
+                payload_bytes: 64,
+                origin: self.origin(2),
+            })
+        {
+            return Err("altered opaque resource descriptor");
+        }
         for (index, op) in self.operations.iter().enumerate() {
             let (name, parameter, success, failure, class, binding) = match index {
                 0 => (

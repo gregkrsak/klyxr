@@ -338,9 +338,10 @@ enum OwnershipKind {
 fn ownership_kind(ty: ValueType) -> OwnershipKind {
     match ty {
         ValueType::Bool | ValueType::Range(_) | ValueType::SharedRef(_) => OwnershipKind::Copy,
-        ValueType::Record(_) | ValueType::MutableRef(_) | ValueType::Result(_) => {
-            OwnershipKind::Move
-        }
+        ValueType::Record(_)
+        | ValueType::Resource(_)
+        | ValueType::MutableRef(_)
+        | ValueType::Result(_) => OwnershipKind::Move,
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -455,7 +456,7 @@ fn analyze_with(
     } else {
         Vec::new()
     };
-    if !summaries.is_empty() {
+    if !summaries.is_empty() || program.trusted.is_some() {
         if let Some(context) = context {
             let nodes = context.resource_nodes.get()
                 + program.functions.len()
@@ -502,14 +503,21 @@ fn analyze_with(
                 .map_err(|e| vec![*e])?;
         }
         // Registered stubs are fixed primitive boundaries, never callback bodies.
-        if !summaries.is_empty()
+        if (!summaries.is_empty() || program.trusted.is_some())
             && !program
                 .resources
                 .operations
                 .iter()
                 .any(|o| o.function == function.id)
         {
-            let mut custody = Custody::new(function.id, summaries.clone());
+            let mut custody = Custody::new(
+                function.id,
+                summaries.clone(),
+                program
+                    .trusted
+                    .as_ref()
+                    .map(|c| (c.sensor, c.resource.effects)),
+            );
             for parameter in &function.parameters {
                 if let ParameterType::Value(ty) = program.parameter(*parameter).ty {
                     custody.initialize(Place::Parameter(*parameter), ty);
@@ -1367,7 +1375,7 @@ impl<'a> Checker<'a> {
         {
             match ty {
                 ExprType::SharedRef(_) | ExprType::MutableRef(_) => return Err(self.loop_reference_error(span)),
-                ExprType::Record(_) | ExprType::Result(_) => return Err(self.diagnostic(span, "non-Copy ownership activity is unsupported in while conditions".into(), "recurring condition ownership requires future generalized cyclic ownership analysis; only the loop body permits iteration-local Move values", None)),
+                ExprType::Record(_) | ExprType::Resource(_) | ExprType::Result(_) => return Err(self.diagnostic(span, "non-Copy ownership activity is unsupported in while conditions".into(), "recurring condition ownership requires future generalized cyclic ownership analysis; only the loop body permits iteration-local Move values", None)),
                 _ => {}
             }
         }
@@ -2163,6 +2171,7 @@ impl<'a> Checker<'a> {
                             ValueType::Bool => ReferentType::Bool,
                             ValueType::Range(id) => ReferentType::Range(id),
                             ValueType::Record(id) => ReferentType::Record(id),
+                            ValueType::Resource(id) => ReferentType::Resource(id),
                             _ => return None,
                         };
                         if kind == BorrowKind::Mutable
@@ -2333,7 +2342,7 @@ impl<'a> Checker<'a> {
             .is_some_and(|scope| scope.header_places.contains(&place))
             && matches!(
                 self.metadata(place).1,
-                ValueType::Record(_) | ValueType::Result(_)
+                ValueType::Record(_) | ValueType::Resource(_) | ValueType::Result(_)
             )
             && !self.terminal_return
         {
@@ -8035,7 +8044,7 @@ mod cleanup_effect_transaction_tests {
         let mut checker = Checker::new(&p, f);
         let plans = p.resources.plans(&p).unwrap();
         let summaries = Rc::new(p.resources.summaries(&p, &plans).unwrap());
-        let mut custody = Custody::new(f.id, summaries);
+        let mut custody = Custody::new(f.id, summaries, None);
         for parameter in &f.parameters {
             custody.initialize(Place::Parameter(*parameter), ValueType::Record(RecordId(0)));
         }

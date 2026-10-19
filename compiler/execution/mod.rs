@@ -681,6 +681,11 @@ pub fn execute(
             ));
         }
     }
+    if matches!(f.return_type, Some(ValueType::Resource(_))) {
+        return Err(ExecutionError::integrity(
+            "public live-resource egress is excluded",
+        ));
+    }
     if let Some(ValueType::Result(id)) = f.return_type {
         if executable
             .result_plans
@@ -779,7 +784,7 @@ mod effect_authority_tests {
             .push(crate::effects::custody::Site {
                 function: f.id,
                 holder: hir::Place::Local(local),
-                record: hir::RecordId(0),
+                plan: hir::resources::CleanupType::Record(hir::RecordId(0)),
                 effects,
                 kind: crate::effects::custody::Kind::Return,
                 origin: *span,
@@ -960,7 +965,7 @@ mod effect_authority_tests {
                 2 => sites.swap(0, 1),
                 3 => sites[0].function = FunctionId(0),
                 4 => sites[0].holder = hir::Place::Local(hir::LocalId(999)),
-                5 => sites[0].record = hir::RecordId(1),
+                5 => sites[0].plan = hir::resources::CleanupType::Record(hir::RecordId(1)),
                 6 => sites[0].effects = EffectSet::EMPTY,
                 7 => sites[0].origin.start += 1,
                 8 => {
@@ -1064,7 +1069,10 @@ mod temporary_authority_tests {
                         flow.regions[0].roots.push(root);
                     }
                     3 => flow.sites[0].id = SiteId(usize::MAX),
-                    4 => flow.sites[0].plan = Some(hir::RecordId(999)),
+                    4 => {
+                        flow.sites[0].plan =
+                            Some(hir::resources::CleanupType::Record(hir::RecordId(999)))
+                    }
                     5 => flow.sites[0].destination = Destination::Parameter(hir::ParameterId(999)),
                     6 => flow.regions[0].parent = Some(RegionId(0)),
                     7 => flow.regions[0].origin.kind = mir::OriginKind::FunctionBoundary,

@@ -17,6 +17,30 @@ impl Program {
     }
     // Bounded admission has already checked the catalog with typed failure propagation.
     pub(crate) fn validate_record_expressions_without_resources(&self) -> Result {
+        let valid_resource_type = |ty| match ty {
+            ValueType::Resource(id) | ValueType::SharedRef(ReferentType::Resource(id)) => {
+                self.trusted.as_ref().is_some_and(|c| c.sensor == id)
+            }
+            ValueType::MutableRef(ReferentType::Resource(_)) => false,
+            _ => true,
+        };
+        if self
+            .parameters
+            .iter()
+            .any(|p| matches!(p.ty, ParameterType::Value(ty) if !valid_resource_type(ty)))
+            || self.locals.iter().any(|l| !valid_resource_type(l.ty))
+            || self
+                .functions
+                .iter()
+                .filter_map(Function::as_ordinary)
+                .any(|f| f.return_type.is_some_and(|ty| !valid_resource_type(ty)))
+            || self
+                .results
+                .iter()
+                .any(|r| !valid_resource_type(r.success) || !valid_resource_type(r.failure))
+        {
+            return Err(Box::new(Diagnostic::semantic(crate::bounded::START, "invalid opaque Resource interface", "Resource identity must belong to this exact catalog and mutable Resource references are excluded")));
+        }
         if let Some(catalog) = &self.trusted {
             catalog.validate(self).map_err(|message| {
                 Box::new(Diagnostic::semantic(
@@ -464,7 +488,7 @@ impl Program {
                 then_value,
                 else_value,
             } => {
-                if !conditional {
+                if !conditional || matches!(expression.ty, ExprType::Resource(_)) {
                     return Err(invalid("conditional values are permitted only as complete local initializers or their complete branch results"));
                 }
                 self.record_expression(function, condition, ordinary, false)?;

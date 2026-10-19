@@ -287,3 +287,119 @@ fn catalog_combined_envelope_exact_neighbors_are_charged_without_source() {
         assert!(c.reserve_catalog(1, 4).is_err());
     }
 }
+
+#[test]
+fn sensor_is_canonical_resource_distinct_from_records_and_is_move_only() {
+    let p = program(
+        "fn relay(sensor:Sensor)->Sensor{return sensor;} fn demo(){}",
+        Grants::ALL,
+    );
+    let c = p.trusted.as_ref().unwrap();
+    let f = p.functions[0].as_ordinary().unwrap();
+    assert_eq!(f.return_type, Some(hir::ValueType::Resource(c.sensor)));
+    assert_eq!(
+        p.parameter(f.parameters[0]).ty,
+        hir::ParameterType::Value(hir::ValueType::Resource(c.sensor))
+    );
+    assert!(p.records.is_empty());
+    assert!(p.resources.leaves.is_empty());
+    assert!(rejected(
+        "fn twice(sensor:Sensor)->Sensor{let moved=sensor;return sensor;} fn demo(){}",
+        Grants::ALL
+    )
+    .contains("moved"));
+}
+
+#[test]
+fn residual_parameter_cleanup_requires_io_but_protected_relay_does_not() {
+    let absent = rejected(
+        "fn retire(sensor:Sensor)->bool{return true;} fn demo(){}",
+        Grants::ALL,
+    );
+    assert!(absent.contains("unadmitted effect `io`"), "{absent}");
+    prepare_execution_with_profile("fn retire(sensor:Sensor)->bool effects io{return true;} fn relay(sensor:Sensor)->Sensor{return sensor;} fn demo(){}",AdmissionLimits::default(),&selection(Grants::ALL)).unwrap();
+}
+
+#[test]
+fn sensor_shared_aliases_and_non_escaping_helpers_preserve_owner_transfer() {
+    let source="fn inspect(sensor:&Sensor)->bool{return true;} fn relay(sensor:Sensor)->Sensor{let first=&sensor;let second=first;let a=inspect(first);let b=inspect(second);return sensor;} fn demo(){}";
+    prepare_execution_with_profile(source, AdmissionLimits::default(), &selection(Grants::ALL))
+        .unwrap();
+}
+
+#[test]
+fn sensor_result_payloads_have_typed_resource_children_and_cleanup_effects() {
+    let p=program("fn wrap(sensor:Sensor)->Result<success:Sensor,failure:bool>{return Ok(sensor);} fn demo(){}",Grants::ALL);
+    let c = p.trusted.as_ref().unwrap();
+    let plans = p.variant_plans(&[], &[]).unwrap();
+    assert_eq!(plans.len(), 1);
+    assert_eq!(
+        plans[0].success,
+        Some(hir::results::VariantChild::Resource(c.sensor))
+    );
+    assert_eq!(plans[0].failure, None);
+    assert!(plans[0].bearing());
+    assert!(plans[0].effects.contains(Effect::Io));
+    prepare_execution_with_profile("fn wrap(sensor:Sensor)->Result<success:Sensor,failure:bool>{return Ok(sensor);} fn demo(){}",AdmissionLimits::default(),&selection(Grants::ALL)).unwrap();
+}
+
+#[test]
+fn mutable_sensor_reference_interfaces_and_borrows_are_excluded() {
+    for source in ["fn bad(sensor:&mut Sensor){} fn demo(){}","fn bad(sensor:Sensor) effects io {let mut owner=sensor;let borrow=&mut owner;} fn demo(){}"] {
+        assert!(rejected(source,Grants::ALL).contains("mutable Sensor references are excluded"));
+    }
+}
+
+#[test]
+fn sensor_conditionals_replacement_and_public_record_fields_remain_excluded() {
+    for source in [
+        "fn bad(a:Sensor,b:Sensor)->Sensor{let chosen=if true{a}else{b};return chosen;} fn demo(){}",
+        "fn bad(a:Sensor,b:Sensor)effects io{let mut owner=a;owner=b;} fn demo(){}",
+        "record Bad{value:Sensor} fn demo(){}",
+    ] {
+        assert!(!rejected(source,Grants::ALL).is_empty());
+    }
+}
+
+#[test]
+fn sensor_representation_arithmetic_comparison_and_dereference_cannot_forge_a_value() {
+    for expression in ["sensor.value", "sensor-1", "sensor==sensor", "*borrow"] {
+        let source=format!("fn bad(sensor:Sensor)effects io{{let borrow=&sensor;let forged={expression};}} fn demo(){{}}");
+        assert!(!rejected(&source, Grants::ALL).is_empty());
+    }
+}
+
+#[test]
+fn public_sensor_bearing_result_is_rejected_before_machine_entry() {
+    let e = prepare_execution_with_profile(
+        "fn demo()->Result<success:Sensor,failure:bool>{return Error(false);}",
+        AdmissionLimits::default(),
+        &selection(Grants::ALL),
+    )
+    .unwrap();
+    let entry = e.entry("demo").unwrap();
+    let error = crate::execution::execute(&e, entry, crate::execution::ExecutionLimits::default())
+        .unwrap_err();
+    assert_eq!(
+        error.kind,
+        ErrorKind::Integrity("live resource Result cannot cross public boundary")
+    );
+}
+
+#[test]
+fn foreign_resource_type_and_mutable_referent_metadata_cannot_publish() {
+    let p = program(
+        "fn relay(sensor:Sensor)->Sensor{return sensor;} fn demo(){}",
+        Grants::ALL,
+    );
+    let other = program("fn demo(){}", Grants::ALL);
+    let foreign = other.trusted.unwrap().sensor;
+    let mut altered = p.clone();
+    altered.parameters[0].ty = hir::ParameterType::Value(hir::ValueType::Resource(foreign));
+    assert!(altered.validate_record_expressions().is_err());
+    let mut altered = p;
+    let id = altered.trusted.as_ref().unwrap().sensor;
+    altered.parameters[0].ty =
+        hir::ParameterType::Value(hir::ValueType::MutableRef(hir::ReferentType::Resource(id)));
+    assert!(altered.validate_record_expressions().is_err());
+}

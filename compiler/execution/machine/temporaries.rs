@@ -160,7 +160,7 @@ impl<'a> Machine<'a> {
             .find(|s| {
                 s.region == f.region
                     && s.plan
-                        .is_some_and(|r| self.executable.program.resources.is_leaf(r))
+                        .is_some_and(|r| matches!(r, hir::resources::CleanupType::Record(record) if self.executable.program.resources.is_leaf(record)))
             })
             .unwrap()
             .id;
@@ -360,7 +360,9 @@ impl<'a> Machine<'a> {
             .sites[site.0];
         let record_valid = metadata.result_plan.is_none()
             && metadata.plan.is_some()
-            && matches!(self.values.last(), Some(Value::Leaf {record,..} | Value::Aggregate {record,..}) if Some(*record) == metadata.plan);
+            && matches!(self.values.last(), Some(Value::Leaf {record,..} | Value::Aggregate {record,..}) if Some(hir::resources::CleanupType::Record(*record)) == metadata.plan);
+        let resource_valid = metadata.result_plan.is_none()
+            && matches!((metadata.plan, self.values.last()), (Some(hir::resources::CleanupType::Resource(expected)), Some(Value::Resource {ty, ..})) if expected == *ty);
         let result_valid = metadata.plan.is_none()
             && metadata.result_plan.is_some_and(|ty| {
                 self.values
@@ -370,7 +372,7 @@ impl<'a> Machine<'a> {
         if i + 1 != self.temporaries.as_ref().unwrap().frames.len()
             || f.phase != Phase::Active
             || f.region != metadata.region
-            || !(record_valid || result_valid)
+            || !(record_valid || resource_valid || result_valid)
         {
             return Err(self.integrity("invalid temporary creation type, region or plan"));
         }

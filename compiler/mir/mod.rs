@@ -504,6 +504,7 @@ fn lower_internal(
         .map(|f| {
             let bearing = |ty| match ty {
                 hir::ValueType::Record(id) => plans.get(id.0).is_some_and(Option::is_some),
+                hir::ValueType::Resource(_) => true,
                 hir::ValueType::Result(id) => result_plans.get(id.0).is_some_and(hir::results::VariantPlan::bearing),
                 _ => false,
             };
@@ -2531,7 +2532,7 @@ pub(crate) fn mutate_result_mir(program: &mut MirProgram, mutation: usize) {
             match mutation {
                 13 => site.result_plan = None,
                 14 => site.result_plan = Some(hir::ResultTypeId(999)),
-                15 => site.plan = Some(hir::RecordId(0)),
+                15 => site.plan = Some(hir::resources::CleanupType::Record(hir::RecordId(0))),
                 16 => site.destination = temporaries::Destination::Return,
                 17 => site.transfer.span.start += 1,
                 18 => site.region = temporaries::RegionId(999),

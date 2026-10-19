@@ -13,6 +13,12 @@ struct Location {
 }
 #[derive(Debug, PartialEq, Eq)]
 enum Value {
+    // Construction stays disabled until M5 establishes receipt + session custody.
+    #[allow(dead_code)]
+    Resource {
+        ty: hir::ResourceTypeId,
+        identity: u64,
+    },
     Result(results::OwnerId),
     Temporary(temporaries::OwnerId),
     Leaf {
@@ -1179,6 +1185,7 @@ impl<'a> Machine<'a> {
             .ok_or_else(|| self.integrity("return function"))?
             .return_type;
         let matches = match (value, declared) {
+            (Value::Resource { ty, .. }, Some(ValueType::Resource(expected))) => *ty == expected,
             (Value::Result(_), Some(ty @ ValueType::Result(_))) => {
                 self.result_value_matches(value, ty)
             }

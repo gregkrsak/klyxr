@@ -37,6 +37,7 @@ pub(crate) enum ResolvedValueType {
     Bool,
     Range(RangeTypeId),
     Record(RecordId),
+    Resource(hir::ResourceTypeId),
     SharedRef(hir::ReferentType),
     MutableRef(hir::ReferentType),
     NestedReference,
@@ -561,6 +562,7 @@ impl Resolver<'_> {
                             ResolvedValueType::Bool => hir::ValueType::Bool,
                             ResolvedValueType::Range(id) => hir::ValueType::Range(id),
                             ResolvedValueType::Record(id) => hir::ValueType::Record(id),
+                            ResolvedValueType::Resource(id) => hir::ValueType::Resource(id),
                             _ => {
                                 return Err(error(
                                     span,
@@ -625,6 +627,16 @@ impl Resolver<'_> {
             ResolvedValueType::Bool => hir::ReferentType::Bool,
             ResolvedValueType::Range(id) => hir::ReferentType::Range(id),
             ResolvedValueType::Record(id) => hir::ReferentType::Record(id),
+            ResolvedValueType::Resource(id) => {
+                if *kind == ast::BorrowKind::Mutable {
+                    return Err(error(
+                        span,
+                        "mutable Sensor references are excluded",
+                        "opaque resources permit shared observation only",
+                    ));
+                }
+                hir::ReferentType::Resource(id)
+            }
             ResolvedValueType::Result(_) => {
                 return Err(error(
                     span,
@@ -648,6 +660,11 @@ impl Resolver<'_> {
         }
         if let Some(id) = self.records.get(name) {
             return Ok(ResolvedValueType::Record(*id));
+        }
+        if name == "Sensor" {
+            if let Some(catalog) = &self.program.trusted {
+                return Ok(ResolvedValueType::Resource(catalog.sensor));
+            }
         }
         Err(error(
             span,

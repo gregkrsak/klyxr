@@ -2,7 +2,7 @@
   "baseline_commit": "62023217b3f93e53cae302731643cbcea1fb3d17",
   "baseline_tree": "3998bcad9b34d66e960b863eb20b7b78680da07d",
   "predecessor_count": 1875,
-  "milestone": "M1: catalog admission; invocation disabled",
+  "milestone": "M2: canonical Resource eligibility; invocation disabled",
   "migrations": {},
   "contract_corrections": [],
   "additions": [
@@ -13,14 +13,23 @@
     "lib.rs::trusted::tests::distinct_collections_have_foreign_resource_operation_and_origin_identities",
     "lib.rs::trusted::tests::equal_source_range_bounds_do_not_establish_imported_nominal_compatibility",
     "lib.rs::trusted::tests::every_unused_and_denied_catalog_row_is_validated_independently",
+    "lib.rs::trusted::tests::foreign_resource_type_and_mutable_referent_metadata_cannot_publish",
     "lib.rs::trusted::tests::imported_range_literal_neighbors_preserve_existing_frontend_checks",
     "lib.rs::trusted::tests::imported_ranges_keep_existing_arithmetic_comparison_copy_and_field_rules",
+    "lib.rs::trusted::tests::mutable_sensor_reference_interfaces_and_borrows_are_excluded",
     "lib.rs::trusted::tests::profile_root_configuration_is_bounded_exact_and_immutable",
+    "lib.rs::trusted::tests::public_sensor_bearing_result_is_rejected_before_machine_entry",
     "lib.rs::trusted::tests::release_has_no_source_callable_alias_or_record_representation",
+    "lib.rs::trusted::tests::residual_parameter_cleanup_requires_io_but_protected_relay_does_not",
     "lib.rs::trusted::tests::selected_denied_call_resolves_to_grant_failure_without_fallback",
     "lib.rs::trusted::tests::selected_denied_operations_still_occupy_callable_namespace",
     "lib.rs::trusted::tests::selected_ranges_precede_signatures_and_have_honest_catalog_origins",
     "lib.rs::trusted::tests::selected_type_namespace_collisions_reject_before_signatures",
+    "lib.rs::trusted::tests::sensor_conditionals_replacement_and_public_record_fields_remain_excluded",
+    "lib.rs::trusted::tests::sensor_is_canonical_resource_distinct_from_records_and_is_move_only",
+    "lib.rs::trusted::tests::sensor_representation_arithmetic_comparison_and_dereference_cannot_forge_a_value",
+    "lib.rs::trusted::tests::sensor_result_payloads_have_typed_resource_children_and_cleanup_effects",
+    "lib.rs::trusted::tests::sensor_shared_aliases_and_non_escaping_helpers_preserve_owner_transfer",
     "lib.rs::trusted::tests::tiny_source_still_charges_catalog_storage_work_and_diagnostics"
   ],
   "classifications": {
@@ -31,14 +40,23 @@
     "lib.rs::trusted::tests::distinct_collections_have_foreign_resource_operation_and_origin_identities": "private_canonical_catalog",
     "lib.rs::trusted::tests::equal_source_range_bounds_do_not_establish_imported_nominal_compatibility": "ordinary_source",
     "lib.rs::trusted::tests::every_unused_and_denied_catalog_row_is_validated_independently": "private_canonical_catalog",
+    "lib.rs::trusted::tests::foreign_resource_type_and_mutable_referent_metadata_cannot_publish": "private_canonical_catalog",
     "lib.rs::trusted::tests::imported_range_literal_neighbors_preserve_existing_frontend_checks": "ordinary_source",
     "lib.rs::trusted::tests::imported_ranges_keep_existing_arithmetic_comparison_copy_and_field_rules": "ordinary_source",
+    "lib.rs::trusted::tests::mutable_sensor_reference_interfaces_and_borrows_are_excluded": "ordinary_source",
     "lib.rs::trusted::tests::profile_root_configuration_is_bounded_exact_and_immutable": "private_catalog_envelope",
+    "lib.rs::trusted::tests::public_sensor_bearing_result_is_rejected_before_machine_entry": "ordinary_source",
     "lib.rs::trusted::tests::release_has_no_source_callable_alias_or_record_representation": "ordinary_source",
+    "lib.rs::trusted::tests::residual_parameter_cleanup_requires_io_but_protected_relay_does_not": "ordinary_source",
     "lib.rs::trusted::tests::selected_denied_call_resolves_to_grant_failure_without_fallback": "ordinary_source",
     "lib.rs::trusted::tests::selected_denied_operations_still_occupy_callable_namespace": "ordinary_source",
     "lib.rs::trusted::tests::selected_ranges_precede_signatures_and_have_honest_catalog_origins": "ordinary_source",
     "lib.rs::trusted::tests::selected_type_namespace_collisions_reject_before_signatures": "ordinary_source",
+    "lib.rs::trusted::tests::sensor_conditionals_replacement_and_public_record_fields_remain_excluded": "ordinary_source",
+    "lib.rs::trusted::tests::sensor_is_canonical_resource_distinct_from_records_and_is_move_only": "ordinary_source",
+    "lib.rs::trusted::tests::sensor_representation_arithmetic_comparison_and_dereference_cannot_forge_a_value": "ordinary_source",
+    "lib.rs::trusted::tests::sensor_result_payloads_have_typed_resource_children_and_cleanup_effects": "ordinary_source",
+    "lib.rs::trusted::tests::sensor_shared_aliases_and_non_escaping_helpers_preserve_owner_transfer": "ordinary_source",
     "lib.rs::trusted::tests::tiny_source_still_charges_catalog_storage_work_and_diagnostics": "private_catalog_envelope"
   },
   "fixture_adaptations": [
@@ -49,6 +67,20 @@
         "lib.rs::hir::validate::multiple_fields::formed_literal_integrity_rejects_forged_leaves_without_panicking",
         "lib.rs::verify::tests::affine_proofs_match_exhaustive_execution_on_small_domains",
         "lib.rs::verify::tests::numerical_kernel_preserves_extreme_and_empty_domain_coverage"
+      ]
+    },
+    {
+      "reason": "Private Record cleanup-plan fixtures now explicitly wrap their existing RecordId in CleanupType::Record. The original malformed IDs, expected rejections, effects and protocol constants are unchanged.",
+      "affected_identities": [
+        "lib.rs::execution::effect_authority_tests::cleanup_witness_site_function_owner_plan_summary_and_origin_mutations_reject",
+        "lib.rs::execution::effect_authority_tests::protected_return_owner_cannot_gain_cleanup_authority_from_an_unused_superset",
+        "lib.rs::execution::machine::cleanup::effects::approved_abort_binds_actual_frame_pending_membership_and_origin_before_attempt",
+        "lib.rs::execution::machine::cleanup::effects::approved_abort_rejects_independent_template_and_domain_mutations",
+        "lib.rs::execution::machine::cleanup::effects::approved_abort_release_failure_keeps_its_observable_prefix_and_stops",
+        "lib.rs::execution::machine::cleanup::effects::ordinary_approved_abort_and_primitive_protocol_have_separate_sealed_authority",
+        "lib.rs::execution::machine::cleanup::effects::ordinary_trap_during_pending_construction_adds_no_cleanup_edge",
+        "lib.rs::execution::temporary_authority_tests::each_independent_temporary_authority_mutation_is_rejected",
+        "lib.rs::mir::multiple_field_tests::reference_write_mir_recurses_unary_binary_and_rejects_hidden_conditionals"
       ]
     }
   ]
