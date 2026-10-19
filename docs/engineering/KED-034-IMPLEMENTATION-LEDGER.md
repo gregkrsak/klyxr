@@ -66,7 +66,7 @@ all classified additions, zero failures/ignores/filters/migrations, the complete
 KED-033 evidence map and authority/affine identities. The workflow retains both
 complete unfiltered profiles. The staged manifest is not a completed M9 map.
 
-## M2: sealed checker and MIR correspondence (validation pending)
+## M2: sealed checker and MIR correspondence (Actions verified)
 
 The existing successful ownership consume path emits a distinct invocation
 cleanup holder. It is not a source Place and confers no move permission.
@@ -77,6 +77,25 @@ and the ordered eight-phase protocol. Derivation requires exactly one real
 checker witness per completion and rejects orphan witnesses. Private controls
 mutate holder roles, protocol order, contracts, origins, all retained copies
 and cleanup witnesses at the opaque validation seam. Dispatch remains disabled.
+
+All eight runs passed at `23db19e921f4d803a9a7246d96560d1ede299460`
+(tree `36d0274ccf9a89bbdde4c3e3a2ffe29461b0c288`): 1,999 tests in each
+profile, all 1,981 predecessors retained. Run/job pairs:
+39316093077/118277825920, 39316093242/118277826759,
+39316093262/118277835745, 39316093226/118278041914,
+39316086017/118277800051, 39316086055/118277800149,
+39316086032/118277800290, 39316085803/118277799443.
+
+## M3: receiving envelope (validation pending)
+
+A pending record retains the exact current temporary identity and future
+completion/protected-result roles. One checked sum reserves provenance, seven
+protocol events, Result cell, operand, transfer/register events, temporary owner,
+fixed cleanup work and two continuations together. Actual diagnostic storage
+is reserved before handoff and moves into terminal reporting without allocation.
+The pre-dispatch guard remains enabled: no finish attempt or consume occurs.
+Tests pressure direct and relay-returned owners, a real diagnostic Host cut,
+simultaneous capacities and measured storage neighbors. These are pending CI.
 
 ## Remaining gated milestones
 

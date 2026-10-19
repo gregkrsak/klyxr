@@ -126,6 +126,60 @@ impl State {
 }
 
 impl<'a> Machine<'a> {
+    pub(super) fn completion_temporary_growth(
+        &self,
+        activation: u64,
+        site: SiteId,
+    ) -> Result<usize, ExecutionError> {
+        let index = self.temporary_index(activation)?;
+        let frame = &self.temporaries.as_ref().unwrap().frames[index];
+        let metadata = &self.executable.function(frame.function)?.temporaries.as_ref().unwrap().sites[site.0];
+        if frame.phase != Phase::Active || frame.region != metadata.region {
+            return Err(self.integrity("completion receiving region mismatch"));
+        }
+        let owners = usize::from(frame.owners.len() == frame.owners.capacity()) * size_of::<Owner>();
+        let events = &self.temporaries.as_ref().unwrap().events;
+        owners.checked_add(2usize.saturating_sub(events.capacity() - events.len()).checked_mul(size_of::<Event>()).ok_or_else(|| self.integrity("completion temporary event overflow"))?)
+            .ok_or_else(|| self.integrity("completion temporary envelope overflow"))
+    }
+
+    pub(super) fn completion_input(
+        &self,
+        input: SiteId,
+        operation: hir::TrustedOperationId,
+    ) -> Result<(OwnerId, hir::ResourceTypeId, u64), ExecutionError> {
+        let Some(Value::Temporary(id)) = self.values.last() else {
+            return Err(self.integrity("completion requires current owned temporary"));
+        };
+        let index = self.temporary_index(id.activation)?;
+        let frame = &self.temporaries.as_ref().unwrap().frames[index];
+        let owner = frame.owners.get(id.ordinal).filter(|o| o.custody == Custody::Owned && o.site == input).ok_or_else(|| self.integrity("completion input holder/site mismatch"))?;
+        let flow = self.executable.function(frame.function)?.temporaries.as_ref().unwrap();
+        if flow.sites[input.0].destination != Transfer::TrustedArgument(operation, 0) {
+            return Err(self.integrity("completion input destination mismatch"));
+        }
+        let Some(Value::Resource { ty, identity }) = owner.value.as_ref() else {
+            return Err(self.integrity("completion input lacks exact Sensor ticket"));
+        };
+        Ok((*id, *ty, *identity))
+    }
+
+    pub(super) fn completion_temporary_reserve(
+        &mut self,
+        activation: u64,
+        site: SiteId,
+    ) -> Result<(), ExecutionError> {
+        self.temporary_reserve_register(activation, site)?;
+        let events = &self.temporaries.as_ref().unwrap().events;
+        let growth = 2usize.saturating_sub(events.capacity() - events.len());
+        self.reserve(growth.checked_mul(size_of::<Event>()).ok_or_else(|| self.integrity("completion transfer events overflow"))?)?;
+        #[cfg(test)]
+        self.trusted_allocation(super::trusted::Allocation::CompletionTransfer, growth > 0)?;
+        self.temporaries.as_mut().unwrap().events.try_reserve_exact(2)
+            .map_err(|_| self.failure(ErrorKind::Host("completion temporary events")))?;
+        Ok(())
+    }
+
     #[cfg(test)]
     pub(super) fn temporary_allocation(&self) -> Result<(), ExecutionError> {
         FAIL_ALLOCATION.with(|remaining| {

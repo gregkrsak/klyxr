@@ -4,6 +4,7 @@
 use super::*;
 use crate::trusted::{approval::Invocation, Binding, OperationClass, Scenario};
 use std::sync::atomic::{AtomicU64, Ordering};
+mod completion;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
@@ -74,6 +75,10 @@ pub(super) enum Allocation {
     TemporaryOwner,
     TemporaryEvent,
     ReleaseAudit,
+    CompletionTransfer,
+    CompletionCleanup,
+    CompletionContinuation,
+    CompletionDiagnostic,
 }
 enum Status {
     Pending,
@@ -91,10 +96,15 @@ pub(super) struct State {
     events: Vec<Event>,
     status: Status,
     stop_storage: usize,
+    completion: Option<completion::Pending>,
+    diagnostic: std::cell::RefCell<Option<Vec<CallTrace>>>,
     #[cfg(test)]
     fault: Option<(Fault, u64)>,
 }
 impl State {
+    pub(super) fn take_diagnostic(&self) -> Option<Vec<CallTrace>> {
+        self.diagnostic.borrow_mut().take()
+    }
     pub(super) fn storage(&self) -> Option<usize> {
         let mut n = size_of::<Self>()
             .checked_add(self.entries.capacity().checked_mul(size_of::<Entry>())?)?
@@ -114,7 +124,8 @@ impl State {
                 .checked_mul(size_of::<(hir::FieldId, RangeValue)>())?,
             _ => 0,
         };
-        n = n.checked_add(self.stop_storage.max(outcome))?;
+        let diagnostic = self.diagnostic.borrow().as_ref().map_or(Some(0), |trace| trace.capacity().checked_mul(size_of::<CallTrace>()))?;
+        n = n.checked_add(self.stop_storage.max(outcome).max(diagnostic))?;
         Some(n)
     }
     fn live(&self) -> usize {
@@ -169,6 +180,8 @@ impl<'a> ExecutionSession<'a> {
             events: Vec::new(),
             status: Status::Pending,
             stop_storage,
+            completion: None,
+            diagnostic: std::cell::RefCell::new(None),
             #[cfg(test)]
             fault: None,
         });
@@ -392,6 +405,7 @@ impl<'a> Machine<'a> {
         // M1-M3: the catalog can be checked, but completion cannot dispatch
         // before the sealed receiving, protection and release protocol exists.
         if op.class == OperationClass::Completion {
+            self.completion_prepare(index, activation, frame)?;
             return Err(self.integrity("completion invocation disabled before custody protocol"));
         }
         let open = op.class == OperationClass::Acquisition;

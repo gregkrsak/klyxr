@@ -188,6 +188,16 @@ impl<'a> Machine<'a> {
         let mut e = ExecutionError::new(kind, self.origin.span);
         e.expression = self.expression;
         let count = self.frames.len().min(self.limits.trace_depth);
+        if let Some(mut trace) = self.trusted.as_ref().and_then(trusted::State::take_diagnostic) {
+            // Completion reserved this real backing storage before dispatch.
+            // No allocation is needed to retain a post-response terminal trace.
+            for f in self.frames.iter().rev().take(count) {
+                trace.push(CallTrace { function: f.function, call_site: f.call_site });
+            }
+            e.trace = trace;
+            e.trace_truncated = self.frames.len() > count;
+            return e;
+        }
         // Error construction is independently bounded. Failure to allocate a
         // trace reports host failure with the scalar immediate origin intact.
         if e.trace.try_reserve_exact(count).is_err() {

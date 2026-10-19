@@ -1,9 +1,9 @@
 {
-  "stage": "M2",
+  "stage": "M3",
   "baseline_commit": "372230df1d359b13d28f5c136130ac031507716a",
   "baseline_tree": "a646e9576a9b7650ff9a95275f1080b591d06986",
   "predecessor_count": 1981,
-  "expected_per_profile": 1999,
+  "expected_per_profile": 2003,
   "additions": [
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific",
     "lib.rs::trusted::completion_tests::finish_direct_and_relay_arguments_prepare_without_reference_coercion",
@@ -22,7 +22,11 @@
     "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_contract_and_pair_mutations",
     "lib.rs::execution::completion_authority_tests::completion_all_authority_copies_still_require_exact_mir_derivation",
     "lib.rs::execution::completion_authority_tests::completion_mir_cleanup_witness_omission_duplicate_wrong_holder_and_kind_reject",
-    "lib.rs::execution::completion_authority_tests::completion_direct_and_cleanup_effects_are_independently_sealed"
+    "lib.rs::execution::completion_authority_tests::completion_direct_and_cleanup_effects_are_independently_sealed",
+    "lib.rs::execution::machine::trusted::completion::tests::m3_disabled_completion_reserves_but_never_consumes_current_owner",
+    "lib.rs::execution::machine::trusted::completion::tests::m3_diagnostic_host_cut_keeps_relay_returned_owner_without_attempt",
+    "lib.rs::execution::machine::trusted::completion::tests::m3_simultaneous_storage_neighbor_retains_the_input",
+    "lib.rs::execution::machine::trusted::completion::tests::m3_receiving_capacities_coexist_before_handoff"
   ],
   "classifications": {
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific": "ordinary_source",
@@ -42,7 +46,11 @@
     "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_contract_and_pair_mutations": "private_malformed_authority",
     "lib.rs::execution::completion_authority_tests::completion_all_authority_copies_still_require_exact_mir_derivation": "private_malformed_authority",
     "lib.rs::execution::completion_authority_tests::completion_mir_cleanup_witness_omission_duplicate_wrong_holder_and_kind_reject": "private_malformed_authority",
-    "lib.rs::execution::completion_authority_tests::completion_direct_and_cleanup_effects_are_independently_sealed": "trusted_boundary"
+    "lib.rs::execution::completion_authority_tests::completion_direct_and_cleanup_effects_are_independently_sealed": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion::tests::m3_disabled_completion_reserves_but_never_consumes_current_owner": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion::tests::m3_diagnostic_host_cut_keeps_relay_returned_owner_without_attempt": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion::tests::m3_simultaneous_storage_neighbor_retains_the_input": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion::tests::m3_receiving_capacities_coexist_before_handoff": "trusted_boundary"
   },
   "migrations": {},
   "contract_corrections": [],
@@ -53,7 +61,7 @@
     },
     {
       "identities": [
-        "lib.rs::execution::effect_authority_tests::mir_cleanup_witness_cannot_be_invented_after_checker_approval",
+        "lib.rs::execution::effect_authority_tests::protected_return_owner_cannot_gain_cleanup_authority_from_an_unused_superset",
         "lib.rs::execution::effect_authority_tests::cleanup_witness_site_function_owner_plan_summary_and_origin_mutations_reject"
       ],
       "reason": "Wrap the identical source Place payload in Holder::Place after the representation gains invocation holders. No assertion or identity change."
@@ -85,6 +93,12 @@
       "lib.rs::execution::completion_authority_tests::completion_all_authority_copies_still_require_exact_mir_derivation",
       "lib.rs::execution::completion_authority_tests::completion_mir_cleanup_witness_omission_duplicate_wrong_holder_and_kind_reject",
       "lib.rs::execution::completion_authority_tests::completion_direct_and_cleanup_effects_are_independently_sealed"
+    ],
+    "M3": [
+      "lib.rs::execution::machine::trusted::completion::tests::m3_disabled_completion_reserves_but_never_consumes_current_owner",
+      "lib.rs::execution::machine::trusted::completion::tests::m3_diagnostic_host_cut_keeps_relay_returned_owner_without_attempt",
+      "lib.rs::execution::machine::trusted::completion::tests::m3_simultaneous_storage_neighbor_retains_the_input",
+      "lib.rs::execution::machine::trusted::completion::tests::m3_receiving_capacities_coexist_before_handoff"
     ]
   },
   "authority_doctests": 1,
