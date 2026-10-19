@@ -115,7 +115,73 @@ Each row requires independent controls, not one compound corrupted artifact.
 ## Milestone status
 
 M0: baseline and branch established; ledger created before semantic changes.
-M1-M9: pending. No KED-033 invocation path is enabled at this checkpoint.
+M1: immutable selection, namespace/range/origin admission implemented; milestone
+validation below. M2-M9 remain pending. No KED-033 invocation path is enabled at
+this checkpoint. In particular selected trusted calls still reject explicitly;
+they cannot route to an ordinary function or fixture before M5.
+
+### M0 published checkpoint
+
+Commit `3c88f3f38a86182ad5193db9b16521f6ee9fd272`, tree
+`ba6e05ba571b00dd96e50b1fab233e2d66091a3f`, establishes this ledger. All four
+push workflows and every job/step passed:
+
+| Workflow | Run | Job |
+| --- | --- | --- |
+| build | [39190661833](https://github.com/gregkrsak/klyxr/actions/runs/39190661833) | 117862503061 |
+| tests | [39190661856](https://github.com/gregkrsak/klyxr/actions/runs/39190661856) | 117862503113 |
+| verify | [39190661865](https://github.com/gregkrsak/klyxr/actions/runs/39190661865) | 117862503206 |
+| docs | [39190661926](https://github.com/gregkrsak/klyxr/actions/runs/39190661926) | 117862503128 |
+
+[Issue progress record](https://github.com/gregkrsak/klyxr/issues/78#issuecomment-6258480234).
+
+### M1 implementation details and evidence
+
+One explicit immutable sensor-demo selection records its scenario, independent
+open/read/release grants and bounded named entry roots. It supplies only fixed
+compiler-owned rows; ordinary source cannot author descriptors or bindings.
+Range rows precede source declaration/signature collection, with exact domains
+and nominal identities. Resource and operation IDs carry distinct checked
+collection serials; matching numeric row offsets in another collection are not
+authority. Range declarations now distinguish Source spans from Catalog origins;
+no catalog row is assigned a synthetic source location.
+
+Selected operations occupy only callable names and selected types occupy only
+type names. Denied rows still occupy their names, collection rejects collisions
+without overwriting the catalog, and ordinary values/fields retain their separate
+namespaces and original case rules. Imported ranges retain existing literal,
+subtraction, comparison, Copy and field behavior. Every row is validated even
+when unused/denied; fixed release has no source-callable name. No private resource
+record fixture or acquisition path is activated.
+
+The source-independent admission envelope adds 65,536 bytes plus 4,096 bytes per
+root plus 16 times root-name bytes, 65,536 work plus 4,096 work per root, and 4,096
+diagnostic bytes plus 16 times root-name bytes. The conservative terms cover
+catalog rows, selected configuration, retained approval copies, root scans and
+diagnostics. They are summed with frontend, outcome and cleanup envelopes, rather
+than compared in isolation. Exact sufficient and immediately insufficient
+combined neighbors are tested independently. The no-profile terms stay zero.
+
+Sixteen new identities are enumerated and classified in
+`ked-033-evidence.json`; `ked-033-predecessors.json` preserves all 1,875 exact
+baseline identities and `verify-ked033-tests.py` reconciles both profiles without
+permitting unclassified additions. Predecessor fixtures receive only their honest
+Source-origin wrapper; no expectation or numeric protocol oracle changes.
+Ordinary development corrections were limited to test fixtures initially using
+unsupported syntax (`+`, missing `range`, and a reserved Result-family name).
+Those fixtures were corrected to the existing syntax rather than changing it.
+
+The complete M1 local gate passed: **1,891 exact debug identities and 1,891
+release identities** (1,875 predecessors plus 16 additions), authority doctest,
+both 1,800-case affine checks, all-target checking, formatting, warnings-denied
+Clippy/Rustdoc, all predecessor CLI/examples/rejection diagnostics, README assets,
+scaffold, context reproducibility and diff integrity. All existing numeric
+protocol oracles passed unchanged. The development diff is the authorized M1
+change, not a new claim of baseline cleanliness; index/worktree identity is
+reconfirmed at the published checkpoint.
+
+M1 does not claim typed Sensor eligibility, trusted execution, stopped custody,
+structural audit, or completion of P02-P09. Those remain later milestones.
 
 Future entries must record meaningful changes, validation and exact remote evidence,
 ordinary development corrections, any K33-I escalation, predecessor adaptations,

@@ -33,6 +33,7 @@ pub struct ResultType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Program {
+    pub(crate) trusted: Option<crate::trusted::Catalog>,
     pub(crate) results: Vec<ResultType>,
     pub(crate) resources: resources::Catalog,
     pub(crate) ranges: Vec<RangeType>,
@@ -100,7 +101,13 @@ pub struct RangeType {
     pub name: String,
     pub min: i64,
     pub max: i64,
-    pub span: Span,
+    pub origin: DeclarationOrigin,
+}
+/// Catalog rows have no source declaration or source location.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeclarationOrigin {
+    Source(Span),
+    Catalog(crate::trusted::CatalogOrigin),
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Record {

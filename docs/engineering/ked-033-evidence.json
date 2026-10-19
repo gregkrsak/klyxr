@@ -1,0 +1,55 @@
+{
+  "baseline_commit": "62023217b3f93e53cae302731643cbcea1fb3d17",
+  "baseline_tree": "3998bcad9b34d66e960b863eb20b7b78680da07d",
+  "predecessor_count": 1875,
+  "milestone": "M1: catalog admission; invocation disabled",
+  "migrations": {},
+  "contract_corrections": [],
+  "additions": [
+    "lib.rs::trusted::tests::acquisition_requires_its_exact_cleanup_only_release_grant",
+    "lib.rs::trusted::tests::catalog_combined_envelope_exact_neighbors_are_charged_without_source",
+    "lib.rs::trusted::tests::catalog_names_preserve_case_and_unselected_catalog_reserves_nothing",
+    "lib.rs::trusted::tests::cross_namespace_equalities_keep_value_field_and_callable_lookup_separate",
+    "lib.rs::trusted::tests::distinct_collections_have_foreign_resource_operation_and_origin_identities",
+    "lib.rs::trusted::tests::equal_source_range_bounds_do_not_establish_imported_nominal_compatibility",
+    "lib.rs::trusted::tests::every_unused_and_denied_catalog_row_is_validated_independently",
+    "lib.rs::trusted::tests::imported_range_literal_neighbors_preserve_existing_frontend_checks",
+    "lib.rs::trusted::tests::imported_ranges_keep_existing_arithmetic_comparison_copy_and_field_rules",
+    "lib.rs::trusted::tests::profile_root_configuration_is_bounded_exact_and_immutable",
+    "lib.rs::trusted::tests::release_has_no_source_callable_alias_or_record_representation",
+    "lib.rs::trusted::tests::selected_denied_call_resolves_to_grant_failure_without_fallback",
+    "lib.rs::trusted::tests::selected_denied_operations_still_occupy_callable_namespace",
+    "lib.rs::trusted::tests::selected_ranges_precede_signatures_and_have_honest_catalog_origins",
+    "lib.rs::trusted::tests::selected_type_namespace_collisions_reject_before_signatures",
+    "lib.rs::trusted::tests::tiny_source_still_charges_catalog_storage_work_and_diagnostics"
+  ],
+  "classifications": {
+    "lib.rs::trusted::tests::acquisition_requires_its_exact_cleanup_only_release_grant": "ordinary_source",
+    "lib.rs::trusted::tests::catalog_combined_envelope_exact_neighbors_are_charged_without_source": "private_catalog_envelope",
+    "lib.rs::trusted::tests::catalog_names_preserve_case_and_unselected_catalog_reserves_nothing": "ordinary_source",
+    "lib.rs::trusted::tests::cross_namespace_equalities_keep_value_field_and_callable_lookup_separate": "ordinary_source",
+    "lib.rs::trusted::tests::distinct_collections_have_foreign_resource_operation_and_origin_identities": "private_canonical_catalog",
+    "lib.rs::trusted::tests::equal_source_range_bounds_do_not_establish_imported_nominal_compatibility": "ordinary_source",
+    "lib.rs::trusted::tests::every_unused_and_denied_catalog_row_is_validated_independently": "private_canonical_catalog",
+    "lib.rs::trusted::tests::imported_range_literal_neighbors_preserve_existing_frontend_checks": "ordinary_source",
+    "lib.rs::trusted::tests::imported_ranges_keep_existing_arithmetic_comparison_copy_and_field_rules": "ordinary_source",
+    "lib.rs::trusted::tests::profile_root_configuration_is_bounded_exact_and_immutable": "private_catalog_envelope",
+    "lib.rs::trusted::tests::release_has_no_source_callable_alias_or_record_representation": "ordinary_source",
+    "lib.rs::trusted::tests::selected_denied_call_resolves_to_grant_failure_without_fallback": "ordinary_source",
+    "lib.rs::trusted::tests::selected_denied_operations_still_occupy_callable_namespace": "ordinary_source",
+    "lib.rs::trusted::tests::selected_ranges_precede_signatures_and_have_honest_catalog_origins": "ordinary_source",
+    "lib.rs::trusted::tests::selected_type_namespace_collisions_reject_before_signatures": "ordinary_source",
+    "lib.rs::trusted::tests::tiny_source_still_charges_catalog_storage_work_and_diagnostics": "private_catalog_envelope"
+  },
+  "fixture_adaptations": [
+    {
+      "reason": "RangeType now carries an honest Source or Catalog declaration origin; predecessor source-only fixtures retain exactly their existing source spans and all expected results and numeric oracles.",
+      "affected_identities": [
+        "lib.rs::execution::result_admission_tests::exact_canonical_result_count_succeeds_and_next_distinct_pair_is_limit",
+        "lib.rs::hir::validate::multiple_fields::formed_literal_integrity_rejects_forged_leaves_without_panicking",
+        "lib.rs::verify::tests::affine_proofs_match_exhaustive_execution_on_small_domains",
+        "lib.rs::verify::tests::numerical_kernel_preserves_extreme_and_empty_domain_coverage"
+      ]
+    }
+  ]
+}

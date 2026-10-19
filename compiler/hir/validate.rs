@@ -17,6 +17,25 @@ impl Program {
     }
     // Bounded admission has already checked the catalog with typed failure propagation.
     pub(crate) fn validate_record_expressions_without_resources(&self) -> Result {
+        if let Some(catalog) = &self.trusted {
+            catalog.validate(self).map_err(|message| {
+                Box::new(Diagnostic::semantic(
+                    crate::bounded::START,
+                    message,
+                    "every selected catalog row must preserve its exact contract and honest origin",
+                ))
+            })?;
+        } else if self
+            .ranges
+            .iter()
+            .any(|r| matches!(r.origin, DeclarationOrigin::Catalog(_)))
+        {
+            return Err(Box::new(Diagnostic::semantic(
+                crate::bounded::START,
+                "catalog range without selection",
+                "catalog origins require their exact compilation",
+            )));
+        }
         self.validate_result_tables().map_err(|message| {
             Box::new(Diagnostic::semantic(
                 crate::bounded::START,
@@ -1131,7 +1150,9 @@ mod multiple_fields {
     #[test]
     fn formed_literal_integrity_rejects_forged_leaves_without_panicking() {
         let mut p = fixture();
-        let span = p.ranges[0].span;
+        let DeclarationOrigin::Source(span) = p.ranges[0].origin else {
+            panic!("expected source range")
+        };
         let range = p.ranges[0].id;
         let formed = TypedExpr {
             kind: ExprKind::FormedRangeLiteral(80),

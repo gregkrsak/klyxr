@@ -280,6 +280,12 @@ impl CheckedExecutable {
             ));
         }
         let c = Context::new(self.limits);
+        if let Some(catalog) = &self.program.trusted {
+            c.reserve_catalog(
+                catalog.selection.roots().len(),
+                catalog.selection.roots().iter().map(String::len).sum(),
+            )?;
+        }
         // Admission already bounds this private immutable representation. Check
         // shape before any recursive comparison/re-lowering, including injections.
         validate::program_shape(&self.program, &c)?;
@@ -391,6 +397,24 @@ pub fn prepare_execution(
     source: &str,
     limits: AdmissionLimits,
 ) -> Result<CheckedExecutable, ExecutionError> {
+    prepare_selected(source, limits, None)
+}
+
+/// Explicit selection uses the same bounded frontend and opaque preparation.
+/// No profile is implicitly selected by the resource-free convenience API.
+pub fn prepare_execution_with_profile(
+    source: &str,
+    limits: AdmissionLimits,
+    selection: &crate::trusted::Selection,
+) -> Result<CheckedExecutable, ExecutionError> {
+    prepare_selected(source, limits, Some(selection))
+}
+
+fn prepare_selected(
+    source: &str,
+    limits: AdmissionLimits,
+    selection: Option<&crate::trusted::Selection>,
+) -> Result<CheckedExecutable, ExecutionError> {
     limits.validate()?;
     if source.len() > limits.source_bytes {
         return Err(ResourceFailure::limit("source bytes", START).into());
@@ -438,8 +462,11 @@ pub fn prepare_execution(
                 )
             })
     })?;
-    let resolved = crate::resolve::resolve_bounded(&ast, &context)
-        .map_err(|e| frontend("resolve", e, &context))?;
+    let resolved = match selection {
+        Some(selection) => crate::resolve::resolve_profile(&ast, &context, selection),
+        None => crate::resolve::resolve_bounded(&ast, &context),
+    }
+    .map_err(|e| frontend("resolve", e, &context))?;
     let program = crate::types::check(resolved).map_err(|e| frontend("type", e, &context))?;
     let (cleanup_sites, outcomes) = crate::ownership::evidence_bounded(&program, &context)
         .map_err(|e| frontend("ownership", e, &context))?;

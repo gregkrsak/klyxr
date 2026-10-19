@@ -249,30 +249,80 @@ struct Scope {
 
 /// Collect declarations/signatures first, then resolve bodies and ordered harness statements.
 pub fn resolve(ast: &ast::Program) -> Result<ResolvedProgram, Vec<Diagnostic>> {
-    resolve_with(ast, None)
+    resolve_with(ast, None, None)
 }
 
 pub(crate) fn resolve_bounded(
     ast: &ast::Program,
     context: &crate::bounded::Context,
 ) -> Result<ResolvedProgram, Vec<Diagnostic>> {
-    resolve_with(ast, Some(context))
+    resolve_with(ast, Some(context), None)
+}
+
+pub(crate) fn resolve_profile(
+    ast: &ast::Program,
+    context: &crate::bounded::Context,
+    selection: &crate::trusted::Selection,
+) -> Result<ResolvedProgram, Vec<Diagnostic>> {
+    resolve_with(ast, Some(context), Some(selection))
 }
 
 fn resolve_with(
     ast: &ast::Program,
     context: Option<&crate::bounded::Context>,
+    selection: Option<&crate::trusted::Selection>,
 ) -> Result<ResolvedProgram, Vec<Diagnostic>> {
     let mut resolver = Resolver {
         context,
         ..Resolver::default()
     };
     let mut diagnostics = Vec::new();
-    let mut types = HashSet::new();
+    let mut types: HashSet<&str> = HashSet::new();
+    if let Some(selection) = selection {
+        let context = context.expect("profile preparation always carries bounded admission");
+        let catalog = crate::trusted::Catalog::collect(selection, context).map_err(|failure| {
+            context.fail(failure);
+            vec![Diagnostic::semantic(
+                failure.span,
+                failure.resource,
+                "catalog admission stopped before signature collection",
+            )]
+        })?;
+        resolver.program.ranges.try_reserve_exact(2).map_err(|_| {
+            let failure = crate::bounded::ResourceFailure::host(
+                "imported range table",
+                crate::bounded::START,
+            );
+            context.fail(failure);
+            vec![Diagnostic::semantic(
+                failure.span,
+                failure.resource,
+                "no catalog is published",
+            )]
+        })?;
+        for (index, (name, min, max)) in [("Reading", 0, 4095), ("SensorError", 1, 3)]
+            .into_iter()
+            .enumerate()
+        {
+            let id = RangeTypeId(index);
+            types.insert(name);
+            resolver.ranges.insert(name.into(), id);
+            resolver.program.ranges.push(hir::RangeType {
+                id,
+                name: name.into(),
+                min,
+                max,
+                origin: hir::DeclarationOrigin::Catalog(catalog.origin(index)),
+            });
+        }
+        types.insert("Sensor");
+        resolver.program.trusted = Some(catalog);
+    }
     for range in &ast.ranges {
         unreserved(&range.name, range.span).map_err(|e| vec![*e])?;
         if !types.insert(&range.name) {
             diagnostics.push(*duplicate(range.span, &range.name));
+            continue;
         }
         if range.min > range.max {
             diagnostics.push(Diagnostic::semantic(
@@ -291,13 +341,14 @@ fn resolve_with(
             name: range.name.clone(),
             min: range.min,
             max: range.max,
-            span: range.span,
+            origin: hir::DeclarationOrigin::Source(range.span),
         });
     }
     for (index, record) in ast.records.iter().enumerate() {
         unreserved(&record.name, record.span).map_err(|e| vec![*e])?;
         if !types.insert(&record.name) {
             diagnostics.push(*duplicate(record.span, &record.name));
+            continue;
         }
         resolver
             .records
@@ -305,6 +356,15 @@ fn resolve_with(
     }
     for (index, function) in ast.functions.iter().enumerate() {
         unreserved(function.name(), function.span()).map_err(|e| vec![*e])?;
+        if resolver
+            .program
+            .trusted
+            .as_ref()
+            .is_some_and(|c| c.callable(function.name()).is_some())
+        {
+            diagnostics.push(*duplicate(function.span(), function.name()));
+            continue;
+        }
         match function {
             ast::FunctionDecl::Ordinary(f) => {
                 for p in &f.parameters {
@@ -407,6 +467,26 @@ struct Resolver<'a> {
     bindings: HashMap<String, BindingId>,
 }
 impl Resolver<'_> {
+    // M1 admission resolves the exact catalog row. Invocation remains disabled
+    // until canonical calls, receipts and persistent sessions are implemented.
+    fn selected_call(&self, name: &str, span: Span) -> ResolutionResult<()> {
+        if let Some(catalog) = &self.program.trusted {
+            if let Some(op) = catalog.callable(name) {
+                if !catalog.granted(op.id)
+                    || (op.class == crate::trusted::OperationClass::Acquisition
+                        && !catalog.granted(catalog.operations[2].id))
+                {
+                    return Err(error(span, format!("trusted operation `{name}` is not granted"), "the exact selected operation and its fixed cleanup-only release require authority"));
+                }
+                return Err(error(
+                    span,
+                    "trusted invocation is not enabled at this implementation milestone",
+                    "the selected canonical row has no ordinary-function fallback",
+                ));
+            }
+        }
+        Ok(())
+    }
     fn result_resource_error(&self, failure: crate::bounded::ResourceFailure) -> Box<Diagnostic> {
         if let Some(context) = self.context {
             context.fail(failure);
@@ -841,6 +921,7 @@ impl Resolver<'_> {
                 },
                 ast::ValueStatement::ReturnNoValue { span } => ResolvedValueStatement::ReturnNoValue { span: *span },
                 ast::ValueStatement::CallNoValue { callee, arguments, span } => {
+                    self.selected_call(callee, *span)?;
                     let function = self.functions.get(callee).copied().ok_or_else(|| error(*span, format!("unknown function `{callee}`"), "declare an ordinary function"))?;
                     if !self.ordinary[function.0] {
                         return Err(error(*span, "ordinary call statements require an ordinary no-value function", "verified functions retain their specialized call harness; mixed-assurance calls are unsupported"));
@@ -1038,6 +1119,7 @@ impl Resolver<'_> {
                 ResolvedExprKind::OldField(self.access(a, scope)?)
             }
             ast::ExprKind::Call { callee, arguments } => {
+                self.selected_call(callee, expression.span)?;
                 let function = self.functions.get(callee).copied().ok_or_else(|| error(expression.span, format!("unknown function `{callee}`"), "declare an ordinary value function"))?;
                 if scope.state.is_some() || !self.ordinary[function.0] {
                     return Err(error(expression.span, "call expressions are supported only between ordinary value functions", "verified contracts/body expressions cannot call functions; mixed-assurance call rules remain open"));

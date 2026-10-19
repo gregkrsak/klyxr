@@ -485,14 +485,14 @@ mod tests {
                                 name: "State".into(),
                                 min: low,
                                 max: high,
-                                span: template.span,
+                                origin: crate::hir::DeclarationOrigin::Source(template.span),
                             };
                             let amount = RangeType {
                                 id: template.amount_param.ty,
                                 name: "Amount".into(),
                                 min: amount_low,
                                 max: amount_high,
-                                span: template.span,
+                                origin: crate::hir::DeclarationOrigin::Source(template.span),
                             };
                             let proof_body: Vec<ProofSubtract> = body
                                 .iter()
@@ -536,14 +536,14 @@ mod tests {
             name: "Full".into(),
             min: i64::MIN,
             max: i64::MAX,
-            span: function.span,
+            origin: crate::hir::DeclarationOrigin::Source(function.span),
         };
         let zero = RangeType {
             id: function.amount_param.ty,
             name: "Zero".into(),
             min: 0,
             max: 0,
-            span: function.span,
+            origin: crate::hir::DeclarationOrigin::Source(function.span),
         };
         assert!(prove_affine_function(&program, function, &full, &zero, &body).is_ok());
         let small = RangeType {
@@ -551,14 +551,14 @@ mod tests {
             name: "Small".into(),
             min: 0,
             max: 100,
-            span: function.span,
+            origin: crate::hir::DeclarationOrigin::Source(function.span),
         };
         let too_much = RangeType {
             id: function.amount_param.ty,
             name: "TooMuch".into(),
             min: 101,
             max: 200,
-            span: function.span,
+            origin: crate::hir::DeclarationOrigin::Source(function.span),
         };
         let error =
             prove_affine_function(&program, function, &small, &too_much, &body).unwrap_err();
