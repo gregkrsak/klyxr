@@ -397,20 +397,23 @@ their performance results are treated as comparable.
 > [!IMPORTANT]
 > **Klyxr is an early-stage language project.**
 >
-> The compiler, verifier, syntax, semantics, and tooling are still being designed and prototyped.
-> An executable Rust-based prototype now resolves and type-checks ordinary value functions, checks core moves, path-sensitive whole-value loans across straight-line code and acyclic branches, and explicit Copy-safe borrowed access/mutation, supports initializer-only owned/Copy conditional values and direct Copy-safe mutable-local reassignment, supports ownership-stable statement `while` with Copy state, iteration-local Move/borrowing and stable carried-reference access and structured unlabeled `continue`/`break` and lowers `if`/`else`, conditional initializers, and loops to ordinary MIR CFGs with real backedges, and supports a narrow verified integer/record subset. It proves supported subtraction safety, field-range preservation, and postconditions, and checks call preconditions using state updated by earlier calls. General ownership beyond the documented subset, advanced effects beyond frozen KED-030, runtime contracts, and code generation are not yet implemented.
-> The badges at the top of this README are **live GitHub Actions status badges** for this repository's `build`, `tests`, `verify`, and `docs` workflows. These workflows build the prototype, run its regression tests in debug and optimized builds, exercise successful and failing contract examples, and validate documentation assets. They do not establish production readiness.
-
-KD-037 now permits direct signed integer literals to form named-range values at
-independently established ordinary return, argument, assignment, write-through
-and record-field boundaries. Inclusive bounds are checked during typing; this is
-not general conversion, inference or arithmetic-result verification. See
-[the contextual literal boundary](compiler/README.md#contextual-named-range-literal-formation-ked-022--kd-037).
-
-KD-038 adds direct Copy-field assignment through a mutable named owned record
-local, such as `working.charge = 80;`. It evaluates the complete RHS first, then
-checks whole-record availability and loans; it adds no field ownership, reference
-projection, execution or proof. See [the field-assignment boundary](compiler/README.md#direct-copy-field-assignment-ked-023--kd-038).
+> The compiler, verifier, syntax, semantics, and tooling are still being designed
+> and prototyped.
+>
+> The executable Rust prototype supports a deliberately bounded ordinary-language
+> subset: nominal ranges and records, ownership and borrowing, structured control
+> flow, deterministic cleanup, explicit effects, canonical `Result` values,
+> exhaustive handling, `or return`, and deterministic interpretation of approved
+> MIR under configured limits. The verifier supports a narrower integer-and-record
+> contract subset.
+>
+> The prototype does not yet provide the complete planned ownership, verification,
+> runtime, standard-library, package, or native-code-generation systems.
+>
+> The badges at the top of this README are **live GitHub Actions status badges**
+> for this repository's `build`, `tests`, `verify`, and `docs` workflows.
+> They report regression and documentation checks; they do not establish
+> production readiness.
 
 Try the current prototype from the repository root with Rust/rustup installed:
 
@@ -424,6 +427,19 @@ exact guarantees, and intentional failure examples. The examples elsewhere in th
 README describe the broader language design; they are not all accepted by the
 current prototype.
 
+### Run an ordinary function
+
+```sh
+cargo run --locked --bin klyxr -- run examples/ordinary_run.klx --function demo
+```
+
+This prints `Pair { first: Percent(89), second: Percent(90) }`. `run` performs the
+existing frontend and ownership checks through bounded preparation, then executes
+ordinary MIR. It does not evaluate verified proofs or harness calls and does not
+prove ordinary contracts. Named-range violations stop immediately; configured
+resource stops are not nontermination proofs. See
+[bounded execution](docs/BOUNDED_EXECUTION.md) for supported limits and reporting.
+
 Current design areas include:
 
 - [x] public language story
@@ -432,12 +448,15 @@ Current design areas include:
 - [x] contracts and invariants
 - [x] explicit effect model
 - [x] visible trusted / unsafe boundaries
-- [ ] compiler MVP
-- [x] core move and whole-value loan checker with acyclic branch joins
-- [x] nested statement while, Copy-state loop stability, iteration-local Move/borrowing, stable carried references, structured continue/break with canonical exits, and cyclic MIR (no termination proof)
-- [x] bounded ordinary MIR interpretation with opaque execution authority and deterministic fuel (KD-041)
+- [x] executable frontend for the documented ordinary-language subset
+- [x] structured conditionals and loops with explicit MIR control flow
+- [x] deterministic cleanup and bounded expression-temporary custody
+- [x] typed recoverable failure with explicit handling and propagation
+- [x] bounded ordinary MIR interpretation with opaque execution authority
+- [ ] complete compiler MVP
 - [ ] advanced borrowing and destruction
-- [ ] verifier integration
+- [ ] broader verifier integration
+- [ ] native-code generation
 - [ ] standard library
 - [ ] package ecosystem
 - [ ] self-hosting
@@ -556,32 +575,4 @@ And ultimately toward software where engineers can say, with much greater precis
   <sub>Own what moves. Constrain what exists. Prove what matters. Make every escape hatch visible.</sub>
 </p>
 
-### Run an ordinary function
-
-```sh
-cargo run --locked --bin klyxr -- run examples/ordinary_run.klx --function demo
-```
-
-This prints `Pair { first: Percent(89), second: Percent(90) }`. `run` performs the
-existing frontend and ownership checks through bounded preparation, then executes
-ordinary MIR. It does not evaluate verified proofs or harness calls and does not
-prove ordinary contracts. Named-range violations stop immediately; configured
-resource stops are not nontermination proofs. See
-[bounded execution](docs/BOUNDED_EXECUTION.md) for supported limits and reporting.
-
-## Frozen KED-030 ordinary effects
-
-Ordinary `fn` and `function` declarations now support explicit upper bounds such
-as `fn observe() -> bool effects clock, io { return true; }`. Calls require the
-callee's complete declared contract, including unused members; absent clauses mean
-empty. Derived cleanup effects follow ownership-approved realization sites.
-`unsafe` is an audit identity and grants no safety permission. Verified/harness
-proofs and ordinary terminal-stop behavior are unchanged.
-
-Try [the runnable example](examples/explicit_effects.klx) and
-[the transitive rejection example](examples/explicit_effects_fail.klx). These
-conservative declarations provide no clock or I/O API. Policy attributes in the
-older illustrative `effects.klx` remain unsupported. This branch implements frozen
-Draft 2 and awaits independent exact-head review and Greg's acceptance; see the
-[compiler scope](compiler/README.md#frozen-ked-030-explicit-ordinary-effects) and
-[implementation ledger](docs/engineering/KED-030-IMPLEMENTATION-LEDGER.md).
+<!-- README-END -->
