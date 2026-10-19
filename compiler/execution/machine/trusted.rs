@@ -434,7 +434,12 @@ impl<'a> Machine<'a> {
             #[cfg(test)]
             ACTUAL_GROWTH.with(|mask| mask.set(0));
             #[cfg(test)]
-            if self.trusted.as_ref().unwrap().fault == Some((Fault::CompletionInputFrame, self.trusted.as_ref().unwrap().next_invocation)) {
+            if self.trusted.as_ref().unwrap().fault
+                == Some((
+                    Fault::CompletionInputFrame,
+                    self.trusted.as_ref().unwrap().next_invocation,
+                ))
+            {
                 self.corrupt_completion_input_frame();
             }
             self.completion_prepare(index, activation, frame)?;

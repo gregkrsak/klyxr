@@ -191,7 +191,9 @@ impl<'a> Machine<'a> {
 
     #[cfg(test)]
     pub(super) fn corrupt_completion_input_frame(&mut self) {
-        let Some(Value::Temporary(id)) = self.values.last() else { unreachable!("owned completion argument") };
+        let Some(Value::Temporary(id)) = self.values.last() else {
+            unreachable!("owned completion argument")
+        };
         let index = self.temporary_index(id.activation).unwrap();
         self.temporaries.as_mut().unwrap().frames[index].frame = u64::MAX;
     }
