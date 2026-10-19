@@ -293,7 +293,10 @@ fn m6_invocation_argument_order_arity_result_source_mir_and_catalog_origins_reje
             }
         }
         if mutation == 0 {
-            assert_eq!(e.validate().unwrap_err().kind, ErrorKind::ConfiguredLimit("trusted approval metadata bounds"));
+            assert_eq!(
+                e.validate().unwrap_err().kind,
+                ErrorKind::ConfiguredLimit("trusted approval metadata bounds")
+            );
         } else {
             rejected(&e);
         }
