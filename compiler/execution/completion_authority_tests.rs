@@ -302,3 +302,13 @@ fn m6_invocation_argument_order_arity_result_source_mir_and_catalog_origins_reje
         }
     }
 }
+
+#[test]
+fn m9_finish_only_approval_allocations_are_host_and_publish_no_executable() {
+    use crate::trusted::approval::{with_failure,Allocation};
+    let source="fn finish_only(sensor:Sensor)->Result<success:FinishReceipt,failure:SensorError>effects io{return sensor_finish(sensor);}fn demo(){}";
+    for site in [Allocation::Root,Allocation::Edge,Allocation::Argument,Allocation::Invocation] {
+        let result=with_failure(site,||prepare_execution_with_profile(source,AdmissionLimits::default(),&Selection::sensor_demo(Scenario::Sample,Grants::ALL,&["demo"]).unwrap()));
+        assert!(matches!(result.err().unwrap().kind,ErrorKind::Host(_)));
+    }
+}

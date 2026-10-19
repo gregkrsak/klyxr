@@ -1,9 +1,9 @@
 {
-  "stage": "M8",
+  "stage": "M9",
   "baseline_commit": "372230df1d359b13d28f5c136130ac031507716a",
   "baseline_tree": "a646e9576a9b7650ff9a95275f1080b591d06986",
   "predecessor_count": 1981,
-  "expected_per_profile": 2041,
+  "expected_per_profile": 2044,
   "additions": [
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific",
     "lib.rs::trusted::completion_tests::finish_direct_and_relay_arguments_prepare_without_reference_coercion",
@@ -64,10 +64,13 @@
     "lib.rs::execution::audit::completion_tests::recursive_structural_edges_terminate_without_running_completion",
     "tests/completion_cli.rs::defining_sample_cli_delivers_success_and_both_completion_error_scenarios",
     "tests/completion_cli.rs::completion_cli_preserves_profile_grants_and_discriminating_rejections",
-    "tests/completion_cli.rs::completion_cli_audit_reports_static_protocol_without_executing_a_scenario"
+    "tests/completion_cli.rs::completion_cli_audit_reports_static_protocol_without_executing_a_scenario",
+    "lib.rs::execution::completion_authority_tests::m9_finish_only_approval_allocations_are_host_and_publish_no_executable",
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_coordinated_protected_payload_and_production_forgery_cannot_widen_finish_errors",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m9_stopped_completion_report_neighbors_preserve_cursor_outcome_and_prefix"
   ],
   "classifications": {
-    "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific": "ordinary_source",
+    "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific": "private_canonical_catalog",
     "lib.rs::trusted::completion_tests::finish_direct_and_relay_arguments_prepare_without_reference_coercion": "ordinary_source",
     "lib.rs::trusted::completion_tests::finish_match_and_local_propagation_reuse_existing_outcomes": "ordinary_source",
     "lib.rs::trusted::completion_tests::finish_and_receipt_names_obey_existing_namespace_selection": "ordinary_source",
@@ -113,7 +116,7 @@
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_bad_ticket_realm_fresh_identity_and_frame_reject_before_finish_attempt": "private_malformed_authority",
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_finish_error_two_is_integrity_with_actual_partial_prefix_retained": "private_malformed_authority",
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_late_protected_tag_payload_realm_production_and_receiver_corruptions_keep_prefix": "private_malformed_authority",
-    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_completion_catalog_has_explicit_terms_and_exact_combined_neighbors": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_completion_catalog_has_explicit_terms_and_exact_combined_neighbors": "private_catalog_envelope",
     "lib.rs::execution::machine::trusted::completion_bound_tests::m7_preparation_storage_work_diagnostics_tokens_and_identifier_neighbors": "trusted_boundary",
     "lib.rs::execution::machine::trusted::completion_bound_tests::m7_runtime_peak_and_fuel_neighbors_for_all_three_outcomes": "trusted_boundary",
     "lib.rs::execution::machine::trusted::completion_bound_tests::m7_each_container_fits_but_combined_envelope_rejects_before_handoff": "trusted_boundary",
@@ -126,24 +129,29 @@
     "lib.rs::execution::audit::completion_tests::recursive_structural_edges_terminate_without_running_completion": "ordinary_source",
     "tests/completion_cli.rs::defining_sample_cli_delivers_success_and_both_completion_error_scenarios": "trusted_boundary",
     "tests/completion_cli.rs::completion_cli_preserves_profile_grants_and_discriminating_rejections": "trusted_boundary",
-    "tests/completion_cli.rs::completion_cli_audit_reports_static_protocol_without_executing_a_scenario": "trusted_boundary"
+    "tests/completion_cli.rs::completion_cli_audit_reports_static_protocol_without_executing_a_scenario": "trusted_boundary",
+    "lib.rs::execution::completion_authority_tests::m9_finish_only_approval_allocations_are_host_and_publish_no_executable": "private_malformed_authority",
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_coordinated_protected_payload_and_production_forgery_cannot_widen_finish_errors": "private_malformed_authority",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m9_stopped_completion_report_neighbors_preserve_cursor_outcome_and_prefix": "trusted_boundary"
   },
   "migrations": {},
   "contract_corrections": [],
   "fixture_adaptations": [
     {
-      "identity": "lib.rs::trusted::tests::selected_ranges_precede_signatures_and_have_honest_catalog_origins",
+      "affected_identities": [
+        "lib.rs::trusted::tests::selected_ranges_precede_signatures_and_have_honest_catalog_origins"
+      ],
       "reason": "Frozen KED-034 explicitly adds FinishReceipt: extend exact catalog cardinality from two to three and verify all three. Original Reading/SensorError identities/domains/origins remain asserted; this is feature inventory growth, no identity migration or weakened assertion."
     },
     {
-      "identities": [
+      "affected_identities": [
         "lib.rs::execution::effect_authority_tests::protected_return_owner_cannot_gain_cleanup_authority_from_an_unused_superset",
         "lib.rs::execution::effect_authority_tests::cleanup_witness_site_function_owner_plan_summary_and_origin_mutations_reject"
       ],
       "reason": "Wrap the identical source Place payload in Holder::Place after the representation gains invocation holders. No assertion or identity change."
     },
     {
-      "affected_additions": [
+      "affected_identities": [
         "lib.rs::trusted::completion_tests::m1_completion_dispatch_is_disabled_and_retains_the_sensor",
         "lib.rs::execution::machine::trusted::completion::tests::m3_disabled_completion_reserves_but_never_consumes_current_owner",
         "lib.rs::execution::machine::trusted::completion::tests::m3_simultaneous_storage_neighbor_retains_the_input",
@@ -152,9 +160,236 @@
       "reason": "M1-M3 disabled snapshots passed before enabling M4. Their pre-dispatch assertions remain intact via a narrow private test-only disabled-completion cut at the same boundary. Production no longer stops at that milestone guard. Frozen predecessor tests are unchanged."
     }
   ],
-  "semantic_obligations": {},
-  "malformed_controls": {},
-  "constraints": {},
+  "semantic_obligations": {
+    "13.01": [
+      "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific",
+      "lib.rs::execution::completion_authority_tests::m6_finish_specific_catalog_binding_type_subset_effect_grant_origin_and_root_matrix"
+    ],
+    "13.02": [
+      "lib.rs::trusted::completion_tests::receipt_literal_neighbors_and_foreign_nominal_values_reject",
+      "lib.rs::trusted::completion_tests::receipt_is_source_formable_copy_field_status_without_finish"
+    ],
+    "13.03": [
+      "lib.rs::trusted::completion_tests::denied_finish_keeps_occupancy_without_source_fallback",
+      "tests/completion_cli.rs::completion_cli_preserves_profile_grants_and_discriminating_rejections"
+    ],
+    "13.04": [
+      "lib.rs::trusted::completion_tests::finish_requires_release_even_on_unrooted_owned_helper",
+      "lib.rs::execution::completion_authority_tests::m6_finish_specific_catalog_binding_type_subset_effect_grant_origin_and_root_matrix"
+    ],
+    "13.05": [
+      "lib.rs::execution::machine::trusted::completion_composition_tests::defining_sample_runs_through_read_finish_release_and_record_delivery",
+      "tests/completion_cli.rs::defining_sample_cli_delivers_success_and_both_completion_error_scenarios"
+    ],
+    "13.06": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_success_error_and_partial_error_release_before_inner_delivery",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::explicit_match_and_or_return_deliver_both_finish_alternatives"
+    ],
+    "13.07": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_malformed_completion_response_retains_sensor_and_real_prefix",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_finish_error_two_is_integrity_with_actual_partial_prefix_retained",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_coordinated_protected_payload_and_production_forgery_cannot_widen_finish_errors"
+    ],
+    "13.08": [
+      "lib.rs::execution::machine::trusted::completion_composition_tests::source_formed_receipt_and_release_only_path_have_no_completion_event",
+      "lib.rs::execution::audit::completion_tests::rooted_completion_audit_lists_roles_effect_origins_and_both_release_paths_without_execution"
+    ],
+    "13.09": [
+      "lib.rs::execution::machine::trusted::completion_composition_tests::consumed_owner_cannot_be_used_read_finished_replaced_or_reinitialized",
+      "lib.rs::execution::completion_authority_tests::completion_checker_witness_names_invocation_without_a_source_place"
+    ],
+    "13.10": [
+      "lib.rs::execution::machine::trusted::completion_composition_tests::final_shared_use_can_precede_finish_but_a_still_live_handle_rejects"
+    ],
+    "13.11": [
+      "lib.rs::execution::machine::trusted::completion::tests::m3_diagnostic_host_cut_keeps_relay_returned_owner_without_attempt",
+      "lib.rs::execution::machine::trusted::completion::tests::m3_simultaneous_storage_neighbor_retains_the_input",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_every_actual_finish_receiving_host_growth_cut_preserves_current_owner"
+    ],
+    "13.12": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_post_response_host_preserves_protected_outcome_and_completion_owner"
+    ],
+    "13.13": [
+      "lib.rs::execution::machine::trusted::completion::tests::m3_receiving_capacities_coexist_before_handoff",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_post_response_host_preserves_protected_outcome_and_completion_owner",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_post_response_release_uses_prepaid_events_and_no_growth_host_boundary"
+    ],
+    "13.14": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_both_outcomes_survive_release_failure_with_exact_prefix_and_no_delivery",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m9_stopped_completion_report_neighbors_preserve_cursor_outcome_and_prefix"
+    ],
+    "13.15": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_both_outcomes_survive_release_failure_with_exact_prefix_and_no_delivery"
+    ],
+    "13.16": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_runtime_peak_and_fuel_neighbors_for_all_three_outcomes"
+    ],
+    "13.17": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::later_outer_range_trap_cannot_undo_an_inner_finish_and_release"
+    ],
+    "13.18": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_both_outcomes_survive_release_failure_with_exact_prefix_and_no_delivery",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m9_stopped_completion_report_neighbors_preserve_cursor_outcome_and_prefix"
+    ],
+    "13.19": [
+      "lib.rs::execution::machine::trusted::completion_composition_tests::explicit_match_and_or_return_deliver_both_finish_alternatives",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::branch_finish_and_release_only_exit_remain_distinct",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::loop_local_owners_finish_each_iteration_without_duplicating_release",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::loop_carried_consumption_remains_rejected_by_existing_checker",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::owned_helper_parameter_protected_return_and_temporary_finish_once"
+    ],
+    "13.20": [
+      "lib.rs::execution::machine::trusted::completion_composition_tests::owned_helper_parameter_protected_return_and_temporary_finish_once",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::nested_protected_sensor_returns_feed_completion_after_existing_outcome_selection",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::several_finish_result_arguments_preserve_written_order_and_individual_release"
+    ],
+    "13.21": [
+      "lib.rs::execution::completion_authority_tests::completion_checker_witness_names_invocation_without_a_source_place",
+      "lib.rs::execution::completion_authority_tests::completion_direct_and_cleanup_effects_are_independently_sealed",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_success_error_and_partial_error_release_before_inner_delivery",
+      "lib.rs::execution::audit::completion_tests::rooted_completion_audit_lists_roles_effect_origins_and_both_release_paths_without_execution"
+    ],
+    "13.22": [
+      "lib.rs::execution::audit::completion_tests::rooted_completion_audit_lists_roles_effect_origins_and_both_release_paths_without_execution",
+      "lib.rs::execution::audit::completion_tests::unused_finish_grant_and_source_status_never_become_rooted_finish_use",
+      "lib.rs::execution::audit::completion_tests::recursive_structural_edges_terminate_without_running_completion",
+      "tests/completion_cli.rs::completion_cli_audit_reports_static_protocol_without_executing_a_scenario"
+    ],
+    "13.23": [
+      "lib.rs::execution::completion_authority_tests::completion_all_authority_copies_still_require_exact_mir_derivation",
+      "lib.rs::execution::completion_authority_tests::m6_each_completion_event_identity_is_sealed_even_across_all_authority_copies",
+      "lib.rs::execution::completion_authority_tests::m6_invocation_argument_order_arity_result_source_mir_and_catalog_origins_reject",
+      "lib.rs::execution::completion_authority_tests::completion_mir_cleanup_witness_omission_duplicate_wrong_holder_and_kind_reject"
+    ],
+    "13.24": [
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_completion_catalog_has_explicit_terms_and_exact_combined_neighbors",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_preparation_storage_work_diagnostics_tokens_and_identifier_neighbors",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_runtime_peak_and_fuel_neighbors_for_all_three_outcomes",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_each_container_fits_but_combined_envelope_rejects_before_handoff",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_every_actual_finish_receiving_host_growth_cut_preserves_current_owner",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_audit_work_storage_output_and_result_error_render_neighbors",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_invocation_counter_overflow_stops_before_consumption_or_attempt",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m9_stopped_completion_report_neighbors_preserve_cursor_outcome_and_prefix",
+      "lib.rs::execution::completion_authority_tests::m9_finish_only_approval_allocations_are_host_and_publish_no_executable"
+    ],
+    "13.25": [
+      "python:predecessor_identity_reconciliation"
+    ],
+    "13.26": [
+      "lib.rs::execution::machine::trusted::completion_composition_tests::finish_grant_never_authorizes_verified_contracts_or_harness_calls",
+      "lib.rs::trusted::completion_tests::receipt_is_source_formable_copy_field_status_without_finish"
+    ]
+  },
+  "malformed_controls": {
+    "14.01": [
+      "lib.rs::execution::completion_authority_tests::m6_finish_specific_catalog_binding_type_subset_effect_grant_origin_and_root_matrix",
+      "lib.rs::execution::completion_authority_tests::completion_all_authority_copies_still_require_exact_mir_derivation"
+    ],
+    "14.02": [
+      "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_contract_and_pair_mutations",
+      "lib.rs::execution::completion_authority_tests::m6_finish_specific_catalog_binding_type_subset_effect_grant_origin_and_root_matrix"
+    ],
+    "14.03": [
+      "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_contract_and_pair_mutations",
+      "lib.rs::execution::completion_authority_tests::m6_finish_specific_catalog_binding_type_subset_effect_grant_origin_and_root_matrix",
+      "lib.rs::trusted::completion_tests::receipt_literal_neighbors_and_foreign_nominal_values_reject"
+    ],
+    "14.04": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_malformed_completion_response_retains_sensor_and_real_prefix",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_finish_error_two_is_integrity_with_actual_partial_prefix_retained",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_coordinated_protected_payload_and_production_forgery_cannot_widen_finish_errors"
+    ],
+    "14.05": [
+      "lib.rs::execution::completion_authority_tests::completion_direct_and_cleanup_effects_are_independently_sealed",
+      "lib.rs::execution::completion_authority_tests::m6_finish_specific_catalog_binding_type_subset_effect_grant_origin_and_root_matrix"
+    ],
+    "14.06": [
+      "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_contract_and_pair_mutations",
+      "lib.rs::execution::completion_authority_tests::m6_finish_specific_catalog_binding_type_subset_effect_grant_origin_and_root_matrix"
+    ],
+    "14.07": [
+      "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_holder_and_continuation_mutations",
+      "lib.rs::execution::completion_authority_tests::m6_invocation_argument_order_arity_result_source_mir_and_catalog_origins_reject",
+      "lib.rs::execution::completion_authority_tests::completion_mir_cleanup_witness_omission_duplicate_wrong_holder_and_kind_reject"
+    ],
+    "14.08": [
+      "lib.rs::execution::completion_authority_tests::m6_each_completion_event_identity_is_sealed_even_across_all_authority_copies"
+    ],
+    "14.09": [
+      "lib.rs::execution::completion_authority_tests::m6_invocation_argument_order_arity_result_source_mir_and_catalog_origins_reject",
+      "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_holder_and_continuation_mutations",
+      "lib.rs::execution::completion_authority_tests::completion_all_authority_copies_still_require_exact_mir_derivation"
+    ],
+    "14.10": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_bad_ticket_realm_fresh_identity_and_frame_reject_before_finish_attempt",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_invocation_counter_overflow_stops_before_consumption_or_attempt"
+    ],
+    "14.11": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_late_protected_tag_payload_realm_production_and_receiver_corruptions_keep_prefix",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_coordinated_protected_payload_and_production_forgery_cannot_widen_finish_errors"
+    ],
+    "14.12": [
+      "lib.rs::execution::completion_authority_tests::m6_finish_specific_catalog_binding_type_subset_effect_grant_origin_and_root_matrix",
+      "lib.rs::execution::audit::completion_tests::unused_finish_grant_and_source_status_never_become_rooted_finish_use",
+      "lib.rs::execution::audit::completion_tests::recursive_structural_edges_terminate_without_running_completion"
+    ]
+  },
+  "constraints": {
+    "K34-P01": [
+      "lib.rs::execution::machine::trusted::completion::tests::m3_diagnostic_host_cut_keeps_relay_returned_owner_without_attempt",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::owned_helper_parameter_protected_return_and_temporary_finish_once",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::nested_protected_sensor_returns_feed_completion_after_existing_outcome_selection"
+    ],
+    "K34-P02": [
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_each_container_fits_but_combined_envelope_rejects_before_handoff",
+      "lib.rs::execution::machine::trusted::completion::tests::m3_receiving_capacities_coexist_before_handoff",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_every_actual_finish_receiving_host_growth_cut_preserves_current_owner"
+    ],
+    "K34-P03": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_both_outcomes_survive_release_failure_with_exact_prefix_and_no_delivery",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_post_response_host_preserves_protected_outcome_and_completion_owner",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects"
+    ],
+    "K34-P04": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_success_error_and_partial_error_release_before_inner_delivery",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_finish_error_two_is_integrity_with_actual_partial_prefix_retained",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_coordinated_protected_payload_and_production_forgery_cannot_widen_finish_errors"
+    ],
+    "K34-P05": [
+      "lib.rs::execution::completion_authority_tests::completion_checker_witness_names_invocation_without_a_source_place",
+      "lib.rs::execution::completion_authority_tests::completion_direct_and_cleanup_effects_are_independently_sealed",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_success_error_and_partial_error_release_before_inner_delivery"
+    ],
+    "K34-P06": [
+      "lib.rs::execution::completion_authority_tests::completion_all_authority_copies_still_require_exact_mir_derivation",
+      "lib.rs::execution::completion_authority_tests::m6_each_completion_event_identity_is_sealed_even_across_all_authority_copies",
+      "lib.rs::execution::completion_authority_tests::m6_invocation_argument_order_arity_result_source_mir_and_catalog_origins_reject",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_late_protected_tag_payload_realm_production_and_receiver_corruptions_keep_prefix"
+    ],
+    "K34-P07": [
+      "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific",
+      "lib.rs::trusted::completion_tests::denied_finish_keeps_occupancy_without_source_fallback",
+      "lib.rs::trusted::completion_tests::receipt_literal_neighbors_and_foreign_nominal_values_reject",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::finish_grant_never_authorizes_verified_contracts_or_harness_calls"
+    ],
+    "K34-P08": [
+      "lib.rs::execution::audit::completion_tests::rooted_completion_audit_lists_roles_effect_origins_and_both_release_paths_without_execution",
+      "lib.rs::execution::audit::completion_tests::unused_finish_grant_and_source_status_never_become_rooted_finish_use",
+      "lib.rs::execution::audit::completion_tests::recursive_structural_edges_terminate_without_running_completion",
+      "tests/completion_cli.rs::completion_cli_audit_reports_static_protocol_without_executing_a_scenario"
+    ],
+    "K34-P09": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_runtime_peak_and_fuel_neighbors_for_all_three_outcomes",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_every_actual_finish_receiving_host_growth_cut_preserves_current_owner",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m9_stopped_completion_report_neighbors_preserve_cursor_outcome_and_prefix",
+      "python:predecessor_identity_reconciliation"
+    ]
+  },
   "milestones": {
     "M0": "Fresh same-tree Actions gate, reports 6275856224 and 6275856656",
     "M1": [
@@ -232,8 +467,713 @@
       "tests/completion_cli.rs::defining_sample_cli_delivers_success_and_both_completion_error_scenarios",
       "tests/completion_cli.rs::completion_cli_preserves_profile_grants_and_discriminating_rejections",
       "tests/completion_cli.rs::completion_cli_audit_reports_static_protocol_without_executing_a_scenario"
+    ],
+    "M9": [
+      "lib.rs::execution::completion_authority_tests::m9_finish_only_approval_allocations_are_host_and_publish_no_executable",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m9_coordinated_protected_payload_and_production_forgery_cannot_widen_finish_errors",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m9_stopped_completion_report_neighbors_preserve_cursor_outcome_and_prefix"
     ]
   },
   "authority_doctests": 1,
-  "affine_cases_per_profile": 1800
+  "affine_cases_per_profile": 1800,
+  "production": {
+    "semantic_obligations": {
+      "13.01": [
+        {
+          "path": "compiler/trusted/mod.rs",
+          "symbol": "SensorFinishV1"
+        },
+        {
+          "path": "compiler/resolve/mod.rs",
+          "symbol": "resolve_profile"
+        },
+        {
+          "path": "compiler/types/mod.rs",
+          "symbol": "TrustedCall"
+        },
+        {
+          "path": "compiler/effects/calls.rs",
+          "symbol": "Completion"
+        }
+      ],
+      "13.02": [
+        {
+          "path": "compiler/trusted/mod.rs",
+          "symbol": "SensorFinishV1"
+        },
+        {
+          "path": "compiler/resolve/mod.rs",
+          "symbol": "resolve_profile"
+        },
+        {
+          "path": "compiler/types/mod.rs",
+          "symbol": "TrustedCall"
+        }
+      ],
+      "13.03": [
+        {
+          "path": "compiler/trusted/mod.rs",
+          "symbol": "SensorFinishV1"
+        },
+        {
+          "path": "compiler/resolve/mod.rs",
+          "symbol": "resolve_profile"
+        }
+      ],
+      "13.04": [
+        {
+          "path": "compiler/trusted/mod.rs",
+          "symbol": "SensorFinishV1"
+        },
+        {
+          "path": "compiler/effects/calls.rs",
+          "symbol": "Completion"
+        },
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "CompletionPlan"
+        }
+      ],
+      "13.05": [
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_attempt"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_release"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_deliver"
+        }
+      ],
+      "13.06": [
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_attempt"
+        },
+        {
+          "path": "compiler/execution/machine/results.rs",
+          "symbol": "CompletionProtected"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_release"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_deliver"
+        }
+      ],
+      "13.07": [
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_receipt_validate"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "validate_trusted_cell"
+        }
+      ],
+      "13.08": [
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "release_sensor"
+        },
+        {
+          "path": "compiler/execution/audit.rs",
+          "symbol": "possible finish protocol"
+        }
+      ],
+      "13.09": [
+        {
+          "path": "compiler/ownership/mod.rs",
+          "symbol": "held_arguments"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_consume"
+        },
+        {
+          "path": "compiler/execution/machine/temporaries.rs",
+          "symbol": "temporary_take"
+        }
+      ],
+      "13.10": [
+        {
+          "path": "compiler/ownership/mod.rs",
+          "symbol": "held_arguments"
+        }
+      ],
+      "13.11": [
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_prepare"
+        },
+        {
+          "path": "compiler/execution/machine/temporaries.rs",
+          "symbol": "temporary_take"
+        }
+      ],
+      "13.12": [
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_consume"
+        },
+        {
+          "path": "compiler/execution/machine/results.rs",
+          "symbol": "CompletionProtected"
+        },
+        {
+          "path": "compiler/execution/machine/cleanup.rs",
+          "symbol": "release_value"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "pub fn advance"
+        }
+      ],
+      "13.13": [
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_prepare"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_attempt"
+        },
+        {
+          "path": "compiler/execution/machine/results.rs",
+          "symbol": "CompletionProtected"
+        },
+        {
+          "path": "compiler/execution/machine.rs",
+          "symbol": "take_diagnostic"
+        }
+      ],
+      "13.14": [
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_release"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "release_sensor"
+        },
+        {
+          "path": "compiler/execution/machine/results.rs",
+          "symbol": "CompletionProtected"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "pub fn advance"
+        }
+      ],
+      "13.15": [
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_release"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "release_sensor"
+        },
+        {
+          "path": "compiler/execution/machine/results.rs",
+          "symbol": "CompletionProtected"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "pub fn advance"
+        }
+      ],
+      "13.16": [
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "pub fn advance"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_consume"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_release"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_deliver"
+        }
+      ],
+      "13.17": [
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "pub fn advance"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_release"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_deliver"
+        }
+      ],
+      "13.18": [
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "pub fn advance"
+        }
+      ],
+      "13.19": [
+        {
+          "path": "compiler/ownership/mod.rs",
+          "symbol": "held_arguments"
+        },
+        {
+          "path": "compiler/execution/machine/temporaries.rs",
+          "symbol": "temporary_take"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_consume"
+        }
+      ],
+      "13.20": [
+        {
+          "path": "compiler/execution/machine/temporaries.rs",
+          "symbol": "temporary_take"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_consume"
+        }
+      ],
+      "13.21": [
+        {
+          "path": "compiler/effects/custody.rs",
+          "symbol": "completion"
+        },
+        {
+          "path": "compiler/effects/calls.rs",
+          "symbol": "Completion"
+        },
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "orphan completion cleanup witness"
+        },
+        {
+          "path": "compiler/execution/machine/cleanup.rs",
+          "symbol": "release_value"
+        }
+      ],
+      "13.22": [
+        {
+          "path": "compiler/execution/audit.rs",
+          "symbol": "possible finish protocol"
+        },
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "CompletionPlan"
+        }
+      ],
+      "13.23": [
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "CompletionPlan"
+        },
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "orphan completion cleanup witness"
+        },
+        {
+          "path": "compiler/execution/mod.rs",
+          "symbol": "trusted runtime/invocation/root authority correspondence"
+        }
+      ],
+      "13.24": [
+        {
+          "path": "compiler/bounded.rs",
+          "symbol": "reserve_completion_catalog"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_prepare"
+        },
+        {
+          "path": "compiler/execution/machine.rs",
+          "symbol": "fn reserve"
+        },
+        {
+          "path": "compiler/execution/audit.rs",
+          "symbol": "possible finish protocol"
+        },
+        {
+          "path": "compiler/execution/machine.rs",
+          "symbol": "take_diagnostic"
+        },
+        {
+          "path": "compiler/execution/render.rs",
+          "symbol": "diagnostic truncated"
+        }
+      ],
+      "13.25": [
+        {
+          "path": "scripts/verify-ked034-tests.py",
+          "symbol": "missing or changed predecessor"
+        }
+      ],
+      "13.26": [
+        {
+          "path": "compiler/resolve/mod.rs",
+          "symbol": "resolve_profile"
+        },
+        {
+          "path": "compiler/types/mod.rs",
+          "symbol": "TrustedCall"
+        },
+        {
+          "path": "compiler/trusted/mod.rs",
+          "symbol": "SensorFinishV1"
+        }
+      ]
+    },
+    "malformed_controls": {
+      "14.01": [
+        {
+          "path": "compiler/trusted/mod.rs",
+          "symbol": "SensorFinishV1"
+        },
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "CompletionPlan"
+        },
+        {
+          "path": "compiler/execution/mod.rs",
+          "symbol": "trusted runtime/invocation/root authority correspondence"
+        }
+      ],
+      "14.02": [
+        {
+          "path": "compiler/types/mod.rs",
+          "symbol": "TrustedCall"
+        },
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "CompletionPlan"
+        }
+      ],
+      "14.03": [
+        {
+          "path": "compiler/trusted/mod.rs",
+          "symbol": "SensorFinishV1"
+        },
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "CompletionPlan"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "validate_trusted_cell"
+        }
+      ],
+      "14.04": [
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_receipt_validate"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "validate_trusted_cell"
+        }
+      ],
+      "14.05": [
+        {
+          "path": "compiler/effects/calls.rs",
+          "symbol": "Completion"
+        },
+        {
+          "path": "compiler/effects/custody.rs",
+          "symbol": "completion"
+        },
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "CompletionPlan"
+        }
+      ],
+      "14.06": [
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "CompletionPlan"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "release_sensor"
+        }
+      ],
+      "14.07": [
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "orphan completion cleanup witness"
+        },
+        {
+          "path": "compiler/execution/mod.rs",
+          "symbol": "trusted runtime/invocation/root authority correspondence"
+        }
+      ],
+      "14.08": [
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "CompletionPlan"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_attempt"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "release_sensor"
+        }
+      ],
+      "14.09": [
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "orphan completion cleanup witness"
+        },
+        {
+          "path": "compiler/execution/mod.rs",
+          "symbol": "trusted runtime/invocation/root authority correspondence"
+        }
+      ],
+      "14.10": [
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_prepare"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_attempt"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "validate_trusted_cell"
+        }
+      ],
+      "14.11": [
+        {
+          "path": "compiler/execution/machine/results.rs",
+          "symbol": "CompletionProtected"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "validate_trusted_cell"
+        }
+      ],
+      "14.12": [
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "CompletionPlan"
+        },
+        {
+          "path": "compiler/execution/audit.rs",
+          "symbol": "possible finish protocol"
+        }
+      ]
+    },
+    "constraints": {
+      "K34-P01": [
+        {
+          "path": "compiler/ownership/mod.rs",
+          "symbol": "held_arguments"
+        },
+        {
+          "path": "compiler/execution/machine/temporaries.rs",
+          "symbol": "temporary_take"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_consume"
+        }
+      ],
+      "K34-P02": [
+        {
+          "path": "compiler/bounded.rs",
+          "symbol": "reserve_completion_catalog"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_prepare"
+        },
+        {
+          "path": "compiler/execution/machine.rs",
+          "symbol": "take_diagnostic"
+        }
+      ],
+      "K34-P03": [
+        {
+          "path": "compiler/execution/machine/results.rs",
+          "symbol": "CompletionProtected"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_release"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "pub fn advance"
+        }
+      ],
+      "K34-P04": [
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_attempt"
+        },
+        {
+          "path": "compiler/execution/machine/trusted/completion.rs",
+          "symbol": "completion_receipt_validate"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "validate_trusted_cell"
+        }
+      ],
+      "K34-P05": [
+        {
+          "path": "compiler/effects/custody.rs",
+          "symbol": "completion"
+        },
+        {
+          "path": "compiler/effects/calls.rs",
+          "symbol": "Completion"
+        },
+        {
+          "path": "compiler/execution/machine/cleanup.rs",
+          "symbol": "release_value"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "release_sensor"
+        }
+      ],
+      "K34-P06": [
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "CompletionPlan"
+        },
+        {
+          "path": "compiler/trusted/approval.rs",
+          "symbol": "orphan completion cleanup witness"
+        },
+        {
+          "path": "compiler/execution/mod.rs",
+          "symbol": "trusted runtime/invocation/root authority correspondence"
+        },
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "validate_trusted_cell"
+        }
+      ],
+      "K34-P07": [
+        {
+          "path": "compiler/trusted/mod.rs",
+          "symbol": "SensorFinishV1"
+        },
+        {
+          "path": "compiler/resolve/mod.rs",
+          "symbol": "resolve_profile"
+        },
+        {
+          "path": "compiler/types/mod.rs",
+          "symbol": "TrustedCall"
+        }
+      ],
+      "K34-P08": [
+        {
+          "path": "compiler/execution/audit.rs",
+          "symbol": "possible finish protocol"
+        }
+      ],
+      "K34-P09": [
+        {
+          "path": "compiler/execution/machine/trusted.rs",
+          "symbol": "pub fn advance"
+        },
+        {
+          "path": "compiler/execution/machine.rs",
+          "symbol": "fn reserve"
+        },
+        {
+          "path": "compiler/bounded.rs",
+          "symbol": "reserve_completion_catalog"
+        },
+        {
+          "path": "scripts/verify-ked034-tests.py",
+          "symbol": "missing or changed predecessor"
+        }
+      ]
+    }
+  },
+  "obligation_descriptions": {
+    "semantic_obligations": {
+      "13.01": "exact operation contract",
+      "13.02": "nominal singleton and mismatch",
+      "13.03": "denial without fallback",
+      "13.04": "exact release authority",
+      "13.05": "defining Sample vertical slice",
+      "13.06": "Error release and delivery",
+      "13.07": "finish-only Error subset",
+      "13.08": "release without receipt/completion",
+      "13.09": "whole-owner move and moved-source exclusion",
+      "13.10": "live Sensor loan exclusion",
+      "13.11": "pre-dispatch Host/Limit and current holder",
+      "13.12": "no-gap physical and logical custody",
+      "13.13": "allocation-free response protection",
+      "13.14": "Error then release failure",
+      "13.15": "success then release failure",
+      "13.16": "every fuel cut retains prefix and duty",
+      "13.17": "no retry/resume/rollback/duplicate release",
+      "13.18": "repeat advance preserves recorded terminal outcome",
+      "13.19": "source branches loops helpers matches propagation",
+      "13.20": "temporary and protected-return transfer",
+      "13.21": "independent cleanup-effect realization",
+      "13.22": "static rooted authority distinctions",
+      "13.23": "opaque malformed correspondence rejection",
+      "13.24": "exact work/storage/fuel/diagnostic/audit/output neighbors",
+      "13.25": "exact predecessor identities and outcomes",
+      "13.26": "verified/harness exclusion and no proof authority"
+    },
+    "malformed_controls": {
+      "14.01": "operation/binding/catalog/profile/compiler/target/configuration",
+      "14.02": "owned versus borrowed passing",
+      "14.03": "Sensor/receipt/error/ordered Result identities",
+      "14.04": "permitted Error subset",
+      "14.05": "independent direct/cleanup effects and grants",
+      "14.06": "exact finish/release pairing",
+      "14.07": "invocation/holder/protected/cleanup/delivery sites",
+      "14.08": "all four event identities",
+      "14.09": "source/HIR/MIR/catalog origins",
+      "14.10": "actual ticket/realm/fresh identity/frame",
+      "14.11": "protected tag/payload/production/receiver",
+      "14.12": "root authority membership and structural edges"
+    },
+    "constraints": {
+      "K34-P01": "current actual holder",
+      "K34-P02": "complete simultaneous envelope",
+      "K34-P03": "independent completion and protected Result custody",
+      "K34-P04": "operation-specific outcomes and actual partial prefix",
+      "K34-P05": "existing cleanup/effect authority",
+      "K34-P06": "sealed entire protocol",
+      "K34-P07": "closed catalog without wider source authority",
+      "K34-P08": "bounded non-executing rooted audit",
+      "K34-P09": "terminal custody and predecessor/budget conservation"
+    }
+  },
+  "script_assertions": {
+    "python:predecessor_identity_reconciliation": {
+      "path": "scripts/verify-ked034-tests.py",
+      "assertion": "all(actual.get(k) == v for k, v in expected.items())",
+      "meaning": "Every fresh profile preserves all exact predecessor identities and successful outcomes; set equality also rejects unclassified additions, duplicate, failed, ignored, filtered or migrated identities."
+    }
+  }
 }

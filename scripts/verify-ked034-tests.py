@@ -58,10 +58,15 @@ assert len(additions) == len(set(additions))
 assert set(actual) - set(expected) == set(additions), "missing or unclassified KED-034 identity"
 assert len(actual) == sum(summaries) == manifest["expected_per_profile"] == 1981 + len(additions)
 assert set(manifest["classifications"]) == set(additions)
+assert set(manifest["classifications"].values()) <= {"ordinary_source", "private_canonical_catalog", "private_catalog_envelope", "trusted_boundary", "private_malformed_authority"}
 k33 = json.loads((root / "docs/engineering/ked-033-evidence.json").read_text())
 old = json.loads((root / "docs/engineering/ked-033-predecessors.json").read_text())
 assert {row["id"] for row in old["identities"]} | set(k33["additions"]) == set(expected)
 assert len(old["identities"]) == 1875 and len(k33["additions"]) == 106
+pre32 = json.loads((root / "docs/engineering/ked-032-predecessors.json").read_text())
+k32 = json.loads((root / "docs/engineering/ked-032-evidence.json").read_text())
+assert {row["id"] for row in pre32["identities"]} | set(k32["additions"]) == {row["id"] for row in old["identities"]}
+assert len(pre32["identities"]) == 1846 and len(k32["additions"]) == 29
 assert k33["migrations"] == {} and k33["contract_corrections"] == []
 for key, count, prefix in [("semantic_obligations", 35, "20."), ("malformed_controls", 13, "21."), ("constraints", 9, "K33-P")]:
     assert set(k33[key]) == {prefix + f"{n:02}" for n in range(1, count + 1)}
@@ -71,10 +76,31 @@ doctests = [k for k in actual if k.startswith("doctest:")]
 assert len(doctests) == 1 and "CheckedExecutable - compile fail" in doctests[0]
 assert manifest["authority_doctests"] == 1 and manifest["affine_cases_per_profile"] == 1800
 if manifest["stage"] == "M9":
+    script_id = "python:predecessor_identity_reconciliation"
+    assert set(manifest["script_assertions"]) == {script_id}
+    script = manifest["script_assertions"][script_id]
+    assert script["path"] == "scripts/verify-ked034-tests.py"
+    assert script["assertion"] == "all(actual.get(k) == v for k, v in expected.items())"
+    assert script["meaning"] and script["assertion"] in (root / script["path"]).read_text()
     for key, count, prefix in [("semantic_obligations", 26, "13."), ("malformed_controls", 12, "14."), ("constraints", 9, "K34-P")]:
-        assert set(manifest[key]) == {prefix + f"{n:02}" for n in range(1, count + 1)}
-        assert all(values and set(values) <= set(additions) for values in manifest[key].values())
+        keys = {prefix + f"{n:02}" for n in range(1, count + 1)}
+        assert set(manifest[key]) == keys
+        assert set(manifest["production"][key]) == keys
+        assert set(manifest["obligation_descriptions"][key]) == keys
+        assert all(values and len(values) == len(set(values)) and set(values) <= set(additions) | {script_id} for values in manifest[key].values())
+        for obligation in keys:
+            assert manifest["obligation_descriptions"][key][obligation]
+            production = manifest["production"][key][obligation]
+            assert production
+            for seam in production:
+                file = root / seam["path"]
+                assert file.is_file() and seam["symbol"] in file.read_text(), (obligation, seam)
+    assert manifest["semantic_obligations"]["13.25"] == [script_id]
     assert set(manifest["milestones"]) == {f"M{n}" for n in range(10)}
+    for adaptation in manifest["fixture_adaptations"]:
+        assert adaptation["reason"] and adaptation["affected_identities"]
+        assert set(adaptation["affected_identities"]) <= set(expected) | set(additions)
+    print("Frozen KED-034 map: 26 semantic obligations, 12 malformed families, P01-P09, M0-M9; production symbols and exact assertions present")
 print(f"KED-034 {manifest['stage']} reconciliation: 1,981 exact predecessors + {len(additions)} additions = {len(actual)} passed")
 print("KED-033 retained: 1,875 predecessors + 106 additions = 1,981")
 print("identity migrations: 0; failed/ignored/filtered: 0/0/0")

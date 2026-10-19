@@ -61,6 +61,8 @@ enum Fault {
     ProtectedRealm,
     ProtectedIdentity,
     ProtectedReceiver,
+    ProtectedContractOne,
+    ProtectedContractTwo,
     DisabledCompletion,
     BeforeInvocationHost,
     AfterReceiptHost,

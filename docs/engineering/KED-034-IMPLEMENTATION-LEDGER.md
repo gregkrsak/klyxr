@@ -205,7 +205,7 @@ nine actual finish receiving growth sites. Preparation storage 18,559,608;
 work 1,344,662,663; diagnostics 44,608; tokens 35; identifier bytes 13.
 Output fallback is tested separately from the full diagnostic.
 
-## M8: static audit, CLI and guide (validation pending)
+## M8: static audit, CLI and guide (Actions verified)
 
 The bounded rooted audit names both holder roles, all origins and continuations,
 phases/events, exact pair, independent direct/cleanup effects, both ordinary
@@ -216,7 +216,30 @@ selections and rejection examples remain explicit. New real-binary CLI and
 static/recursive audit tests, the implementation guide and candidate-labelled
 canonical context are pending Actions. No Accepted decision is changed.
 
-## Remaining gated milestones
+All eight Actions runs passed at `cb081c18ca289d8f73daccc1a670a6ac8d976503`,
+tree `82ed30696c94c6cd099bf248995669b15761a78c`, 2,041 identities per profile.
+Run/job pairs: 39321772556/118297348689, 39321772314/118297346490,
+39321772392/118297347883, 39321772339/118297347292,
+39321763131/118297313203, 39321763266/118297314239,
+39321763098/118297313672, 39321763305/118297313609.
+M8 audit output is 6,193 bytes on the measured artifact; audit work 65,584,
+storage 65,617. Other M7 numeric neighbors remained identical in all four logs.
+
+## M9: final exact-head conformance (validation pending)
+
+The manifest and conformance index map all 26 section 13 obligations, all 12
+section 14 families, P01-P09 and M0-M9 to exact assertions and production
+symbols. Identity reconciliation is its real Python gate assertion, not an
+unrelated Rust test used as a proxy. The checker retains the complete KED-033
+and KED-032 predecessor chain. It validates mapping completeness and symbol
+presence; the index is not a proof of semantic coverage over all programs.
+
+Final additional controls pressure finish-only approval Host allocations,
+coordinated protected payload/provenance Error-subset forgery, and the exact
+stopped-session audit/report storage neighbor with cursor, outcome and prefix
+retained. Final workflow evidence and integration status remain pending.
+
+## Historical milestone sequence
 
 M2 seals invocation custody/effect evidence; M3 establishes the complete receiving
 envelope while invocation remains disabled. M4 enables sealed completion and the
