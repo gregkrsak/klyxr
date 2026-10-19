@@ -227,43 +227,93 @@ fn m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects() {
 
 #[test]
 fn m6_bad_ticket_realm_fresh_identity_and_frame_reject_before_finish_attempt() {
-    for fault in [Fault::CompletionTicket, Fault::CompletionRealm, Fault::CompletionIdentity, Fault::CompletionFrame] {
-        let e=artifact(Scenario::Sample);
-        let mut s=ExecutionSession::new(&e,e.entry("demo").unwrap(),ExecutionLimits::default()).unwrap();
-        s.machine.trusted.as_mut().unwrap().fault=Some((fault,1));
-        assert!(matches!(s.advance().unwrap_err().kind,ErrorKind::Integrity(_)));
-        assert_eq!(s.live_sensors(),1);
-        let state=s.machine.trusted.as_ref().unwrap();
+    for fault in [
+        Fault::CompletionTicket,
+        Fault::CompletionRealm,
+        Fault::CompletionIdentity,
+        Fault::CompletionFrame,
+    ] {
+        let e = artifact(Scenario::Sample);
+        let mut s = ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default())
+            .unwrap();
+        s.machine.trusted.as_mut().unwrap().fault = Some((fault, 1));
+        assert!(matches!(
+            s.advance().unwrap_err().kind,
+            ErrorKind::Integrity(_)
+        ));
+        assert_eq!(s.live_sensors(), 1);
+        let state = s.machine.trusted.as_ref().unwrap();
         assert!(state.completion.as_ref().unwrap().value.is_some());
-        assert_eq!(s.events().iter().filter(|e|matches!(e,Event::Attempt(..))).count(),1);
-        assert!(!s.events().iter().any(|e|matches!(e,Event::ReleaseAttempt(..))));
-        let prefix=s.events().to_vec();assert!(s.advance().is_err());assert_eq!(s.events(),prefix);
+        assert_eq!(
+            s.events()
+                .iter()
+                .filter(|e| matches!(e, Event::Attempt(..)))
+                .count(),
+            1
+        );
+        assert!(!s
+            .events()
+            .iter()
+            .any(|e| matches!(e, Event::ReleaseAttempt(..))));
+        let prefix = s.events().to_vec();
+        assert!(s.advance().is_err());
+        assert_eq!(s.events(), prefix);
     }
 }
 
 #[test]
 fn m6_finish_error_two_is_integrity_with_actual_partial_prefix_retained() {
-    let e=artifact(Scenario::FinishPartialIoFailure);
-    let mut s=ExecutionSession::new(&e,e.entry("demo").unwrap(),ExecutionLimits::default()).unwrap();
-    s.machine.trusted.as_mut().unwrap().fault=Some((Fault::CompletionErrorTwo,1));
-    assert!(matches!(s.advance().unwrap_err().kind,ErrorKind::Integrity(_)));
-    assert_eq!(s.live_sensors(),1);
-    assert!(s.events().contains(&Event::FinishPrefix(1,1)));
+    let e = artifact(Scenario::FinishPartialIoFailure);
+    let mut s =
+        ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).unwrap();
+    s.machine.trusted.as_mut().unwrap().fault = Some((Fault::CompletionErrorTwo, 1));
+    assert!(matches!(
+        s.advance().unwrap_err().kind,
+        ErrorKind::Integrity(_)
+    ));
+    assert_eq!(s.live_sensors(), 1);
+    assert!(s.events().contains(&Event::FinishPrefix(1, 1)));
     assert!(s.machine.trusted.as_ref().unwrap().receipt.is_some());
 }
 
 #[test]
 fn m6_late_protected_tag_payload_realm_production_and_receiver_corruptions_keep_prefix() {
-    for fault in [Fault::ProtectedTag,Fault::ProtectedPayload,Fault::ProtectedRealm,Fault::ProtectedIdentity,Fault::ProtectedReceiver] {
-        let e=artifact(Scenario::FinishPartialIoFailure);
-        let mut s=ExecutionSession::new(&e,e.entry("demo").unwrap(),ExecutionLimits::default()).unwrap();
-        s.machine.trusted.as_mut().unwrap().fault=Some((fault,1));
-        assert!(matches!(s.advance().unwrap_err().kind,ErrorKind::Integrity(_)));
-        assert_eq!(s.live_sensors(),1);
-        assert!(s.events().contains(&Event::FinishPrefix(1,1)));
-        assert!(s.events().contains(&Event::FinishProtected(1,hir::ResultTag::Error)));
-        assert!(s.machine.trusted.as_ref().unwrap().completion.as_ref().unwrap().value.is_some());
-        assert!(!s.events().iter().any(|e|matches!(e,Event::Published(1,_)|Event::ReleaseAttempt(..))));
-        let prefix=s.events().to_vec();assert!(s.advance().is_err());assert_eq!(s.events(),prefix);
+    for fault in [
+        Fault::ProtectedTag,
+        Fault::ProtectedPayload,
+        Fault::ProtectedRealm,
+        Fault::ProtectedIdentity,
+        Fault::ProtectedReceiver,
+    ] {
+        let e = artifact(Scenario::FinishPartialIoFailure);
+        let mut s = ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default())
+            .unwrap();
+        s.machine.trusted.as_mut().unwrap().fault = Some((fault, 1));
+        assert!(matches!(
+            s.advance().unwrap_err().kind,
+            ErrorKind::Integrity(_)
+        ));
+        assert_eq!(s.live_sensors(), 1);
+        assert!(s.events().contains(&Event::FinishPrefix(1, 1)));
+        assert!(s
+            .events()
+            .contains(&Event::FinishProtected(1, hir::ResultTag::Error)));
+        assert!(s
+            .machine
+            .trusted
+            .as_ref()
+            .unwrap()
+            .completion
+            .as_ref()
+            .unwrap()
+            .value
+            .is_some());
+        assert!(!s
+            .events()
+            .iter()
+            .any(|e| matches!(e, Event::Published(1, _) | Event::ReleaseAttempt(..))));
+        let prefix = s.events().to_vec();
+        assert!(s.advance().is_err());
+        assert_eq!(s.events(), prefix);
     }
 }

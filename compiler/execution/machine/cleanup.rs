@@ -255,7 +255,9 @@ impl State {
 }
 impl<'a> Machine<'a> {
     pub(super) fn completion_cleanup_idle(&self) -> bool {
-        self.resources.as_ref().is_some_and(|s| s.detached.is_none() && s.current.is_none() && s.work.is_empty())
+        self.resources
+            .as_ref()
+            .is_some_and(|s| s.detached.is_none() && s.current.is_none() && s.work.is_empty())
     }
     pub(super) fn completion_cleanup_growth(&self) -> Result<usize, ExecutionError> {
         let bytes = self

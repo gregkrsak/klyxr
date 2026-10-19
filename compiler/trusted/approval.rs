@@ -85,7 +85,12 @@ pub(crate) enum CompletionEvent {
     ReleaseComplete,
 }
 impl CompletionEvent {
-    pub(crate) const PROTOCOL: [Self; 4] = [Self::Attempt, Self::Success, Self::ReleaseAttempt, Self::ReleaseComplete];
+    pub(crate) const PROTOCOL: [Self; 4] = [
+        Self::Attempt,
+        Self::Success,
+        Self::ReleaseAttempt,
+        Self::ReleaseComplete,
+    ];
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

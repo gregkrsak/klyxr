@@ -753,25 +753,48 @@ impl<'a> Machine<'a> {
                 self.integrity("trusted-produced Result operation/tag/type/origin correspondence")
             );
         }
-        let operation = approved.catalog.operation(plan.operation).ok_or_else(|| self.integrity("missing trusted production operation"))?;
+        let operation = approved
+            .catalog
+            .operation(plan.operation)
+            .ok_or_else(|| self.integrity("missing trusted production operation"))?;
         let contract = match (row.tag, row.range.as_ref(), row.sensor) {
             (hir::ResultTag::Ok, None, Some(_)) => operation.class == OperationClass::Acquisition,
             (tag, Some(value), None) => {
-                let expected = if tag == hir::ResultTag::Error { operation.failure } else {
-                    match operation.success { Some(crate::trusted::Payload::Range(id)) => Some(id), _ => None }
+                let expected = if tag == hir::ResultTag::Error {
+                    operation.failure
+                } else {
+                    match operation.success {
+                        Some(crate::trusted::Payload::Range(id)) => Some(id),
+                        _ => None,
+                    }
                 };
-                approved.ranges.iter().find(|range| Some(range.id) == expected).is_some_and(|range| {
-                    value.ty == range.id && value.value >= range.min && value.value <= range.max
-                        && (tag != hir::ResultTag::Error || u32::try_from(value.value).ok().is_some_and(|code| code < 8 && operation.errors & (1u8 << code) != 0))
-                })
+                approved
+                    .ranges
+                    .iter()
+                    .find(|range| Some(range.id) == expected)
+                    .is_some_and(|range| {
+                        value.ty == range.id
+                            && value.value >= range.min
+                            && value.value <= range.max
+                            && (tag != hir::ResultTag::Error
+                                || u32::try_from(value.value).ok().is_some_and(|code| {
+                                    code < 8 && operation.errors & (1u8 << code) != 0
+                                }))
+                    })
             }
             _ => false,
         };
         if !contract {
-            return Err(self.integrity("trusted production violates exact operation outcome contract"));
+            return Err(
+                self.integrity("trusted production violates exact operation outcome contract")
+            );
         }
         if cell.phase == results::Phase::CompletionProtected
-            && !state.completion.as_ref().is_some_and(|pending| pending.protected == Some(id) && pending.plan == row.plan && pending.invocation == row.invocation)
+            && !state.completion.as_ref().is_some_and(|pending| {
+                pending.protected == Some(id)
+                    && pending.plan == row.plan
+                    && pending.invocation == row.invocation
+            })
         {
             return Err(self.integrity("protected completion invocation association"));
         }

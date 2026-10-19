@@ -42,8 +42,19 @@ impl<'a> Machine<'a> {
             let pending = state.completion.as_mut().unwrap();
             if let Some((fault, _)) = state.fault.filter(|(_, at)| *at == pending.invocation) {
                 match fault {
-                    Fault::CompletionTicket => { if let Some(Value::Resource { identity, .. }) = pending.value.as_mut() { *identity = u64::MAX; } }
-                    Fault::CompletionRealm => { state.entries.iter_mut().find_map(|entry| entry.token.as_mut()).unwrap().realm += 1; }
+                    Fault::CompletionTicket => {
+                        if let Some(Value::Resource { identity, .. }) = pending.value.as_mut() {
+                            *identity = u64::MAX;
+                        }
+                    }
+                    Fault::CompletionRealm => {
+                        state
+                            .entries
+                            .iter_mut()
+                            .find_map(|entry| entry.token.as_mut())
+                            .unwrap()
+                            .realm += 1;
+                    }
                     Fault::CompletionIdentity => pending.invocation += 1,
                     Fault::CompletionFrame => pending.frame = u64::MAX,
                     _ => {}
@@ -78,7 +89,8 @@ impl<'a> Machine<'a> {
             .operation(plan.operation)
             .ok_or_else(|| self.integrity("foreign completion operation"))?;
         if pending.frame != frame
-            || plan.completion.as_ref().map(|p| p.events) != Some(crate::trusted::approval::CompletionEvent::PROTOCOL)
+            || plan.completion.as_ref().map(|p| p.events)
+                != Some(crate::trusted::approval::CompletionEvent::PROTOCOL)
             || pending.phase != CompletionPhase::Consumed
             || pending.invocation != state.next_invocation
             || !matches!(pending.value, Some(Value::Resource{ty, identity}) if ty == approved.catalog.sensor && identity == pending.sensor)
@@ -157,7 +169,13 @@ impl<'a> Machine<'a> {
                     }));
                 }
                 Fault::WrongInvocation => receipt.plan = usize::MAX,
-                Fault::CompletionErrorTwo => { receipt.tag = 1; receipt.payload = Some(Payload::Range(RangeValue {ty: approved.catalog.error, value: 2})); }
+                Fault::CompletionErrorTwo => {
+                    receipt.tag = 1;
+                    receipt.payload = Some(Payload::Range(RangeValue {
+                        ty: approved.catalog.error,
+                        value: 2,
+                    }));
+                }
                 _ => {}
             }
         }
@@ -201,7 +219,15 @@ impl<'a> Machine<'a> {
         if let Some((fault, _)) = state.fault.filter(|(_, at)| *at == invocation) {
             match fault {
                 Fault::ProtectedTag => self.results.as_mut().unwrap().cells[owner.0].tag = 255,
-                Fault::ProtectedPayload => { if let Some(Value::Public(RuntimeValue::Range(value))) = self.results.as_mut().unwrap().cells[owner.0].payload.as_mut() { value.value = 2; } }
+                Fault::ProtectedPayload => {
+                    if let Some(Value::Public(RuntimeValue::Range(value))) =
+                        self.results.as_mut().unwrap().cells[owner.0]
+                            .payload
+                            .as_mut()
+                    {
+                        value.value = 2;
+                    }
+                }
                 Fault::ProtectedRealm => state.productions.last_mut().unwrap().realm += 1,
                 Fault::ProtectedIdentity => state.productions.last_mut().unwrap().invocation = 0,
                 Fault::ProtectedReceiver => pending.protected = Some(results::OwnerId(0)),
@@ -264,7 +290,10 @@ impl<'a> Machine<'a> {
             .completion
             .as_ref()
             .ok_or_else(|| self.integrity("missing completion release continuation"))?;
-        if pending.frame != frame || pending.phase != CompletionPhase::ReleasePending || pending.value.is_none() {
+        if pending.frame != frame
+            || pending.phase != CompletionPhase::ReleasePending
+            || pending.value.is_none()
+        {
             return Err(self.integrity("completion release continuation phase"));
         }
         self.completion_result_validate(
@@ -301,7 +330,8 @@ impl<'a> Machine<'a> {
             .completion
             .as_ref()
             .ok_or_else(|| self.integrity("missing completion delivery continuation"))?;
-        if pending.frame != frame || pending.phase != CompletionPhase::Released
+        if pending.frame != frame
+            || pending.phase != CompletionPhase::Released
             || pending.value.is_some()
             || state.entries.iter().any(|entry| {
                 entry
