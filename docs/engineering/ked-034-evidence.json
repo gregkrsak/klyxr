@@ -1,9 +1,9 @@
 {
-  "stage": "M4",
+  "stage": "M5",
   "baseline_commit": "372230df1d359b13d28f5c136130ac031507716a",
   "baseline_tree": "a646e9576a9b7650ff9a95275f1080b591d06986",
   "predecessor_count": 1981,
-  "expected_per_profile": 2008,
+  "expected_per_profile": 2021,
   "additions": [
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific",
     "lib.rs::trusted::completion_tests::finish_direct_and_relay_arguments_prepare_without_reference_coercion",
@@ -31,7 +31,20 @@
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_both_outcomes_survive_release_failure_with_exact_prefix_and_no_delivery",
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_post_response_host_preserves_protected_outcome_and_completion_owner",
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_malformed_completion_response_retains_sensor_and_real_prefix",
-    "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects"
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::defining_sample_runs_through_read_finish_release_and_record_delivery",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::final_shared_use_can_precede_finish_but_a_still_live_handle_rejects",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::owned_helper_parameter_protected_return_and_temporary_finish_once",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::nested_protected_sensor_returns_feed_completion_after_existing_outcome_selection",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::explicit_match_and_or_return_deliver_both_finish_alternatives",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::consumed_owner_cannot_be_used_read_finished_replaced_or_reinitialized",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::branch_finish_and_release_only_exit_remain_distinct",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::loop_local_owners_finish_each_iteration_without_duplicating_release",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::loop_carried_consumption_remains_rejected_by_existing_checker",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::several_finish_result_arguments_preserve_written_order_and_individual_release",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::later_outer_range_trap_cannot_undo_an_inner_finish_and_release",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::source_formed_receipt_and_release_only_path_have_no_completion_event",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::finish_grant_never_authorizes_verified_contracts_or_harness_calls"
   ],
   "classifications": {
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific": "ordinary_source",
@@ -60,7 +73,20 @@
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_both_outcomes_survive_release_failure_with_exact_prefix_and_no_delivery": "trusted_boundary",
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_post_response_host_preserves_protected_outcome_and_completion_owner": "trusted_boundary",
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_malformed_completion_response_retains_sensor_and_real_prefix": "private_malformed_authority",
-    "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects": "trusted_boundary"
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::defining_sample_runs_through_read_finish_release_and_record_delivery": "ordinary_source",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::final_shared_use_can_precede_finish_but_a_still_live_handle_rejects": "ordinary_source",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::owned_helper_parameter_protected_return_and_temporary_finish_once": "ordinary_source",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::nested_protected_sensor_returns_feed_completion_after_existing_outcome_selection": "ordinary_source",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::explicit_match_and_or_return_deliver_both_finish_alternatives": "ordinary_source",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::consumed_owner_cannot_be_used_read_finished_replaced_or_reinitialized": "ordinary_source",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::branch_finish_and_release_only_exit_remain_distinct": "ordinary_source",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::loop_local_owners_finish_each_iteration_without_duplicating_release": "ordinary_source",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::loop_carried_consumption_remains_rejected_by_existing_checker": "ordinary_source",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::several_finish_result_arguments_preserve_written_order_and_individual_release": "ordinary_source",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::later_outer_range_trap_cannot_undo_an_inner_finish_and_release": "ordinary_source",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::source_formed_receipt_and_release_only_path_have_no_completion_event": "ordinary_source",
+    "lib.rs::execution::machine::trusted::completion_composition_tests::finish_grant_never_authorizes_verified_contracts_or_harness_calls": "ordinary_source"
   },
   "migrations": {},
   "contract_corrections": [],
@@ -125,6 +151,21 @@
       "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_post_response_host_preserves_protected_outcome_and_completion_owner",
       "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_malformed_completion_response_retains_sensor_and_real_prefix",
       "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects"
+    ],
+    "M5": [
+      "lib.rs::execution::machine::trusted::completion_composition_tests::defining_sample_runs_through_read_finish_release_and_record_delivery",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::final_shared_use_can_precede_finish_but_a_still_live_handle_rejects",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::owned_helper_parameter_protected_return_and_temporary_finish_once",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::nested_protected_sensor_returns_feed_completion_after_existing_outcome_selection",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::explicit_match_and_or_return_deliver_both_finish_alternatives",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::consumed_owner_cannot_be_used_read_finished_replaced_or_reinitialized",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::branch_finish_and_release_only_exit_remain_distinct",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::loop_local_owners_finish_each_iteration_without_duplicating_release",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::loop_carried_consumption_remains_rejected_by_existing_checker",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::several_finish_result_arguments_preserve_written_order_and_individual_release",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::later_outer_range_trap_cannot_undo_an_inner_finish_and_release",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::source_formed_receipt_and_release_only_path_have_no_completion_event",
+      "lib.rs::execution::machine::trusted::completion_composition_tests::finish_grant_never_authorizes_verified_contracts_or_harness_calls"
     ]
   },
   "authority_doctests": 1,

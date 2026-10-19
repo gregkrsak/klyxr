@@ -842,4 +842,6 @@ impl<'a> Machine<'a> {
 #[cfg(test)]
 mod completion_runtime_tests;
 #[cfg(test)]
+mod completion_composition_tests;
+#[cfg(test)]
 mod tests;

@@ -1,0 +1,17 @@
+record Sample {
+    reading: Reading,
+    finished: FinishReceipt
+}
+
+fn sample()
+    -> Result<success: Sample, failure: SensorError>
+    effects io
+{
+    let sensor = sensor_open() or return;
+    let reading = sensor_read(&sensor) or return;
+    let finished = sensor_finish(sensor) or return;
+    return Ok(Sample {
+        reading: reading,
+        finished: finished
+    });
+}

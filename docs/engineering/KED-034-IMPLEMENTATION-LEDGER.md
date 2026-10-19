@@ -102,7 +102,7 @@ Run/job pairs: 39317058163/118281154313, 39317058161/118281154457,
 39317048287/118281119343, 39317048289/118281119864,
 39317048423/118281120954, 39317048447/118281121438.
 
-## M4: sealed completion enabled (validation pending)
+## M4: sealed completion enabled (Actions verified)
 
 Only after the complete M3 snapshot passed all eight workflows, completion
 was enabled. The current temporary transfers once into pending completion
@@ -116,6 +116,25 @@ cover all three scenarios, malformed response retention, protected outcomes
 at Host/release failure and every successful-trace fuel cut. M1/M3 guard
 assertions remain as private test-only boundary cuts; their exact pre-enable
 Actions snapshots remain historical evidence. No frozen predecessor changes.
+
+All eight Actions runs passed at `5803b6af6b9340da0c36fc679f8a8db14a990179`
+(tree `64cf0f988cb2d5fabefc59a651dc4d119ea25c0f`), 2,008 tests per profile.
+Run/job pairs: 39317881855/118283983575, 39317881805/118283983117,
+39317881600/118283985479, 39317881628/118283981807,
+39317874839/118283958364, 39317874808/118283958677,
+39317874705/118283957830, 39317874676/118283957652.
+
+## M5: source composition checkpoint (validation pending)
+
+Thirteen source tests add the defining Sample, last shared use/live-handle
+rejection, owned helpers, relay temporaries and nested protected returns, both
+outcome selectors, consumed-owner exclusions, branch finish versus release-only
+exit, iteration-local finish and existing loop-carried rejection, written
+Result-argument order, later outer range failure, source-formed status data and
+verified-domain exclusion. Replacement/reinitialization remain forbidden under
+the existing Sensor destination policy; this is not a new replacement mechanism.
+The defining source and two discriminating rejection examples are retained.
+M5 must obtain complete exact-head workflow evidence before M6-M9 begins.
 
 ## Remaining gated milestones
 
