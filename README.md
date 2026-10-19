@@ -367,6 +367,31 @@ It is part of the language philosophy.
 
 ---
 
+## Benchmarking and community conduct
+
+Performance work should illuminate engineering tradeoffs, not diminish other
+projects or the people behind them.
+
+> **Measure honestly. Publish reproducibly. Report losses alongside wins. Respect
+> the people and projects that make comparison possible.**
+
+Official Klyxr performance claims and published benchmarks must:
+
+- disclose the relevant source, compiler and toolchain versions, target,
+  configuration, assurance mode, enabled checks, methodology, and known
+  limitations;
+- compare semantically equivalent work and identify material differences;
+- publish representative losses alongside wins rather than cherry-picking;
+- distinguish language design from compiler and backend maturity; and
+- discuss other languages, compilers, tools, and communities accurately,
+  respectfully, and with appropriate credit.
+
+For interpreter/native comparisons, semantic agreement comes first: both engines
+must execute the same approved MIR with the same observable Klyxr behavior before
+their performance results are treated as comparable.
+
+---
+
 ## Status
 
 > [!IMPORTANT]
