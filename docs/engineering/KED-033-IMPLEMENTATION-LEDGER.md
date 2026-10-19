@@ -118,7 +118,7 @@ M0: baseline and branch established; ledger created before semantic changes.
 M1-M4: catalog admission, canonical Resource eligibility, trusted-call typing and
 explicit invocation/root/runtime approval are implemented; validation below.
 M5 joint receipt/session custody is implemented and source fixture execution is
-enabled only through that seam. M6-M9 remain pending. The consuming convenience
+enabled only through that seam. M6 composition is implemented; M7-M9 remain pending. The consuming convenience
 executor still rejects profile artifacts, and no ordinary/host fallback exists.
 
 ### M0 published checkpoint
@@ -414,6 +414,51 @@ numeric protocol oracles remain unchanged. No toolchain or artifact anomaly was
 observed. M6 composition, the full M7 cut/mutation matrix, M8 audit/CLI and M9
 documentation/final reconciliation are still outstanding; no acceptance is claimed.
 
+### M5 published checkpoint and K33-I01 resolution
+
+The preserved staged snapshot was committed without changing a byte as
+`5dce4db52a638e3c90e737d87d176a633b32a9ee`, tree
+`8483f4a4e5e90eba29632736a542ca3c71093d4c`. All four push runs and every step passed:
+
+| Workflow | Run | Job |
+| --- | --- | --- |
+| build | [39207396019](https://github.com/gregkrsak/klyxr/actions/runs/39207396019) | 117913119813 |
+| tests | [39207396028](https://github.com/gregkrsak/klyxr/actions/runs/39207396028) | 117913119863 |
+| verify | [39207396047](https://github.com/gregkrsak/klyxr/actions/runs/39207396047) | 117913120100 |
+| docs | [39207396052](https://github.com/gregkrsak/klyxr/actions/runs/39207396052) | 117913120205 |
+
+K33-I01 recorded prod's documentation advancement to
+`10f89f925c84f53bf9f4599c0c88bc7b75b614b2` in
+[the pause record](https://github.com/gregkrsak/klyxr/issues/78#issuecomment-6259067524).
+Greg expressly confirmed that authorized documentation work does not revoke the
+frozen implementation baseline, directed preservation/publication of M5 and
+continuation through M6-M9, and prohibited rebasing or merging prod without
+separate direction. That blocker is resolved by this authorization. Implementation
+continues from the original baseline; actual final integration conflicts will be
+reported, and merge remains human only.
+
+### M6 source composition
+
+Eleven real source/session identities cover explicit matches and Err normalization,
+read Error followed by a second explicit read through a shared alias, owned helper
+retirement, effect-free protected Sensor relay, shared observation helpers, nested
+Result obligations, branch cleanup, iteration-local continue/break/normal exit,
+early loop return, protected argument temporaries, written argument order and
+public Resource/Resource-bearing Result egress rejection before session entry.
+
+These tests exposed one ordinary implementation omission: taking a Resource slot
+marked it vacant instead of transferred. Resource now uses the existing transferred
+slot state alongside Record and Result, so relay and nested protected returns
+retire the old owner without releasing the new owner. No new ownership checker,
+cleanup authority or source rule was introduced. Initial source fixtures using
+unsupported named arguments and non-total returns were corrected to existing
+accepted grammar; predecessor tests and numeric oracles remain unchanged.
+
 Future entries must record meaningful changes, validation and exact remote evidence,
 ordinary development corrections, any K33-I escalation, predecessor adaptations,
 accounting constants, documentation/context outcomes and residual limitations.
+
+M6 complete local gate: **1,951 exact debug identities and 1,951 release identities**
+(1,875 predecessors plus 76 additions); all established check/fmt/Clippy/Rustdoc,
+authority doctest, both 1,800-case affine checks, CLI/examples/rejections, assets,
+scaffold, context reproducibility and diff integrity passed. No artifact anomaly.

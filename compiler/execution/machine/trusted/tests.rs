@@ -2,6 +2,8 @@
 use super::*;
 use crate::trusted::{Grants, Selection};
 
+mod composition;
+
 const SAMPLE:&str="fn demo()->Result<success:Reading,failure:SensorError>effects io{let sensor=sensor_open()or return;let reading=sensor_read(&sensor)or return;return Ok(reading);}";
 fn artifact(scenario: Scenario) -> CheckedExecutable {
     let selection = Selection::sensor_demo(scenario, Grants::ALL, &["demo"]).unwrap();

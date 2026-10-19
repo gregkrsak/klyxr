@@ -403,7 +403,12 @@ impl<'a> Machine<'a> {
         let (f, i) = self.slot_index(at)?;
         let vacant = if matches!(
             self.frames[f].slots[i].1,
-            Slot::Available(Value::Leaf { .. } | Value::Aggregate { .. } | Value::Result(_))
+            Slot::Available(
+                Value::Leaf { .. }
+                    | Value::Aggregate { .. }
+                    | Value::Resource { .. }
+                    | Value::Result(_)
+            )
         ) {
             Slot::Transferred
         } else {
