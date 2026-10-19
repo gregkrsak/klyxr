@@ -235,7 +235,7 @@ impl<'a> Machine<'a> {
         }
         let parent = parent.map(|p| p.id);
         self.origin = description.origin;
-        if self.executable.cleanup_plans.iter().any(Option::is_some) {
+        if self.executable.cleanup_plans.iter().any(Option::is_some) || self.trusted.is_some() {
             self.enable_resources()?;
         }
         if self.temporaries.is_none() {
@@ -377,7 +377,44 @@ impl<'a> Machine<'a> {
             return Err(self.integrity("invalid temporary creation type, region or plan"));
         }
         let ordinal = f.owners.len();
-        let owner_growth = if ordinal == f.owners.capacity() {
+        self.temporary_reserve_register(activation, site)?;
+        // Payload remains in values through every fallible reservation.
+        let value = self.values.pop().unwrap();
+        let id = OwnerId {
+            activation,
+            ordinal,
+        };
+        let s = self.temporaries.as_mut().unwrap();
+        s.frames[i].owners.push(Owner {
+            site,
+            custody: Custody::Owned,
+            value: Some(value),
+        });
+        s.events.push(Event::Register(id, site));
+        self.values.push(Value::Temporary(id));
+        Ok(())
+    }
+    pub(super) fn temporary_reserve_register(
+        &mut self,
+        activation: u64,
+        site: SiteId,
+    ) -> Result<(), ExecutionError> {
+        let i = self.temporary_index(activation)?;
+        let f = &self.temporaries.as_ref().unwrap().frames[i];
+        let metadata = &self
+            .executable
+            .function(f.function)?
+            .temporaries
+            .as_ref()
+            .unwrap()
+            .sites[site.0];
+        if i + 1 != self.temporaries.as_ref().unwrap().frames.len()
+            || f.phase != Phase::Active
+            || f.region != metadata.region
+        {
+            return Err(self.integrity("invalid trusted receiving temporary activation"));
+        }
+        let owner_growth = if f.owners.len() == f.owners.capacity() {
             size_of::<Owner>()
         } else {
             0
@@ -403,20 +440,6 @@ impl<'a> Machine<'a> {
                 .map_err(|_| self.failure(ErrorKind::Host("temporary owner allocation")))?;
         }
         self.temporary_event_reserve()?;
-        // Payload remains in values through every fallible reservation.
-        let value = self.values.pop().unwrap();
-        let id = OwnerId {
-            activation,
-            ordinal,
-        };
-        let s = self.temporaries.as_mut().unwrap();
-        s.frames[i].owners.push(Owner {
-            site,
-            custody: Custody::Owned,
-            value: Some(value),
-        });
-        s.events.push(Event::Register(id, site));
-        self.values.push(Value::Temporary(id));
         Ok(())
     }
     pub(super) fn temporary_take(

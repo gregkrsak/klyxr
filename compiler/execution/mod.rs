@@ -14,6 +14,7 @@ use crate::{
     lexer::Span,
     mir::{self, Origin},
 };
+pub use machine::trusted::{Event as TrustedEvent, ExecutionSession};
 pub use render::write_output;
 use std::{io::Read, rc::Rc};
 pub fn render_admission_error(
@@ -676,6 +677,19 @@ pub fn execute(
     entry: FunctionId,
     limits: ExecutionLimits,
 ) -> Result<ExecutionResult, ExecutionError> {
+    checked_entry(executable, entry, limits)?;
+    if executable.program.trusted.is_some() {
+        return Err(ExecutionError::integrity(
+            "selected profile execution requires persistent session custody",
+        ));
+    }
+    machine::Machine::new(executable, limits).run(entry)
+}
+fn checked_entry(
+    executable: &CheckedExecutable,
+    entry: FunctionId,
+    limits: ExecutionLimits,
+) -> Result<(), ExecutionError> {
     limits.validate()?;
     executable.validate()?;
     let f = executable
@@ -736,12 +750,7 @@ pub fn execute(
             ));
         }
     }
-    if executable.program.trusted.is_some() {
-        return Err(ExecutionError::integrity(
-            "selected profile execution requires persistent session custody",
-        ));
-    }
-    machine::Machine::new(executable, limits).run(entry)
+    Ok(())
 }
 
 #[cfg(test)]

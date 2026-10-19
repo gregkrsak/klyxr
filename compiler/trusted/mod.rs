@@ -64,6 +64,7 @@ pub struct Selection {
     scenario: Scenario,
     grants: Grants,
     roots: Vec<String>,
+    sensor_limit: usize,
 }
 impl Selection {
     pub fn sensor_demo(
@@ -101,6 +102,7 @@ impl Selection {
             scenario,
             grants,
             roots: names,
+            sensor_limit: 16,
         })
     }
     pub fn scenario(&self) -> Scenario {
@@ -111,6 +113,16 @@ impl Selection {
     }
     pub fn roots(&self) -> &[String] {
         &self.roots
+    }
+    pub fn with_sensor_limit(mut self, limit: usize) -> Result<Self, ResourceFailure> {
+        if limit == 0 || limit > 1024 {
+            return Err(ResourceFailure::limit("live Sensor configuration", START));
+        }
+        self.sensor_limit = limit;
+        Ok(self)
+    }
+    pub fn sensor_limit(&self) -> usize {
+        self.sensor_limit
     }
 }
 

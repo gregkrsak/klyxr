@@ -5,6 +5,7 @@ use std::mem::size_of;
 mod cleanup;
 mod results;
 mod temporaries;
+pub(super) mod trusted;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Location {
@@ -13,8 +14,6 @@ struct Location {
 }
 #[derive(Debug, PartialEq, Eq)]
 enum Value {
-    // Construction stays disabled until M5 establishes receipt + session custody.
-    #[allow(dead_code)]
     Resource {
         ty: hir::ResourceTypeId,
         identity: u64,
@@ -102,6 +101,7 @@ enum Destination {
     Field(Location, hir::RecordId, hir::FieldId),
 }
 enum Action<'a> {
+    TrustedInvoke(usize, usize, u64),
     ResultRecordNext(usize, &'a [hir::RecordFieldInit], usize),
     ResultRecordField(usize, &'a [hir::RecordFieldInit], usize),
     ResultComplete(results::OwnerId),
@@ -151,6 +151,7 @@ pub(super) struct Machine<'a> {
     resources: Option<cleanup::State>,
     temporaries: Option<temporaries::State>,
     results: Option<results::State>,
+    trusted: Option<trusted::State>,
     terminal: bool,
     site: Option<(u64, crate::mir::temporaries::SiteId)>,
     staged_return: Option<u64>,
@@ -168,6 +169,7 @@ impl<'a> Machine<'a> {
             resources: None,
             temporaries: None,
             results: None,
+            trusted: None,
             terminal: false,
             site: None,
             staged_return: None,
@@ -242,6 +244,9 @@ impl<'a> Machine<'a> {
         if let Some(s) = &self.results {
             n = n.checked_add(s.storage()?)?;
         }
+        if let Some(s) = &self.trusted {
+            n = n.checked_add(s.storage()?)?;
+        }
         Some(n)
     }
     fn reserve(&self, bytes: usize) -> Result<(), ExecutionError> {
@@ -279,6 +284,9 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     fn resource_bearing(&self, value: &Value) -> bool {
+        if matches!(value, Value::Resource { .. }) {
+            return true;
+        }
         if let Value::Result(id) = value {
             return self
                 .results
@@ -1021,10 +1029,49 @@ impl<'a> Machine<'a> {
                 )?;
                 self.operands(frame, fields.iter().map(|f| &f.value), depth + 1)?;
             }
-            ExprKind::TrustedCall { .. } => {
-                return Err(self.integrity(
-                    "trusted dispatch requires receipt and persistent session custody",
-                ));
+            ExprKind::TrustedCall {
+                operation,
+                arguments,
+            } => {
+                let scans = self
+                    .executable
+                    .trusted
+                    .as_ref()
+                    .map_or(0, |p| p.invocations.len());
+                for _ in 0..scans {
+                    self.charge()?;
+                }
+                let (activation, site) = self.site.ok_or_else(|| {
+                    self.integrity("trusted call without explicit temporary custody")
+                })?;
+                let function = self.frames[self.frame_index(frame)?].function;
+                let plans = self
+                    .executable
+                    .trusted
+                    .as_ref()
+                    .ok_or_else(|| self.integrity("trusted call without runtime approval"))?;
+                let plan = plans
+                    .invocations
+                    .iter()
+                    .find(|p| {
+                        p.function == function
+                            && p.site == site
+                            && p.operation == *operation
+                            && p.source == e.span
+                    })
+                    .ok_or_else(|| self.integrity("trusted call/invocation plan mismatch"))?;
+                if self.trusted.is_none() {
+                    return Err(
+                        self.integrity("trusted dispatch requires persistent session custody")
+                    );
+                }
+                self.task(
+                    frame,
+                    self.origin,
+                    self.expression,
+                    Action::TrustedInvoke(plan.ordinal, arguments.len(), activation),
+                )?;
+                self.operands(frame, arguments.iter(), depth + 1)?;
             }
             ExprKind::Call {
                 function,
@@ -1297,6 +1344,9 @@ impl<'a> Machine<'a> {
                     let frame = self.enter(f, n)?;
                     self.task(frame, self.origin, None, Action::Drive)?;
                 }
+            }
+            Action::TrustedInvoke(plan, arguments, activation) => {
+                self.invoke_selected(plan, arguments, activation, task.frame)?
             }
             Action::Commit(d) => {
                 let v = self.pop()?;

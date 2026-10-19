@@ -212,6 +212,11 @@ impl Approved {
         if self.roots.is_empty() {
             return Err(PlanError::Integrity("empty trusted root authority"));
         }
+        if self.catalog.selection.sensor_limit() == 0
+            || self.catalog.selection.sensor_limit() > 1024
+        {
+            return Err(PlanError::Integrity("invalid sealed live Sensor limit"));
+        }
         if self.roots.len() > 64
             || self.ranges.iter().any(|r| r.name.len() > 128)
             || self.catalog.selection.roots().len() > 64

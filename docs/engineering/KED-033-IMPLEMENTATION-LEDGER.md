@@ -117,9 +117,9 @@ Each row requires independent controls, not one compound corrupted artifact.
 M0: baseline and branch established; ledger created before semantic changes.
 M1-M4: catalog admission, canonical Resource eligibility, trusted-call typing and
 explicit invocation/root/runtime approval are implemented; validation below.
-M5-M9 remain pending. No KED-033 invocation path is enabled at
-this checkpoint. In particular selected trusted calls still reject explicitly;
-they cannot route to an ordinary function or fixture before M5.
+M5 joint receipt/session custody is implemented and source fixture execution is
+enabled only through that seam. M6-M9 remain pending. The consuming convenience
+executor still rejects profile artifacts, and no ordinary/host fallback exists.
 
 ### M0 published checkpoint
 
@@ -345,6 +345,74 @@ affine checks, check/fmt/Clippy/Rustdoc, CLI/examples/rejection diagnostics, ass
 scaffold, byte-identical context and diff integrity. Numeric protocol oracles
 remain unchanged. No deterministic or external acquisition has executed.
 No semantic deviation, new checker, fallback or implementation blocker is reported.
+
+### M4 published checkpoint
+
+Commit `4ec483803d111a09f3d32cac283c8d8d523cf4db`, tree
+`0ecd76e570c0418a2d0501aa30400f1c81285633`. All four push workflows and every
+job/step passed:
+
+| Workflow | Run | Job |
+| --- | --- | --- |
+| build | [39193893211](https://github.com/gregkrsak/klyxr/actions/runs/39193893211) | 117872352894 |
+| tests | [39193893276](https://github.com/gregkrsak/klyxr/actions/runs/39193893276) | 117872353039 |
+| verify | [39193893237](https://github.com/gregkrsak/klyxr/actions/runs/39193893237) | 117872352788 |
+| docs | [39193893272](https://github.com/gregkrsak/klyxr/actions/runs/39193893272) | 117872353014 |
+
+[Issue progress record](https://github.com/gregkrsak/klyxr/issues/78#issuecomment-6258996923).
+
+### M5 joint custody gate and first real source execution
+
+The no-gap receipt and opaque persistent ExecutionSession were implemented and
+compiled together before the first fixture execution. The sole production path
+that installs trusted runtime state is session construction from the existing
+opaque executable and shared entry gate. Public consuming execution still rejects
+profile artifacts. A stopped session retains the whole machine, receipt, binding
+tokens, Result cells/provenance, protected values, cleanup cursors, completed
+effect prefix and unfinished responsibilities. Repeated advancement returns its
+recorded borrowed outcome without executing, retrying or releasing anything.
+
+Before dispatch, combined managed capacity is reserved for identity/token slots,
+actual receipt payload, Result cells and provenance, operand, immediate temporary
+owner/event registration, audit prefix and stopped diagnostics. The fixed binding
+creates a non-Clone token directly inside the already machine-owned receipt;
+there is no host handle held only on the Rust stack across a fallible boundary.
+Tag, operation, range identity/bounds, Error subset and fresh session-scoped
+identity are validated while that holder owns the actual payload. Allocation-free
+commit transfers the token to a machine-owned live table and publishes its sole
+non-Copy language ticket and canonical Result cell. Histories never own tokens.
+Trusted Result authority references real invocation provenance, not a constructor.
+
+Later receiver or cleanup failures retain the token, its tickets/cells and all
+other custody in the stopped session. The fixed release validates exact binding,
+grant, resource and live identity and has no source completion Result. Teardown
+and process reclamation are not successful Klyxr release and provide no unwind
+guarantee. The demonstration remains a fixed deterministic fixture, not a device
+driver or general FFI.
+
+The selected profile has an audited configurable live-Sensor limit (default 16,
+supported configuration 1 through 1,024). It is part of the sealed configuration,
+never ambient source authority. Runtime accounting includes the selected state
+header, token/provenance/event capacities, outstanding receipt, output and stopped
+diagnostic storage. Bounded invocation/resource scans are charged explicitly;
+the predecessor no-profile managed-buffer accounting remains unchanged.
+
+Twelve new identities establish the full defining source's Ok and all four
+recoverable fixture outcomes, cleanup before delivery, no attempt before admission
+failure, retained receipt after external success plus Host/Integrity/publication
+Limit, invalid imported reading rejection, protected Error after release failure,
+and every fuel cut. Tests use real source/catalog/approval/session; no HIR/token
+pre-injection, system OOM, panic catching or source-selectable fault switch exists.
+Private faults are compiled only for tests at the real boundary. All normal and
+faulted runs preserve exact terminal non-resumption and the completed effect prefix.
+
+The complete local M5 gate passed: **1,940 exact debug identities and 1,940
+release identities** (1,875 predecessors plus 65 additions), authority doctest,
+both 1,800-case affine checks, check/fmt/Clippy/Rustdoc, CLI/examples/rejection
+diagnostics, assets/scaffold, context reproducibility and diff integrity. Existing
+numeric protocol oracles remain unchanged. No toolchain or artifact anomaly was
+observed. M6 composition, the full M7 cut/mutation matrix, M8 audit/CLI and M9
+documentation/final reconciliation are still outstanding; no acceptance is claimed.
 
 Future entries must record meaningful changes, validation and exact remote evidence,
 ordinary development corrections, any K33-I escalation, predecessor adaptations,
