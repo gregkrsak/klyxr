@@ -864,7 +864,7 @@ mod effect_authority_tests {
             .cleanup_effect_sites
             .push(crate::effects::custody::Site {
                 function: f.id,
-                holder: hir::Place::Local(local),
+                holder: crate::effects::custody::Holder::Place(hir::Place::Local(local)),
                 plan: hir::resources::CleanupType::Record(hir::RecordId(0)),
                 effects,
                 kind: crate::effects::custody::Kind::Return,
@@ -1045,7 +1045,7 @@ mod effect_authority_tests {
                 1 => sites.push(sites[0].clone()),
                 2 => sites.swap(0, 1),
                 3 => sites[0].function = FunctionId(0),
-                4 => sites[0].holder = hir::Place::Local(hir::LocalId(999)),
+                4 => sites[0].holder = crate::effects::custody::Holder::Place(hir::Place::Local(hir::LocalId(999))),
                 5 => sites[0].plan = hir::resources::CleanupType::Record(hir::RecordId(1)),
                 6 => sites[0].effects = EffectSet::EMPTY,
                 7 => sites[0].origin.start += 1,

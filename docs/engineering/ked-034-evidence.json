@@ -50,6 +50,13 @@
     {
       "identity": "lib.rs::trusted::tests::selected_ranges_precede_signatures_and_have_honest_catalog_origins",
       "reason": "Frozen KED-034 explicitly adds FinishReceipt: extend exact catalog cardinality from two to three and verify all three. Original Reading/SensorError identities/domains/origins remain asserted; this is feature inventory growth, no identity migration or weakened assertion."
+    },
+    {
+      "identities": [
+        "lib.rs::execution::effect_authority_tests::mir_cleanup_witness_cannot_be_invented_after_checker_approval",
+        "lib.rs::execution::effect_authority_tests::cleanup_witness_site_function_owner_plan_summary_and_origin_mutations_reject"
+      ],
+      "reason": "Wrap the identical source Place payload in Holder::Place after the representation gains invocation holders. No assertion or identity change."
     }
   ],
   "semantic_obligations": {},
