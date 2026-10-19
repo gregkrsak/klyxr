@@ -808,3 +808,39 @@ implementation is authorized on its dedicated branch; independent review and
 Greg's acceptance remain pending. Its exact baseline is the human-merged KED-031
 commit 74c1bedc8f847ffaeb38ed4795ee91730e35b949, tree
 2d0cc78b67a8cb69ea8feaff183dbf1b91938e63.
+
+## Frozen KED-033 implementation boundary
+
+Issue #78 Draft 2 is frozen; Greg separately authorized implementation on baseline
+62023217b3f93e53cae302731643cbcea1fb3d17 (tree
+3998bcad9b34d66e960b863eb20b7b78680da07d). The branch implements one explicitly
+selected immutable sensor-demo catalog: exact nominal Reading 0..4095 and
+SensorError 1..3, opaque Move Resource Sensor, canonical sensor_open/sensor_read
+trusted calls and cleanup-only fixed release, all effects io. Operation-specific
+grants remain separate from effects. Open Error is only 1/3; read Error is only
+2/3 and preserves the Sensor. No selected catalog means no names or authority.
+
+The defining source uses existing exact local `or return`. Owned helpers, protected
+internal relay, shared observation, nested Results and structured cleanup reuse
+the existing ownership/outcome/effect/temporary systems. Retire needs io for
+residual cleanup; relay transfer alone does not. Mutable Sensor refs, conditional
+Sensor initialization, replacement, record fields, representation/forging and
+public live-Sensor egress remain excluded. Existing whole-Result obligations and
+sealed private primitive cleanup are unchanged.
+
+Explicit MIR plans and opaque approval seal catalog/profile/compiler/configuration,
+grants, binding/signature/effect identities, roots, origins and custody. Only a
+persistent ExecutionSession may invoke: its pre-reserved machine-owned receipt
+holds actual binding payload before any fallible boundary; stopped sessions retain
+unfinished responsibilities, protected Results and completed prefix. Terminal
+Host/Limit/Integrity/trap/cleanup failure never becomes source Error or permits
+retry/resume/unwind. Teardown is not successful release. The fixed deterministic
+fixture is not hardware/FFI; fallible completion remains deferred to KED-034.
+
+CLI `run` and `audit` require `--profile sensor-demo` and an explicit --function
+root; the static bounded audit follows sealed structural edges through empty-effect
+helpers and both alternatives, disclosing grants versus reachable use and exact
+release pairing without invocation. See docs/engineering/KED-033-TRUSTED-SENSOR.md,
+its ledger and identity manifest for contracts, budgets, commands and evidence.
+Implementation is not independent confirmation or acceptance; Sarah's exact-head
+review and Greg's acceptance remain separate, and only humans merge.

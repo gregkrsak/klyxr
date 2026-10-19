@@ -280,3 +280,51 @@ fn trusted_metadata_shape_bounds_precede_deep_authority_comparison() {
         ErrorKind::ConfiguredLimit("trusted approval metadata bounds")
     );
 }
+
+#[test]
+fn each_resource_result_child_effect_and_variant_plan_mutation_rejects_before_entry() {
+    for mutation in 0..6 {
+        let mut e = artifact();
+        let plan = &mut e.result_plans[0];
+        match mutation {
+            0 => {
+                plan.success = Some(hir::results::VariantChild::Resource(hir::ResourceTypeId(
+                    usize::MAX,
+                )))
+            }
+            1 => plan.success = None,
+            2 => plan.failure = plan.success,
+            3 => plan.result = hir::ResultTypeId(usize::MAX),
+            4 => plan.effects = crate::effects::EffectSet::EMPTY,
+            _ => plan.resource_bearing = false,
+        }
+        integrity(&e);
+        assert!(matches!(
+            ExecutionSession::new(&e, FunctionId(0), ExecutionLimits::default())
+                .err()
+                .unwrap()
+                .kind,
+            ErrorKind::Integrity(_)
+        ));
+    }
+}
+
+#[test]
+fn independent_resource_cleanup_realization_and_protected_holder_mutations_reject() {
+    let source="fn relay(sensor:Sensor)->Sensor{return sensor;}fn demo()->Result<success:Reading,failure:SensorError>effects io{let sensor=sensor_open()or return;let moved=relay(sensor);return sensor_read(&moved);}";
+    for mutation in 0..4 {
+        let mut e =
+            prepare_execution_with_profile(source, AdmissionLimits::default(), &selection())
+                .unwrap();
+        let flow = e.mir.test_functions_mut()[0].cleanup.as_mut().unwrap();
+        assert!(flow.protected_return);
+        assert_eq!(flow.parameters.len(), 1);
+        match mutation {
+            0 => flow.protected_return = false,
+            1 => flow.parameters.clear(),
+            2 => flow.blocks[0].exit.clear(),
+            _ => flow.scopes[0].span.start += 1,
+        }
+        integrity(&e);
+    }
+}

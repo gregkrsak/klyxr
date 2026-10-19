@@ -59,6 +59,17 @@ assert set(actual) - set(expected) == set(additions), "missing or unclassified K
 assert len(actual) == sum(summaries) == 1875 + len(additions)
 assert set(manifest["classifications"]) == set(additions)
 assert set(manifest["classifications"].values()) <= {"ordinary_source", "private_canonical_catalog", "private_catalog_envelope", "trusted_boundary", "private_malformed_authority"}
+assert manifest["expected_per_profile"] == len(actual)
+assert manifest["authority_doctests"] == 1 and manifest["affine_cases_per_profile"] == 1800
+for key, expected_keys in [
+    ("semantic_obligations", {f"20.{n:02}" for n in range(1, 36)}),
+    ("malformed_controls", {f"21.{n:02}" for n in range(1, 14)}),
+    ("constraints", {f"K33-P{n:02}" for n in range(1, 10)}),
+]:
+    mapping = manifest[key]
+    assert set(mapping) == expected_keys, "incomplete frozen obligation map: " + key
+    assert all(ids and len(ids) == len(set(ids)) and set(ids) <= set(additions)
+               for ids in mapping.values()), "invalid exact evidence identity: " + key
 old = json.loads((root / "docs/engineering/ked-032-predecessors.json").read_text())
 k32 = json.loads((root / "docs/engineering/ked-032-evidence.json").read_text())
 assert {r["id"] for r in old["identities"]} | set(k32["additions"]) == set(expected)
@@ -68,6 +79,7 @@ doctests = [k for k in actual if k.startswith("doctest:")]
 assert len(doctests) == 1 and "CheckedExecutable - compile fail" in doctests[0]
 print(f"KED-033 reconciliation: 1,875 exact predecessors + {len(additions)} additions = {len(actual)} passed")
 print("KED-032 reconciliation retained: 1,846 predecessors + 29 additions = 1,875")
+print("Frozen evidence map: 35 semantic obligations, 13 malformed controls, P01-P09")
 print("identity migrations: 0; failed/ignored/filtered: 0/0/0")
 print("compile-fail authority doctest: passed; affine cross-check: 1,800 cases passed")
 print("evidence lanes:", {d: list(manifest["classifications"].values()).count(d) for d in sorted(set(manifest["classifications"].values()))})

@@ -442,3 +442,48 @@ fn bounded_authority_rendering_failure_preserves_stopped_session_and_writer_fail
     assert!(s.advance().is_err());
     assert_eq!(s.machine.steps, steps);
 }
+
+#[test]
+fn forged_sensor_ticket_and_stale_reference_reject_before_read_dispatch() {
+    for (fault, message) in [
+        (Fault::ForgedObservation, "stale or foreign Sensor identity"),
+        (Fault::StaleObservation, "retired or unknown runtime frame"),
+    ] {
+        let e = artifact(Scenario::Sample);
+        let mut s = session(&e);
+        s.machine.trusted.as_mut().unwrap().fault = Some((fault, 1));
+        terminal(&mut s, ErrorKind::Integrity(message), 1);
+        assert_eq!(
+            s.events()
+                .iter()
+                .filter(|v| matches!(v, Event::Attempt(..)))
+                .count(),
+            1
+        );
+        assert_eq!(
+            s.events()
+                .iter()
+                .filter(|v| matches!(v, Event::Published(..)))
+                .count(),
+            1
+        );
+    }
+}
+
+#[test]
+fn duplicate_cleanup_of_a_released_sensor_cannot_attempt_release_again() {
+    let e = artifact(Scenario::Sample);
+    let mut s = session(&e);
+    s.advance().unwrap();
+    let prefix = s.events().to_vec();
+    let ty = e.trusted.as_ref().unwrap().catalog.sensor;
+    assert_eq!(
+        s.machine
+            .release_sensor(Value::Resource { ty, identity: 0 })
+            .unwrap_err()
+            .kind,
+        ErrorKind::Integrity("stale or duplicate Sensor cleanup identity")
+    );
+    assert_eq!(s.events(), prefix);
+    assert_eq!(s.live_sensors(), 0);
+}

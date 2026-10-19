@@ -673,3 +673,21 @@ errors, generalized sums/patterns, verified/harness Result execution, production
 fallible APIs, panic/unwind/cancellation or generalized cyclic ownership.
 Earlier wholly-open propagation references now apply to those deferred extensions.
 Implementation evidence and independent acceptance remain distinct.
+
+### KED-033 refinement of trusted-operation and resource questions
+
+Frozen Issue #78 Draft 2 narrows OQ-001/OQ-006/OQ-012/OQ-013/OQ-022/OQ-023/OQ-026
+only for the one explicitly selected compiler-supplied sensor-demo family. The
+implementation covers canonical trusted calls, exact existing nominal ranges,
+opaque owned Sensor/shared observations, Result recovery, ownership-derived io
+cleanup, no-gap receipts, persistent terminal custody and bounded rooted authority
+audit. Historical wholly-open public-resource statements now apply beyond this
+exact slice. Implementation evidence remains distinct from independent acceptance.
+
+General FFI/ABI, user-defined resources/destructors, standard-library layering,
+modules/interface/manifest syntax, capabilities, concurrency, realtime guarantees,
+reference escape, mutable Sensor refs, Sensor conditionals/replacement/record fields,
+public live-resource egress, native execution and verified trusted execution remain
+open or excluded. Automatic release promises no flush/commit/durability/completion;
+explicit fallible completion and ownership after its failure remain deferred to
+KED-034. No such follow-on work is authorized by KED-033 implementation.

@@ -59,6 +59,8 @@ enum Fault {
     WrongRangeIdentity,
     WrongErrorCode,
     WrongInvocation,
+    ForgedObservation,
+    StaleObservation,
     Allocation(Allocation),
 }
 #[cfg(test)]
@@ -393,6 +395,37 @@ impl<'a> Machine<'a> {
         }
         if size_of::<Payload>() > approved.catalog.resource.payload_bytes {
             return Err(self.integrity("binding payload exceeds sealed reservation bound"));
+        }
+        #[cfg(test)]
+        if !open {
+            let state = self.trusted.as_ref().unwrap();
+            let fault = state
+                .fault
+                .filter(|(_, at)| *at == state.next_invocation)
+                .map(|(f, _)| f);
+            if matches!(
+                fault,
+                Some(Fault::ForgedObservation | Fault::StaleObservation)
+            ) {
+                let Some(Value::Reference { location, .. }) = self.values.last() else {
+                    unreachable!()
+                };
+                let location = *location;
+                if fault == Some(Fault::StaleObservation) {
+                    let Some(Value::Reference { location, .. }) = self.values.last_mut() else {
+                        unreachable!()
+                    };
+                    location.frame = u64::MAX;
+                } else {
+                    let (f, i) = self.slot_index(location)?;
+                    let Slot::Available(Value::Resource { identity, .. }) =
+                        &mut self.frames[f].slots[i].1
+                    else {
+                        unreachable!()
+                    };
+                    *identity = u64::MAX;
+                }
+            }
         }
         let observed = if open {
             None

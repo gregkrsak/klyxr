@@ -1176,3 +1176,43 @@ and cleanup-validation allocation failures. The legacy read-only validate API
 only adapts diagnostics; execution approval uses variants rather than matching
 diagnostic text. Exact deterministic HIR/MIR/origin comparison and immutable
 outcome/effect witnesses seal both branches and generated transfer sites.
+
+## KED-033 selected trusted catalog and persistent invocation custody
+
+Immutable Selection enters collection before signatures. Compilation-scoped
+ResourceTypeId and TrustedOperationId are distinct from RecordId and FunctionId;
+imported named ranges retain canonical RangeIds and Catalog declaration origins.
+Every row, including unused/denied rows, is bounded and validated. Typed TrustedCall
+and trusted-argument destinations reuse the existing argument, hold, ownership,
+outcome, custody and temporary systems. CleanupType distinguishes Record/Resource;
+Result variant plans carry Resource children without changing private whole-wrapper
+cleanup authority. Resource slot moves use the existing Transferred state.
+
+Approved runtime metadata is independent of HIR: exact target/compiler/catalog/
+profile/configuration, grants, bindings, contracts, roots, complete structural edges
+and MIR invocation/site/receiver/origin correspondence are retained and independently
+compared by opaque approval. Trusted runtime meaning uses only those contracts.
+There are no synthetic ordinary stubs, fabricated ParameterIds or fallback dispatch.
+
+ExecutionSession is the sole production installer of binding state. Its inline
+stopped/complete status retains the machine through reporting. Before invocation,
+combined capacities cover the receipt payload, fresh token slot, Result cell and
+provenance, operand, immediate temporary registration, audit prefix and stopped
+diagnostics. The binding constructs its non-Clone Sensor directly in the owned
+receipt. Malformed or stopped publication keeps it there; allocation-free commit
+moves it into the live token table and publishes the sole non-Copy logical ticket.
+Trusted Result authority records actual invocation provenance. History is never
+physical ownership. Fixed release consumes exactly the matched token only on
+success. Every later stop retains protected values and unfinished cleanup; repeated
+advance borrows the recorded outcome without execution or implicit cleanup.
+
+A static bounded authority renderer follows sealed structural edges from explicit
+roots using bounded visited storage, independent of direct-effect filtering or
+fixture trace. It records complete contracts/configuration/grants/bindings, source
+and catalog origins, acquisition/release pairing and possible cleanup sites. Audit
+scratch/output and retained session storage share one conservative envelope;
+rendering is read-only and failure cannot alter a recorded outcome. Existing bounded
+reader/preparation and CLI diagnostics are reused by explicit profile run/audit.
+Private cfg(test) controls act only at genuine allocation/receipt/cleanup/reporting
+boundaries. No second ownership/effect checker, host registry, FFI, device proof or
+KED-034 fallible completion is introduced. Independent review/acceptance is pending.

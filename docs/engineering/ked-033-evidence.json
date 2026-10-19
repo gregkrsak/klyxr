@@ -2,7 +2,7 @@
   "baseline_commit": "62023217b3f93e53cae302731643cbcea1fb3d17",
   "baseline_tree": "3998bcad9b34d66e960b863eb20b7b78680da07d",
   "predecessor_count": 1875,
-  "milestone": "M8: deterministic bounded rooted authority account and explicit profile CLI",
+  "milestone": "M9: complete frozen evidence map and final reconciliation",
   "migrations": {},
   "contract_corrections": [],
   "additions": [
@@ -27,11 +27,13 @@
     "lib.rs::execution::machine::trusted::tests::failures::all_fuel_cuts_through_partial_argument_entry_and_completed_release_prefix_conserve_tokens",
     "lib.rs::execution::machine::trusted::tests::failures::bounded_authority_rendering_failure_preserves_stopped_session_and_writer_failure_is_host",
     "lib.rs::execution::machine::trusted::tests::failures::cleanup_host_keeps_protected_ok_and_cli_host_exit_class_two",
+    "lib.rs::execution::machine::trusted::tests::failures::duplicate_cleanup_of_a_released_sensor_cannot_attempt_release_again",
     "lib.rs::execution::machine::trusted::tests::failures::duplicate_identity_after_an_earlier_success_retains_both_actual_responsibilities",
     "lib.rs::execution::machine::trusted::tests::failures::each_actual_receiving_allocation_failure_is_host_before_any_external_attempt",
     "lib.rs::execution::machine::trusted::tests::failures::error_carrying_sensor_is_integrity_and_cannot_become_no_owner_error",
     "lib.rs::execution::machine::trusted::tests::failures::exact_combined_runtime_storage_and_fuel_neighbors_are_sufficient_and_insufficient",
     "lib.rs::execution::machine::trusted::tests::failures::foreign_fresh_identity_is_integrity_while_receipt_owns_the_actual_token",
+    "lib.rs::execution::machine::trusted::tests::failures::forged_sensor_ticket_and_stale_reference_reject_before_read_dispatch",
     "lib.rs::execution::machine::trusted::tests::failures::in_bounds_but_unenumerated_operation_errors_are_integrity",
     "lib.rs::execution::machine::trusted::tests::failures::legitimate_error_then_fuel_limit_retains_protected_error_and_completed_prefix",
     "lib.rs::execution::machine::trusted::tests::failures::live_resource_limit_exact_neighbor_stops_before_the_excess_attempt",
@@ -52,7 +54,9 @@
     "lib.rs::execution::machine::trusted::tests::real_source_read_no_sample_preserves_owner_until_cleanup_before_error_two",
     "lib.rs::execution::machine::trusted::tests::real_source_read_recoverable_io_preserves_owner_until_cleanup_before_error_three",
     "lib.rs::execution::trusted_authority_tests::altered_all_runtime_approval_copies_still_require_exact_mir_derivation",
+    "lib.rs::execution::trusted_authority_tests::each_resource_result_child_effect_and_variant_plan_mutation_rejects_before_entry",
     "lib.rs::execution::trusted_authority_tests::independent_grant_binding_release_and_resource_descriptor_mutations_reject",
+    "lib.rs::execution::trusted_authority_tests::independent_resource_cleanup_realization_and_protected_holder_mutations_reject",
     "lib.rs::execution::trusted_authority_tests::independent_root_edge_and_authority_copy_mutations_reject",
     "lib.rs::execution::trusted_authority_tests::independent_target_compiler_catalog_profile_and_configuration_mutations_reject",
     "lib.rs::execution::trusted_authority_tests::independently_altered_operation_signature_effect_and_catalog_origin_reject",
@@ -131,11 +135,13 @@
     "lib.rs::execution::machine::trusted::tests::failures::all_fuel_cuts_through_partial_argument_entry_and_completed_release_prefix_conserve_tokens": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failures::bounded_authority_rendering_failure_preserves_stopped_session_and_writer_failure_is_host": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failures::cleanup_host_keeps_protected_ok_and_cli_host_exit_class_two": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::tests::failures::duplicate_cleanup_of_a_released_sensor_cannot_attempt_release_again": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failures::duplicate_identity_after_an_earlier_success_retains_both_actual_responsibilities": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failures::each_actual_receiving_allocation_failure_is_host_before_any_external_attempt": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failures::error_carrying_sensor_is_integrity_and_cannot_become_no_owner_error": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failures::exact_combined_runtime_storage_and_fuel_neighbors_are_sufficient_and_insufficient": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failures::foreign_fresh_identity_is_integrity_while_receipt_owns_the_actual_token": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::tests::failures::forged_sensor_ticket_and_stale_reference_reject_before_read_dispatch": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failures::in_bounds_but_unenumerated_operation_errors_are_integrity": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failures::legitimate_error_then_fuel_limit_retains_protected_error_and_completed_prefix": "trusted_boundary",
     "lib.rs::execution::machine::trusted::tests::failures::live_resource_limit_exact_neighbor_stops_before_the_excess_attempt": "trusted_boundary",
@@ -156,7 +162,9 @@
     "lib.rs::execution::machine::trusted::tests::real_source_read_no_sample_preserves_owner_until_cleanup_before_error_two": "ordinary_source",
     "lib.rs::execution::machine::trusted::tests::real_source_read_recoverable_io_preserves_owner_until_cleanup_before_error_three": "ordinary_source",
     "lib.rs::execution::trusted_authority_tests::altered_all_runtime_approval_copies_still_require_exact_mir_derivation": "private_malformed_authority",
+    "lib.rs::execution::trusted_authority_tests::each_resource_result_child_effect_and_variant_plan_mutation_rejects_before_entry": "private_malformed_authority",
     "lib.rs::execution::trusted_authority_tests::independent_grant_binding_release_and_resource_descriptor_mutations_reject": "private_malformed_authority",
+    "lib.rs::execution::trusted_authority_tests::independent_resource_cleanup_realization_and_protected_holder_mutations_reject": "private_malformed_authority",
     "lib.rs::execution::trusted_authority_tests::independent_root_edge_and_authority_copy_mutations_reject": "private_malformed_authority",
     "lib.rs::execution::trusted_authority_tests::independent_target_compiler_catalog_profile_and_configuration_mutations_reject": "private_malformed_authority",
     "lib.rs::execution::trusted_authority_tests::independently_altered_operation_signature_effect_and_catalog_origin_reject": "private_malformed_authority",
@@ -243,5 +251,300 @@
         "lib.rs::execution::effect_authority_tests::direct_effect_sites_reject_independent_authority_mutations"
       ]
     }
-  ]
+  ],
+  "semantic_obligations": {
+    "20.01": [
+      "lib.rs::trusted::tests::defining_source_prepares_canonical_trusted_calls_without_source_stubs"
+    ],
+    "20.02": [
+      "lib.rs::trusted::tests::selected_denied_call_resolves_to_grant_failure_without_fallback",
+      "tests/trusted_cli.rs::profile_is_never_implicit_and_io_does_not_grant_denied_read"
+    ],
+    "20.03": [
+      "lib.rs::trusted::tests::selected_denied_operations_still_occupy_callable_namespace",
+      "lib.rs::trusted::tests::selected_type_namespace_collisions_reject_before_signatures"
+    ],
+    "20.04": [
+      "lib.rs::trusted::tests::cross_namespace_equalities_keep_value_field_and_callable_lookup_separate"
+    ],
+    "20.05": [
+      "lib.rs::trusted::tests::catalog_names_preserve_case_and_unselected_catalog_reserves_nothing",
+      "lib.rs::trusted::tests::selected_denied_operations_still_occupy_callable_namespace"
+    ],
+    "20.06": [
+      "lib.rs::trusted::tests::selected_ranges_precede_signatures_and_have_honest_catalog_origins",
+      "lib.rs::trusted::tests::imported_ranges_keep_existing_arithmetic_comparison_copy_and_field_rules",
+      "lib.rs::trusted::tests::equal_source_range_bounds_do_not_establish_imported_nominal_compatibility",
+      "lib.rs::trusted::tests::imported_range_literal_neighbors_preserve_existing_frontend_checks"
+    ],
+    "20.07": [
+      "tests/trusted_cli.rs::explicit_profile_executes_all_five_fixed_outcomes_as_source_results",
+      "lib.rs::execution::machine::trusted::tests::failures::in_bounds_but_unenumerated_operation_errors_are_integrity"
+    ],
+    "20.08": [
+      "lib.rs::execution::machine::trusted::tests::failures::wrong_imported_nominal_range_identity_is_integrity_without_conversion",
+      "lib.rs::execution::machine::trusted::tests::imported_out_of_bounds_read_stops_with_live_sensor_and_no_source_error"
+    ],
+    "20.09": [
+      "lib.rs::execution::machine::trusted::tests::real_source_open_read_success_releases_before_ok_delivery",
+      "lib.rs::execution::machine::trusted::tests::failures::duplicate_identity_after_an_earlier_success_retains_both_actual_responsibilities"
+    ],
+    "20.10": [
+      "lib.rs::execution::machine::trusted::tests::real_source_open_no_sensor_returns_error_one_without_owner_or_read",
+      "lib.rs::execution::machine::trusted::tests::real_source_open_recoverable_io_returns_error_three_without_owner"
+    ],
+    "20.11": [
+      "lib.rs::execution::machine::trusted::tests::real_source_open_read_success_releases_before_ok_delivery"
+    ],
+    "20.12": [
+      "lib.rs::execution::machine::trusted::tests::real_source_read_no_sample_preserves_owner_until_cleanup_before_error_two",
+      "lib.rs::execution::machine::trusted::tests::composition::read_error_keeps_shared_alias_and_owner_valid_for_explicit_later_read"
+    ],
+    "20.13": [
+      "lib.rs::execution::machine::trusted::tests::real_source_open_read_success_releases_before_ok_delivery",
+      "lib.rs::execution::machine::trusted::tests::real_source_read_recoverable_io_preserves_owner_until_cleanup_before_error_three"
+    ],
+    "20.14": [
+      "lib.rs::execution::machine::trusted::tests::composition::branch_local_custody_cleans_before_protected_ok_and_error_delivery"
+    ],
+    "20.15": [
+      "lib.rs::execution::machine::trusted::tests::failures::legitimate_error_then_fuel_limit_retains_protected_error_and_completed_prefix",
+      "lib.rs::execution::machine::trusted::tests::legitimate_error_then_release_failure_retains_protected_error_without_delivery"
+    ],
+    "20.16": [
+      "lib.rs::trusted::tests::receiving_call_holds_sensor_borrow_across_nested_trusted_arguments",
+      "lib.rs::execution::machine::trusted::tests::composition::shared_non_escaping_helper_observes_without_replacing_owner"
+    ],
+    "20.17": [
+      "lib.rs::trusted::tests::sensor_is_canonical_resource_distinct_from_records_and_is_move_only",
+      "lib.rs::execution::machine::trusted::tests::failures::forged_sensor_ticket_and_stale_reference_reject_before_read_dispatch",
+      "lib.rs::execution::machine::trusted::tests::failures::duplicate_cleanup_of_a_released_sensor_cannot_attempt_release_again"
+    ],
+    "20.18": [
+      "lib.rs::execution::machine::trusted::tests::composition::owned_parameter_retirement_and_effect_free_protected_relay_compose",
+      "lib.rs::execution::machine::trusted::tests::composition::nested_result_obligations_move_sensor_through_internal_protected_returns"
+    ],
+    "20.19": [
+      "lib.rs::trusted::tests::mutable_sensor_reference_interfaces_and_borrows_are_excluded",
+      "lib.rs::trusted::tests::sensor_conditionals_replacement_and_public_record_fields_remain_excluded",
+      "lib.rs::execution::machine::trusted::tests::composition::public_resource_and_resource_bearing_result_roots_cannot_enter_session"
+    ],
+    "20.20": [
+      "lib.rs::trusted::tests::trusted_io_contract_is_required_independently_of_operation_grants",
+      "lib.rs::trusted::tests::trusted_propagation_cleanup_witnesses_come_from_residual_sensor_custody"
+    ],
+    "20.21": [
+      "lib.rs::trusted::tests::residual_parameter_cleanup_requires_io_but_protected_relay_does_not",
+      "lib.rs::execution::machine::trusted::tests::composition::owned_parameter_retirement_and_effect_free_protected_relay_compose"
+    ],
+    "20.22": [
+      "lib.rs::trusted::tests::selected_denied_call_resolves_to_grant_failure_without_fallback"
+    ],
+    "20.23": [
+      "lib.rs::trusted::tests::acquisition_requires_its_exact_cleanup_only_release_grant",
+      "lib.rs::execution::trusted_authority_tests::independent_grant_binding_release_and_resource_descriptor_mutations_reject"
+    ],
+    "20.24": [
+      "tests/trusted_cli.rs::explicit_profile_executes_all_five_fixed_outcomes_as_source_results",
+      "lib.rs::execution::machine::trusted::tests::failures::cleanup_host_keeps_protected_ok_and_cli_host_exit_class_two",
+      "lib.rs::execution::machine::trusted::tests::failures::range_trap_after_acquisition_is_terminal_and_keeps_sensor_without_cleanup",
+      "lib.rs::execution::machine::trusted::tests::failures::live_resource_limit_exact_neighbor_stops_before_the_excess_attempt"
+    ],
+    "20.25": [
+      "lib.rs::trusted::tests::defining_source_prepares_canonical_trusted_calls_without_source_stubs",
+      "lib.rs::execution::trusted_authority_tests::independent_grant_binding_release_and_resource_descriptor_mutations_reject"
+    ],
+    "20.26": [
+      "lib.rs::execution::trusted_authority_tests::independent_target_compiler_catalog_profile_and_configuration_mutations_reject"
+    ],
+    "20.27": [
+      "lib.rs::execution::trusted_authority_tests::invocation_origin_result_receiver_region_and_argument_site_mutations_reject",
+      "lib.rs::execution::trusted_authority_tests::independent_resource_cleanup_realization_and_protected_holder_mutations_reject"
+    ],
+    "20.28": [
+      "lib.rs::execution::machine::trusted::tests::failures::each_actual_receiving_allocation_failure_is_host_before_any_external_attempt",
+      "lib.rs::execution::machine::trusted::tests::failure_before_binding_has_no_attempt_or_responsibility"
+    ],
+    "20.29": [
+      "lib.rs::execution::machine::trusted::tests::every_fuel_stop_keeps_the_real_effect_prefix_and_all_live_responsibilities",
+      "lib.rs::execution::machine::trusted::tests::failures::all_fuel_cuts_through_partial_argument_entry_and_completed_release_prefix_conserve_tokens"
+    ],
+    "20.30": [
+      "lib.rs::execution::machine::trusted::tests::composition::iteration_local_custody_retires_on_continue_break_and_loop_exit",
+      "lib.rs::execution::machine::trusted::tests::composition::explicit_matches_normalize_err_and_keep_open_and_read_outcomes",
+      "lib.rs::execution::machine::trusted::tests::composition::early_return_from_loop_retires_iteration_local_before_error_delivery"
+    ],
+    "20.31": [
+      "lib.rs::execution::machine::trusted::tests::composition::protected_sensor_temporary_moves_to_owned_argument_and_retires_once",
+      "lib.rs::execution::machine::trusted::tests::composition::nested_result_obligations_move_sensor_through_internal_protected_returns",
+      "lib.rs::execution::machine::trusted::tests::composition::written_argument_order_and_multiple_owned_parameters_preserve_release_order"
+    ],
+    "20.32": [
+      "lib.rs::execution::machine::trusted::tests::failures::exact_combined_runtime_storage_and_fuel_neighbors_are_sufficient_and_insufficient",
+      "lib.rs::trusted::tests::catalog_combined_envelope_exact_neighbors_are_charged_without_source",
+      "lib.rs::execution::machine::trusted::tests::failures::tiny_profile_session_header_and_stopped_diagnostics_are_charged_exactly",
+      "lib.rs::execution::audit::tests::audit_exact_output_storage_and_work_neighbors_are_bounded"
+    ],
+    "20.33": [
+      "lib.rs::execution::audit::tests::audit_is_deterministic_and_distinguishes_unused_grants_from_rooted_use",
+      "lib.rs::execution::audit::tests::structural_audit_includes_both_alternatives_zero_effect_helpers_and_cleanup_sites",
+      "tests/trusted_cli.rs::audit_reports_roots_grants_pairing_and_origins_without_execution"
+    ],
+    "20.34": [
+      "lib.rs::execution::audit::tests::audit_exact_output_storage_and_work_neighbors_are_bounded",
+      "lib.rs::execution::audit::tests::actual_reachability_and_renderer_allocation_failures_stay_host",
+      "lib.rs::execution::machine::trusted::tests::failures::bounded_authority_rendering_failure_preserves_stopped_session_and_writer_failure_is_host"
+    ],
+    "20.35": [
+      "lib.rs::trusted::tests::trusted_calls_remain_excluded_from_verified_contracts_and_harness_authority"
+    ]
+  },
+  "malformed_controls": {
+    "21.01": [
+      "lib.rs::execution::trusted_authority_tests::invocation_omission_duplication_reordering_and_foreign_numeric_id_reject",
+      "lib.rs::trusted::tests::foreign_resource_type_and_mutable_referent_metadata_cannot_publish"
+    ],
+    "21.02": [
+      "lib.rs::execution::trusted_authority_tests::independent_target_compiler_catalog_profile_and_configuration_mutations_reject"
+    ],
+    "21.03": [
+      "lib.rs::trusted::tests::trusted_call_approval_rejects_foreign_cleanup_only_type_and_arity_mutations",
+      "lib.rs::execution::trusted_authority_tests::independently_altered_operation_signature_effect_and_catalog_origin_reject",
+      "lib.rs::execution::trusted_authority_tests::invocation_origin_result_receiver_region_and_argument_site_mutations_reject"
+    ],
+    "21.04": [
+      "lib.rs::execution::trusted_authority_tests::each_resource_result_child_effect_and_variant_plan_mutation_rejects_before_entry"
+    ],
+    "21.05": [
+      "lib.rs::execution::trusted_authority_tests::independently_altered_operation_signature_effect_and_catalog_origin_reject",
+      "lib.rs::execution::trusted_authority_tests::each_resource_result_child_effect_and_variant_plan_mutation_rejects_before_entry"
+    ],
+    "21.06": [
+      "lib.rs::execution::trusted_authority_tests::independent_grant_binding_release_and_resource_descriptor_mutations_reject"
+    ],
+    "21.07": [
+      "lib.rs::execution::machine::trusted::tests::failures::foreign_fresh_identity_is_integrity_while_receipt_owns_the_actual_token",
+      "lib.rs::execution::machine::trusted::tests::failures::duplicate_identity_after_an_earlier_success_retains_both_actual_responsibilities",
+      "lib.rs::execution::machine::trusted::tests::failures::forged_sensor_ticket_and_stale_reference_reject_before_read_dispatch"
+    ],
+    "21.08": [
+      "lib.rs::execution::trusted_authority_tests::invocation_origin_result_receiver_region_and_argument_site_mutations_reject",
+      "lib.rs::execution::machine::trusted::tests::failures::receipt_operation_provenance_rejects_before_result_publication"
+    ],
+    "21.09": [
+      "lib.rs::execution::trusted_authority_tests::independent_grant_binding_release_and_resource_descriptor_mutations_reject"
+    ],
+    "21.10": [
+      "lib.rs::execution::trusted_authority_tests::independent_resource_cleanup_realization_and_protected_holder_mutations_reject",
+      "lib.rs::execution::trusted_authority_tests::invocation_origin_result_receiver_region_and_argument_site_mutations_reject"
+    ],
+    "21.11": [
+      "lib.rs::execution::trusted_authority_tests::independent_resource_cleanup_realization_and_protected_holder_mutations_reject",
+      "lib.rs::execution::trusted_authority_tests::each_resource_result_child_effect_and_variant_plan_mutation_rejects_before_entry",
+      "lib.rs::execution::machine::trusted::tests::failures::duplicate_cleanup_of_a_released_sensor_cannot_attempt_release_again"
+    ],
+    "21.12": [
+      "lib.rs::execution::machine::trusted::tests::malformed_success_tag_retains_actual_receipt_with_integrity",
+      "lib.rs::execution::machine::trusted::tests::failures::error_carrying_sensor_is_integrity_and_cannot_become_no_owner_error",
+      "lib.rs::execution::machine::trusted::tests::failures::wrong_imported_nominal_range_identity_is_integrity_without_conversion"
+    ],
+    "21.13": [
+      "lib.rs::execution::trusted_authority_tests::independent_root_edge_and_authority_copy_mutations_reject",
+      "lib.rs::execution::trusted_authority_tests::altered_all_runtime_approval_copies_still_require_exact_mir_derivation",
+      "lib.rs::execution::audit::tests::no_profile_and_mutated_approval_cannot_gain_authority_from_audit"
+    ]
+  },
+  "constraints": {
+    "K33-P01": [
+      "lib.rs::trusted::tests::catalog_names_preserve_case_and_unselected_catalog_reserves_nothing",
+      "lib.rs::trusted::tests::cross_namespace_equalities_keep_value_field_and_callable_lookup_separate",
+      "lib.rs::trusted::tests::defining_source_prepares_canonical_trusted_calls_without_source_stubs",
+      "lib.rs::trusted::tests::equal_source_range_bounds_do_not_establish_imported_nominal_compatibility",
+      "lib.rs::trusted::tests::imported_range_literal_neighbors_preserve_existing_frontend_checks",
+      "lib.rs::trusted::tests::imported_ranges_keep_existing_arithmetic_comparison_copy_and_field_rules",
+      "lib.rs::trusted::tests::selected_denied_operations_still_occupy_callable_namespace",
+      "lib.rs::trusted::tests::selected_ranges_precede_signatures_and_have_honest_catalog_origins",
+      "lib.rs::trusted::tests::selected_type_namespace_collisions_reject_before_signatures"
+    ],
+    "K33-P02": [
+      "lib.rs::execution::machine::trusted::tests::composition::nested_result_obligations_move_sensor_through_internal_protected_returns",
+      "lib.rs::execution::machine::trusted::tests::composition::owned_parameter_retirement_and_effect_free_protected_relay_compose",
+      "lib.rs::execution::machine::trusted::tests::composition::public_resource_and_resource_bearing_result_roots_cannot_enter_session",
+      "lib.rs::execution::machine::trusted::tests::failures::duplicate_cleanup_of_a_released_sensor_cannot_attempt_release_again",
+      "lib.rs::execution::machine::trusted::tests::failures::forged_sensor_ticket_and_stale_reference_reject_before_read_dispatch",
+      "lib.rs::trusted::tests::mutable_sensor_reference_interfaces_and_borrows_are_excluded",
+      "lib.rs::trusted::tests::sensor_conditionals_replacement_and_public_record_fields_remain_excluded",
+      "lib.rs::trusted::tests::sensor_is_canonical_resource_distinct_from_records_and_is_move_only"
+    ],
+    "K33-P03": [
+      "lib.rs::execution::machine::trusted::tests::composition::early_return_from_loop_retires_iteration_local_before_error_delivery",
+      "lib.rs::execution::machine::trusted::tests::composition::explicit_matches_normalize_err_and_keep_open_and_read_outcomes",
+      "lib.rs::execution::machine::trusted::tests::composition::iteration_local_custody_retires_on_continue_break_and_loop_exit",
+      "lib.rs::execution::machine::trusted::tests::composition::nested_result_obligations_move_sensor_through_internal_protected_returns",
+      "lib.rs::execution::machine::trusted::tests::composition::protected_sensor_temporary_moves_to_owned_argument_and_retires_once",
+      "lib.rs::execution::machine::trusted::tests::composition::shared_non_escaping_helper_observes_without_replacing_owner",
+      "lib.rs::execution::machine::trusted::tests::composition::written_argument_order_and_multiple_owned_parameters_preserve_release_order",
+      "lib.rs::trusted::tests::defining_source_prepares_canonical_trusted_calls_without_source_stubs",
+      "lib.rs::trusted::tests::receiving_call_holds_sensor_borrow_across_nested_trusted_arguments",
+      "lib.rs::trusted::tests::trusted_io_contract_is_required_independently_of_operation_grants",
+      "lib.rs::trusted::tests::trusted_propagation_cleanup_witnesses_come_from_residual_sensor_custody"
+    ],
+    "K33-P04": [
+      "lib.rs::execution::machine::trusted::tests::composition::branch_local_custody_cleans_before_protected_ok_and_error_delivery",
+      "lib.rs::execution::machine::trusted::tests::every_fuel_stop_keeps_the_real_effect_prefix_and_all_live_responsibilities",
+      "lib.rs::execution::machine::trusted::tests::failure_before_binding_has_no_attempt_or_responsibility",
+      "lib.rs::execution::machine::trusted::tests::failures::all_fuel_cuts_through_partial_argument_entry_and_completed_release_prefix_conserve_tokens",
+      "lib.rs::execution::machine::trusted::tests::failures::duplicate_identity_after_an_earlier_success_retains_both_actual_responsibilities",
+      "lib.rs::execution::machine::trusted::tests::failures::each_actual_receiving_allocation_failure_is_host_before_any_external_attempt",
+      "lib.rs::execution::machine::trusted::tests::failures::wrong_imported_nominal_range_identity_is_integrity_without_conversion",
+      "lib.rs::execution::machine::trusted::tests::imported_out_of_bounds_read_stops_with_live_sensor_and_no_source_error",
+      "lib.rs::execution::machine::trusted::tests::real_source_open_read_success_releases_before_ok_delivery"
+    ],
+    "K33-P05": [
+      "lib.rs::execution::machine::trusted::tests::every_fuel_stop_keeps_the_real_effect_prefix_and_all_live_responsibilities",
+      "lib.rs::execution::machine::trusted::tests::failures::all_fuel_cuts_through_partial_argument_entry_and_completed_release_prefix_conserve_tokens",
+      "lib.rs::execution::machine::trusted::tests::failures::cleanup_host_keeps_protected_ok_and_cli_host_exit_class_two",
+      "lib.rs::execution::machine::trusted::tests::failures::legitimate_error_then_fuel_limit_retains_protected_error_and_completed_prefix",
+      "lib.rs::execution::machine::trusted::tests::failures::live_resource_limit_exact_neighbor_stops_before_the_excess_attempt",
+      "lib.rs::execution::machine::trusted::tests::failures::range_trap_after_acquisition_is_terminal_and_keeps_sensor_without_cleanup",
+      "lib.rs::execution::machine::trusted::tests::legitimate_error_then_release_failure_retains_protected_error_without_delivery",
+      "tests/trusted_cli.rs::explicit_profile_executes_all_five_fixed_outcomes_as_source_results"
+    ],
+    "K33-P06": [
+      "lib.rs::execution::machine::trusted::tests::composition::owned_parameter_retirement_and_effect_free_protected_relay_compose",
+      "lib.rs::trusted::tests::residual_parameter_cleanup_requires_io_but_protected_relay_does_not",
+      "lib.rs::trusted::tests::trusted_io_contract_is_required_independently_of_operation_grants",
+      "lib.rs::trusted::tests::trusted_propagation_cleanup_witnesses_come_from_residual_sensor_custody"
+    ],
+    "K33-P07": [
+      "lib.rs::execution::trusted_authority_tests::independent_grant_binding_release_and_resource_descriptor_mutations_reject",
+      "lib.rs::execution::trusted_authority_tests::independent_resource_cleanup_realization_and_protected_holder_mutations_reject",
+      "lib.rs::execution::trusted_authority_tests::independent_target_compiler_catalog_profile_and_configuration_mutations_reject",
+      "lib.rs::execution::trusted_authority_tests::invocation_origin_result_receiver_region_and_argument_site_mutations_reject",
+      "lib.rs::trusted::tests::acquisition_requires_its_exact_cleanup_only_release_grant",
+      "lib.rs::trusted::tests::defining_source_prepares_canonical_trusted_calls_without_source_stubs",
+      "lib.rs::trusted::tests::selected_denied_call_resolves_to_grant_failure_without_fallback"
+    ],
+    "K33-P08": [
+      "lib.rs::execution::audit::tests::actual_reachability_and_renderer_allocation_failures_stay_host",
+      "lib.rs::execution::audit::tests::audit_exact_output_storage_and_work_neighbors_are_bounded",
+      "lib.rs::execution::audit::tests::audit_is_deterministic_and_distinguishes_unused_grants_from_rooted_use",
+      "lib.rs::execution::audit::tests::structural_audit_includes_both_alternatives_zero_effect_helpers_and_cleanup_sites",
+      "lib.rs::execution::machine::trusted::tests::failures::bounded_authority_rendering_failure_preserves_stopped_session_and_writer_failure_is_host",
+      "tests/trusted_cli.rs::audit_reports_roots_grants_pairing_and_origins_without_execution"
+    ],
+    "K33-P09": [
+      "lib.rs::execution::audit::tests::actual_reachability_and_renderer_allocation_failures_stay_host",
+      "lib.rs::execution::audit::tests::audit_exact_output_storage_and_work_neighbors_are_bounded",
+      "lib.rs::execution::machine::trusted::tests::failure_before_binding_has_no_attempt_or_responsibility",
+      "lib.rs::execution::machine::trusted::tests::failures::bounded_authority_rendering_failure_preserves_stopped_session_and_writer_failure_is_host",
+      "lib.rs::execution::machine::trusted::tests::failures::each_actual_receiving_allocation_failure_is_host_before_any_external_attempt",
+      "lib.rs::execution::machine::trusted::tests::failures::exact_combined_runtime_storage_and_fuel_neighbors_are_sufficient_and_insufficient",
+      "lib.rs::execution::machine::trusted::tests::failures::tiny_profile_session_header_and_stopped_diagnostics_are_charged_exactly",
+      "lib.rs::trusted::tests::catalog_combined_envelope_exact_neighbors_are_charged_without_source"
+    ]
+  },
+  "expected_per_profile": 1981,
+  "authority_doctests": 1,
+  "affine_cases_per_profile": 1800
 }

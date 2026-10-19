@@ -118,7 +118,7 @@ M0: baseline and branch established; ledger created before semantic changes.
 M1-M4: catalog admission, canonical Resource eligibility, trusted-call typing and
 explicit invocation/root/runtime approval are implemented; validation below.
 M5 joint receipt/session custody is implemented and source fixture execution is
-enabled only through that seam. M6 composition and M7 failures are implemented; M8 audit/CLI is implemented; M9 final evidence remains pending. The consuming convenience
+enabled only through that seam. M6 composition and M7 failures are implemented; M8 audit/CLI and M9 evidence/documentation are implemented; final publication and independent review remain pending. The consuming convenience
 executor still rejects profile artifacts, and no ordinary/host fallback exists.
 
 ### M0 published checkpoint
@@ -560,3 +560,95 @@ success/Error/audit/denied controls. One supplementary harness expected the word
 was corrected against the preserved exit-1 log, then the remaining documentation
 and integrity gates completed. No implementation diagnostic was weakened, no test
 identity or numeric oracle changed, and no artifact anomaly occurred.
+
+### M8 published checkpoint
+
+Commit `8f475e37dc29191b7525b6ee5af52554bf089382`, tree
+`dc1e67ef8573c5f3e41083c85c4622c22aed5c5a`. Every push job/step passed:
+
+| Workflow | Run | Job |
+| --- | --- | --- |
+| build | [39208587758](https://github.com/gregkrsak/klyxr/actions/runs/39208587758) | 117916718294 |
+| tests | [39208587714](https://github.com/gregkrsak/klyxr/actions/runs/39208587714) | 117916718084 |
+| verify | [39208587712](https://github.com/gregkrsak/klyxr/actions/runs/39208587712) | 117916717885 |
+| docs | [39208587718](https://github.com/gregkrsak/klyxr/actions/runs/39208587718) | 117916718102 |
+
+### M9 reconciliation and implementation-facing documentation
+
+Four final identities complete Sensor-specific malformed evidence: forged logical
+ticket and stale shared reference before read dispatch, duplicate release rejection
+after successful fixed cleanup, independent canonical Resource Result-plan child/
+effect/identity mutations, and independent protected-return/parameter/scope cleanup
+realization mutations. These pass through genuine opaque approval or session
+boundaries. Private controls never pre-create a Sensor or discard its physical
+responsibility. Source eligibility and production authority are unchanged.
+
+The exact manifest now enumerates 106 additions and maps each of the 35 section-20
+obligations, 13 section-21 controls and P01-P09 to existing exact test identities.
+The reconciler enforces complete nonempty maps and exact classifications/counts,
+retains all 1,875 predecessor identities and the KED-032 chain, requires the authority
+doctest and both-profile affine sentinel, and accepts no migration/contract correction.
+Evidence lanes distinguish ordinary source, private catalog/envelope, malformed
+authority and actual trusted runtime boundaries; they are tests under stated
+fixture assumptions, not formal correctness or device proofs.
+
+All five canonical AI files describe frozen semantics, the implemented slice,
+remaining exclusions, ownership-derived effects, exact trust/receipt/session/audit
+boundaries, deferred fallible completion and pending independent acceptance.
+The generated bundle is rebuilt from those files. The compiler guide links the
+focused [fixture and bounded-execution guide](KED-033-TRUSTED-SENSOR.md), which
+documents actual commands, fixed assumptions, budgets, error classes, stopped
+custody versus successful release, and no production fault authority.
+
+The prod documentation changes remain separate. A read-only comparison at
+`10f89f925c84f53bf9f4599c0c88bc7b75b614b2` shows only README.md, docs/README.md and
+scripts/verify-readme.py changed since the frozen baseline; this branch changes
+none of those paths. No rebase, merge or prod update has been performed. Final
+GitHub integration status and exact head/tree/CI are reported externally after
+publication to avoid self-referential commit identities in this ledger.
+
+### Final local conformance result
+
+The complete M9 local gate passed **1,981 exact debug identities and 1,981 release
+identities: 1,875 predecessors plus 106 additions**, with zero failed, ignored,
+filtered or migrated identities. Lanes: 53 ordinary-source, 3 private canonical
+catalog, 13 private catalog/envelope, 11 private malformed-authority and 26 trusted
+boundary identities. The KED-032 chain remains 1,846 plus 29. The authority
+compile-fail doctest and 1,800-case affine cross-check passed independently in
+both profiles. All seven accepted Rust 1.80.0 executable modes/sizes/SHA-256 hashes
+were unchanged before the final gate. No actual compiler/artifact anomaly occurred.
+
+| Exact command | Outcome |
+| --- | --- |
+| `cargo check --locked --workspace --all-targets` | 0 |
+| `cargo fmt --all -- --check` | 0 |
+| `cargo clippy --locked --workspace --all-targets -- -D warnings` | 0 |
+| `cargo test --locked --workspace` | 0; 1,981 identities including doctest |
+| `python3 scripts/verify-ked033-tests.py /tmp/klyxr-ked033-m9-gate/debug.log` | 0; exact reconciliation and all frozen maps |
+| `cargo test --locked --workspace --release` | 0; same 1,981 identities |
+| `python3 scripts/verify-ked033-tests.py /tmp/klyxr-ked033-m9-gate/release.log` | 0; exact reconciliation and all frozen maps |
+| `RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --no-deps` | 0 |
+| `python3 scripts/verify-readme.py` | 0; assets |
+| `python3 scripts/verify-repo-scaffold.py` | 0 |
+| `python3 scripts/build-ai-context.py` | 0; byte-identical regeneration |
+| `git diff --check` and `git diff --cached --exit-code` | 0 before staging |
+
+The gate also executes each established CLI example through `cargo run --locked
+--quiet --bin klyxr --`: result_handling demo and success_demo, result_propagation
+demo and failure_demo, ordinary_run demo, owned_replacement demo, explicit_effects
+demo and battery_ok verification all returned 0 with their exact expected results.
+result_unhandled_fail check, result_propagation_mismatch demo and battery_fail
+verification returned expected 1 with their original diagnostics. The trusted
+sample run and no-sample run returned 0 with Ok(Reading(42)) and
+Error(SensorError(2)); its audit returned 0 with rooted authority; read denial under
+open-release grants returned 1 with “not granted”. All five scenarios and invalid
+configuration/terminal CLI classes are additionally tested as exact identities.
+
+Generated context SHA-256:
+`c99dc023ad072013fe21cba290c0268418fef3eae4cc98c18dc770d128efaab6`.
+The complete baseline-to-final changes were inspected for scope, preservation of
+predecessor expectations, typed boundaries and diff integrity. No tracked change
+outside KED-033 is included. Local worktree/index become clean only after the final
+coherent commit; final identity, remote cleanliness and CI runs are recorded in
+the Issue/PR engineering report. No semantic deviation, KED-034 work, acceptance,
+Issue closure, prod modification or merge is claimed.
