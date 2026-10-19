@@ -101,7 +101,11 @@ impl State {
 
 impl<'a> Machine<'a> {
     pub(super) fn completion_result_growth(&self) -> usize {
-        self.results.as_ref().map_or(size_of::<State>() + size_of::<Cell>(), |s| usize::from(s.cells.len() == s.cells.capacity()) * size_of::<Cell>())
+        self.results
+            .as_ref()
+            .map_or(size_of::<State>() + size_of::<Cell>(), |s| {
+                usize::from(s.cells.len() == s.cells.capacity()) * size_of::<Cell>()
+            })
     }
 
     pub(super) fn trusted_result_prepare(

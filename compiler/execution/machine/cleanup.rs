@@ -255,18 +255,28 @@ impl State {
 }
 impl<'a> Machine<'a> {
     pub(super) fn completion_cleanup_growth(&self) -> Result<usize, ExecutionError> {
-        let bytes = self.resources.as_ref().map_or(size_of::<State>() + size_of::<Value>(), |s| usize::from(s.work.len() == s.work.capacity()) * size_of::<Value>());
+        let bytes = self
+            .resources
+            .as_ref()
+            .map_or(size_of::<State>() + size_of::<Value>(), |s| {
+                usize::from(s.work.len() == s.work.capacity()) * size_of::<Value>()
+            });
         Ok(bytes)
     }
 
     pub(super) fn completion_cleanup_reserve(&mut self) -> Result<(), ExecutionError> {
         self.enable_resources()?;
-        let growth = self.resources.as_ref().unwrap().work.len() == self.resources.as_ref().unwrap().work.capacity();
+        let growth = self.resources.as_ref().unwrap().work.len()
+            == self.resources.as_ref().unwrap().work.capacity();
         if growth {
             self.reserve(size_of::<Value>())?;
             #[cfg(test)]
             self.trusted_allocation(super::trusted::Allocation::CompletionCleanup, true)?;
-            self.resources.as_mut().unwrap().work.try_reserve_exact(1)
+            self.resources
+                .as_mut()
+                .unwrap()
+                .work
+                .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("completion fixed cleanup cursor")))?;
         }
         Ok(())

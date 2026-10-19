@@ -133,13 +133,26 @@ impl<'a> Machine<'a> {
     ) -> Result<usize, ExecutionError> {
         let index = self.temporary_index(activation)?;
         let frame = &self.temporaries.as_ref().unwrap().frames[index];
-        let metadata = &self.executable.function(frame.function)?.temporaries.as_ref().unwrap().sites[site.0];
+        let metadata = &self
+            .executable
+            .function(frame.function)?
+            .temporaries
+            .as_ref()
+            .unwrap()
+            .sites[site.0];
         if frame.phase != Phase::Active || frame.region != metadata.region {
             return Err(self.integrity("completion receiving region mismatch"));
         }
-        let owners = usize::from(frame.owners.len() == frame.owners.capacity()) * size_of::<Owner>();
+        let owners =
+            usize::from(frame.owners.len() == frame.owners.capacity()) * size_of::<Owner>();
         let events = &self.temporaries.as_ref().unwrap().events;
-        owners.checked_add(2usize.saturating_sub(events.capacity() - events.len()).checked_mul(size_of::<Event>()).ok_or_else(|| self.integrity("completion temporary event overflow"))?)
+        owners
+            .checked_add(
+                2usize
+                    .saturating_sub(events.capacity() - events.len())
+                    .checked_mul(size_of::<Event>())
+                    .ok_or_else(|| self.integrity("completion temporary event overflow"))?,
+            )
             .ok_or_else(|| self.integrity("completion temporary envelope overflow"))
     }
 
@@ -153,8 +166,17 @@ impl<'a> Machine<'a> {
         };
         let index = self.temporary_index(id.activation)?;
         let frame = &self.temporaries.as_ref().unwrap().frames[index];
-        let owner = frame.owners.get(id.ordinal).filter(|o| o.custody == Custody::Owned && o.site == input).ok_or_else(|| self.integrity("completion input holder/site mismatch"))?;
-        let flow = self.executable.function(frame.function)?.temporaries.as_ref().unwrap();
+        let owner = frame
+            .owners
+            .get(id.ordinal)
+            .filter(|o| o.custody == Custody::Owned && o.site == input)
+            .ok_or_else(|| self.integrity("completion input holder/site mismatch"))?;
+        let flow = self
+            .executable
+            .function(frame.function)?
+            .temporaries
+            .as_ref()
+            .unwrap();
         if flow.sites[input.0].destination != Transfer::TrustedArgument(operation, 0) {
             return Err(self.integrity("completion input destination mismatch"));
         }
@@ -172,10 +194,18 @@ impl<'a> Machine<'a> {
         self.temporary_reserve_register(activation, site)?;
         let events = &self.temporaries.as_ref().unwrap().events;
         let growth = 2usize.saturating_sub(events.capacity() - events.len());
-        self.reserve(growth.checked_mul(size_of::<Event>()).ok_or_else(|| self.integrity("completion transfer events overflow"))?)?;
+        self.reserve(
+            growth
+                .checked_mul(size_of::<Event>())
+                .ok_or_else(|| self.integrity("completion transfer events overflow"))?,
+        )?;
         #[cfg(test)]
         self.trusted_allocation(super::trusted::Allocation::CompletionTransfer, growth > 0)?;
-        self.temporaries.as_mut().unwrap().events.try_reserve_exact(2)
+        self.temporaries
+            .as_mut()
+            .unwrap()
+            .events
+            .try_reserve_exact(2)
             .map_err(|_| self.failure(ErrorKind::Host("completion temporary events")))?;
         Ok(())
     }
