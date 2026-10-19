@@ -122,7 +122,7 @@ fn count_expression(expression: &TypedExpr, uses: &mut FutureUses) {
         }
         ExprKind::Parameter(id) => *uses.entry(Place::Parameter(*id)).or_default() += 1,
         ExprKind::Local(id) => *uses.entry(Place::Local(*id)).or_default() += 1,
-        ExprKind::Call { arguments, .. } => {
+        ExprKind::Call { arguments, .. } | ExprKind::TrustedCall { arguments, .. } => {
             for argument in arguments {
                 count_expression(argument, uses);
             }
@@ -247,7 +247,7 @@ fn reference_uses(body: &[ValueStatement]) -> BTreeSet<Place> {
             ExprKind::Deref { reference } | ExprKind::CopyReferenceFieldRead { reference, .. } => {
                 uses.insert(*reference);
             }
-            ExprKind::Call { arguments, .. } => {
+            ExprKind::Call { arguments, .. } | ExprKind::TrustedCall { arguments, .. } => {
                 for argument in arguments {
                     expression(argument, uses);
                 }
@@ -351,6 +351,7 @@ enum Transfer {
     ResultPayload(hir::ResultTypeId, hir::ResultTag),
     Local(LocalId),
     Argument(ParameterId),
+    TrustedArgument(hir::TrustedOperationId, usize),
     Return(FunctionId),
     WriteThrough(Place),
 }
@@ -1294,14 +1295,23 @@ impl<'a> Checker<'a> {
         }
     }
     fn call_arguments(&mut self, function: FunctionId, arguments: &[TypedExpr]) -> OwnershipResult {
-        let callee = self
-            .program
+        let program = self.program;
+        let callee = program
             .function(function)
             .as_ordinary()
             .expect("typed ordinary calls");
+        self.held_arguments(arguments, |index| {
+            Transfer::Argument(callee.parameters[index])
+        })
+    }
+    fn held_arguments(
+        &mut self,
+        arguments: &[TypedExpr],
+        destination: impl Fn(usize) -> Transfer,
+    ) -> OwnershipResult {
         let mut held = Vec::new();
-        for (argument, parameter) in arguments.iter().zip(&callee.parameters) {
-            if let Some(loan) = self.expression(argument, Transfer::Argument(*parameter))? {
+        for (index, argument) in arguments.iter().enumerate() {
+            if let Some(loan) = self.expression(argument, destination(index))? {
                 self.loans
                     .get_mut(&loan)
                     .expect("live reference provenance")
@@ -1952,6 +1962,15 @@ impl<'a> Checker<'a> {
                 // Reference returns are forbidden: call results are fresh owned values.
                 Ok(None)
             }
+            ExprKind::TrustedCall {
+                operation,
+                arguments,
+            } => {
+                self.held_arguments(arguments, |index| {
+                    Transfer::TrustedArgument(*operation, index)
+                })?;
+                Ok(None)
+            }
             ExprKind::Unary { operand, .. } => {
                 self.expression(operand, transfer)?;
                 Ok(None)
@@ -2464,6 +2483,9 @@ impl<'a> Checker<'a> {
                     "into by-value parameter `{}`",
                     self.program.parameter(*id).name
                 ),
+                Transfer::TrustedArgument(_, index) => {
+                    format!("into trusted argument #{}", index + 1)
+                }
                 Transfer::Return(id) => format!(
                     "by return from function `{}`",
                     self.program.function(*id).name()

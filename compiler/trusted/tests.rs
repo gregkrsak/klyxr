@@ -332,14 +332,18 @@ fn sensor_result_payloads_have_typed_resource_children_and_cleanup_effects() {
     let p=program("fn wrap(sensor:Sensor)->Result<success:Sensor,failure:bool>{return Ok(sensor);} fn demo(){}",Grants::ALL);
     let c = p.trusted.as_ref().unwrap();
     let plans = p.variant_plans(&[], &[]).unwrap();
-    assert_eq!(plans.len(), 1);
+    let hir::ValueType::Result(result) = p.functions[0].as_ordinary().unwrap().return_type.unwrap()
+    else {
+        unreachable!()
+    };
+    let plan = &plans[result.0];
     assert_eq!(
-        plans[0].success,
+        plan.success,
         Some(hir::results::VariantChild::Resource(c.sensor))
     );
-    assert_eq!(plans[0].failure, None);
-    assert!(plans[0].bearing());
-    assert!(plans[0].effects.contains(Effect::Io));
+    assert_eq!(plan.failure, None);
+    assert!(plan.bearing());
+    assert!(plan.effects.contains(Effect::Io));
     prepare_execution_with_profile("fn wrap(sensor:Sensor)->Result<success:Sensor,failure:bool>{return Ok(sensor);} fn demo(){}",AdmissionLimits::default(),&selection(Grants::ALL)).unwrap();
 }
 
@@ -402,4 +406,213 @@ fn foreign_resource_type_and_mutable_referent_metadata_cannot_publish() {
     altered.parameters[0].ty =
         hir::ParameterType::Value(hir::ValueType::MutableRef(hir::ReferentType::Resource(id)));
     assert!(altered.validate_record_expressions().is_err());
+}
+
+const SAMPLE: &str = "fn demo()->Result<success:Reading,failure:SensorError> effects io {let sensor=sensor_open() or return;let reading=sensor_read(&sensor) or return;return Ok(reading);}";
+
+#[test]
+fn defining_source_prepares_canonical_trusted_calls_without_source_stubs() {
+    prepare_execution_with_profile(SAMPLE, AdmissionLimits::default(), &selection(Grants::ALL))
+        .unwrap();
+    let p = program(SAMPLE, Grants::ALL);
+    assert_eq!(p.functions.len(), 1);
+    assert!(p.parameters.is_empty());
+    assert!(p.records.is_empty());
+    let c = p.trusted.as_ref().unwrap();
+    let f = p.functions[0].as_ordinary().unwrap();
+    for (index, statement) in f.body[..2].iter().enumerate() {
+        let hir::ValueStatement::Let {
+            initializer,
+            propagation: Some(_),
+            ..
+        } = statement
+        else {
+            panic!("expected propagation")
+        };
+        let hir::ExprKind::TrustedCall {
+            operation,
+            arguments,
+        } = &initializer.kind
+        else {
+            panic!("expected canonical trusted target")
+        };
+        assert_eq!(*operation, c.operations[index].id);
+        assert_eq!(arguments.len(), index);
+        assert_eq!(
+            initializer.ty,
+            hir::ExprType::Result(c.operations[index].result.unwrap())
+        );
+    }
+}
+
+#[test]
+fn trusted_argument_typing_uses_exact_arity_type_and_shared_passing_mode() {
+    for call in [
+        "sensor_open(true)",
+        "sensor_read()",
+        "sensor_read(true)",
+        "sensor_read(sensor)",
+    ] {
+        let source =
+            format!("fn bad(sensor:Sensor)effects io{{let ignored={call};}} fn demo(){{}}");
+        let message = rejected(&source, Grants::ALL);
+        assert!(
+            message.contains("argument") || message.contains("type"),
+            "{message}"
+        );
+    }
+}
+
+#[test]
+fn trusted_result_and_error_payloads_keep_nominal_identity_and_literal_rules() {
+    assert!(!rejected("type Same=range 0..4095;fn bad(sensor:&Sensor)->Result<success:Same,failure:SensorError>effects io{return sensor_read(sensor);}fn demo(){}",Grants::ALL).is_empty());
+    assert!(rejected(
+        "fn demo()->Result<success:Reading,failure:SensorError>{return Error(2);}",
+        Grants::ALL
+    )
+    .contains("payload"));
+    prepare_execution_with_profile("fn code()->SensorError{return 2;}fn demo()->Result<success:Reading,failure:SensorError>{return Error(code());}",AdmissionLimits::default(),&selection(Grants::ALL)).unwrap();
+}
+
+#[test]
+fn trusted_io_contract_is_required_independently_of_operation_grants() {
+    let source="fn bad(sensor:&Sensor)->Result<success:Reading,failure:SensorError>{return sensor_read(sensor);}fn demo(){}";
+    assert!(rejected(source, Grants::ALL).contains("unadmitted effect `io`"));
+    let source = source.replace("SensorError>{", "SensorError>effects io{");
+    assert_eq!(
+        rejected(
+            &source,
+            Grants {
+                read: false,
+                ..Grants::ALL
+            }
+        ),
+        "trusted operation `sensor_read` is not granted"
+    );
+}
+
+#[test]
+fn trusted_shared_alias_calls_reuse_existing_loan_and_outcome_transactions() {
+    let source="fn twice(sensor:&Sensor)->Result<success:Reading,failure:SensorError>effects io{let first=sensor;let second=first;let a=sensor_read(first)or return;let b=sensor_read(second)or return;return Ok(a-b);}fn demo(){}";
+    prepare_execution_with_profile(source, AdmissionLimits::default(), &selection(Grants::ALL))
+        .unwrap();
+}
+
+#[test]
+fn receiving_call_holds_sensor_borrow_across_nested_trusted_arguments() {
+    let source="fn received(sensor:&Sensor,outcome:Result<success:Reading,failure:SensorError>)->bool{match outcome{Ok(value)=>{return true;}Error(problem)=>{return false;}}}fn bad(sensor:Sensor)->bool effects io{return received(&sensor,sensor_read(&sensor));}fn demo(){}";
+    prepare_execution_with_profile(source, AdmissionLimits::default(), &selection(Grants::ALL))
+        .unwrap();
+    let invalid="fn received(sensor:&Sensor,value:bool)->bool{return value;}fn take(sensor:Sensor)->bool effects io{return true;}fn bad(sensor:Sensor)->bool effects io{return received(&sensor,take(sensor));}fn demo(){}";
+    let message = rejected(invalid, Grants::ALL);
+    assert!(
+        message.contains("borrow") || message.contains("loan"),
+        "{message}"
+    );
+}
+
+#[test]
+fn trusted_result_cannot_be_discarded_or_left_as_an_unresolved_outcome() {
+    assert!(rejected(
+        "fn bad(sensor:&Sensor)effects io{sensor_read(sensor);}fn demo(){}",
+        Grants::ALL
+    )
+    .contains("cannot be discarded"));
+    assert!(rejected(
+        "fn bad(sensor:&Sensor)effects io{let ignored=sensor_read(sensor);}fn demo(){}",
+        Grants::ALL
+    )
+    .contains("unresolved Result outcome"));
+}
+
+#[test]
+fn trusted_calls_remain_excluded_from_verified_contracts_and_harness_authority() {
+    let source="type P=range 0..100;record Battery{charge:P}verified fn take(battery:&mut Battery,amount:P)requires sensor_open() ensures true {battery.charge-=amount;}fn demo(){}";
+    assert!(rejected(source, Grants::ALL).contains("trusted calls require an ordinary function"));
+}
+
+#[test]
+fn trusted_argument_destinations_are_canonical_and_never_parameter_ids() {
+    let p = program(SAMPLE, Grants::ALL);
+    let c = p.trusted.as_ref().unwrap();
+    let (m, _) = crate::mir::lower_with_origins(&p).unwrap();
+    let f = m.functions().first().unwrap();
+    let flow = f.temporaries.as_ref().unwrap();
+    assert!(flow.sites.iter().any(|s| s.destination
+        == crate::mir::temporaries::Destination::TrustedArgument(c.operations[1].id, 0)));
+    assert!(p.parameters.is_empty());
+    assert!(flow.sites.iter().all(|s| !matches!(
+        s.destination,
+        crate::mir::temporaries::Destination::Parameter(_)
+    )));
+}
+
+#[test]
+fn trusted_call_approval_rejects_foreign_cleanup_only_type_and_arity_mutations() {
+    let original = program(SAMPLE, Grants::ALL);
+    let foreign = program(SAMPLE, Grants::ALL).trusted.unwrap().operations[0].id;
+    for mutation in 0..4 {
+        let mut p = original.clone();
+        let cleanup = p.trusted.as_ref().unwrap().operations[2].id;
+        let f = match &mut p.functions[0] {
+            hir::Function::Ordinary(f) => f,
+            _ => unreachable!(),
+        };
+        let hir::ValueStatement::Let { initializer, .. } = &mut f.body[0] else {
+            unreachable!()
+        };
+        let hir::ExprKind::TrustedCall {
+            operation,
+            arguments,
+        } = &mut initializer.kind
+        else {
+            unreachable!()
+        };
+        match mutation {
+            0 => *operation = foreign,
+            1 => *operation = cleanup,
+            2 => initializer.ty = hir::ExprType::Bool,
+            _ => arguments.push(hir::TypedExpr {
+                kind: hir::ExprKind::BoolLiteral(true),
+                ty: hir::ExprType::Bool,
+                span: initializer.span,
+            }),
+        }
+        assert!(
+            p.validate_record_expressions().is_err(),
+            "mutation {mutation}"
+        );
+    }
+}
+
+#[test]
+fn trusted_propagation_cleanup_witnesses_come_from_residual_sensor_custody() {
+    let p = program(SAMPLE, Grants::ALL);
+    let c = p.trusted.as_ref().unwrap();
+    let sites = crate::ownership::analyze(&p).unwrap();
+    assert!(sites
+        .iter()
+        .any(|s| s.plan == hir::resources::CleanupType::Resource(c.sensor)));
+    assert!(sites.iter().all(|s| s.effects == c.resource.effects));
+    assert!(
+        sites.len() >= 2,
+        "read propagation failure and ordinary return both retire Sensor"
+    );
+}
+
+#[test]
+fn profile_convenience_execution_stops_before_entry_without_receipt_session() {
+    let e =
+        prepare_execution_with_profile(SAMPLE, AdmissionLimits::default(), &selection(Grants::ALL))
+            .unwrap();
+    let error = crate::execution::execute(
+        &e,
+        e.entry("demo").unwrap(),
+        crate::execution::ExecutionLimits::default(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.kind,
+        ErrorKind::Integrity("selected profile execution requires persistent session custody")
+    );
 }

@@ -171,6 +171,10 @@ pub(crate) struct ResolvedExpr {
 }
 #[derive(Debug)]
 pub(crate) enum ResolvedExprKind {
+    TrustedCall {
+        operation: hir::TrustedOperationId,
+        arguments: Vec<ResolvedExpr>,
+    },
     ResultConstruct {
         tag: hir::ResultTag,
         payload: Box<ResolvedExpr>,
@@ -318,6 +322,28 @@ fn resolve_with(
         }
         types.insert("Sensor");
         resolver.program.trusted = Some(catalog);
+        let sensor = resolver.program.trusted.as_ref().unwrap().sensor;
+        for success in [
+            hir::ValueType::Resource(sensor),
+            hir::ValueType::Range(RangeTypeId(0)),
+        ] {
+            resolver
+                .program
+                .intern_result(success, hir::ValueType::Range(RangeTypeId(1)))
+                .map_err(|failure| {
+                    let diagnostic = match failure {
+                        hir::results::AdmissionError::Source(message) => error(
+                            crate::bounded::START,
+                            message,
+                            "invalid compiler-supplied Result contract",
+                        ),
+                        hir::results::AdmissionError::Resource(failure) => {
+                            resolver.result_resource_error(failure)
+                        }
+                    };
+                    vec![*diagnostic]
+                })?;
+        }
     }
     for range in &ast.ranges {
         unreserved(&range.name, range.span).map_err(|e| vec![*e])?;
@@ -468,9 +494,11 @@ struct Resolver<'a> {
     bindings: HashMap<String, BindingId>,
 }
 impl Resolver<'_> {
-    // M1 admission resolves the exact catalog row. Invocation remains disabled
-    // until canonical calls, receipts and persistent sessions are implemented.
-    fn selected_call(&self, name: &str, span: Span) -> ResolutionResult<()> {
+    fn selected_call(
+        &self,
+        name: &str,
+        span: Span,
+    ) -> ResolutionResult<Option<hir::TrustedOperationId>> {
         if let Some(catalog) = &self.program.trusted {
             if let Some(op) = catalog.callable(name) {
                 if !catalog.granted(op.id)
@@ -479,14 +507,10 @@ impl Resolver<'_> {
                 {
                     return Err(error(span, format!("trusted operation `{name}` is not granted"), "the exact selected operation and its fixed cleanup-only release require authority"));
                 }
-                return Err(error(
-                    span,
-                    "trusted invocation is not enabled at this implementation milestone",
-                    "the selected canonical row has no ordinary-function fallback",
-                ));
+                return Ok(Some(op.id));
             }
         }
-        Ok(())
+        Ok(None)
     }
     fn result_resource_error(&self, failure: crate::bounded::ResourceFailure) -> Box<Diagnostic> {
         if let Some(context) = self.context {
@@ -938,7 +962,9 @@ impl Resolver<'_> {
                 },
                 ast::ValueStatement::ReturnNoValue { span } => ResolvedValueStatement::ReturnNoValue { span: *span },
                 ast::ValueStatement::CallNoValue { callee, arguments, span } => {
-                    self.selected_call(callee, *span)?;
+                    if self.selected_call(callee, *span)?.is_some() {
+                        return Err(error(*span, "trusted Result cannot be discarded as a no-value call", "bind or handle the exact Result outcome"));
+                    }
                     let function = self.functions.get(callee).copied().ok_or_else(|| error(*span, format!("unknown function `{callee}`"), "declare an ordinary function"))?;
                     if !self.ordinary[function.0] {
                         return Err(error(*span, "ordinary call statements require an ordinary no-value function", "verified functions retain their specialized call harness; mixed-assurance calls are unsupported"));
@@ -1136,7 +1162,13 @@ impl Resolver<'_> {
                 ResolvedExprKind::OldField(self.access(a, scope)?)
             }
             ast::ExprKind::Call { callee, arguments } => {
-                self.selected_call(callee, expression.span)?;
+                if let Some(operation) = self.selected_call(callee, expression.span)? {
+                    if scope.state.is_some() {
+                        return Err(error(expression.span, "trusted calls require an ordinary function", "verified contracts and bodies retain their specialized proof scope"));
+                    }
+                    let arguments = arguments.iter().map(|a| self.expression(a, scope, false)).collect::<ResolutionResult<Vec<_>>>()?;
+                    return Ok(ResolvedExpr { kind: ResolvedExprKind::TrustedCall { operation, arguments }, span: expression.span });
+                }
                 let function = self.functions.get(callee).copied().ok_or_else(|| error(expression.span, format!("unknown function `{callee}`"), "declare an ordinary value function"))?;
                 if scope.state.is_some() || !self.ordinary[function.0] {
                     return Err(error(expression.span, "call expressions are supported only between ordinary value functions", "verified contracts/body expressions cannot call functions; mixed-assurance call rules remain open"));

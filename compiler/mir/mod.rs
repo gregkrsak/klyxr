@@ -272,7 +272,7 @@ impl MirFunction {
                 }
                 hir::ExprKind::IfValue { .. } => return Err("conditional value must lower to control flow".into()),
                 hir::ExprKind::RecordConstruct { fields, .. } => { for entry in fields { expression_valid(&entry.value)?; } },
-                hir::ExprKind::Call { arguments, .. } => for argument in arguments { expression_valid(argument)?; },
+                hir::ExprKind::Call { arguments, .. } | hir::ExprKind::TrustedCall { arguments, .. } => for argument in arguments { expression_valid(argument)?; },
                 hir::ExprKind::Unary { operand, .. } => expression_valid(operand)?,
                 hir::ExprKind::Binary { left, right, .. } => { expression_valid(left)?; expression_valid(right)?; },
                 hir::ExprKind::FieldAccess(_) | hir::ExprKind::OldField(_) => return Err("verified-state or residual projection representation is ineligible in ordinary MIR".into()),
@@ -460,7 +460,11 @@ pub(crate) fn lower_with_origins(
         .functions()
         .iter()
         .filter_map(|f| f.as_ordinary())
-        .filter(|_| plans.iter().any(Option::is_some) || !program.result_types().is_empty())
+        .filter(|_| {
+            plans.iter().any(Option::is_some)
+                || !program.result_types().is_empty()
+                || program.trusted.is_some()
+        })
     {
         #[cfg(test)]
         temporaries::allocation()?;

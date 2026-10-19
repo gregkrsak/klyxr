@@ -309,7 +309,8 @@ impl Catalog {
     }
     fn temporaries(&self, p: &Program, plans: &[Option<CleanupPlan>]) -> Result<(), &'static str> {
         fn bearing(e: &TypedExpr, plans: &[Option<CleanupPlan>]) -> bool {
-            matches!(e.ty,ExprType::Record(id) if plans.get(id.0).is_some_and(Option::is_some))
+            matches!(e.ty, ExprType::Resource(_))
+                || matches!(e.ty,ExprType::Record(id) if plans.get(id.0).is_some_and(Option::is_some))
         }
         fn expression(
             e: &TypedExpr,
@@ -340,7 +341,7 @@ impl Catalog {
                         expression(&f.value, plans, leaves, true)?;
                     }
                 }
-                ExprKind::Call { arguments, .. } => {
+                ExprKind::Call { arguments, .. } | ExprKind::TrustedCall { arguments, .. } => {
                     for a in arguments {
                         expression(a, plans, leaves, true)?;
                     }
@@ -591,7 +592,7 @@ pub(crate) fn fixture_with(extra: &str) -> Program {
             }
             ExprKind::CopyFieldRead { field: id, .. }
             | ExprKind::CopyReferenceFieldRead { field: id, .. } => field(id),
-            ExprKind::Call { arguments, .. } => {
+            ExprKind::Call { arguments, .. } | ExprKind::TrustedCall { arguments, .. } => {
                 for a in arguments {
                     expression(a);
                 }

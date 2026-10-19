@@ -42,6 +42,7 @@ pub(crate) enum Destination {
     Condition,
     NoValue(FunctionId),
     Parameter(ParameterId),
+    TrustedArgument(hir::TrustedOperationId, usize),
     Pending(RecordId, FieldId),
     Operand,
 }
@@ -123,7 +124,9 @@ impl Flow {
             return true;
         }
         match &e.kind {
-            ExprKind::Call { arguments, .. } => arguments.iter().any(|e| Self::bearing(e, plans)),
+            ExprKind::Call { arguments, .. } | ExprKind::TrustedCall { arguments, .. } => {
+                arguments.iter().any(|e| Self::bearing(e, plans))
+            }
             ExprKind::RecordConstruct { fields, .. } => {
                 fields.iter().any(|f| Self::bearing(&f.value, plans))
             }
@@ -229,7 +232,9 @@ impl Flow {
         let mut children = Vec::new();
         let count = match &e.kind {
             ExprKind::ResultConstruct { .. } => 1,
-            ExprKind::Call { arguments, .. } => arguments.len(),
+            ExprKind::Call { arguments, .. } | ExprKind::TrustedCall { arguments, .. } => {
+                arguments.len()
+            }
             ExprKind::RecordConstruct { fields, .. } => fields.len(),
             ExprKind::IfValue { .. } => 3,
             ExprKind::Unary { .. } => 1,
@@ -272,6 +277,20 @@ impl Flow {
                         e,
                         region,
                         Destination::Parameter(*parameter),
+                        plans,
+                    )?);
+                }
+            }
+            ExprKind::TrustedCall {
+                operation,
+                arguments,
+            } => {
+                for (index, e) in arguments.iter().enumerate() {
+                    children.push(self.expression(
+                        p,
+                        e,
+                        region,
+                        Destination::TrustedArgument(*operation, index),
                         plans,
                     )?);
                 }

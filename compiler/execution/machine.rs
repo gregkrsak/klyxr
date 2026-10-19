@@ -1021,6 +1021,11 @@ impl<'a> Machine<'a> {
                 )?;
                 self.operands(frame, fields.iter().map(|f| &f.value), depth + 1)?;
             }
+            ExprKind::TrustedCall { .. } => {
+                return Err(self.integrity(
+                    "trusted dispatch requires receipt and persistent session custody",
+                ));
+            }
             ExprKind::Call {
                 function,
                 arguments,

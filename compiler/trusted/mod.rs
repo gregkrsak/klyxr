@@ -134,6 +134,14 @@ pub(crate) enum Passing {
     Shared(ResourceTypeId),
     Owned(ResourceTypeId),
 }
+impl Passing {
+    pub(crate) fn value_type(self) -> hir::ValueType {
+        match self {
+            Self::Shared(id) => hir::ValueType::SharedRef(hir::ReferentType::Resource(id)),
+            Self::Owned(id) => hir::ValueType::Resource(id),
+        }
+    }
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Resource {
     pub id: ResourceTypeId,
@@ -150,6 +158,7 @@ pub(crate) struct Operation {
     pub parameter: Option<Passing>,
     pub success: Option<Payload>,
     pub failure: Option<RangeTypeId>,
+    pub result: Option<hir::ResultTypeId>,
     pub effects: EffectSet,
     pub class: OperationClass,
     pub binding: Binding,
@@ -196,6 +205,7 @@ impl Catalog {
             parameter,
             success,
             failure,
+            result: (index < 2).then_some(hir::ResultTypeId(index)),
             effects,
             class,
             binding,
@@ -264,6 +274,9 @@ impl Catalog {
         self.operations
             .iter()
             .find(|op| op.source_name == Some(name))
+    }
+    pub(crate) fn operation(&self, id: TrustedOperationId) -> Option<&Operation> {
+        self.operations.iter().find(|op| op.id == id)
     }
     pub(crate) fn granted(&self, id: TrustedOperationId) -> bool {
         self.operations
@@ -349,6 +362,7 @@ impl Catalog {
                 || op.parameter != parameter
                 || op.success != success
                 || op.failure != failure
+                || op.result != (index < 2).then_some(hir::ResultTypeId(index))
                 || op.class != class
                 || op.binding != binding
                 || op.resource != self.sensor
@@ -356,6 +370,18 @@ impl Catalog {
                 || op.origin != self.origin(index + 3)
             {
                 return Err("altered trusted operation descriptor");
+            }
+            if let Some(result) = op.result {
+                let success = match op.success {
+                    Some(Payload::Sensor(id)) => hir::ValueType::Resource(id),
+                    Some(Payload::Range(id)) => hir::ValueType::Range(id),
+                    None => return Err("trusted Result without success contract"),
+                };
+                if program.result_type(result).map(|r| (r.success, r.failure))
+                    != Some((success, hir::ValueType::Range(self.error)))
+                {
+                    return Err("altered trusted Result contract");
+                }
             }
         }
         // No other catalog is selected; a foreign origin cannot hide in an

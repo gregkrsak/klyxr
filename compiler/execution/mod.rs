@@ -697,6 +697,11 @@ pub fn execute(
             ));
         }
     }
+    if executable.program.trusted.is_some() {
+        return Err(ExecutionError::integrity(
+            "selected profile execution requires persistent session custody",
+        ));
+    }
     machine::Machine::new(executable, limits).run(entry)
 }
 
@@ -1031,7 +1036,7 @@ mod effect_authority_tests {
                 }
                 6 => sites[0].origin.start += 1,
                 7 => sites[0].ordinal += 10,
-                _ => sites[0].callee = FunctionId(1),
+                _ => sites[0].callee = crate::effects::calls::Callee::Source(FunctionId(1)),
             }
             assert!(e.validate().is_err(), "mutation {mutation}");
         }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reconcile one complete Cargo profile against the exact KED-032 predecessor."""
+"""Reconcile one complete Cargo profile against the exact KED-033 predecessor."""
 import json
 from pathlib import Path
 import re

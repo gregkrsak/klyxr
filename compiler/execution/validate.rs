@@ -227,6 +227,30 @@ pub(super) fn expression(
                 expression(p, f, &item.value, c, depth + 1, ordinary, false)?;
             }
         }
+        ExprKind::TrustedCall {
+            operation,
+            arguments,
+        } => {
+            let catalog = p.trusted.as_ref().ok_or_else(bad)?;
+            let op = catalog
+                .operation(*operation)
+                .filter(|op| op.source_name.is_some() && catalog.granted(op.id))
+                .ok_or_else(bad)?;
+            if !ordinary
+                || op.result.map(ExprType::Result) != Some(e.ty)
+                || arguments.len() != usize::from(op.parameter.is_some())
+                || (op.class == crate::trusted::OperationClass::Acquisition
+                    && !catalog.granted(catalog.resource.release))
+            {
+                return Err(bad());
+            }
+            for argument in arguments {
+                if Some(argument.ty) != op.parameter.map(|p| ExprType::from(p.value_type())) {
+                    return Err(bad());
+                }
+                expression(p, f, argument, c, depth + 1, true, false)?;
+            }
+        }
         ExprKind::Call {
             function,
             arguments,
@@ -655,13 +679,8 @@ pub(super) fn mir_shape(
             return Err(ResourceFailure::limit("direct effect sites", START).into());
         }
         for site in &f.direct_effects {
-            let callee = p
-                .functions()
-                .get(site.callee.0)
-                .filter(|f| f.id() == site.callee)
-                .and_then(|f| f.as_ordinary())
-                .ok_or_else(bad)?;
-            if site.function != f.function() || site.effects != callee.effects.set() {
+            let contract = site.callee.effects(p).ok_or_else(bad)?;
+            if site.function != f.function() || site.effects != contract {
                 return Err(bad());
             }
         }

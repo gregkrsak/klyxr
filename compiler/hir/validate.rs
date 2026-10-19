@@ -495,6 +495,35 @@ impl Program {
                 self.record_expression(function, then_value, ordinary, true)?;
                 self.record_expression(function, else_value, ordinary, true)?;
             }
+            ExprKind::TrustedCall {
+                operation,
+                arguments,
+            } => {
+                let catalog = self
+                    .trusted
+                    .as_ref()
+                    .ok_or_else(|| invalid("trusted call without selected catalog"))?;
+                let op = catalog
+                    .operation(*operation)
+                    .filter(|op| op.source_name.is_some() && catalog.granted(op.id))
+                    .ok_or_else(|| invalid("foreign, denied or cleanup-only trusted target"))?;
+                if !ordinary
+                    || op.result.map(ExprType::Result) != Some(expression.ty)
+                    || arguments.len() != usize::from(op.parameter.is_some())
+                    || (op.class == crate::trusted::OperationClass::Acquisition
+                        && !catalog.granted(catalog.resource.release))
+                {
+                    return Err(invalid(
+                        "trusted call signature or release authority mismatch",
+                    ));
+                }
+                for argument in arguments {
+                    if Some(argument.ty) != op.parameter.map(|p| ExprType::from(p.value_type())) {
+                        return Err(invalid("trusted argument type or passing mode mismatch"));
+                    }
+                    self.record_expression(function, argument, true, false)?;
+                }
+            }
             ExprKind::Call { arguments, .. } => {
                 for argument in arguments {
                     self.record_expression(function, argument, ordinary, false)?;

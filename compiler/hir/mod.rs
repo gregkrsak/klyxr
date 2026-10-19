@@ -187,6 +187,10 @@ pub struct RecordFieldInit {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprKind {
+    TrustedCall {
+        operation: TrustedOperationId,
+        arguments: Vec<TypedExpr>,
+    },
     ResultConstruct {
         result: ResultTypeId,
         tag: ResultTag,

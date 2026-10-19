@@ -143,28 +143,47 @@ fn call_arguments(
     arguments: &[ResolvedExpr],
     span: crate::lexer::Span,
 ) -> TypeResult<Vec<TypedExpr>> {
-    if arguments.len() != callee.parameters.len() {
+    value_arguments(
+        program,
+        functions,
+        arguments,
+        callee.parameters.len(),
+        &callee.name,
+        span,
+        |index| {
+            let ParameterType::Value(expected) = program.parameter(callee.parameters[index]).ty
+            else {
+                return Err(Diagnostic::semantic(
+                    span,
+                    "invalid ordinary parameter type",
+                    "ordinary signatures require bool, named ranges, or records",
+                )
+                .into());
+            };
+            Ok(expected)
+        },
+    )
+}
+fn value_arguments(
+    program: &Program,
+    functions: &[ResolvedFunction],
+    arguments: &[ResolvedExpr],
+    arity: usize,
+    name: &str,
+    span: crate::lexer::Span,
+    mut expected: impl FnMut(usize) -> TypeResult<ValueType>,
+) -> TypeResult<Vec<TypedExpr>> {
+    if arguments.len() != arity {
         return Err(Diagnostic::semantic(
             span,
-            format!("wrong argument count for `{}`", callee.name),
-            format!(
-                "expected {} arguments, found {}",
-                callee.parameters.len(),
-                arguments.len()
-            ),
+            format!("wrong argument count for `{name}`"),
+            format!("expected {} arguments, found {}", arity, arguments.len()),
         )
         .into());
     }
     let mut typed = Vec::new();
-    for (argument, parameter) in arguments.iter().zip(&callee.parameters) {
-        let ParameterType::Value(expected) = program.parameter(*parameter).ty else {
-            return Err(Diagnostic::semantic(
-                span,
-                "invalid ordinary parameter type",
-                "ordinary signatures require bool, named ranges, or records",
-            )
-            .into());
-        };
+    for (index, argument) in arguments.iter().enumerate() {
+        let expected = expected(index)?;
         let argument = check_value(program, functions, argument, expected, "call argument")?;
         typed.push(argument);
     }
@@ -1072,6 +1091,13 @@ fn expression(
                 },
                 ty,
             )
+        }
+        ResolvedExprKind::TrustedCall { operation, arguments } => {
+            let catalog = program.trusted.as_ref().expect("resolved selected catalog");
+            let op = catalog.operation(*operation).expect("resolved trusted operation");
+            let name = op.source_name.expect("resolved source-callable operation");
+            let typed = value_arguments(program, functions, arguments, usize::from(op.parameter.is_some()), name, span, |_| Ok(op.parameter.expect("checked trusted arity").value_type()))?;
+            (ExprKind::TrustedCall { operation: *operation, arguments: typed }, ExprType::Result(op.result.expect("source-callable trusted Result")))
         }
         ResolvedExprKind::FieldAccess(access) => {
             let ty = ExprType::Range(access.ty);

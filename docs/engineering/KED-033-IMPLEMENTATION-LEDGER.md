@@ -115,8 +115,8 @@ Each row requires independent controls, not one compound corrupted artifact.
 ## Milestone status
 
 M0: baseline and branch established; ledger created before semantic changes.
-M1 and M2: catalog/range/origin admission and canonical Resource eligibility are
-implemented; milestone validation below. M3-M9 remain pending. No KED-033 invocation path is enabled at
+M1-M3: catalog admission, canonical Resource eligibility and trusted-call typing
+are implemented; milestone validation below. M4-M9 remain pending. No KED-033 invocation path is enabled at
 this checkpoint. In particular selected trusted calls still reject explicitly;
 they cannot route to an ordinary function or fixture before M5.
 
@@ -238,6 +238,61 @@ validator for shared Resource referents and checking foreign Resource interfaces
 at the typed-HIR publication boundary rather than adding type inference to the
 ownership checker. No frozen source behavior was revised. M3-M9, actual trusted
 calls/receipts/binding, structural audit and independent acceptance remain open.
+
+### M2 published checkpoint
+
+Commit `243b79b2ca43e85260cbac54e5dd7cec8b0c606c`, tree
+`4abc931ff7e2ca6d5e2eeb50d3677b370f05d4f6`. All four push workflows and every
+job/step passed:
+
+| Workflow | Run | Job |
+| --- | --- | --- |
+| build | [39192143108](https://github.com/gregkrsak/klyxr/actions/runs/39192143108) | 117867064199 |
+| tests | [39192143077](https://github.com/gregkrsak/klyxr/actions/runs/39192143077) | 117867064472 |
+| verify | [39192143109](https://github.com/gregkrsak/klyxr/actions/runs/39192143109) | 117867066174 |
+| docs | [39192143093](https://github.com/gregkrsak/klyxr/actions/runs/39192143093) | 117867064306 |
+
+[Issue progress record](https://github.com/gregkrsak/klyxr/issues/78#issuecomment-6258673128).
+
+### M3 implementation details and evidence
+
+The defining source now prepares through an early canonical catalog, exact
+imported Result contracts, distinct resolved/HIR TrustedCall nodes and typed
+trusted argument destinations. No source functions or ParameterIds stand in for
+trusted operations. The fixed source-callable operation contracts are canonical
+Result rows collected before ordinary signatures, including unused/denied rows.
+
+Source and trusted calls share argument checking and the existing loan-hold
+transaction. All finite-use/reference-use visitors, temporary child traversal,
+MIR validation and HIR publication traverse the new node. The existing direct
+effect collector has a tagged canonical callee; catalog io is checked independently
+of grants and contributes its complete contract. Catalog diagnostics cite catalog
+origins, never an invented source declaration. Cleanup effects remain the same
+successful residual-custody product, including read propagation failure and the
+ordinary protected return.
+
+Twelve additions bring the KED-033 inventory to 37. They establish exact trusted
+typing, no ordinary stubs/fake parameters, nominal Result payloads, unchanged
+constructor literal rules, independent effects/grants, shared aliases and nested
+receiving-call holds, no discarded/unresolved outcome, verified-scope exclusion,
+typed MIR destinations and independent foreign/cleanup-only/type/arity mutations.
+No fixture invocation is used for these preparation witnesses. The consuming
+public convenience executor rejects profile artifacts before machine entry;
+profile execution must use the future persistent session. The runtime TrustedCall
+arm also rejects explicitly, with no ordinary or host fallback.
+
+The complete local M3 gate passed: **1,912 exact debug identities and 1,912
+release identities**, all 1,875 predecessors, authority doctest, both 1,800-case
+affine checks, checking/fmt/Clippy/Rustdoc, CLI/examples/rejection diagnostics,
+assets/scaffold, byte-identical context and diff integrity. Numeric protocol
+oracles remain unchanged. An existing malformed Source-callee fixture receives
+only its typed Source wrapper. New test-development corrections used the genuine
+fallible MIR lowering seam for temporary metadata and matched the existing
+Result-payload diagnostic; neither production semantics nor old expectations
+were changed.
+
+M4 exact invocation/root/runtime-binding approval and M5 joint receipt/session
+custody are still required before any deterministic or external acquisition.
 
 Future entries must record meaningful changes, validation and exact remote evidence,
 ordinary development corrections, any K33-I escalation, predecessor adaptations,

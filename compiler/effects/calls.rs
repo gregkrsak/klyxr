@@ -6,11 +6,41 @@ use crate::{
     lexer::Span,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Callee {
+    Source(FunctionId),
+    Trusted(crate::hir::TrustedOperationId),
+}
+impl Callee {
+    pub(crate) fn effects(self, program: &Program) -> Option<EffectSet> {
+        match self {
+            Self::Source(id) => program
+                .functions()
+                .get(id.0)
+                .filter(|f| f.id() == id)
+                .and_then(|f| f.as_ordinary())
+                .map(|f| f.effects.set()),
+            Self::Trusted(id) => {
+                let catalog = program.trusted.as_ref()?;
+                catalog
+                    .operation(id)
+                    .filter(|op| {
+                        op.source_name.is_some()
+                            && catalog.granted(id)
+                            && (op.class != crate::trusted::OperationClass::Acquisition
+                                || catalog.granted(catalog.resource.release))
+                    })
+                    .map(|op| op.effects)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CallSite {
     pub(crate) ordinal: usize,
     pub(crate) function: FunctionId,
-    pub(crate) callee: FunctionId,
+    pub(crate) callee: Callee,
     pub(crate) effects: EffectSet,
     pub(crate) origin: Span,
 }
@@ -31,20 +61,18 @@ thread_local! {
 }
 
 impl Collector<'_> {
-    fn call(&mut self, callee: FunctionId, origin: Span, arguments: &[TypedExpr]) {
+    fn call(&mut self, callee: Callee, origin: Span, arguments: &[TypedExpr]) {
         let ordinal = self.ordinal;
         self.ordinal += 1;
-        let contract = self
-            .program
-            .function(callee)
-            .as_ordinary()
-            .expect("typed ordinary callee");
-        if contract.effects.set() != EffectSet::EMPTY {
+        let contract = callee
+            .effects(self.program)
+            .expect("validated canonical call target");
+        if contract != EffectSet::EMPTY {
             let site = CallSite {
                 ordinal,
                 function: self.function,
                 callee,
-                effects: contract.effects.set(),
+                effects: contract,
                 origin,
             };
             if self.checking {
@@ -90,8 +118,12 @@ impl Collector<'_> {
                 function,
                 arguments,
             } => {
-                self.call(*function, expression.span, arguments);
+                self.call(Callee::Source(*function), expression.span, arguments);
             }
+            ExprKind::TrustedCall {
+                operation,
+                arguments,
+            } => self.call(Callee::Trusted(*operation), expression.span, arguments),
             ExprKind::RecordConstruct { fields, .. } => {
                 for field in fields {
                     self.expression(&field.value);
@@ -134,7 +166,7 @@ impl Collector<'_> {
                     arguments,
                     span,
                 } => {
-                    self.call(*function, *span, arguments);
+                    self.call(Callee::Source(*function), *span, arguments);
                 }
                 ValueStatement::Let { initializer, .. } => self.expression(initializer),
                 ValueStatement::Assign { value, .. }
@@ -201,8 +233,23 @@ pub(crate) fn check(program: &Program) -> Result<(), Vec<Diagnostic>> {
         };
         collector.statements(&function.body);
         if let Some(site) = collector.violation {
+            if let Callee::Trusted(id) = site.callee {
+                let catalog = program.trusted.as_ref().expect("checked selected catalog");
+                let op = catalog.operation(id).expect("checked trusted call");
+                let missing = site
+                    .effects
+                    .iter()
+                    .find(|e| !function.effects.set().contains(*e))
+                    .unwrap();
+                return Err(vec![Diagnostic::semantic(site.origin,
+                    format!("unadmitted effect `{}` in `{}`: trusted call to `{}` uses its complete canonical contract (catalog {} row {}; no source declaration)",missing.name(),function.name,op.source_name.unwrap(),crate::trusted::CATALOG,op.origin.row),
+                    "admit the complete operation effect set; profile grants do not replace source effects")]);
+            }
+            let Callee::Source(id) = site.callee else {
+                unreachable!()
+            };
             let callee = program
-                .function(site.callee)
+                .function(id)
                 .as_ordinary()
                 .expect("typed ordinary callee");
             let missing = site
