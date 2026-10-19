@@ -3,6 +3,7 @@ use super::*;
 use crate::trusted::approval::CompletionPhase;
 
 pub(super) struct Pending {
+    pub(super) frame: u64,
     pub(super) invocation: u64,
     pub(super) plan: usize,
     pub(super) input: temporaries::OwnerId,
@@ -35,6 +36,20 @@ impl<'a> Machine<'a> {
         let pending = self.trusted.as_mut().unwrap().completion.as_mut().unwrap();
         pending.value = Some(value);
         pending.phase = CompletionPhase::Consumed;
+        #[cfg(test)]
+        {
+            let state = self.trusted.as_mut().unwrap();
+            let pending = state.completion.as_mut().unwrap();
+            if let Some((fault, _)) = state.fault.filter(|(_, at)| *at == pending.invocation) {
+                match fault {
+                    Fault::CompletionTicket => { if let Some(Value::Resource { identity, .. }) = pending.value.as_mut() { *identity = u64::MAX; } }
+                    Fault::CompletionRealm => { state.entries.iter_mut().find_map(|entry| entry.token.as_mut()).unwrap().realm += 1; }
+                    Fault::CompletionIdentity => pending.invocation += 1,
+                    Fault::CompletionFrame => pending.frame = u64::MAX,
+                    _ => {}
+                }
+            }
+        }
         self.task(
             frame,
             self.origin,
@@ -62,7 +77,9 @@ impl<'a> Machine<'a> {
             .catalog
             .operation(plan.operation)
             .ok_or_else(|| self.integrity("foreign completion operation"))?;
-        if pending.phase != CompletionPhase::Consumed
+        if pending.frame != frame
+            || plan.completion.as_ref().map(|p| p.events) != Some(crate::trusted::approval::CompletionEvent::PROTOCOL)
+            || pending.phase != CompletionPhase::Consumed
             || pending.invocation != state.next_invocation
             || !matches!(pending.value, Some(Value::Resource{ty, identity}) if ty == approved.catalog.sensor && identity == pending.sensor)
             || operation.binding != Binding::SensorFinishV1
@@ -140,6 +157,7 @@ impl<'a> Machine<'a> {
                     }));
                 }
                 Fault::WrongInvocation => receipt.plan = usize::MAX,
+                Fault::CompletionErrorTwo => { receipt.tag = 1; receipt.payload = Some(Payload::Range(RangeValue {ty: approved.catalog.error, value: 2})); }
                 _ => {}
             }
         }
@@ -157,6 +175,7 @@ impl<'a> Machine<'a> {
         let ticket = state.completion.as_mut().unwrap().ticket.take().unwrap();
         let owner = ticket.owner;
         state.productions.push(Production {
+            realm: state.realm,
             cell: owner,
             plan: plan.ordinal,
             invocation,
@@ -178,6 +197,17 @@ impl<'a> Machine<'a> {
         pending.phase = CompletionPhase::OutcomeProtected;
         state.events.push(Event::FinishProtected(invocation, tag));
         pending.phase = CompletionPhase::ReleasePending;
+        #[cfg(test)]
+        if let Some((fault, _)) = state.fault.filter(|(_, at)| *at == invocation) {
+            match fault {
+                Fault::ProtectedTag => self.results.as_mut().unwrap().cells[owner.0].tag = 255,
+                Fault::ProtectedPayload => { if let Some(Value::Public(RuntimeValue::Range(value))) = self.results.as_mut().unwrap().cells[owner.0].payload.as_mut() { value.value = 2; } }
+                Fault::ProtectedRealm => state.productions.last_mut().unwrap().realm += 1,
+                Fault::ProtectedIdentity => state.productions.last_mut().unwrap().invocation = 0,
+                Fault::ProtectedReceiver => pending.protected = Some(results::OwnerId(0)),
+                _ => {}
+            }
+        }
         #[cfg(test)]
         if state.fault == Some((Fault::AfterReceiptHost, invocation)) {
             return Err(self.failure(ErrorKind::Host("injected trusted receipt boundary")));
@@ -226,6 +256,7 @@ impl<'a> Machine<'a> {
 
     pub(in crate::execution::machine) fn completion_release(
         &mut self,
+        frame: u64,
     ) -> Result<(), ExecutionError> {
         self.charge()?;
         let state = self.trusted.as_ref().unwrap();
@@ -233,7 +264,7 @@ impl<'a> Machine<'a> {
             .completion
             .as_ref()
             .ok_or_else(|| self.integrity("missing completion release continuation"))?;
-        if pending.phase != CompletionPhase::ReleasePending || pending.value.is_none() {
+        if pending.frame != frame || pending.phase != CompletionPhase::ReleasePending || pending.value.is_none() {
             return Err(self.integrity("completion release continuation phase"));
         }
         self.completion_result_validate(
@@ -241,6 +272,9 @@ impl<'a> Machine<'a> {
                 .protected
                 .ok_or_else(|| self.integrity("completion release without protected outcome"))?,
         )?;
+        if !self.completion_cleanup_idle() {
+            return Err(self.integrity("completion release cursor already occupied"));
+        }
         let pending = self.trusted.as_mut().unwrap().completion.as_mut().unwrap();
         pending.phase = CompletionPhase::Releasing;
         let value = pending.value.take().unwrap();
@@ -259,6 +293,7 @@ impl<'a> Machine<'a> {
 
     pub(in crate::execution::machine) fn completion_deliver(
         &mut self,
+        frame: u64,
     ) -> Result<(), ExecutionError> {
         self.charge()?;
         let state = self.trusted.as_ref().unwrap();
@@ -266,7 +301,7 @@ impl<'a> Machine<'a> {
             .completion
             .as_ref()
             .ok_or_else(|| self.integrity("missing completion delivery continuation"))?;
-        if pending.phase != CompletionPhase::Released
+        if pending.frame != frame || pending.phase != CompletionPhase::Released
             || pending.value.is_some()
             || state.entries.iter().any(|entry| {
                 entry
@@ -392,6 +427,7 @@ impl<'a> Machine<'a> {
         self.reserve(0)?;
         let state = self.trusted.as_mut().unwrap();
         state.completion = Some(Pending {
+            frame,
             invocation: state.next_invocation,
             plan: index,
             input,

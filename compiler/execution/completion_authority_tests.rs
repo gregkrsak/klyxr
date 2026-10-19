@@ -192,3 +192,70 @@ fn completion_direct_and_cleanup_effects_are_independently_sealed() {
         rejected(&changed);
     }
 }
+
+#[test]
+fn m6_each_completion_event_identity_is_sealed_even_across_all_authority_copies() {
+    use crate::trusted::approval::CompletionEvent;
+    for index in 0..4 {
+        let mut e = artifact();
+        let plan = e.trusted.as_mut().unwrap().invocations.iter_mut().find_map(|i| i.completion.as_mut()).unwrap();
+        plan.events[index] = CompletionEvent::PROTOCOL[(index+1)%4];
+        let approved = Rc::new(Approval {
+            outcomes: e.approval.outcomes.clone(), program:e.approval.program.clone(),
+            cleanup_sites:e.approval.cleanup_sites.clone(), domain:e.approval.domain.clone(), trusted:e.trusted.clone(),
+        });
+        e.approval=approved.clone();e.mir_approval=approved.clone();e.origin_approval=approved;
+        rejected(&e);
+    }
+}
+
+#[test]
+fn m6_finish_specific_catalog_binding_type_subset_effect_grant_origin_and_root_matrix() {
+    for mutation in 0..20 {
+        let mut e=artifact();
+        let t=e.trusted.as_mut().unwrap();
+        match mutation {
+            0=>t.catalog.operations[3].id=t.catalog.operations[1].id,
+            1=>t.catalog.operations[3].binding=crate::trusted::Binding::SensorReadV1,
+            2=>t.catalog_identity="foreign",
+            3=>t.profile_identity="foreign",
+            4=>t.compiler="foreign",
+            5=>t.target="foreign",
+            6=>t.catalog.operations[3].parameter=Some(crate::trusted::Passing::Shared(t.catalog.sensor)),
+            7=>t.catalog.operations[3].success=Some(crate::trusted::Payload::Range(t.catalog.reading)),
+            8=>t.catalog.operations[3].failure=Some(t.catalog.finish_receipt),
+            9=>t.catalog.operations[3].result=t.catalog.operations[1].result,
+            10=>t.catalog.operations[3].errors|=0b10,
+            11=>t.catalog.operations[3].effects=crate::effects::EffectSet::EMPTY,
+            12=>t.catalog.resource.effects=crate::effects::EffectSet::EMPTY,
+            13|14=>{let grants=Grants{finish:mutation!=13,release:mutation!=14,..Grants::ALL};t.catalog.selection=Selection::sensor_demo(Scenario::Sample,grants,&["demo"]).unwrap();}
+            15=>t.catalog.resource.release=t.catalog.operations[3].id,
+            16=>t.catalog.operations[3].origin.row+=1,
+            17=>t.ranges[2].id=t.ranges[0].id,
+            18=>t.roots[0]=FunctionId(0),
+            _=>t.edges.clear(),
+        }
+        rejected(&e);
+        assert!(ExecutionSession::new(&e,FunctionId(1),ExecutionLimits::default()).is_err());
+    }
+}
+
+#[test]
+fn m6_invocation_argument_order_arity_result_source_mir_and_catalog_origins_reject() {
+    for mutation in 0..9 {
+        let mut e=artifact();
+        let invocation=e.trusted.as_mut().unwrap().invocations.iter_mut().find(|i|i.completion.is_some()).unwrap();
+        match mutation {
+            0=>invocation.arguments.push(invocation.arguments[0]),
+            1=>invocation.arguments.clear(),
+            2=>invocation.arguments[0].0+=1,
+            3=>invocation.function=FunctionId(0),
+            4=>invocation.block=mir::BasicBlockId(999),
+            5=>invocation.statement+=1,
+            6=>invocation.source.start+=1,
+            7=>invocation.catalog.row+=1,
+            _=>invocation.completion.as_mut().unwrap().delivery.kind=mir::OriginKind::FunctionBoundary,
+        }
+        rejected(&e);
+    }
+}

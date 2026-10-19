@@ -78,6 +78,17 @@ pub(crate) struct CompletionHolder(pub SiteId);
 pub(crate) struct ProtectedOutcome(pub SiteId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CompletionEvent {
+    Attempt,
+    Success,
+    ReleaseAttempt,
+    ReleaseComplete,
+}
+impl CompletionEvent {
+    pub(crate) const PROTOCOL: [Self; 4] = [Self::Attempt, Self::Success, Self::ReleaseAttempt, Self::ReleaseComplete];
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CompletionPhase {
     Reserved,
     Consumed,
@@ -106,6 +117,7 @@ impl CompletionPhase {
 /// This is derived MIR correspondence, not another ownership analysis.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CompletionPlan {
+    pub events: [CompletionEvent; 4],
     pub input: SiteId,
     pub holder: CompletionHolder,
     pub protected: ProtectedOutcome,
@@ -345,6 +357,7 @@ impl Approved {
                     || !self.catalog.granted(plan.release)
                     || plan.destination != invocation.destination
                     || plan.phases != CompletionPhase::PROTOCOL
+                    || plan.events != CompletionEvent::PROTOCOL
                 {
                     return Err(PlanError::Integrity(
                         "completion contract/holder/release protocol",
@@ -477,6 +490,7 @@ impl Collector<'_> {
                         ));
                     }
                     Some(CompletionPlan {
+                        events: CompletionEvent::PROTOCOL,
                         input: input.id,
                         holder: CompletionHolder(site.id),
                         protected: ProtectedOutcome(site.id),

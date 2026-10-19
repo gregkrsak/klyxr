@@ -124,7 +124,7 @@ Run/job pairs: 39317881855/118283983575, 39317881805/118283983117,
 39317874839/118283958364, 39317874808/118283958677,
 39317874705/118283957830, 39317874676/118283957652.
 
-## M5: source composition checkpoint (validation pending)
+## M5: source composition checkpoint (Actions verified)
 
 Thirteen source tests add the defining Sample, last shared use/live-handle
 rejection, owned helpers, relay temporaries and nested protected returns, both
@@ -135,6 +135,29 @@ verified-domain exclusion. Replacement/reinitialization remain forbidden under
 the existing Sensor destination policy; this is not a new replacement mechanism.
 The defining source and two discriminating rejection examples are retained.
 M5 must obtain complete exact-head workflow evidence before M6-M9 begins.
+
+M5 was preserved at `c0a95373fedaeafee7530ac7fd73ff23553ca938`, tree
+`3e026f4019402518b2e8cfb5f5b7ed4e68a64b9b`. All eight runs and every
+step passed. Push and PR debug/release independently reconciled 2,021 identities
+(all 1,981 predecessors + 40 additions), zero failures/ignores/filters/migrations.
+Complete inventory: [PR record](https://github.com/gregkrsak/klyxr/pull/83#issuecomment-6276550172)
+and [Issue record](https://github.com/gregkrsak/klyxr/issues/82#issuecomment-6276550481).
+Both records were retrieved and verified before M6 started. The new larger
+Result-argument fixture explicitly selects the existing supported admission
+storage maximum; production defaults and predecessor limits are unchanged.
+
+## M6: malformed authority and late runtime matrix (validation pending)
+
+The protocol seals four separate event identities in addition to its eight
+phases. Production provenance now includes session realm and exact fresh
+invocation identity; operation-specific payload contracts are independently
+revalidated, including coordinated protected-payload/provenance corruption.
+Runtime continuations bind the original frame and protected-cell association.
+Existing cleanup cursor vacancy is checked before transferring its pending
+ticket. Private static controls cover catalogs, bindings, types, effects, grants,
+origins, argument/site correspondence, event roles and roots. Private runtime
+controls cover actual ticket, realm, fresh identity, frame, Error(2), protected
+tag/payload/realm/production/receiver while preserving the real prefix.
 
 ## Remaining gated milestones
 

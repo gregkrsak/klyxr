@@ -1323,8 +1323,8 @@ impl<'a> Machine<'a> {
         self.site = None;
         match task.action {
             Action::CompletionAttempt => self.completion_attempt(task.frame)?,
-            Action::CompletionRelease => self.completion_release()?,
-            Action::CompletionDeliver => self.completion_deliver()?,
+            Action::CompletionRelease => self.completion_release(task.frame)?,
+            Action::CompletionDeliver => self.completion_deliver(task.frame)?,
             Action::ResultRecordNext(id, fields, depth) => {
                 self.result_record_next(task.frame, id, fields, depth)?
             }
