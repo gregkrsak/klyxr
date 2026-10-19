@@ -30,7 +30,7 @@ M0 commit; the unpublished local candidate was aligned to its exact object.
 No shared history was rewritten. Local parallel and serial generated-artifact
 failures remain recorded separately and are not Klyxr nonconformance evidence.
 
-## M1: catalog and frontend (validation pending)
+## M1: catalog and frontend (Actions verified)
 
 The same closed catalog gains one owned completion operation, exact singleton
 FinishReceipt range, canonical Result and finish-only Error subset. Existing
@@ -44,7 +44,15 @@ guard at that runtime seam; no external finish operation is implemented or
 simulated. Twelve proposed regression identities cover the contract, source
 composition, independent denial/release grants, receipt status formation,
 nominal/literal/type rejection, direct effects, malformed unused descriptors
-and retained Sensor custody at disabled dispatch. Passing claims await CI.
+and retained Sensor custody at disabled dispatch. All eight Actions runs passed at `65f9b8344768019ecd4fc686f0b8bd5e9a920f34`
+(tree `0ae44bfa930dd87ada97aecb90f9c74a7eeda73d`). Push and PR logs
+reconcile 1,993 tests per profile: all 1,981 predecessors plus twelve additions,
+zero failed, ignored, filtered or migrated identities. Run/job inventory:
+39314892235/118273678532, 39314892259/118273679128,
+39314892229/118273679209, 39314892231/118273678841,
+39314885456/118273658747, 39314885521/118273660359,
+39314885486/118273660273, 39314885515/118273658103.
+All eight job conclusions and steps were inspected.
 
 The predecessor selected-range inventory assertion is extended from two to
 three and its loop now verifies all three imported ranges. All original
@@ -57,6 +65,18 @@ The new reconciler checks every one of the 1,981 frozen predecessor identities,
 all classified additions, zero failures/ignores/filters/migrations, the complete
 KED-033 evidence map and authority/affine identities. The workflow retains both
 complete unfiltered profiles. The staged manifest is not a completed M9 map.
+
+## M2: sealed checker and MIR correspondence (validation pending)
+
+The existing successful ownership consume path emits a distinct invocation
+cleanup holder. It is not a source Place and confers no move permission.
+The same cleanup-effect table carries the release obligation independently
+from the direct finish effect. Approval seals input and completion holders,
+protected outcome, fixed pair, grants, effects, all four continuation origins,
+and the ordered eight-phase protocol. Derivation requires exactly one real
+checker witness per completion and rejects orphan witnesses. Private controls
+mutate holder roles, protocol order, contracts, origins, all retained copies
+and cleanup witnesses at the opaque validation seam. Dispatch remains disabled.
 
 ## Remaining gated milestones
 

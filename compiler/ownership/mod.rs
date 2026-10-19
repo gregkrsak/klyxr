@@ -1969,6 +1969,13 @@ impl<'a> Checker<'a> {
                 self.held_arguments(arguments, |index| {
                     Transfer::TrustedArgument(*operation, index)
                 })?;
+                if self.program.trusted.as_ref().and_then(|c| c.operation(*operation))
+                    .is_some_and(|op| op.class == crate::trusted::OperationClass::Completion)
+                {
+                    if let Some(custody) = &mut self.cleanup_custody {
+                        custody.completion(*operation, expression.span);
+                    }
+                }
                 Ok(None)
             }
             ExprKind::Unary { operand, .. } => {

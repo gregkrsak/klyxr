@@ -27,7 +27,7 @@ impl Callee {
                     .filter(|op| {
                         op.source_name.is_some()
                             && catalog.granted(id)
-                            && (op.class != crate::trusted::OperationClass::Acquisition
+                            && (!matches!(op.class, crate::trusted::OperationClass::Acquisition | crate::trusted::OperationClass::Completion)
                                 || catalog.granted(catalog.resource.release))
                     })
                     .map(|op| op.effects)

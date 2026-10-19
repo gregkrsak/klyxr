@@ -317,7 +317,7 @@ impl CheckedExecutable {
             ));
         }
         if !self.approval.cleanup_sites.is_empty() {
-            let holders = self.program.locals.len() + self.program.parameters.len();
+            let holders = self.program.locals.len() + self.program.parameters.len() + usize::from(self.program.trusted.is_some());
             let nodes = c.resource_nodes.get() + self.program.functions.len() + holders;
             c.reserve_cleanup_effects(nodes, crate::effects::custody::holder_bound(&self.program))?;
             if self.approval.cleanup_sites.len() > nodes.saturating_mul(holders) {
@@ -783,6 +783,8 @@ mod result_admission_tests;
 mod tests;
 #[cfg(test)]
 mod trusted_authority_tests;
+#[cfg(test)]
+mod completion_authority_tests;
 mod validate;
 
 #[cfg(test)]

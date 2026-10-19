@@ -1,9 +1,9 @@
 {
-  "stage": "M1",
+  "stage": "M2",
   "baseline_commit": "372230df1d359b13d28f5c136130ac031507716a",
   "baseline_tree": "a646e9576a9b7650ff9a95275f1080b591d06986",
   "predecessor_count": 1981,
-  "expected_per_profile": 1993,
+  "expected_per_profile": 1999,
   "additions": [
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific",
     "lib.rs::trusted::completion_tests::finish_direct_and_relay_arguments_prepare_without_reference_coercion",
@@ -16,7 +16,13 @@
     "lib.rs::trusted::completion_tests::finish_rejects_reference_wrong_arity_and_unselected_payload",
     "lib.rs::trusted::completion_tests::finish_complete_direct_effect_is_required",
     "lib.rs::trusted::completion_tests::unused_finish_descriptor_and_error_subset_are_independently_validated",
-    "lib.rs::trusted::completion_tests::m1_completion_dispatch_is_disabled_and_retains_the_sensor"
+    "lib.rs::trusted::completion_tests::m1_completion_dispatch_is_disabled_and_retains_the_sensor",
+    "lib.rs::execution::completion_authority_tests::completion_checker_witness_names_invocation_without_a_source_place",
+    "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_holder_and_continuation_mutations",
+    "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_contract_and_pair_mutations",
+    "lib.rs::execution::completion_authority_tests::completion_all_authority_copies_still_require_exact_mir_derivation",
+    "lib.rs::execution::completion_authority_tests::completion_mir_cleanup_witness_omission_duplicate_wrong_holder_and_kind_reject",
+    "lib.rs::execution::completion_authority_tests::completion_direct_and_cleanup_effects_are_independently_sealed"
   ],
   "classifications": {
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific": "ordinary_source",
@@ -30,7 +36,13 @@
     "lib.rs::trusted::completion_tests::finish_rejects_reference_wrong_arity_and_unselected_payload": "ordinary_source",
     "lib.rs::trusted::completion_tests::finish_complete_direct_effect_is_required": "ordinary_source",
     "lib.rs::trusted::completion_tests::unused_finish_descriptor_and_error_subset_are_independently_validated": "private_malformed_authority",
-    "lib.rs::trusted::completion_tests::m1_completion_dispatch_is_disabled_and_retains_the_sensor": "trusted_boundary"
+    "lib.rs::trusted::completion_tests::m1_completion_dispatch_is_disabled_and_retains_the_sensor": "trusted_boundary",
+    "lib.rs::execution::completion_authority_tests::completion_checker_witness_names_invocation_without_a_source_place": "trusted_boundary",
+    "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_holder_and_continuation_mutations": "private_malformed_authority",
+    "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_contract_and_pair_mutations": "private_malformed_authority",
+    "lib.rs::execution::completion_authority_tests::completion_all_authority_copies_still_require_exact_mir_derivation": "private_malformed_authority",
+    "lib.rs::execution::completion_authority_tests::completion_mir_cleanup_witness_omission_duplicate_wrong_holder_and_kind_reject": "private_malformed_authority",
+    "lib.rs::execution::completion_authority_tests::completion_direct_and_cleanup_effects_are_independently_sealed": "trusted_boundary"
   },
   "migrations": {},
   "contract_corrections": [],
@@ -58,6 +70,14 @@
       "lib.rs::trusted::completion_tests::finish_complete_direct_effect_is_required",
       "lib.rs::trusted::completion_tests::unused_finish_descriptor_and_error_subset_are_independently_validated",
       "lib.rs::trusted::completion_tests::m1_completion_dispatch_is_disabled_and_retains_the_sensor"
+    ],
+    "M2": [
+      "lib.rs::execution::completion_authority_tests::completion_checker_witness_names_invocation_without_a_source_place",
+      "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_holder_and_continuation_mutations",
+      "lib.rs::execution::completion_authority_tests::completion_approval_rejects_independent_contract_and_pair_mutations",
+      "lib.rs::execution::completion_authority_tests::completion_all_authority_copies_still_require_exact_mir_derivation",
+      "lib.rs::execution::completion_authority_tests::completion_mir_cleanup_witness_omission_duplicate_wrong_holder_and_kind_reject",
+      "lib.rs::execution::completion_authority_tests::completion_direct_and_cleanup_effects_are_independently_sealed"
     ]
   },
   "authority_doctests": 1,

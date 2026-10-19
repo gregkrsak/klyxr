@@ -19,12 +19,25 @@ pub(crate) enum Kind {
     Continue,
     Iteration,
     Replacement,
+    CompletionRelease,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Holder {
+    Place(Place),
+    Invocation(crate::hir::TrustedOperationId),
+}
+
+impl PartialEq<Place> for Holder {
+    fn eq(&self, other: &Place) -> bool {
+        matches!(self, Self::Place(place) if place == other)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Site {
     pub(crate) function: FunctionId,
-    pub(crate) holder: Place,
+    pub(crate) holder: Holder,
     pub(crate) plan: CleanupType,
     pub(crate) effects: EffectSet,
     pub(crate) kind: Kind,
@@ -32,7 +45,7 @@ pub(crate) struct Site {
 }
 
 impl Site {
-    pub(crate) fn order(&self) -> (FunctionId, usize, usize, usize, usize, Kind, Place) {
+    pub(crate) fn order(&self) -> (FunctionId, usize, usize, usize, usize, Kind, Holder) {
         (
             self.function,
             self.origin.start,
@@ -46,7 +59,7 @@ impl Site {
 }
 
 // Canonical ordering does not depend on traversal or diagnostic spellings.
-type Key = (usize, usize, usize, usize, Kind, Place);
+type Key = (usize, usize, usize, usize, Kind, Holder);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Custody {
@@ -116,13 +129,13 @@ impl Custody {
                 origin.line,
                 origin.column,
                 kind,
-                *place,
+                Holder::Place(*place),
             );
             sites.insert(
                 key,
                 Site {
                     function,
-                    holder: *place,
+                    holder: Holder::Place(*place),
                     plan: *record,
                     effects: match *record {
                         CleanupType::Record(id) => summaries[id.0],
@@ -138,6 +151,24 @@ impl Custody {
                 },
             );
             false
+        });
+    }
+
+    /// The existing checker calls this only after the owned argument has
+    /// passed its ordinary consume/loan/hold gate. This witnesses cleanup;
+    /// it confers no source availability or alternative ownership permission.
+    pub(crate) fn completion(&mut self, operation: crate::hir::TrustedOperationId, origin: Span) {
+        let (resource, effects) = self.resource.expect("selected completion resource");
+        let holder = Holder::Invocation(operation);
+        let kind = Kind::CompletionRelease;
+        let key = (origin.start, origin.end, origin.line, origin.column, kind, holder);
+        self.sites.insert(key, Site {
+            function: self.function,
+            holder,
+            plan: CleanupType::Resource(resource),
+            effects,
+            kind,
+            origin,
         });
     }
 
@@ -190,6 +221,7 @@ pub(crate) fn holder_bound(program: &Program) -> usize {
         })
         .max()
         .unwrap_or(0)
+        + usize::from(program.trusted.is_some())
 }
 
 #[cfg(test)]

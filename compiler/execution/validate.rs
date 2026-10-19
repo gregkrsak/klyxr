@@ -613,6 +613,30 @@ pub(super) fn program_shape(p: &hir::Program, c: &Context) -> Result<(), Executi
     Ok(())
 }
 
+fn cleanup_holder_type(
+    p: &hir::Program,
+    function: hir::FunctionId,
+    site: &crate::effects::custody::Site,
+) -> Result<hir::ValueType, ExecutionError> {
+    use crate::effects::custody::{Holder, Kind};
+    match site.holder {
+        Holder::Place(holder) if site.kind != Kind::CompletionRelease => place(p, function, holder),
+        Holder::Invocation(id) if site.kind == Kind::CompletionRelease => {
+            let catalog = p.trusted.as_ref().ok_or_else(bad)?;
+            let operation = catalog.operation(id).ok_or_else(bad)?;
+            if operation.class != crate::trusted::OperationClass::Completion
+                || operation.parameter != Some(crate::trusted::Passing::Owned(catalog.sensor))
+                || !catalog.granted(id)
+                || !catalog.granted(catalog.resource.release)
+            {
+                return Err(bad());
+            }
+            Ok(hir::ValueType::Resource(catalog.sensor))
+        }
+        _ => Err(bad()),
+    }
+}
+
 pub(super) fn cleanup_site_shape(
     p: &hir::Program,
     sites: &[crate::effects::custody::Site],
@@ -633,7 +657,7 @@ pub(super) fn cleanup_site_shape(
                 .filter(|c| c.sensor == id)
                 .map(|c| c.resource.effects),
         };
-        if place(p, f.id, site.holder)? != site.plan.value_type()
+        if cleanup_holder_type(p, f.id, site)? != site.plan.value_type()
             || effects != Some(site.effects)
             || site.effects == crate::effects::EffectSet::EMPTY
             || !site.effects.is_subset(f.effects.set())
@@ -668,12 +692,12 @@ pub(super) fn mir_shape(
             .filter(|v| v.id() == f.function())
             .and_then(|v| v.as_ordinary())
             .ok_or_else(bad)?;
-        let holders = p.locals.len() + p.parameters.len();
+        let holders = p.locals.len() + p.parameters.len() + usize::from(p.trusted.is_some());
         if f.cleanup_effect_sites.len() > c.limits.tokens.saturating_mul(holders) {
             return Err(ResourceFailure::limit("cleanup effect site count", START).into());
         }
         for site in &f.cleanup_effect_sites {
-            let ty = place(p, f.function(), site.holder)?;
+            let ty = cleanup_holder_type(p, f.function(), site)?;
             if site.function != f.function() || ty != site.plan.value_type() {
                 return Err(bad());
             }
