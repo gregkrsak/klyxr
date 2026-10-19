@@ -1574,4 +1574,34 @@ mod tests {
         }
         assert!(protected_stops > 0);
     }
+    #[test]
+    fn propagation_private_sibling_retirement_precedes_tag_selection() {
+        let source="fn wrap(x:Leaf)->Result<success:Leaf,failure:bool>{return Ok(x);}fn sample()->Result<success:bool,failure:bool>{let value=wrap(acquire()) or return;return Ok(true);}fn demo(){match sample(){Ok(v)=>{}Error(e)=>{}}}";
+        let e = artifact(source);
+        let mut m = Machine::new(&e, ExecutionLimits::default());
+        m.start(e.entry("demo").unwrap()).unwrap();
+        let activation = loop {
+            let task = m.tasks.pop().unwrap();
+            m.step(task).unwrap();
+            if let Some(f) = m.temporaries.as_ref().and_then(|s| s.frames.last()) {
+                let definition = e.function(f.function).unwrap();
+                if e.program.function(f.function).name() == "sample"
+                    && f.phase == Phase::Active
+                    && definition.temporaries.as_ref().unwrap().regions[f.region.0].destination
+                        == Transfer::Match
+                {
+                    break f.id;
+                }
+            }
+        };
+        let sibling = m.inject_temporary_leaf(activation).unwrap();
+        m.resources.as_mut().unwrap().failure_at = Some(sibling);
+        assert!(matches!(m.resume().unwrap_err().kind, ErrorKind::Host(_)));
+        conserved(&m);
+        assert!(m.results.as_ref().unwrap().matches.is_empty());
+        let frame = m.temporaries.as_ref().unwrap().frames.last().unwrap();
+        assert!(matches!(frame.protected, Some(Value::Result(_))));
+        assert!(completed(&m).is_empty());
+        assert!(m.resume().is_err());
+    }
 }

@@ -356,13 +356,7 @@ impl CheckedExecutable {
         }
         validate::mir_shape(&self.program, &self.mir, &c)?;
         for f in self.mir.functions() {
-            f.validate().map_err(|s| {
-                if s == "MIR validation allocation failed" {
-                    ExecutionError::new(ErrorKind::Host("MIR validation allocation"), START)
-                } else {
-                    ExecutionError::integrity(s)
-                }
-            })?;
+            f.validate_bounded().map_err(ExecutionError::from)?;
         }
         // Same deterministic lowerer, not a second semantic or ownership pipeline.
         let (mut expected, origins) =

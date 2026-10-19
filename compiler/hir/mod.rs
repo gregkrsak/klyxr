@@ -3,6 +3,7 @@
 //! Public inspection is read-only; compiler-internal mutation must preserve identity
 //! and reference invariants. Names and spans are diagnostic metadata.
 use crate::lexer::Span;
+pub(crate) mod propagation;
 pub(crate) mod resources;
 pub(crate) mod results;
 mod validate;
@@ -340,6 +341,16 @@ pub struct ValueFunction {
     pub body: Vec<ValueStatement>,
     pub span: Span,
 }
+/// Canonical local-initializer propagation. Scope identity is derived from this
+/// statement's actual lexical placement by the existing structured MIR builder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Propagation {
+    pub span: Span,
+    pub inner: ResultTypeId,
+    pub outer: ResultTypeId,
+    pub failure: ValueType,
+    pub syntax: crate::ast::PropagationSyntax,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueStatement {
     Match {
@@ -403,6 +414,7 @@ pub enum ValueStatement {
     Let {
         local: LocalId,
         initializer: TypedExpr,
+        propagation: Option<Propagation>,
         span: Span,
     },
     Return {

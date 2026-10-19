@@ -346,6 +346,7 @@ fn ownership_kind(ty: ValueType) -> OwnershipKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Transfer {
     Match,
+    Propagate(LocalId),
     ResultPayload(hir::ResultTypeId, hir::ResultTag),
     Local(LocalId),
     Argument(ParameterId),
@@ -629,6 +630,7 @@ impl<'a> Initializers<'a> {
                     local,
                     initializer,
                     span,
+                    propagation,
                 } => {
                     let declaration = program
                         .locals()
@@ -653,8 +655,13 @@ impl<'a> Initializers<'a> {
                             return Err(*span);
                         }
                     }
-                    if initializer.ty != ExprType::from(declaration.ty)
-                        || self.entries.insert(*local, initializer).is_some()
+                    if propagation.map_or(
+                        initializer.ty != ExprType::from(declaration.ty),
+                        |mode| {
+                            mode.validate(program, self.function, *local, initializer, *span)
+                                .is_err()
+                        },
+                    ) || self.entries.insert(*local, initializer).is_some()
                     {
                         return Err(*span);
                     }
@@ -937,9 +944,17 @@ impl<'a> Checker<'a> {
                 return self.conditional(condition, then_body, else_body, function, after);
             }
             ValueStatement::Let {
-                local, initializer, ..
+                local,
+                initializer,
+                propagation,
+                ..
             } => {
-                let loan = self.expression(initializer, Transfer::Local(*local))?;
+                let loan = if let Some(mode) = propagation {
+                    self.propagating_local(*local, initializer, *mode)?;
+                    None
+                } else {
+                    self.expression(initializer, Transfer::Local(*local))?
+                };
                 let place = Place::Local(*local);
                 self.initialize_outcome(place, self.program.local(*local).ty, initializer.span);
                 if let ValueType::Result(ty) = self.program.local(*local).ty {
@@ -2427,6 +2442,10 @@ impl<'a> Checker<'a> {
         {
             let destination = match previous {
                 Transfer::Match => "by exhaustive Result match".into(),
+                Transfer::Propagate(local) => format!(
+                    "by or return into success local `{}`",
+                    self.program.local(*local).name
+                ),
                 Transfer::ResultPayload(_, _) => "into a Result payload".into(),
                 Transfer::WriteThrough(reference) => {
                     format!("through reference `{}`", self.metadata(*reference).0)

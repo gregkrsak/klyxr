@@ -197,7 +197,22 @@ impl Program {
                     }
                     self.record_expression(function, value, true, false)?;
                 }
-                ValueStatement::Let { initializer, .. } => {
+                ValueStatement::Let {
+                    local,
+                    initializer,
+                    propagation,
+                    span,
+                } => {
+                    if let Some(mode) = propagation {
+                        mode.validate(self, function, *local, initializer, *span)
+                            .map_err(|message| {
+                                Box::new(Diagnostic::semantic(
+                                    *span,
+                                    message,
+                                    "canonical propagation statement required",
+                                ))
+                            })?;
+                    }
                     self.record_expression(function, initializer, true, true)?
                 }
                 ValueStatement::Assign { local, value, span } => {
@@ -850,6 +865,7 @@ mod tests {
             ValueStatement::Let {
                 local,
                 initializer: constructed.clone(),
+                propagation: None,
                 span,
             },
             ValueStatement::Assign {
@@ -1051,6 +1067,7 @@ mod multiple_fields {
                     ValueStatement::Let {
                         local: LocalId(999),
                         initializer: e.clone(),
+                        propagation: None,
                         span,
                     },
                     ValueStatement::Assign {
@@ -1268,6 +1285,7 @@ mod multiple_fields {
             ValueStatement::Let {
                 local: p.locals[0].id,
                 initializer: leaf.clone(),
+                propagation: None,
                 span,
             },
             ValueStatement::Assign {

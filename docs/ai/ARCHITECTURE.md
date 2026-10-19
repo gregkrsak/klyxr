@@ -1141,3 +1141,38 @@ regions through separate inert field staging. The public output is a bounded fla
 active chain with one Bool/range/record leaf; private resource results cannot cross
 the public execution boundary. Only sealed primitive/protocol authority traverses
 a whole wrapper for active-payload cleanup.
+
+## KED-032 contextual local propagation
+
+AST/resolved Let retain optional exact phrase/binding spans. Typed Let retains an
+approved propagation mode binding inner/outer ResultTypeIds, exact failure type
+and source origins; local type is the inner success type. No expected Result type
+is supplied to initializer synthesis. Table-aware publication and bounded shape
+validation independently check function/local/type/origin relationships.
+
+The existing ownership checker consumes the input through an explicit propagation
+transfer witness. A failure-state snapshot removes bypassed suffix finite uses,
+checks all remaining outcomes/holds and records existing return cleanup effects.
+Only success initializes the original local and flows into the suffix; nested
+Result obligations remain independent. No synthetic arm reduction or second checker
+is used. Runtime tags never establish static authority.
+
+Structured lowering emits Propagate and ForwardError terminators plus the existing
+selected binding transfer. Success continues the same lexical scope; only Error
+has ordinary function-return exits. Canonical declaring ScopeIds are derived while
+structured HIR is present even when no runtime cleanup Flow is needed. No owning
+activation is invented. Replacement metadata keeps the target's original scope.
+
+The flat cell table retains incoming protection and active payloads. Forwarded
+Error cells bind their type/tag/origin to the approved ForwardError block; ordinary
+constructors retain their approved temporary-site identity. A bounded tagged scalar
+keeps this distinction in the predecessor cell footprint. Receiving capacities
+are reserved together before detachment; commit allocates nothing. Existing
+protected return/cleanup machinery prevents early delivery and retains stopped
+payloads. Inert paths activate no resource catalog.
+
+Bounded MIR validation carries typed PlanError internally, including traversal
+and cleanup-validation allocation failures. The legacy read-only validate API
+only adapts diagnostics; execution approval uses variants rather than matching
+diagnostic text. Exact deterministic HIR/MIR/origin comparison and immutable
+outcome/effect witnesses seal both branches and generated transfer sites.

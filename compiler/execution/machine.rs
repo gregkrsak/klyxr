@@ -792,6 +792,25 @@ impl<'a> Machine<'a> {
             self.charge()?;
             let context = self.temporary_point(id, function, block_id, statement_index)?;
             match block.terminator() {
+                Terminator::Propagate {
+                    operation,
+                    initializer,
+                    ok_target,
+                    error_target,
+                    ..
+                } => {
+                    self.task(
+                        id,
+                        origin,
+                        None,
+                        Action::ResultSelect(operation.inner, *ok_target, *error_target),
+                    )?;
+                    self.eval_region(id, initializer, 1, context)?;
+                }
+                Terminator::ForwardError { operation } => {
+                    self.result_forward_error(id, *operation)?;
+                    self.finish_return(id)?;
+                }
                 Terminator::Match {
                     result,
                     scrutinee,
@@ -1766,3 +1785,6 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod propagation_tests;

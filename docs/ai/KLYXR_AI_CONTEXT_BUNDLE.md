@@ -801,6 +801,27 @@ formation, reference/public-record/verified/harness extension, general enum/patt
 `?`, conversion, unwind, retry, rollback or production resource API is added.
 The implementation and ledger await independent review and Greg's acceptance.
 
+## Frozen KED-032 implementation boundary
+
+Frozen Issue #75 Draft 2 adds exact lowercase contextual `or return` only at an
+ordinary Result-returning Value function's local initializer. The independently
+typed inner Result and declared outer Result must share exact failure identity;
+their success types may differ. Success initializes the original local in its
+actual lexical scope; failure canonically rewraps the selected payload and uses
+protected ordinary return, actual-scope cleanup and delivery after completion.
+There is no synthetic owning match arm. Existing replacement generations yield
+direct A → C → B versus explicit match A → B → C.
+
+The existing ownership checker retains outcome/effect witnesses and all loop/loan
+restrictions. Tool stops remain distinct from source Error. Contextual `or` remains
+an identifier elsewhere; existing keyword aliases/trivia are preserved. No `?`,
+conversion, nested propagation expression, conditional Result initializer, Result
+replacement, verified/harness extension, unwind or resource API is added. The
+implementation is authorized on its dedicated branch; independent review and
+Greg's acceptance remain pending. Its exact baseline is the human-merged KED-031
+commit 74c1bedc8f847ffaeb38ed4795ee91730e35b949, tree
+2d0cc78b67a8cb69ea8feaff183dbf1b91938e63.
+
 <!-- END KLYXR_CONTEXT.md -->
 
 ---
@@ -2399,6 +2420,44 @@ retry or unwind. Tool stops never become Error. General enums/generics, Option,
 `?`, conversions, reference payloads, fallible cleanup and production effectful
 APIs remain deferred. See the KED-031 ledger for evidence and its limits.
 
+## Frozen KED-032 — Explicit local Result propagation
+
+**Status:** Frozen Draft 2, implementation authorized in Issue #75; independent
+implementation review and Greg's acceptance remain separate. KD-007's broader
+Direction Accepted status is unchanged.
+
+`let value = E or return;` requires independently typed canonical
+`E : Result<success: S, failure: F>` inside an ordinary Value function returning
+`Result<success: T, failure: F>`. Exact canonical F is mandatory; S and T may differ.
+No conversion or constructor expected-type context is inferred from propagation.
+The expression executes once in its statement-local region, its complete Result
+is protected and other initializer temporaries retire before tag selection.
+
+Ok transfers/copies its active payload, consumes the wrapper and establishes the
+original local in the actual enclosing lexical scope, registering only successful
+initialization. Error transfers/copies exact F into canonical outer Error, protects
+that result, consumes the input and uses the existing ordinary return exits.
+Callee scopes/parameters clean before frame retirement and caller delivery; cleanup
+stops retain the outgoing result and unfinished responsibilities without resume.
+Equal complete Result types permit equivalent wrapper reuse, but this implementation
+uses the same canonical rewrapping protocol for both equal and differing types.
+
+The illustrative match in the KED is tag-dependent control flow, not a lexical
+rewrite. No propagation-arm scope exists. KD-042/KD-043 over actual activations
+yield direct A → C → B and unchanged explicit match A → B → C; a failed C release
+retains B without an attempt. The existing ownership checker preserves independent
+nested outcomes, earlier pending obligations, exact nominal types, loans, original
+replacement activations and relative loop restrictions. Initializer evaluation
+gains no terminal-return Move permission. The success path still requires its
+own explicit function return and ordinary break/continue/backedge checks.
+
+The exact lowercase contextual phrase does not reserve `or` globally. Existing
+fn/function, mut/mutable and admitted trivia remain equivalent. Propagation is not
+an expression; `?`, `try`, fallback/abort spellings, conversions, public resource
+APIs, Result replacement, references, verified/harness execution, conditional
+Result initializers, exceptions, unwind, retry and rollback remain excluded.
+All Host, Limit, Integrity, trap and cleanup failures remain tool outcomes.
+
 <!-- END LANGUAGE_DECISIONS.md -->
 
 ---
@@ -3549,6 +3608,41 @@ active chain with one Bool/range/record leaf; private resource results cannot cr
 the public execution boundary. Only sealed primitive/protocol authority traverses
 a whole wrapper for active-payload cleanup.
 
+## KED-032 contextual local propagation
+
+AST/resolved Let retain optional exact phrase/binding spans. Typed Let retains an
+approved propagation mode binding inner/outer ResultTypeIds, exact failure type
+and source origins; local type is the inner success type. No expected Result type
+is supplied to initializer synthesis. Table-aware publication and bounded shape
+validation independently check function/local/type/origin relationships.
+
+The existing ownership checker consumes the input through an explicit propagation
+transfer witness. A failure-state snapshot removes bypassed suffix finite uses,
+checks all remaining outcomes/holds and records existing return cleanup effects.
+Only success initializes the original local and flows into the suffix; nested
+Result obligations remain independent. No synthetic arm reduction or second checker
+is used. Runtime tags never establish static authority.
+
+Structured lowering emits Propagate and ForwardError terminators plus the existing
+selected binding transfer. Success continues the same lexical scope; only Error
+has ordinary function-return exits. Canonical declaring ScopeIds are derived while
+structured HIR is present even when no runtime cleanup Flow is needed. No owning
+activation is invented. Replacement metadata keeps the target's original scope.
+
+The flat cell table retains incoming protection and active payloads. Forwarded
+Error cells bind their type/tag/origin to the approved ForwardError block; ordinary
+constructors retain their approved temporary-site identity. A bounded tagged scalar
+keeps this distinction in the predecessor cell footprint. Receiving capacities
+are reserved together before detachment; commit allocates nothing. Existing
+protected return/cleanup machinery prevents early delivery and retains stopped
+payloads. Inert paths activate no resource catalog.
+
+Bounded MIR validation carries typed PlanError internally, including traversal
+and cleanup-validation allocation failures. The legacy read-only validate API
+only adapts diagnostics; execution approval uses variants rather than matching
+diagnostic text. Exact deterministic HIR/MIR/origin comparison and immutable
+outcome/effect witnesses seal both branches and generated transfer sites.
+
 <!-- END ARCHITECTURE.md -->
 
 ---
@@ -4219,5 +4313,16 @@ implicit error conversion, reference payloads, Result public record fields,
 verified/harness Result use, production fallible APIs, panic/unwind/cancellation
 and generalized ownership/dataflow remain excluded or open. Result grants no unsafe
 permission and no tool-stop recovery or rollback.
+
+### KED-032 refinement of propagation questions
+
+Frozen Draft 2 narrows Result propagation to exact contextual `or return` at an
+ordinary local initializer with exact shared failure identity, actual enclosing
+scope, independent initializer typing and protected ordinary return. It does not
+settle `?`, general postfix/nested propagation, implicit conversion, universal
+errors, generalized sums/patterns, verified/harness Result execution, production
+fallible APIs, panic/unwind/cancellation or generalized cyclic ownership.
+Earlier wholly-open propagation references now apply to those deferred extensions.
+Implementation evidence and independent acceptance remain distinct.
 
 <!-- END OPEN_QUESTIONS.md -->

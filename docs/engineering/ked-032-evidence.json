@@ -1,0 +1,157 @@
+{
+  "baseline_commit": "74c1bedc8f847ffaeb38ed4795ee91730e35b949",
+  "baseline_tree": "2d0cc78b67a8cb69ea8feaff183dbf1b91938e63",
+  "predecessor_count": 1846,
+  "additions": [
+    "lib.rs::execution::machine::propagation_tests::propagation_actual_scope_and_unchanged_match_have_distinct_acb_abc_traces",
+    "lib.rs::execution::machine::propagation_tests::propagation_all_four_payload_classes_on_both_alternatives_conserve",
+    "lib.rs::execution::machine::propagation_tests::propagation_c_release_failure_retains_b_unattempted_and_protected_return",
+    "lib.rs::execution::machine::propagation_tests::propagation_cleanup_effects_cover_error_exit_but_not_returned_failure_payload",
+    "lib.rs::execution::machine::propagation_tests::propagation_combined_storage_has_exact_sufficient_and_insufficient_neighbors",
+    "lib.rs::execution::machine::propagation_tests::propagation_every_allocation_growth_cut_is_host_without_payload_loss",
+    "lib.rs::execution::machine::propagation_tests::propagation_every_fuel_cut_and_exact_neighbor_preserve_custody",
+    "lib.rs::execution::machine::propagation_tests::propagation_failure_return_cleans_guard_before_delivering_failure_payload",
+    "lib.rs::execution::machine::propagation_tests::propagation_forwarded_cell_tag_origin_parent_and_foreign_approval_reject",
+    "lib.rs::execution::machine::propagation_tests::propagation_independent_hir_mir_scope_transfer_and_origin_mutations_reject",
+    "lib.rs::execution::machine::propagation_tests::propagation_preparation_lowering_and_revalidation_allocation_failures_stay_typed",
+    "lib.rs::execution::machine::propagation_tests::propagation_resource_free_and_terminal_traps_do_not_become_source_errors",
+    "lib.rs::execution::machine::temporaries::tests::propagation_private_sibling_retirement_precedes_tag_selection",
+    "lib.rs::propagation_tests::propagation_admission_host_failures_keep_cli_class_two_and_publish_no_executable",
+    "lib.rs::propagation_tests::propagation_contextual_alias_and_trivia_parsing",
+    "lib.rs::propagation_tests::propagation_differing_success_types_keep_exact_failure_identity",
+    "lib.rs::propagation_tests::propagation_does_not_supply_constructor_context_or_complete_return",
+    "lib.rs::propagation_tests::propagation_evaluates_once_and_executes_only_selected_continuation",
+    "lib.rs::propagation_tests::propagation_excluded_fields_harness_verified_and_conditional_values_reject",
+    "lib.rs::propagation_tests::propagation_initializer_never_receives_terminal_loop_permission",
+    "lib.rs::propagation_tests::propagation_malformed_and_nested_source_positions_reject",
+    "lib.rs::propagation_tests::propagation_or_identifier_discriminator_is_preserved",
+    "lib.rs::propagation_tests::propagation_ownership_preserves_earlier_and_nested_obligations",
+    "lib.rs::propagation_tests::propagation_public_execution_selects_success_and_each_failure_alias",
+    "lib.rs::propagation_tests::propagation_public_nested_success_and_failure_obligations_remain_compositional",
+    "lib.rs::propagation_tests::propagation_real_branches_match_arms_and_loop_exits_compose",
+    "lib.rs::propagation_tests::propagation_repeated_sites_have_linear_cfg_and_exact_admission_neighbors",
+    "tests/execution_cli.rs::propagation_cli_examples_select_success_and_failure",
+    "tests/execution_cli.rs::propagation_cli_nominal_failure_mismatch_is_frontend_class_one"
+  ],
+  "classifications": {
+    "lib.rs::execution::machine::propagation_tests::propagation_actual_scope_and_unchanged_match_have_distinct_acb_abc_traces": "private_canonical_resources",
+    "lib.rs::execution::machine::propagation_tests::propagation_all_four_payload_classes_on_both_alternatives_conserve": "private_canonical_resources",
+    "lib.rs::execution::machine::propagation_tests::propagation_c_release_failure_retains_b_unattempted_and_protected_return": "primitive_protocol",
+    "lib.rs::execution::machine::propagation_tests::propagation_cleanup_effects_cover_error_exit_but_not_returned_failure_payload": "private_canonical_resources",
+    "lib.rs::execution::machine::propagation_tests::propagation_combined_storage_has_exact_sufficient_and_insufficient_neighbors": "primitive_protocol",
+    "lib.rs::execution::machine::propagation_tests::propagation_every_allocation_growth_cut_is_host_without_payload_loss": "primitive_protocol",
+    "lib.rs::execution::machine::propagation_tests::propagation_every_fuel_cut_and_exact_neighbor_preserve_custody": "primitive_protocol",
+    "lib.rs::execution::machine::propagation_tests::propagation_failure_return_cleans_guard_before_delivering_failure_payload": "primitive_protocol",
+    "lib.rs::execution::machine::propagation_tests::propagation_independent_hir_mir_scope_transfer_and_origin_mutations_reject": "primitive_protocol",
+    "lib.rs::execution::machine::propagation_tests::propagation_preparation_lowering_and_revalidation_allocation_failures_stay_typed": "primitive_protocol",
+    "lib.rs::execution::machine::propagation_tests::propagation_resource_free_and_terminal_traps_do_not_become_source_errors": "primitive_protocol",
+    "lib.rs::execution::machine::temporaries::tests::propagation_private_sibling_retirement_precedes_tag_selection": "primitive_protocol",
+    "lib.rs::propagation_tests::propagation_admission_host_failures_keep_cli_class_two_and_publish_no_executable": "primitive_protocol",
+    "lib.rs::propagation_tests::propagation_contextual_alias_and_trivia_parsing": "primitive_protocol",
+    "lib.rs::propagation_tests::propagation_differing_success_types_keep_exact_failure_identity": "primitive_protocol",
+    "lib.rs::propagation_tests::propagation_does_not_supply_constructor_context_or_complete_return": "primitive_protocol",
+    "lib.rs::propagation_tests::propagation_evaluates_once_and_executes_only_selected_continuation": "ordinary_source",
+    "lib.rs::propagation_tests::propagation_excluded_fields_harness_verified_and_conditional_values_reject": "ordinary_source",
+    "lib.rs::propagation_tests::propagation_initializer_never_receives_terminal_loop_permission": "ordinary_source",
+    "lib.rs::propagation_tests::propagation_malformed_and_nested_source_positions_reject": "primitive_protocol",
+    "lib.rs::propagation_tests::propagation_or_identifier_discriminator_is_preserved": "primitive_protocol",
+    "lib.rs::propagation_tests::propagation_ownership_preserves_earlier_and_nested_obligations": "ordinary_source",
+    "lib.rs::propagation_tests::propagation_public_execution_selects_success_and_each_failure_alias": "ordinary_source",
+    "lib.rs::propagation_tests::propagation_public_nested_success_and_failure_obligations_remain_compositional": "ordinary_source",
+    "lib.rs::propagation_tests::propagation_real_branches_match_arms_and_loop_exits_compose": "ordinary_source",
+    "lib.rs::propagation_tests::propagation_repeated_sites_have_linear_cfg_and_exact_admission_neighbors": "primitive_protocol",
+    "tests/execution_cli.rs::propagation_cli_examples_select_success_and_failure": "ordinary_source",
+    "tests/execution_cli.rs::propagation_cli_nominal_failure_mismatch_is_frontend_class_one": "ordinary_source",
+    "lib.rs::execution::machine::propagation_tests::propagation_forwarded_cell_tag_origin_parent_and_foreign_approval_reject": "primitive_protocol"
+  },
+  "migrations": {},
+  "contract_corrections": [],
+  "fixture_adaptations": [
+    {
+      "path": "compiler/hir/validate.rs",
+      "function": "invariant_visits_every_expression_and_statement_container",
+      "reason": "Mechanical representation adaptation only: absent propagation mode on original Let fixtures, ignored new field on original destructuring, or explicit rejection of new terminators in the unchanged conditional-value oracle. No assertion weakened.",
+      "affected_identities": [
+        "lib.rs::hir::validate::tests::invariant_visits_every_expression_and_statement_container"
+      ]
+    },
+    {
+      "path": "compiler/hir/validate.rs",
+      "function": "every_initializer_is_traversed_at_depth_and_in_every_statement_container",
+      "reason": "Mechanical representation adaptation only: absent propagation mode on original Let fixtures, ignored new field on original destructuring, or explicit rejection of new terminators in the unchanged conditional-value oracle. No assertion weakened.",
+      "affected_identities": [
+        "lib.rs::hir::validate::multiple_fields::every_initializer_is_traversed_at_depth_and_in_every_statement_container"
+      ]
+    },
+    {
+      "path": "compiler/hir/validate.rs",
+      "function": "formed_leaf_validation_visits_every_container_statement_and_verified_operand",
+      "reason": "Mechanical representation adaptation only: absent propagation mode on original Let fixtures, ignored new field on original destructuring, or explicit rejection of new terminators in the unchanged conditional-value oracle. No assertion weakened.",
+      "affected_identities": [
+        "lib.rs::hir::validate::multiple_fields::formed_leaf_validation_visits_every_container_statement_and_verified_operand"
+      ]
+    },
+    {
+      "path": "compiler/mir/mod.rs",
+      "function": "validator_descends_construction_at_multiple_depths_in_every_mir_container",
+      "reason": "Mechanical representation adaptation only: absent propagation mode on original Let fixtures, ignored new field on original destructuring, or explicit rejection of new terminators in the unchanged conditional-value oracle. No assertion weakened.",
+      "affected_identities": [
+        "lib.rs::mir::tests::validator_descends_construction_at_multiple_depths_in_every_mir_container"
+      ]
+    },
+    {
+      "path": "compiler/mir/mod.rs",
+      "function": "mir_traverses_all_initializers_at_depth_in_every_expression_container",
+      "reason": "Mechanical representation adaptation only: absent propagation mode on original Let fixtures, ignored new field on original destructuring, or explicit rejection of new terminators in the unchanged conditional-value oracle. No assertion weakened.",
+      "affected_identities": [
+        "lib.rs::mir::multiple_field_tests::mir_traverses_all_initializers_at_depth_in_every_expression_container"
+      ]
+    },
+    {
+      "path": "compiler/tests/conditional_values.rs",
+      "function": "mir_all_paths_initialize_one_canonical_destination_once",
+      "reason": "Mechanical representation adaptation only: absent propagation mode on original Let fixtures, ignored new field on original destructuring, or explicit rejection of new terminators in the unchanged conditional-value oracle. No assertion weakened.",
+      "affected_identities": [
+        "tests/conditional_values.rs::mir_all_paths_initialize_one_canonical_destination_once"
+      ]
+    }
+  ],
+  "environmental_limitations": [
+    "The previously accepted ps PID-namespace/procfs anomaly remains ancillary; no process-table discovery or repair. Existing Rust 1.80.0 snapshots remain unchanged."
+  ],
+  "scope": "Frozen KED-032 Draft 2; no production resource API or alternate executable authority.",
+  "protocol_boundaries": {
+    "host": "x86_64-unknown-linux-gnu",
+    "rust": "1.80.0",
+    "scenario_order": [
+      "Copy success",
+      "inert Move success",
+      "resource success",
+      "nested Result success",
+      "Copy failure",
+      "inert Move failure",
+      "resource failure",
+      "nested Result failure"
+    ],
+    "fuel": [
+      53,
+      59,
+      65,
+      88,
+      58,
+      64,
+      72,
+      95
+    ],
+    "storage_bytes": [
+      3904,
+      4344,
+      4392,
+      5232,
+      4080,
+      4544,
+      4624,
+      5504
+    ]
+  }
+}

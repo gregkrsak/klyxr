@@ -338,22 +338,62 @@ fn value_statements(
                 name,
                 mutable,
                 initializer,
+                propagation,
                 span,
             } => {
                 let initializer = expression(program, functions, initializer)?;
-                let ty = match initializer.ty {
-                    ExprType::Result(id) => ValueType::Result(id),
-                    ExprType::Bool => ValueType::Bool,
-                    ExprType::Range(id) => ValueType::Range(id),
-                    ExprType::Record(id) => ValueType::Record(id),
-                    ExprType::SharedRef(ty) => ValueType::SharedRef(ty),
-                    ExprType::MutableRef(ty) => ValueType::MutableRef(ty),
-                    ExprType::IntegerLiteral => {
+                let propagation = if let Some(syntax) = propagation {
+                    let ExprType::Result(inner) = initializer.ty else {
                         return Err(Diagnostic::semantic(
+                            initializer.span,
+                            "or return requires an independently typed Result initializer",
+                            "propagation supplies no constructor context",
+                        )
+                        .into());
+                    };
+                    let Some(ValueType::Result(outer)) = return_type else {
+                        return Err(Diagnostic::semantic(
+                            syntax.phrase,
+                            "or return requires an ordinary Result-returning Value function",
+                            "NoValue and other return types cannot propagate",
+                        )
+                        .into());
+                    };
+                    let failure = program
+                        .result_payload(inner, hir::ResultTag::Error)
+                        .expect("resolved Result");
+                    if Some(failure) != program.result_payload(outer, hir::ResultTag::Error) {
+                        return Err(Diagnostic::semantic(syntax.phrase, "or return failure payload type mismatch", format!("inner Result #{} and enclosing Result #{} require exact failure identity: {} versus {}",inner.0,outer.0,display_type(program,ExprType::from(failure)),program.result_payload(outer,hir::ResultTag::Error).map(|ty|display_type(program,ExprType::from(ty))).unwrap_or_else(||"invalid canonical failure identity".into()))).into());
+                    }
+                    Some(hir::Propagation {
+                        span: *span,
+                        inner,
+                        outer,
+                        failure,
+                        syntax: *syntax,
+                    })
+                } else {
+                    None
+                };
+                let ty = if let Some(propagation) = propagation {
+                    program
+                        .result_payload(propagation.inner, hir::ResultTag::Ok)
+                        .expect("resolved Result")
+                } else {
+                    match initializer.ty {
+                        ExprType::Result(id) => ValueType::Result(id),
+                        ExprType::Bool => ValueType::Bool,
+                        ExprType::Range(id) => ValueType::Range(id),
+                        ExprType::Record(id) => ValueType::Record(id),
+                        ExprType::SharedRef(ty) => ValueType::SharedRef(ty),
+                        ExprType::MutableRef(ty) => ValueType::MutableRef(ty),
+                        ExprType::IntegerLiteral => {
+                            return Err(Diagnostic::semantic(
                             initializer.span,
                             "integer literal cannot materialize as a local value",
                             "general integer/literal materialization is unresolved; use a concrete bool, named range, or record expression",
                         ).into());
+                        }
                     }
                 };
                 if *mutable && matches!(ty, ValueType::SharedRef(_) | ValueType::MutableRef(_)) {
@@ -370,6 +410,7 @@ fn value_statements(
                 hir::ValueStatement::Let {
                     local: *id,
                     initializer,
+                    propagation,
                     span: *span,
                 }
             }

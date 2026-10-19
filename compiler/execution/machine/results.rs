@@ -15,9 +15,34 @@ pub(super) enum Phase {
     Delivered,
 }
 
+// The bounded site/block namespace uses one tagged scalar, preserving the
+// predecessor cell footprint for programs without propagation.
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+struct Authority(usize);
+enum AuthorityKind {
+    Constructor(crate::mir::temporaries::SiteId),
+    Propagation(BasicBlockId),
+}
+impl Authority {
+    const PROPAGATION: usize = 1usize << (usize::BITS - 1);
+    fn constructor(site: crate::mir::temporaries::SiteId) -> Option<Self> {
+        (site.0 < Self::PROPAGATION).then_some(Self(site.0))
+    }
+    fn propagation(block: BasicBlockId) -> Option<Self> {
+        (block.0 < Self::PROPAGATION).then_some(Self(block.0 | Self::PROPAGATION))
+    }
+    fn kind(self) -> AuthorityKind {
+        if self.0 & Self::PROPAGATION == 0 {
+            AuthorityKind::Constructor(crate::mir::temporaries::SiteId(self.0))
+        } else {
+            AuthorityKind::Propagation(BasicBlockId(self.0 & !Self::PROPAGATION))
+        }
+    }
+}
 pub(super) struct Cell {
     function: FunctionId,
-    constructor: crate::mir::temporaries::SiteId,
+    authority: Authority,
     pub(super) ty: ResultTypeId,
     pub(super) tag: u8,
     pub(super) payload: Option<Value>,
@@ -387,11 +412,13 @@ impl<'a> Machine<'a> {
                 .try_reserve_exact(1)
                 .map_err(|_| self.failure(ErrorKind::Host("Result custody allocation")))?;
         }
+        let authority = Authority::constructor(constructor)
+            .ok_or_else(|| self.integrity("Result constructor authority index exhausted"))?;
         let cells = &mut self.results.as_mut().unwrap().cells;
         let id = OwnerId(cells.len());
         cells.push(Cell {
             function,
-            constructor,
+            authority,
             ty,
             tag: match tag {
                 ResultTag::Ok => 0,
@@ -411,6 +438,26 @@ impl<'a> Machine<'a> {
             .as_ref()
             .and_then(|s| s.cells.get(id.0))
             .ok_or_else(|| self.integrity("foreign Result custody identity"))?;
+        if let AuthorityKind::Propagation(block) = cell.authority.kind() {
+            let function = self.executable.function(cell.function)?;
+            let Some(crate::mir::Terminator::ForwardError { operation }) = function
+                .blocks()
+                .find(|(id, _)| *id == block)
+                .map(|(_, b)| b.terminator())
+            else {
+                return Err(self.integrity("foreign propagation cell authority"));
+            };
+            if cell.ty != operation.outer
+                || Self::result_tag(cell.tag)? != ResultTag::Error
+                || cell.origin != operation.syntax.phrase
+            {
+                return Err(self.integrity("propagation cell tag/type/origin correspondence"));
+            }
+            return Ok(cell);
+        }
+        let AuthorityKind::Constructor(constructor) = cell.authority.kind() else {
+            unreachable!()
+        };
         let flow = self
             .executable
             .function(cell.function)?
@@ -419,7 +466,7 @@ impl<'a> Machine<'a> {
             .ok_or_else(|| self.integrity("Result custody without approved temporary flow"))?;
         let site = flow
             .sites
-            .get(cell.constructor.0)
+            .get(constructor.0)
             .ok_or_else(|| self.integrity("foreign Result constructor site"))?;
         let tag = Self::result_tag(cell.tag)?;
         if site.ty != ExprType::Result(cell.ty)
@@ -555,6 +602,98 @@ impl<'a> Machine<'a> {
         };
         self.frames[index].statement = 0;
         self.task(frame, self.origin, None, Action::Drive)
+    }
+
+    pub(super) fn result_forward_error(
+        &mut self,
+        frame: u64,
+        operation: hir::Propagation,
+    ) -> Result<(), ExecutionError> {
+        let id = self
+            .results
+            .as_ref()
+            .and_then(|s| s.matches.last())
+            .filter(|(f, _)| *f == frame)
+            .map(|(_, id)| *id)
+            .ok_or_else(|| self.integrity("propagation without protected input"))?;
+        let cell = self.result_cell(id)?;
+        if cell.ty != operation.inner
+            || Self::result_tag(cell.tag)? != ResultTag::Error
+            || cell.phase
+                != (Phase::MatchProtected {
+                    frame,
+                    origin: operation.span,
+                })
+            || cell
+                .payload
+                .as_ref()
+                .map_or(true, |v| !self.result_value_matches(v, operation.failure))
+        {
+            return Err(self.integrity("propagation failure payload custody"));
+        }
+        if let Some(Value::Result(child)) = &cell.payload {
+            if self.result_cell(*child)?.parent != Some(id) {
+                return Err(self.integrity("propagation nested parent custody"));
+            }
+        }
+        let cell_grow = self.results.as_ref().unwrap().cells.len()
+            == self.results.as_ref().unwrap().cells.capacity();
+        let value_grow = self.values.len() == self.values.capacity();
+        // Combined receiving capacities are charged while F still belongs to
+        // the protected input. No fallible operation follows active detachment.
+        self.charge()?;
+        self.reserve(
+            (if cell_grow { size_of::<Cell>() } else { 0 })
+                + (if value_grow { size_of::<Value>() } else { 0 }),
+        )?;
+        if cell_grow {
+            #[cfg(test)]
+            self.temporary_allocation()?;
+            self.results
+                .as_mut()
+                .unwrap()
+                .cells
+                .try_reserve_exact(1)
+                .map_err(|_| self.failure(ErrorKind::Host("propagated Result cell allocation")))?;
+        }
+        if value_grow {
+            #[cfg(test)]
+            self.temporary_allocation()?;
+            self.values.try_reserve_exact(1).map_err(|_| {
+                self.failure(ErrorKind::Host("propagated return receiving allocation"))
+            })?;
+        }
+        self.charge()?;
+        let f = self.frame_index(frame)?;
+        let function = self.frames[f].function;
+        let block = self.frames[f].block;
+        let authority = Authority::propagation(block)
+            .ok_or_else(|| self.integrity("propagation authority index exhausted"))?;
+        let copied = self.result_cell(id)?.payload.as_ref().and_then(Value::copy);
+        let original = self.results.as_mut().unwrap().cells[id.0]
+            .payload
+            .take()
+            .unwrap();
+        let payload = copied.unwrap_or(original);
+        let out = OwnerId(self.results.as_ref().unwrap().cells.len());
+        if let Value::Result(inner) = &payload {
+            self.results.as_mut().unwrap().cells[inner.0].parent = Some(out);
+        }
+        let state = self.results.as_mut().unwrap();
+        state.cells[id.0].phase = Phase::Consumed;
+        state.matches.pop();
+        state.cells.push(Cell {
+            function,
+            authority,
+            ty: operation.outer,
+            tag: 1,
+            payload: Some(payload),
+            parent: None,
+            phase: Phase::Active,
+            origin: operation.syntax.phrase,
+        });
+        self.values.push(Value::Result(out));
+        Ok(())
     }
 
     pub(super) fn result_bind(
