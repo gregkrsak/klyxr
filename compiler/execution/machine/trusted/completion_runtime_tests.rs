@@ -199,6 +199,7 @@ fn m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects() {
             let acquired = usize::from(s.events().contains(&Event::Received(0, 0)));
             let released = usize::from(s.events().contains(&Event::ReleaseComplete(0)));
             assert_eq!(s.live_sensors(), acquired - released);
+            super::completion_bound_tests::conserved(&s.machine);
             if let Some(pending) = &s.machine.trusted.as_ref().unwrap().completion {
                 if let Some(owner) = pending.protected {
                     protected = true;

@@ -91,9 +91,10 @@ pub(super) enum Allocation {
     ReleaseAudit,
     CompletionTransfer,
     CompletionCleanup,
-    CompletionContinuation,
     CompletionDiagnostic,
 }
+#[cfg(test)]
+thread_local! { static ACTUAL_GROWTH: std::cell::Cell<u64> = const {std::cell::Cell::new(0)}; }
 enum Status {
     Pending,
     Complete(ExecutionResult),
@@ -262,6 +263,9 @@ impl<'a> Machine<'a> {
         site: Allocation,
         growth: bool,
     ) -> Result<(), ExecutionError> {
+        if growth {
+            ACTUAL_GROWTH.with(|mask| mask.set(mask.get() | (1u64 << site as u32)));
+        }
         if growth
             && self
                 .trusted
@@ -424,6 +428,8 @@ impl<'a> Machine<'a> {
             return Err(self.integrity("trusted invocation signature/origin/authority mismatch"));
         }
         if op.class == OperationClass::Completion {
+            #[cfg(test)]
+            ACTUAL_GROWTH.with(|mask| mask.set(0));
             self.completion_prepare(index, activation, frame)?;
             #[cfg(test)]
             if self.trusted.as_ref().unwrap().fault
@@ -904,3 +910,5 @@ mod completion_composition_tests;
 mod completion_runtime_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod completion_bound_tests;

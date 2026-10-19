@@ -296,7 +296,7 @@ impl CheckedExecutable {
         }
         let c = Context::new(self.limits);
         if let Some(catalog) = &self.program.trusted {
-            c.reserve_catalog(
+            c.reserve_completion_catalog(
                 catalog.selection.roots().len(),
                 catalog.selection.roots().iter().map(String::len).sum(),
             )?;

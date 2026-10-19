@@ -1,6 +1,8 @@
 //! Sealed consuming completion, protected Result and existing fixed cleanup.
 use super::*;
 use crate::trusted::approval::CompletionPhase;
+#[cfg(test)]
+thread_local! {pub(super) static ENVELOPE:std::cell::Cell<Option<(usize,usize,usize)>> = const {std::cell::Cell::new(None)};}
 
 pub(super) struct Pending {
     pub(super) frame: u64,
@@ -400,6 +402,14 @@ impl<'a> Machine<'a> {
             .saturating_sub(self.tasks.capacity() - self.tasks.len())
             .checked_mul(size_of::<Task<'_>>())
             .ok_or_else(|| self.integrity("completion continuation overflow"))?;
+        // Evaluating the owned argument already required its evaluation and
+        // registration continuations above this caller's retained stack. Their
+        // completed slots cover both release/delivery tasks. An inconsistent
+        // private machine must reject before handoff, rather than invent a
+        // supposedly reachable allocation boundary here.
+        if tasks != 0 {
+            return Err(self.integrity("completion evaluation continuation capacity"));
+        }
         let total = [
             provenance,
             events
@@ -414,6 +424,8 @@ impl<'a> Machine<'a> {
         .into_iter()
         .try_fold(0usize, usize::checked_add)
         .ok_or_else(|| self.integrity("completion combined envelope overflow"))?;
+        #[cfg(test)]
+        ENVELOPE.with(|record| record.set(Some((self.storage().unwrap(), total, [provenance, events * size_of::<Event>(), operands, self.completion_result_growth(), self.completion_temporary_growth(activation, invocation.site).unwrap(), self.completion_cleanup_growth().unwrap()].into_iter().max().unwrap()))));
         // This is one simultaneous bound, before any receiving allocation or
         // current-holder transfer. Diagnostics are already charged by State.
         self.reserve(total)?;
@@ -437,11 +449,6 @@ impl<'a> Machine<'a> {
         self.reserve_trusted_operand()?;
         self.completion_temporary_reserve(activation, invocation.site)?;
         self.completion_cleanup_reserve()?;
-        #[cfg(test)]
-        self.trusted_allocation(Allocation::CompletionContinuation, tasks > 0)?;
-        self.tasks
-            .try_reserve_exact(2)
-            .map_err(|_| self.failure(ErrorKind::Host("completion continuations")))?;
         if self.trusted.as_ref().unwrap().diagnostic.borrow().is_none() {
             #[cfg(test)]
             self.trusted_allocation(

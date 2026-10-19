@@ -1,9 +1,9 @@
 {
-  "stage": "M6",
+  "stage": "M7",
   "baseline_commit": "372230df1d359b13d28f5c136130ac031507716a",
   "baseline_tree": "a646e9576a9b7650ff9a95275f1080b591d06986",
   "predecessor_count": 1981,
-  "expected_per_profile": 2027,
+  "expected_per_profile": 2035,
   "additions": [
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific",
     "lib.rs::trusted::completion_tests::finish_direct_and_relay_arguments_prepare_without_reference_coercion",
@@ -50,7 +50,15 @@
     "lib.rs::execution::completion_authority_tests::m6_invocation_argument_order_arity_result_source_mir_and_catalog_origins_reject",
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_bad_ticket_realm_fresh_identity_and_frame_reject_before_finish_attempt",
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_finish_error_two_is_integrity_with_actual_partial_prefix_retained",
-    "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_late_protected_tag_payload_realm_production_and_receiver_corruptions_keep_prefix"
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_late_protected_tag_payload_realm_production_and_receiver_corruptions_keep_prefix",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_completion_catalog_has_explicit_terms_and_exact_combined_neighbors",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_preparation_storage_work_diagnostics_tokens_and_identifier_neighbors",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_runtime_peak_and_fuel_neighbors_for_all_three_outcomes",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_each_container_fits_but_combined_envelope_rejects_before_handoff",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_every_actual_finish_receiving_host_growth_cut_preserves_current_owner",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_post_response_release_uses_prepaid_events_and_no_growth_host_boundary",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_audit_work_storage_output_and_result_error_render_neighbors",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_invocation_counter_overflow_stops_before_consumption_or_attempt"
   ],
   "classifications": {
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific": "ordinary_source",
@@ -98,7 +106,15 @@
     "lib.rs::execution::completion_authority_tests::m6_invocation_argument_order_arity_result_source_mir_and_catalog_origins_reject": "private_malformed_authority",
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_bad_ticket_realm_fresh_identity_and_frame_reject_before_finish_attempt": "private_malformed_authority",
     "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_finish_error_two_is_integrity_with_actual_partial_prefix_retained": "private_malformed_authority",
-    "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_late_protected_tag_payload_realm_production_and_receiver_corruptions_keep_prefix": "private_malformed_authority"
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_late_protected_tag_payload_realm_production_and_receiver_corruptions_keep_prefix": "private_malformed_authority",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_completion_catalog_has_explicit_terms_and_exact_combined_neighbors": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_preparation_storage_work_diagnostics_tokens_and_identifier_neighbors": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_runtime_peak_and_fuel_neighbors_for_all_three_outcomes": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_each_container_fits_but_combined_envelope_rejects_before_handoff": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_every_actual_finish_receiving_host_growth_cut_preserves_current_owner": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_post_response_release_uses_prepaid_events_and_no_growth_host_boundary": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_audit_work_storage_output_and_result_error_render_neighbors": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_invocation_counter_overflow_stops_before_consumption_or_attempt": "trusted_boundary"
   },
   "migrations": {},
   "contract_corrections": [],
@@ -186,6 +202,16 @@
       "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_bad_ticket_realm_fresh_identity_and_frame_reject_before_finish_attempt",
       "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_finish_error_two_is_integrity_with_actual_partial_prefix_retained",
       "lib.rs::execution::machine::trusted::completion_runtime_tests::m6_late_protected_tag_payload_realm_production_and_receiver_corruptions_keep_prefix"
+    ],
+    "M7": [
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_completion_catalog_has_explicit_terms_and_exact_combined_neighbors",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_preparation_storage_work_diagnostics_tokens_and_identifier_neighbors",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_runtime_peak_and_fuel_neighbors_for_all_three_outcomes",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_each_container_fits_but_combined_envelope_rejects_before_handoff",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_every_actual_finish_receiving_host_growth_cut_preserves_current_owner",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_post_response_release_uses_prepaid_events_and_no_growth_host_boundary",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_audit_work_storage_output_and_result_error_render_neighbors",
+      "lib.rs::execution::machine::trusted::completion_bound_tests::m7_invocation_counter_overflow_stops_before_consumption_or_attempt"
     ]
   },
   "authority_doctests": 1,

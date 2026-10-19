@@ -207,7 +207,7 @@ impl Catalog {
     ) -> Result<Self, ResourceFailure> {
         // These terms cover every row, immutable selection copy, approval copies,
         // bounded root/name scans and diagnostics independently of source size.
-        context.reserve_catalog(
+        context.reserve_completion_catalog(
             selection.roots.len(),
             selection.roots.iter().map(String::len).sum(),
         )?;

@@ -146,7 +146,7 @@ Both records were retrieved and verified before M6 started. The new larger
 Result-argument fixture explicitly selects the existing supported admission
 storage maximum; production defaults and predecessor limits are unchanged.
 
-## M6: malformed authority and late runtime matrix (validation pending)
+## M6: malformed authority and late runtime matrix (Actions verified)
 
 The protocol seals four separate event identities in addition to its eight
 phases. Production provenance now includes session realm and exact fresh
@@ -158,6 +158,37 @@ ticket. Private static controls cover catalogs, bindings, types, effects, grants
 origins, argument/site correspondence, event roles and roots. Private runtime
 controls cover actual ticket, realm, fresh identity, frame, Error(2), protected
 tag/payload/realm/production/receiver while preserving the real prefix.
+
+All eight Actions runs passed at `1cfa76a7284ef1223196f7bc9fd53a6582e2202c`,
+tree `a196a5e7f6e10e041450575f81aa6e7e1610a820`, 2,027 passing tests per
+profile. Run/job pairs: 39320339365/118292438572, 39320339425/118292438602,
+39320339434/118292441519, 39320339430/118292439319,
+39320330368/118292407125, 39320330173/118292406766,
+39320330234/118292406887, 39320330301/118292407426.
+Oversized malformed arity retains the existing metadata-shape Limit category;
+in-bound correspondence mutations require Integrity.
+
+## M7: measured growth and custody boundaries (validation pending)
+
+The selected profile adds explicit descriptor/diagnostic/work terms and bounded
+protocol-copy storage through the existing Context. The predecessor catalog
+reservation function and its exact numeric oracle remain unchanged. New tests
+measure configured preparation storage/work/diagnostics/token/name neighbors,
+combined receiving storage, full-runtime peak/fuel for all outcomes, every
+actual receiving Host growth, audit work/storage/output and result/error output.
+A physical Sensor/sole-holder census now runs at every completion fuel cut.
+
+Owned argument evaluation already provides both continuation slots. The final
+protocol checks that capacity before handoff instead of inventing a fresh
+continuation allocation surface. The existing cleanup work cursor and event
+capacity are prepaid before response; a post-response allocation control cannot
+trigger there. Real receiving growth is recorded privately without enlarging
+the machine and each observed site receives a typed Host cut.
+
+Actions writes numeric finite-fixture measurements to the runner temporary
+directory and verifies/publishes them in each complete unfiltered profile log.
+These are private test-build measurements at real production reservation seams,
+not portable ABI byte constants or hard realtime/OOM guarantees.
 
 ## Remaining gated milestones
 
