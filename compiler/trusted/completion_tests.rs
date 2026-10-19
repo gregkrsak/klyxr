@@ -11,8 +11,9 @@ fn selection(grants: Grants) -> Selection {
 fn prepare(
     source: &str,
     grants: Grants,
-) -> Result<crate::execution::CheckedExecutable, crate::execution::ExecutionError> {
+) -> Result<crate::execution::CheckedExecutable, Box<crate::execution::ExecutionError>> {
     prepare_execution_with_profile(source, AdmissionLimits::default(), &selection(grants))
+        .map_err(Box::new)
 }
 
 #[test]
