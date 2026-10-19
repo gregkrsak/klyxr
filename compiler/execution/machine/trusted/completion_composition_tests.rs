@@ -133,30 +133,20 @@ fn loop_carried_consumption_remains_rejected_by_existing_checker() {
 #[test]
 fn several_finish_result_arguments_preserve_written_order_and_individual_release() {
     let source="fn both(first:Result<success:FinishReceipt,failure:SensorError>,second:Result<success:FinishReceipt,failure:SensorError>)->Result<success:FinishReceipt,failure:SensorError>{match first{Ok(value)=>{return second;}Error(problem)=>{match second{Ok(other)=>{return Error(problem);}Error(other)=>{return Error(problem);}}}}}fn demo()->Result<success:FinishReceipt,failure:SensorError>effects io{let first=sensor_open()or return;let second=sensor_open()or return;return both(sensor_finish(second),sensor_finish(first));}";
-    composition(source, Scenario::Sample, "Ok(FinishReceipt(1))", 2, 2);
-    composition(
-        source,
-        Scenario::FinishIoFailure,
-        "Error(SensorError(3))",
-        2,
-        2,
-    );
-    let e = artifact(source, "demo", Scenario::Sample);
-    let mut s =
-        ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).unwrap();
-    s.advance().unwrap();
-    let released: Vec<_> = s
-        .events()
-        .iter()
-        .filter_map(|e| {
-            if let Event::ReleaseComplete(id) = e {
-                Some(*id)
-            } else {
-                None
-            }
-        })
-        .collect();
-    assert_eq!(released, [1, 0]);
+    for (scenario, expected) in [(Scenario::Sample, "Ok(FinishReceipt(1))"), (Scenario::FinishIoFailure, "Error(SensorError(3))")] {
+        let selection = Selection::sensor_demo(scenario, Grants::ALL, &["demo"]).unwrap();
+        // This larger fixture uses an explicit supported admission allowance.
+        // The production default and all predecessor budgets remain intact.
+        let limits = AdmissionLimits { working_storage: AdmissionLimits::MAX.working_storage, ..AdmissionLimits::default() };
+        let e = prepare_execution_with_profile(source, limits, &selection).unwrap();
+        let mut s = ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).unwrap();
+        assert_eq!(e.render_result(s.advance().unwrap(),4096).unwrap(), expected);
+        let finish = e.trusted.as_ref().unwrap().catalog.operations[3].id;
+        assert_eq!(s.events().iter().filter(|event| matches!(event, Event::Attempt(_,op) if *op == finish)).count(),2);
+        let released: Vec<_> = s.events().iter().filter_map(|event| if let Event::ReleaseComplete(id) = event {Some(*id)} else {None}).collect();
+        assert_eq!(released,[1,0]);
+        assert_eq!(s.live_sensors(),0);
+    }
 }
 
 #[test]
