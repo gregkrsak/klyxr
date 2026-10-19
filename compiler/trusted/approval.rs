@@ -258,12 +258,16 @@ impl Approved {
         for function in mir.functions() {
             for site in &function.cleanup_effect_sites {
                 if let crate::effects::custody::Holder::Invocation(operation) = site.holder {
-                    let matching = approved.invocations.iter().filter(|invocation| {
-                        invocation.function == site.function
-                            && invocation.operation == operation
-                            && invocation.source == site.origin
-                            && invocation.completion.is_some()
-                    }).count();
+                    let matching = approved
+                        .invocations
+                        .iter()
+                        .filter(|invocation| {
+                            invocation.function == site.function
+                                && invocation.operation == operation
+                                && invocation.source == site.origin
+                                && invocation.completion.is_some()
+                        })
+                        .count();
                     if matching != 1 {
                         return Err(PlanError::Integrity("orphan completion cleanup witness"));
                     }
@@ -317,9 +321,10 @@ impl Approved {
                     "trusted invocation identity or cleanup-only target",
                 ));
             }
-            let operation = self.catalog.operation(invocation.operation).ok_or(
-                PlanError::Integrity("missing invocation operation"),
-            )?;
+            let operation = self
+                .catalog
+                .operation(invocation.operation)
+                .ok_or(PlanError::Integrity("missing invocation operation"))?;
             if (operation.class == OperationClass::Completion) != invocation.completion.is_some() {
                 return Err(PlanError::Integrity("completion protocol membership"));
             }
@@ -341,7 +346,9 @@ impl Approved {
                     || plan.destination != invocation.destination
                     || plan.phases != CompletionPhase::PROTOCOL
                 {
-                    return Err(PlanError::Integrity("completion contract/holder/release protocol"));
+                    return Err(PlanError::Integrity(
+                        "completion contract/holder/release protocol",
+                    ));
                 }
             }
         }
@@ -448,9 +455,10 @@ impl Collector<'_> {
                 reserve(&mut self.approved.invocations, 1, Allocation::Invocation)?;
                 let ordinal = self.approved.invocations.len();
                 let completion = if op.class == OperationClass::Completion {
-                    let input = flow.sites.get(argument_sites[0].0).ok_or(
-                        PlanError::Integrity("missing completion input site"),
-                    )?;
+                    let input = flow
+                        .sites
+                        .get(argument_sites[0].0)
+                        .ok_or(PlanError::Integrity("missing completion input site"))?;
                     let mut witnesses = self.function.cleanup_effect_sites.iter().filter(|w| {
                         w.function == self.function.function()
                             && w.holder == crate::effects::custody::Holder::Invocation(*operation)
@@ -464,7 +472,9 @@ impl Collector<'_> {
                         || witness.plan != hir::resources::CleanupType::Resource(catalog.sensor)
                         || witness.effects != catalog.resource.effects
                     {
-                        return Err(PlanError::Integrity("completion cleanup witness correspondence"));
+                        return Err(PlanError::Integrity(
+                            "completion cleanup witness correspondence",
+                        ));
                     }
                     Some(CompletionPlan {
                         input: input.id,

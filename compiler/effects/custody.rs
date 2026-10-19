@@ -161,15 +161,25 @@ impl Custody {
         let (resource, effects) = self.resource.expect("selected completion resource");
         let holder = Holder::Invocation(operation);
         let kind = Kind::CompletionRelease;
-        let key = (origin.start, origin.end, origin.line, origin.column, kind, holder);
-        self.sites.insert(key, Site {
-            function: self.function,
-            holder,
-            plan: CleanupType::Resource(resource),
-            effects,
+        let key = (
+            origin.start,
+            origin.end,
+            origin.line,
+            origin.column,
             kind,
-            origin,
-        });
+            holder,
+        );
+        self.sites.insert(
+            key,
+            Site {
+                function: self.function,
+                holder,
+                plan: CleanupType::Resource(resource),
+                effects,
+                kind,
+                origin,
+            },
+        );
     }
 
     pub(crate) fn merge_sites(&mut self, other: &Self) {
