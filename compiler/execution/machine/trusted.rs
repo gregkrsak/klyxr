@@ -415,8 +415,15 @@ impl<'a> Machine<'a> {
         if op.class == OperationClass::Completion {
             self.completion_prepare(index, activation, frame)?;
             #[cfg(test)]
-            if self.trusted.as_ref().unwrap().fault == Some((Fault::DisabledCompletion, self.trusted.as_ref().unwrap().next_invocation)) {
-                return Err(self.integrity("completion invocation disabled before custody protocol"));
+            if self.trusted.as_ref().unwrap().fault
+                == Some((
+                    Fault::DisabledCompletion,
+                    self.trusted.as_ref().unwrap().next_invocation,
+                ))
+            {
+                return Err(
+                    self.integrity("completion invocation disabled before custody protocol")
+                );
             }
             return self.completion_consume(frame);
         }
@@ -833,6 +840,6 @@ impl<'a> Machine<'a> {
 }
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod completion_runtime_tests;
+#[cfg(test)]
+mod tests;

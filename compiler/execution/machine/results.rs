@@ -182,9 +182,15 @@ impl<'a> Machine<'a> {
         owner
     }
 
-    pub(super) fn completion_result_validate(&self, owner: OwnerId) -> Result<ResultTag, ExecutionError> {
+    pub(super) fn completion_result_validate(
+        &self,
+        owner: OwnerId,
+    ) -> Result<ResultTag, ExecutionError> {
         let cell = self.result_cell(owner)?;
-        if cell.phase != Phase::CompletionProtected || cell.parent.is_some() || cell.payload.is_none() {
+        if cell.phase != Phase::CompletionProtected
+            || cell.parent.is_some()
+            || cell.payload.is_none()
+        {
             return Err(self.integrity("invalid protected completion result"));
         }
         Self::result_tag(cell.tag)
