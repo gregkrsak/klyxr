@@ -234,9 +234,26 @@ impl<'a> Machine<'a> {
                 Fault::ProtectedIdentity => state.productions.last_mut().unwrap().invocation = 0,
                 Fault::ProtectedReceiver => pending.protected = Some(results::OwnerId(0)),
                 Fault::ProtectedContractOne | Fault::ProtectedContractTwo => {
-                    let code = if fault == Fault::ProtectedContractOne { 1 } else { 2 };
-                    state.productions.last_mut().unwrap().range.as_mut().unwrap().value = code;
-                    if let Some(Value::Public(RuntimeValue::Range(value))) = self.results.as_mut().unwrap().cells[owner.0].payload.as_mut() { value.value = code; }
+                    let code = if fault == Fault::ProtectedContractOne {
+                        1
+                    } else {
+                        2
+                    };
+                    state
+                        .productions
+                        .last_mut()
+                        .unwrap()
+                        .range
+                        .as_mut()
+                        .unwrap()
+                        .value = code;
+                    if let Some(Value::Public(RuntimeValue::Range(value))) =
+                        self.results.as_mut().unwrap().cells[owner.0]
+                            .payload
+                            .as_mut()
+                    {
+                        value.value = code;
+                    }
                 }
                 _ => {}
             }

@@ -321,15 +321,26 @@ fn m6_late_protected_tag_payload_realm_production_and_receiver_corruptions_keep_
 
 #[test]
 fn m9_coordinated_protected_payload_and_production_forgery_cannot_widen_finish_errors() {
-    for fault in [Fault::ProtectedContractOne,Fault::ProtectedContractTwo] {
-        let e=artifact(Scenario::FinishPartialIoFailure);
-        let mut s=ExecutionSession::new(&e,e.entry("demo").unwrap(),ExecutionLimits::default()).unwrap();
-        s.machine.trusted.as_mut().unwrap().fault=Some((fault,1));
-        assert_eq!(s.advance().unwrap_err().kind,ErrorKind::Integrity("trusted production violates exact operation outcome contract"));
-        assert_eq!(s.live_sensors(),1);
-        assert!(s.events().contains(&Event::FinishPrefix(1,1)));
-        assert!(s.events().contains(&Event::FinishProtected(1,hir::ResultTag::Error)));
-        assert!(!s.events().iter().any(|event|matches!(event,Event::ReleaseAttempt(..)|Event::Published(1,_))));
-        let prefix=s.events().to_vec();assert!(s.advance().is_err());assert_eq!(s.events(),prefix);
+    for fault in [Fault::ProtectedContractOne, Fault::ProtectedContractTwo] {
+        let e = artifact(Scenario::FinishPartialIoFailure);
+        let mut s = ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default())
+            .unwrap();
+        s.machine.trusted.as_mut().unwrap().fault = Some((fault, 1));
+        assert_eq!(
+            s.advance().unwrap_err().kind,
+            ErrorKind::Integrity("trusted production violates exact operation outcome contract")
+        );
+        assert_eq!(s.live_sensors(), 1);
+        assert!(s.events().contains(&Event::FinishPrefix(1, 1)));
+        assert!(s
+            .events()
+            .contains(&Event::FinishProtected(1, hir::ResultTag::Error)));
+        assert!(!s
+            .events()
+            .iter()
+            .any(|event| matches!(event, Event::ReleaseAttempt(..) | Event::Published(1, _))));
+        let prefix = s.events().to_vec();
+        assert!(s.advance().is_err());
+        assert_eq!(s.events(), prefix);
     }
 }

@@ -459,20 +459,56 @@ fn m7_invocation_counter_overflow_stops_before_consumption_or_attempt() {
 
 #[test]
 fn m9_stopped_completion_report_neighbors_preserve_cursor_outcome_and_prefix() {
-    let e=artifact(Scenario::FinishPartialIoFailure);
-    let mut stopped=ExecutionSession::new(&e,e.entry("demo").unwrap(),ExecutionLimits::default()).unwrap();
-    stopped.machine.trusted.as_mut().unwrap().fault=Some((Fault::ReleaseFailure,1));
-    assert!(matches!(stopped.advance().unwrap_err().kind,ErrorKind::Host(_)));
-    let prefix=stopped.events().to_vec();let retained=stopped.machine.storage().unwrap();
-    let threshold=minimum(ExecutionLimits::default().working_storage as u64,|value|{
-        match stopped.render_authority(ExecutionLimits{working_storage:value as usize,..ExecutionLimits::default()}) {
-            Ok(_)=>true,Err(error)=>{assert_eq!(error.kind,ErrorKind::ConfiguredLimit("authority audit storage"));false}
-        }
-    });
-    assert!(threshold>retained as u64);
+    let e = artifact(Scenario::FinishPartialIoFailure);
+    let mut stopped =
+        ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).unwrap();
+    stopped.machine.trusted.as_mut().unwrap().fault = Some((Fault::ReleaseFailure, 1));
+    assert!(matches!(
+        stopped.advance().unwrap_err().kind,
+        ErrorKind::Host(_)
+    ));
+    let prefix = stopped.events().to_vec();
+    let retained = stopped.machine.storage().unwrap();
+    let threshold = minimum(
+        ExecutionLimits::default().working_storage as u64,
+        |value| match stopped.render_authority(ExecutionLimits {
+            working_storage: value as usize,
+            ..ExecutionLimits::default()
+        }) {
+            Ok(_) => true,
+            Err(error) => {
+                assert_eq!(
+                    error.kind,
+                    ErrorKind::ConfiguredLimit("authority audit storage")
+                );
+                false
+            }
+        },
+    );
+    assert!(threshold > retained as u64);
     conserved(&stopped.machine);
-    assert!(stopped.machine.resources.as_ref().unwrap().current.is_some());
-    assert!(stopped.machine.trusted.as_ref().unwrap().completion.as_ref().unwrap().protected.is_some());
-    assert_eq!(stopped.events(),prefix);assert!(stopped.advance().is_err());assert_eq!(stopped.events(),prefix);
-    metric("stopped-report",&format!("{{\"retained\":{retained},\"audit_storage\":{threshold}}}"));
+    assert!(stopped
+        .machine
+        .resources
+        .as_ref()
+        .unwrap()
+        .current
+        .is_some());
+    assert!(stopped
+        .machine
+        .trusted
+        .as_ref()
+        .unwrap()
+        .completion
+        .as_ref()
+        .unwrap()
+        .protected
+        .is_some());
+    assert_eq!(stopped.events(), prefix);
+    assert!(stopped.advance().is_err());
+    assert_eq!(stopped.events(), prefix);
+    metric(
+        "stopped-report",
+        &format!("{{\"retained\":{retained},\"audit_storage\":{threshold}}}"),
+    );
 }
