@@ -1,4 +1,4 @@
-//! A sealed receiving envelope; M3 prepares custody but never dispatches.
+//! Sealed consuming completion, protected Result and existing fixed cleanup.
 use super::*;
 use crate::trusted::approval::CompletionPhase;
 
@@ -14,6 +14,157 @@ pub(super) struct Pending {
 }
 
 impl<'a> Machine<'a> {
+    pub(in crate::execution::machine) fn completion_consume(&mut self, frame: u64) -> Result<(), ExecutionError> {
+        self.completion_reserved()?;
+        let state = self.trusted.as_ref().unwrap();
+        let pending = state.completion.as_ref().unwrap();
+        let invocation = &self.executable.trusted.as_ref().unwrap().invocations[pending.plan];
+        #[cfg(test)]
+        if state.fault == Some((Fault::BeforeInvocationHost, pending.invocation)) {
+            return Err(self.failure(ErrorKind::Host("injected trusted invocation boundary")));
+        }
+        let value = self.pop_to(Some(crate::mir::temporaries::Destination::TrustedArgument(invocation.operation, 0)))?;
+        // No fallible operation occurs between taking the current owner and
+        // installing its one ticket in persistent completion custody.
+        let pending = self.trusted.as_mut().unwrap().completion.as_mut().unwrap();
+        pending.value = Some(value);
+        pending.phase = CompletionPhase::Consumed;
+        self.task(frame, self.origin, self.expression, Action::CompletionAttempt)
+    }
+
+    pub(in crate::execution::machine) fn completion_attempt(&mut self, frame: u64) -> Result<(), ExecutionError> {
+        self.charge()?;
+        let state = self.trusted.as_ref().unwrap();
+        let pending = state.completion.as_ref().ok_or_else(|| self.integrity("missing consumed completion"))?;
+        let approved = self.executable.trusted.as_ref().unwrap();
+        let plan = approved.invocations.get(pending.plan).ok_or_else(|| self.integrity("foreign completion invocation"))?;
+        let operation = approved.catalog.operation(plan.operation).ok_or_else(|| self.integrity("foreign completion operation"))?;
+        if pending.phase != CompletionPhase::Consumed || pending.invocation != state.next_invocation
+            || !matches!(pending.value, Some(Value::Resource{ty, identity}) if ty == approved.catalog.sensor && identity == pending.sensor)
+            || operation.binding != Binding::SensorFinishV1 || !approved.catalog.granted(operation.id)
+            || !approved.catalog.granted(approved.catalog.resource.release)
+            || !state.entries.iter().any(|entry| entry.token.as_ref().is_some_and(|token| token.realm == state.realm && token.identity == pending.sensor))
+            || state.receipt.is_some() || state.events.capacity() - state.events.len() < 7
+            || state.productions.len() == state.productions.capacity() || !self.trusted_cell_capacity()
+            || self.tasks.capacity() - self.tasks.len() < 2
+        {
+            return Err(self.integrity("completion attempt custody/authority/envelope mismatch"));
+        }
+        let invocation = pending.invocation;
+        let next = invocation.checked_add(1).ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("trusted invocation identities")))?;
+        let scenario = approved.catalog.selection.scenario();
+        let failed = matches!(scenario, Scenario::FinishIoFailure | Scenario::FinishPartialIoFailure);
+        let state = self.trusted.as_mut().unwrap();
+        state.next_invocation = next;
+        state.completion.as_mut().unwrap().phase = CompletionPhase::Attempted;
+        state.receipt = Some(Receipt { invocation, plan: plan.ordinal, expected_sensor: state.completion.as_ref().unwrap().sensor, tag: u8::from(failed), payload: None });
+        state.events.push(Event::Attempt(invocation, operation.id));
+        // Fixed deterministic binding: one irreversible prefix unit is realized
+        // only in the partial-Error scenario. It is never success or rollback.
+        if scenario == Scenario::FinishPartialIoFailure {
+            state.events.push(Event::FinishPrefix(invocation, 1));
+        }
+        state.receipt.as_mut().unwrap().payload = Some(Payload::Range(RangeValue {
+            ty: if failed { approved.catalog.error } else { approved.catalog.finish_receipt },
+            value: if failed { 3 } else { 1 },
+        }));
+        state.events.push(Event::Received(invocation, u8::from(failed)));
+        #[cfg(test)]
+        if let Some((fault, _)) = state.fault.filter(|(_, selected)| *selected == invocation) {
+            let receipt = state.receipt.as_mut().unwrap();
+            match fault {
+                Fault::BadTag => receipt.tag = 255,
+                Fault::BadRange => { if let Some(Payload::Range(value)) = receipt.payload.as_mut() { value.value = 4096; } }
+                Fault::WrongRangeIdentity => { if let Some(Payload::Range(value)) = receipt.payload.as_mut() { value.ty = approved.catalog.reading; } }
+                Fault::WrongErrorCode => { receipt.tag = 1; receipt.payload = Some(Payload::Range(RangeValue {ty: approved.catalog.error, value: 1})); }
+                Fault::WrongInvocation => receipt.plan = usize::MAX,
+                _ => {}
+            }
+        }
+        self.completion_receipt_validate(plan)?;
+        let state = self.trusted.as_mut().unwrap();
+        let receipt = state.receipt.take().unwrap();
+        let tag = if receipt.tag == 0 { hir::ResultTag::Ok } else { hir::ResultTag::Error };
+        let Some(Payload::Range(range)) = receipt.payload else { unreachable!("validated completion payload") };
+        let ticket = state.completion.as_mut().unwrap().ticket.take().unwrap();
+        let owner = ticket.owner;
+        state.productions.push(Production { cell: owner, plan: plan.ordinal, invocation, tag, range: Some(range.clone()), sensor: None });
+        // The ordinary outcome is now a separate machine-owned Result cell.
+        // It contains no Sensor and cannot be observed in CompletionProtected.
+        self.completion_result_protect(ticket, plan, tag, Value::Public(RuntimeValue::Range(range)));
+        let state = self.trusted.as_mut().unwrap();
+        let pending = state.completion.as_mut().unwrap();
+        pending.protected = Some(owner);
+        pending.phase = CompletionPhase::OutcomeProtected;
+        state.events.push(Event::FinishProtected(invocation, tag));
+        pending.phase = CompletionPhase::ReleasePending;
+        #[cfg(test)]
+        if state.fault == Some((Fault::AfterReceiptHost, invocation)) {
+            return Err(self.failure(ErrorKind::Host("injected trusted receipt boundary")));
+        }
+        self.task(frame, plan.completion.as_ref().unwrap().delivery, Some(plan.source), Action::CompletionDeliver)?;
+        self.task(frame, plan.completion.as_ref().unwrap().cleanup, Some(plan.source), Action::CompletionRelease)
+    }
+
+    fn completion_receipt_validate(&self, plan: &Invocation) -> Result<(), ExecutionError> {
+        let state = self.trusted.as_ref().unwrap();
+        let receipt = state.receipt.as_ref().ok_or_else(|| self.integrity("missing completion response"))?;
+        let pending = state.completion.as_ref().unwrap();
+        let approved = self.executable.trusted.as_ref().unwrap();
+        let valid = match (receipt.tag, receipt.payload.as_ref()) {
+            (0, Some(Payload::Range(value))) => value.ty == approved.catalog.finish_receipt && value.value == 1,
+            (1, Some(Payload::Range(value))) => value.ty == approved.catalog.error && value.value == 3,
+            _ => false,
+        };
+        if !valid || receipt.plan != plan.ordinal || receipt.invocation != pending.invocation
+            || receipt.expected_sensor != pending.sensor || receipt.invocation.checked_add(1) != Some(state.next_invocation)
+        {
+            return Err(self.integrity("completion response tag/payload/provenance contract"));
+        }
+        Ok(())
+    }
+
+    pub(in crate::execution::machine) fn completion_release(&mut self) -> Result<(), ExecutionError> {
+        self.charge()?;
+        let state = self.trusted.as_ref().unwrap();
+        let pending = state.completion.as_ref().ok_or_else(|| self.integrity("missing completion release continuation"))?;
+        if pending.phase != CompletionPhase::ReleasePending || pending.value.is_none() {
+            return Err(self.integrity("completion release continuation phase"));
+        }
+        self.completion_result_validate(pending.protected.ok_or_else(|| self.integrity("completion release without protected outcome"))?)?;
+        let pending = self.trusted.as_mut().unwrap().completion.as_mut().unwrap();
+        pending.phase = CompletionPhase::Releasing;
+        let value = pending.value.take().unwrap();
+        // The one existing cleanup engine takes responsibility immediately.
+        // Its detached/work/current cursor retains the ticket at every cut.
+        self.release_value(value)?;
+        self.trusted.as_mut().unwrap().completion.as_mut().unwrap().phase = CompletionPhase::Released;
+        Ok(())
+    }
+
+    pub(in crate::execution::machine) fn completion_deliver(&mut self) -> Result<(), ExecutionError> {
+        self.charge()?;
+        let state = self.trusted.as_ref().unwrap();
+        let pending = state.completion.as_ref().ok_or_else(|| self.integrity("missing completion delivery continuation"))?;
+        if pending.phase != CompletionPhase::Released || pending.value.is_some()
+            || state.entries.iter().any(|entry| entry.token.as_ref().is_some_and(|token| token.identity == pending.sensor))
+        {
+            return Err(self.integrity("completion delivery before exact fixed release"));
+        }
+        let owner = pending.protected.ok_or_else(|| self.integrity("completion delivery without protected outcome"))?;
+        let tag = self.completion_result_validate(owner)?;
+        if self.values.len() == self.values.capacity() || state.events.len() == state.events.capacity() {
+            return Err(self.failure(ErrorKind::ConfiguredLimit("completion delivery envelope")));
+        }
+        let invocation = pending.invocation;
+        self.completion_result_deliver(owner);
+        let state = self.trusted.as_mut().unwrap();
+        state.completion.as_mut().unwrap().phase = CompletionPhase::Delivered;
+        state.events.push(Event::Published(invocation, tag));
+        state.completion = None;
+        Ok(())
+    }
+
     pub(super) fn completion_prepare(
         &mut self,
         index: usize,
@@ -173,6 +324,7 @@ mod tests {
             let mut s =
                 ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default())
                     .unwrap();
+            s.disable_completion();
             assert!(matches!(
                 s.advance().unwrap_err().kind,
                 ErrorKind::Integrity(_)
@@ -245,6 +397,7 @@ mod tests {
         let mut measured =
             ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default())
                 .unwrap();
+        measured.disable_completion();
         assert!(matches!(
             measured.advance().unwrap_err().kind,
             ErrorKind::Integrity(_)
@@ -260,6 +413,7 @@ mod tests {
                 },
             )
             .unwrap();
+            s.disable_completion();
             let kind = s.advance().unwrap_err().kind.clone();
             if ready {
                 assert!(matches!(kind, ErrorKind::Integrity(_)));
@@ -288,6 +442,7 @@ mod tests {
         let e = artifact(false);
         let mut s = ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default())
             .unwrap();
+        s.disable_completion();
         assert!(s.advance().is_err());
         let state = s.machine.trusted.as_ref().unwrap();
         let pending = state.completion.as_ref().unwrap();

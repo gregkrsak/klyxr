@@ -1,9 +1,9 @@
 {
-  "stage": "M3",
+  "stage": "M4",
   "baseline_commit": "372230df1d359b13d28f5c136130ac031507716a",
   "baseline_tree": "a646e9576a9b7650ff9a95275f1080b591d06986",
   "predecessor_count": 1981,
-  "expected_per_profile": 2003,
+  "expected_per_profile": 2008,
   "additions": [
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific",
     "lib.rs::trusted::completion_tests::finish_direct_and_relay_arguments_prepare_without_reference_coercion",
@@ -26,7 +26,12 @@
     "lib.rs::execution::machine::trusted::completion::tests::m3_disabled_completion_reserves_but_never_consumes_current_owner",
     "lib.rs::execution::machine::trusted::completion::tests::m3_diagnostic_host_cut_keeps_relay_returned_owner_without_attempt",
     "lib.rs::execution::machine::trusted::completion::tests::m3_simultaneous_storage_neighbor_retains_the_input",
-    "lib.rs::execution::machine::trusted::completion::tests::m3_receiving_capacities_coexist_before_handoff"
+    "lib.rs::execution::machine::trusted::completion::tests::m3_receiving_capacities_coexist_before_handoff",
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_success_error_and_partial_error_release_before_inner_delivery",
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_both_outcomes_survive_release_failure_with_exact_prefix_and_no_delivery",
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_post_response_host_preserves_protected_outcome_and_completion_owner",
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_malformed_completion_response_retains_sensor_and_real_prefix",
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects"
   ],
   "classifications": {
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific": "ordinary_source",
@@ -50,7 +55,12 @@
     "lib.rs::execution::machine::trusted::completion::tests::m3_disabled_completion_reserves_but_never_consumes_current_owner": "trusted_boundary",
     "lib.rs::execution::machine::trusted::completion::tests::m3_diagnostic_host_cut_keeps_relay_returned_owner_without_attempt": "trusted_boundary",
     "lib.rs::execution::machine::trusted::completion::tests::m3_simultaneous_storage_neighbor_retains_the_input": "trusted_boundary",
-    "lib.rs::execution::machine::trusted::completion::tests::m3_receiving_capacities_coexist_before_handoff": "trusted_boundary"
+    "lib.rs::execution::machine::trusted::completion::tests::m3_receiving_capacities_coexist_before_handoff": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_success_error_and_partial_error_release_before_inner_delivery": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_both_outcomes_survive_release_failure_with_exact_prefix_and_no_delivery": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_post_response_host_preserves_protected_outcome_and_completion_owner": "trusted_boundary",
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_malformed_completion_response_retains_sensor_and_real_prefix": "private_malformed_authority",
+    "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects": "trusted_boundary"
   },
   "migrations": {},
   "contract_corrections": [],
@@ -65,6 +75,15 @@
         "lib.rs::execution::effect_authority_tests::cleanup_witness_site_function_owner_plan_summary_and_origin_mutations_reject"
       ],
       "reason": "Wrap the identical source Place payload in Holder::Place after the representation gains invocation holders. No assertion or identity change."
+    },
+    {
+      "affected_additions": [
+        "lib.rs::trusted::completion_tests::m1_completion_dispatch_is_disabled_and_retains_the_sensor",
+        "lib.rs::execution::machine::trusted::completion::tests::m3_disabled_completion_reserves_but_never_consumes_current_owner",
+        "lib.rs::execution::machine::trusted::completion::tests::m3_simultaneous_storage_neighbor_retains_the_input",
+        "lib.rs::execution::machine::trusted::completion::tests::m3_receiving_capacities_coexist_before_handoff"
+      ],
+      "reason": "M1-M3 disabled snapshots passed before enabling M4. Their pre-dispatch assertions remain intact via a narrow private test-only disabled-completion cut at the same boundary. Production no longer stops at that milestone guard. Frozen predecessor tests are unchanged."
     }
   ],
   "semantic_obligations": {},
@@ -99,6 +118,13 @@
       "lib.rs::execution::machine::trusted::completion::tests::m3_diagnostic_host_cut_keeps_relay_returned_owner_without_attempt",
       "lib.rs::execution::machine::trusted::completion::tests::m3_simultaneous_storage_neighbor_retains_the_input",
       "lib.rs::execution::machine::trusted::completion::tests::m3_receiving_capacities_coexist_before_handoff"
+    ],
+    "M4": [
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_success_error_and_partial_error_release_before_inner_delivery",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_both_outcomes_survive_release_failure_with_exact_prefix_and_no_delivery",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_post_response_host_preserves_protected_outcome_and_completion_owner",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_malformed_completion_response_retains_sensor_and_real_prefix",
+      "lib.rs::execution::machine::trusted::completion_runtime_tests::m4_every_fuel_cut_preserves_a_lawful_prefix_without_repeat_effects"
     ]
   },
   "authority_doctests": 1,

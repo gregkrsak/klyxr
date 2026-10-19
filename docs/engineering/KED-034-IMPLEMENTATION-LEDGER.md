@@ -86,7 +86,7 @@ profile, all 1,981 predecessors retained. Run/job pairs:
 39316086017/118277800051, 39316086055/118277800149,
 39316086032/118277800290, 39316085803/118277799443.
 
-## M3: receiving envelope (validation pending)
+## M3: receiving envelope (Actions verified)
 
 A pending record retains the exact current temporary identity and future
 completion/protected-result roles. One checked sum reserves provenance, seven
@@ -95,7 +95,27 @@ fixed cleanup work and two continuations together. Actual diagnostic storage
 is reserved before handoff and moves into terminal reporting without allocation.
 The pre-dispatch guard remains enabled: no finish attempt or consume occurs.
 Tests pressure direct and relay-returned owners, a real diagnostic Host cut,
-simultaneous capacities and measured storage neighbors. These are pending CI.
+simultaneous capacities and measured storage neighbors. All eight Actions runs passed at `7498484d709f4cd4863591e07de797c860a2ea13`
+(tree `e06c93c43fc1383e115bfebf7b92d4c59234e4b3`), 2,003 tests per profile.
+Run/job pairs: 39317058163/118281154313, 39317058161/118281154457,
+39317058091/118281154246, 39317058117/118281153996,
+39317048287/118281119343, 39317048289/118281119864,
+39317048423/118281120954, 39317048447/118281121438.
+
+## M4: sealed completion enabled (validation pending)
+
+Only after the complete M3 snapshot passed all eight workflows, completion
+was enabled. The current temporary transfers once into pending completion
+custody; the physical Sensor remains in the machine entry table. The fixed
+binding records attempt, optional nonempty partial prefix, and ordinary response.
+A separate protected Result cell contains only receipt/error data. Both
+alternatives run the existing cleanup work/current cursor and exact fixed
+release before the delivery continuation publishes the Result. Every phase
+is terminally retainable; no retry or owner restoration exists. New tests
+cover all three scenarios, malformed response retention, protected outcomes
+at Host/release failure and every successful-trace fuel cut. M1/M3 guard
+assertions remain as private test-only boundary cuts; their exact pre-enable
+Actions snapshots remain historical evidence. No frozen predecessor changes.
 
 ## Remaining gated milestones
 

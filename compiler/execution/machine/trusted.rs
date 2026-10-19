@@ -14,6 +14,8 @@ pub enum Event {
     ReleaseAttempt(u64, hir::TrustedOperationId),
     ReleaseComplete(u64),
     ReleaseFailure(u64),
+    FinishPrefix(u64, u8),
+    FinishProtected(u64, hir::ResultTag),
 }
 // Neither fixture tokens nor raw binding payloads are Copy or Clone.
 #[derive(Debug)]
@@ -48,6 +50,7 @@ pub(super) struct Production {
 #[cfg(test)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Fault {
+    DisabledCompletion,
     BeforeInvocationHost,
     AfterReceiptHost,
     BadTag,
@@ -146,6 +149,11 @@ pub struct ExecutionSession<'a> {
     machine: Machine<'a>,
 }
 impl<'a> ExecutionSession<'a> {
+    /// Private milestone control: preserve the tested pre-enable boundary.
+    #[cfg(test)]
+    pub(crate) fn disable_completion(&mut self) {
+        self.machine.trusted.as_mut().unwrap().fault = Some((Fault::DisabledCompletion, 1));
+    }
     pub fn new(
         executable: &'a CheckedExecutable,
         entry: FunctionId,
@@ -404,11 +412,13 @@ impl<'a> Machine<'a> {
         {
             return Err(self.integrity("trusted invocation signature/origin/authority mismatch"));
         }
-        // M1-M3: the catalog can be checked, but completion cannot dispatch
-        // before the sealed receiving, protection and release protocol exists.
         if op.class == OperationClass::Completion {
             self.completion_prepare(index, activation, frame)?;
-            return Err(self.integrity("completion invocation disabled before custody protocol"));
+            #[cfg(test)]
+            if self.trusted.as_ref().unwrap().fault == Some((Fault::DisabledCompletion, self.trusted.as_ref().unwrap().next_invocation)) {
+                return Err(self.integrity("completion invocation disabled before custody protocol"));
+            }
+            return self.completion_consume(frame);
         }
         let open = op.class == OperationClass::Acquisition;
         if open && !approved.catalog.granted(approved.catalog.resource.release) {
@@ -824,3 +834,5 @@ impl<'a> Machine<'a> {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod completion_runtime_tests;

@@ -166,6 +166,7 @@ fn m1_completion_dispatch_is_disabled_and_retains_the_sensor() {
         ExecutionLimits::default(),
     )
     .unwrap();
+    session.disable_completion();
     assert!(matches!(
         session.advance().unwrap_err().kind,
         ErrorKind::Integrity(_)

@@ -101,6 +101,9 @@ enum Destination {
     Field(Location, hir::RecordId, hir::FieldId),
 }
 enum Action<'a> {
+    CompletionAttempt,
+    CompletionRelease,
+    CompletionDeliver,
     TrustedInvoke(usize, usize, u64),
     ResultRecordNext(usize, &'a [hir::RecordFieldInit], usize),
     ResultRecordField(usize, &'a [hir::RecordFieldInit], usize),
@@ -1319,6 +1322,9 @@ impl<'a> Machine<'a> {
         self.expression = task.expression;
         self.site = None;
         match task.action {
+            Action::CompletionAttempt => self.completion_attempt(task.frame)?,
+            Action::CompletionRelease => self.completion_release()?,
+            Action::CompletionDeliver => self.completion_deliver()?,
             Action::ResultRecordNext(id, fields, depth) => {
                 self.result_record_next(task.frame, id, fields, depth)?
             }
