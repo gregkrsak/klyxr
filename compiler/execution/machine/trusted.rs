@@ -127,7 +127,7 @@ impl State {
         let diagnostic = self.diagnostic.borrow().as_ref().map_or(Some(0), |trace| {
             trace.capacity().checked_mul(size_of::<CallTrace>())
         })?;
-        n = n.checked_add(self.stop_storage.max(outcome).max(diagnostic))?;
+        n = n.checked_add(self.stop_storage.max(outcome.checked_add(diagnostic)?))?;
         Some(n)
     }
     fn live(&self) -> usize {
