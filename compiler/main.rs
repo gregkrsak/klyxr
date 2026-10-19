@@ -263,6 +263,8 @@ fn run_execution(mut args: impl Iterator<Item = String>, audit: bool) -> Result<
             "open-io-failure" => Scenario::OpenIoFailure,
             "no-sample" => Scenario::NoSample,
             "read-io-failure" => Scenario::ReadIoFailure,
+            "finish-io-failure" => Scenario::FinishIoFailure,
+            "finish-partial-io-failure" => Scenario::FinishPartialIoFailure,
             _ => {
                 eprintln!("error: unknown fixed fixture scenario");
                 return Err(2);
@@ -271,6 +273,8 @@ fn run_execution(mut args: impl Iterator<Item = String>, audit: bool) -> Result<
         let grants = match grants.as_deref().unwrap_or("all") {
             "all" => Grants::ALL,
             "none" => Grants::NONE,
+            "finish-release" => Grants { open:false, read:false, release:true, finish:true },
+            "open-finish-release" => Grants { open:true, read:false, release:true, finish:true },
             "open-release" => Grants {
                 open: true,
                 read: false,

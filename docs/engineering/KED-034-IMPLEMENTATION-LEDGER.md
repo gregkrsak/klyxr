@@ -168,7 +168,7 @@ profile. Run/job pairs: 39320339365/118292438572, 39320339425/118292438602,
 Oversized malformed arity retains the existing metadata-shape Limit category;
 in-bound correspondence mutations require Integrity.
 
-## M7: measured growth and custody boundaries (validation pending)
+## M7: measured growth and custody boundaries (Actions verified)
 
 The selected profile adds explicit descriptor/diagnostic/work terms and bounded
 protocol-copy storage through the existing Context. The predecessor catalog
@@ -189,6 +189,32 @@ Actions writes numeric finite-fixture measurements to the runner temporary
 directory and verifies/publishes them in each complete unfiltered profile log.
 These are private test-build measurements at real production reservation seams,
 not portable ABI byte constants or hard realtime/OOM guarantees.
+
+All eight Actions runs passed at `80e4762179d200ea4f7f300188b3fd16e6b422bd`,
+tree `3d7cc19ae340f6feda1cb825b9bb9c35200dc273`, 2,035 passing identities
+per profile. Run/job pairs: 39320967723/118294600857,
+39320967716/118294590702, 39320967750/118294590617,
+39320968152/118294593077, 39320958767/118294559600,
+39320958806/118294559879, 39320958977/118294559752,
+39320958611/118294558850. All four complete event/profile logs contain
+identical measured JSON. Direct source: runtime peak 4,448 bytes, fuel 72 for
+success/immediate Error/partial Error; receiving retained 3,672, total growth
+680, largest single growth 176. Each independent growth fits at 3,848 while
+the simultaneous envelope fails before handoff. Host mask 1,918 covers all
+nine actual finish receiving growth sites. Preparation storage 18,559,608;
+work 1,344,662,663; diagnostics 44,608; tokens 35; identifier bytes 13.
+Output fallback is tested separately from the full diagnostic.
+
+## M8: static audit, CLI and guide (validation pending)
+
+The bounded rooted audit names both holder roles, all origins and continuations,
+phases/events, exact pair, independent direct/cleanup effects, both ordinary
+outcomes, release-only paths and terminal non-delivery. It remains static and
+never treats source status data or a selected scenario as an execution trace.
+CLI scenarios expose immediate and partial completion Error; exact grant
+selections and rejection examples remain explicit. New real-binary CLI and
+static/recursive audit tests, the implementation guide and candidate-labelled
+canonical context are pending Actions. No Accepted decision is changed.
 
 ## Remaining gated milestones
 

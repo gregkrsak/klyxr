@@ -1,9 +1,9 @@
 {
-  "stage": "M7",
+  "stage": "M8",
   "baseline_commit": "372230df1d359b13d28f5c136130ac031507716a",
   "baseline_tree": "a646e9576a9b7650ff9a95275f1080b591d06986",
   "predecessor_count": 1981,
-  "expected_per_profile": 2035,
+  "expected_per_profile": 2041,
   "additions": [
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific",
     "lib.rs::trusted::completion_tests::finish_direct_and_relay_arguments_prepare_without_reference_coercion",
@@ -58,7 +58,13 @@
     "lib.rs::execution::machine::trusted::completion_bound_tests::m7_every_actual_finish_receiving_host_growth_cut_preserves_current_owner",
     "lib.rs::execution::machine::trusted::completion_bound_tests::m7_post_response_release_uses_prepaid_events_and_no_growth_host_boundary",
     "lib.rs::execution::machine::trusted::completion_bound_tests::m7_audit_work_storage_output_and_result_error_render_neighbors",
-    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_invocation_counter_overflow_stops_before_consumption_or_attempt"
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_invocation_counter_overflow_stops_before_consumption_or_attempt",
+    "lib.rs::execution::audit::completion_tests::rooted_completion_audit_lists_roles_effect_origins_and_both_release_paths_without_execution",
+    "lib.rs::execution::audit::completion_tests::unused_finish_grant_and_source_status_never_become_rooted_finish_use",
+    "lib.rs::execution::audit::completion_tests::recursive_structural_edges_terminate_without_running_completion",
+    "tests/completion_cli.rs::defining_sample_cli_delivers_success_and_both_completion_error_scenarios",
+    "tests/completion_cli.rs::completion_cli_preserves_profile_grants_and_discriminating_rejections",
+    "tests/completion_cli.rs::completion_cli_audit_reports_static_protocol_without_executing_a_scenario"
   ],
   "classifications": {
     "lib.rs::trusted::completion_tests::finish_contract_is_exact_owned_nominal_and_operation_specific": "ordinary_source",
@@ -114,7 +120,13 @@
     "lib.rs::execution::machine::trusted::completion_bound_tests::m7_every_actual_finish_receiving_host_growth_cut_preserves_current_owner": "trusted_boundary",
     "lib.rs::execution::machine::trusted::completion_bound_tests::m7_post_response_release_uses_prepaid_events_and_no_growth_host_boundary": "trusted_boundary",
     "lib.rs::execution::machine::trusted::completion_bound_tests::m7_audit_work_storage_output_and_result_error_render_neighbors": "trusted_boundary",
-    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_invocation_counter_overflow_stops_before_consumption_or_attempt": "trusted_boundary"
+    "lib.rs::execution::machine::trusted::completion_bound_tests::m7_invocation_counter_overflow_stops_before_consumption_or_attempt": "trusted_boundary",
+    "lib.rs::execution::audit::completion_tests::rooted_completion_audit_lists_roles_effect_origins_and_both_release_paths_without_execution": "ordinary_source",
+    "lib.rs::execution::audit::completion_tests::unused_finish_grant_and_source_status_never_become_rooted_finish_use": "ordinary_source",
+    "lib.rs::execution::audit::completion_tests::recursive_structural_edges_terminate_without_running_completion": "ordinary_source",
+    "tests/completion_cli.rs::defining_sample_cli_delivers_success_and_both_completion_error_scenarios": "trusted_boundary",
+    "tests/completion_cli.rs::completion_cli_preserves_profile_grants_and_discriminating_rejections": "trusted_boundary",
+    "tests/completion_cli.rs::completion_cli_audit_reports_static_protocol_without_executing_a_scenario": "trusted_boundary"
   },
   "migrations": {},
   "contract_corrections": [],
@@ -212,6 +224,14 @@
       "lib.rs::execution::machine::trusted::completion_bound_tests::m7_post_response_release_uses_prepaid_events_and_no_growth_host_boundary",
       "lib.rs::execution::machine::trusted::completion_bound_tests::m7_audit_work_storage_output_and_result_error_render_neighbors",
       "lib.rs::execution::machine::trusted::completion_bound_tests::m7_invocation_counter_overflow_stops_before_consumption_or_attempt"
+    ],
+    "M8": [
+      "lib.rs::execution::audit::completion_tests::rooted_completion_audit_lists_roles_effect_origins_and_both_release_paths_without_execution",
+      "lib.rs::execution::audit::completion_tests::unused_finish_grant_and_source_status_never_become_rooted_finish_use",
+      "lib.rs::execution::audit::completion_tests::recursive_structural_edges_terminate_without_running_completion",
+      "tests/completion_cli.rs::defining_sample_cli_delivers_success_and_both_completion_error_scenarios",
+      "tests/completion_cli.rs::completion_cli_preserves_profile_grants_and_discriminating_rejections",
+      "tests/completion_cli.rs::completion_cli_audit_reports_static_protocol_without_executing_a_scenario"
     ]
   },
   "authority_doctests": 1,
