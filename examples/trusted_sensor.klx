@@ -1,0 +1,9 @@
+// Explicit sensor-demo profile supplies Sensor, Reading and SensorError.
+fn sample()
+    -> Result<success: Reading, failure: SensorError>
+    effects io
+{
+    let sensor = sensor_open() or return;
+    let reading = sensor_read(&sensor) or return;
+    return Ok(reading);
+}

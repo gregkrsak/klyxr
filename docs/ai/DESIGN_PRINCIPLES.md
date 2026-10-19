@@ -80,3 +80,13 @@ KD-041 applies the existing trust-boundary principles to bounded ordinary
 execution: an opaque successful-ownership artifact grants authority, MIR controls
 runtime flow, and explicit limits begin before source ingestion. A runtime trap
 or configured stop is a tool outcome; execution never implies contract proof.
+
+Frozen KED-033 applies DP-004/DP-007/DP-008/DP-010/DP-012 to the first selected
+trusted resource slice. Concise ordinary source is supported by an explicit exact
+authority account, not hidden host lookup. Grants, complete effects, recoverable
+Result and terminal tool outcomes stay distinct. No-gap owned receipts and persistent
+stopped sessions retain real responsibilities without promising unwind or cleanup
+after failure. Structural audit, bounded work/storage and deterministic private
+failure evidence expose this trust boundary. Implementation does not itself grant
+independent acceptance or verify the host/device; explicit fallible completion is
+deferred and human-only merge authority remains unchanged.

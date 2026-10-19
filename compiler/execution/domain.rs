@@ -237,7 +237,9 @@ impl Abort {
             .get(request.site.0)
             .filter(|s| s.id == request.site)
             .ok_or_else(invalid)?;
-        let record = site.plan.ok_or_else(invalid)?;
+        let hir::resources::CleanupType::Record(record) = site.plan.ok_or_else(invalid)? else {
+            return Err(invalid());
+        };
         let declaration = program.records().get(record.0).ok_or_else(invalid)?;
         if site.children.len() != declaration.fields.len()
             || !matches!(

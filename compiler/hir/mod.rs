@@ -3,6 +3,7 @@
 //! Public inspection is read-only; compiler-internal mutation must preserve identity
 //! and reference invariants. Names and spans are diagnostic metadata.
 use crate::lexer::Span;
+pub use crate::trusted::{ResourceTypeId, TrustedOperationId};
 pub(crate) mod propagation;
 pub(crate) mod resources;
 pub(crate) mod results;
@@ -33,6 +34,7 @@ pub struct ResultType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Program {
+    pub(crate) trusted: Option<crate::trusted::Catalog>,
     pub(crate) results: Vec<ResultType>,
     pub(crate) resources: resources::Catalog,
     pub(crate) ranges: Vec<RangeType>,
@@ -100,7 +102,13 @@ pub struct RangeType {
     pub name: String,
     pub min: i64,
     pub max: i64,
-    pub span: Span,
+    pub origin: DeclarationOrigin,
+}
+/// Catalog rows have no source declaration or source location.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeclarationOrigin {
+    Source(Span),
+    Catalog(crate::trusted::CatalogOrigin),
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Record {
@@ -159,6 +167,7 @@ pub enum ExprType {
     Bool,
     Range(RangeTypeId),
     Record(RecordId),
+    Resource(ResourceTypeId),
     IntegerLiteral,
     SharedRef(ReferentType),
     MutableRef(ReferentType),
@@ -178,6 +187,10 @@ pub struct RecordFieldInit {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprKind {
+    TrustedCall {
+        operation: TrustedOperationId,
+        arguments: Vec<TypedExpr>,
+    },
     ResultConstruct {
         result: ResultTypeId,
         tag: ResultTag,
@@ -246,6 +259,7 @@ pub enum ValueType {
     Bool,
     Range(RangeTypeId),
     Record(RecordId),
+    Resource(ResourceTypeId),
     SharedRef(ReferentType),
     MutableRef(ReferentType),
 }
@@ -255,6 +269,7 @@ pub enum ReferentType {
     Bool,
     Range(RangeTypeId),
     Record(RecordId),
+    Resource(ResourceTypeId),
 }
 impl ReferentType {
     pub(crate) fn value_type(self) -> ValueType {
@@ -262,6 +277,7 @@ impl ReferentType {
             Self::Bool => ValueType::Bool,
             Self::Range(id) => ValueType::Range(id),
             Self::Record(id) => ValueType::Record(id),
+            Self::Resource(id) => ValueType::Resource(id),
         }
     }
 }
@@ -278,6 +294,7 @@ impl From<ValueType> for ExprType {
             ValueType::Bool => Self::Bool,
             ValueType::Range(id) => Self::Range(id),
             ValueType::Record(id) => Self::Record(id),
+            ValueType::Resource(id) => Self::Resource(id),
             ValueType::SharedRef(ty) => Self::SharedRef(ty),
             ValueType::MutableRef(ty) => Self::MutableRef(ty),
         }

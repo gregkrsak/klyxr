@@ -23,25 +23,32 @@ struct Authority(usize);
 enum AuthorityKind {
     Constructor(crate::mir::temporaries::SiteId),
     Propagation(BasicBlockId),
+    Trusted(usize),
 }
 impl Authority {
     const PROPAGATION: usize = 1usize << (usize::BITS - 1);
+    const TRUSTED: usize = 1usize << (usize::BITS - 2);
     fn constructor(site: crate::mir::temporaries::SiteId) -> Option<Self> {
-        (site.0 < Self::PROPAGATION).then_some(Self(site.0))
+        (site.0 < Self::TRUSTED).then_some(Self(site.0))
     }
     fn propagation(block: BasicBlockId) -> Option<Self> {
-        (block.0 < Self::PROPAGATION).then_some(Self(block.0 | Self::PROPAGATION))
+        (block.0 < Self::TRUSTED).then_some(Self(block.0 | Self::PROPAGATION))
+    }
+    fn trusted(index: usize) -> Option<Self> {
+        (index < Self::TRUSTED).then_some(Self(index | Self::TRUSTED))
     }
     fn kind(self) -> AuthorityKind {
-        if self.0 & Self::PROPAGATION == 0 {
-            AuthorityKind::Constructor(crate::mir::temporaries::SiteId(self.0))
-        } else {
+        if self.0 & Self::PROPAGATION != 0 {
             AuthorityKind::Propagation(BasicBlockId(self.0 & !Self::PROPAGATION))
+        } else if self.0 & Self::TRUSTED != 0 {
+            AuthorityKind::Trusted(self.0 & !Self::TRUSTED)
+        } else {
+            AuthorityKind::Constructor(crate::mir::temporaries::SiteId(self.0))
         }
     }
 }
 pub(super) struct Cell {
-    function: FunctionId,
+    pub(super) function: FunctionId,
     authority: Authority,
     pub(super) ty: ResultTypeId,
     pub(super) tag: u8,
@@ -49,6 +56,10 @@ pub(super) struct Cell {
     pub(super) parent: Option<OwnerId>,
     pub(super) phase: Phase,
     pub(super) origin: Span,
+}
+pub(super) struct TrustedTicket {
+    pub(super) owner: OwnerId,
+    authority: Authority,
 }
 
 struct InertRecord {
@@ -89,6 +100,58 @@ impl State {
 }
 
 impl<'a> Machine<'a> {
+    pub(super) fn trusted_result_prepare(
+        &mut self,
+        production: usize,
+    ) -> Result<TrustedTicket, ExecutionError> {
+        let authority = Authority::trusted(production)
+            .ok_or_else(|| self.integrity("trusted Result authority index exhausted"))?;
+        self.enable_results()?;
+        if self.results.as_ref().unwrap().cells.len()
+            == self.results.as_ref().unwrap().cells.capacity()
+        {
+            self.reserve(size_of::<Cell>())?;
+            #[cfg(test)]
+            self.trusted_allocation(super::trusted::Allocation::ResultCell, true)?;
+            self.results
+                .as_mut()
+                .unwrap()
+                .cells
+                .try_reserve_exact(1)
+                .map_err(|_| self.failure(ErrorKind::Host("trusted Result cell reservation")))?;
+        }
+        Ok(TrustedTicket {
+            owner: OwnerId(self.results.as_ref().unwrap().cells.len()),
+            authority,
+        })
+    }
+    pub(super) fn trusted_result_commit(
+        &mut self,
+        ticket: TrustedTicket,
+        plan: &crate::trusted::approval::Invocation,
+        tag: ResultTag,
+        payload: Value,
+    ) {
+        self.results.as_mut().unwrap().cells.push(Cell {
+            function: plan.function,
+            authority: ticket.authority,
+            ty: plan.result,
+            tag: match tag {
+                ResultTag::Ok => 0,
+                ResultTag::Error => 1,
+            },
+            payload: Some(payload),
+            parent: None,
+            phase: Phase::Active,
+            origin: plan.source,
+        });
+        self.values.push(Value::Result(ticket.owner));
+    }
+    pub(super) fn trusted_cell_capacity(&self) -> bool {
+        self.results
+            .as_ref()
+            .is_some_and(|s| s.cells.len() < s.cells.capacity())
+    }
     pub(super) fn result_export(&mut self, root: OwnerId) -> Result<RuntimeValue, ExecutionError> {
         // Validate the entire bounded chain before allocation or detachment.
         let mut ids = [root; hir::results::MAX_RESULT_DEPTH];
@@ -438,6 +501,10 @@ impl<'a> Machine<'a> {
             .as_ref()
             .and_then(|s| s.cells.get(id.0))
             .ok_or_else(|| self.integrity("foreign Result custody identity"))?;
+        if let AuthorityKind::Trusted(production) = cell.authority.kind() {
+            self.validate_trusted_cell(id, production, cell)?;
+            return Ok(cell);
+        }
         if let AuthorityKind::Propagation(block) = cell.authority.kind() {
             let function = self.executable.function(cell.function)?;
             let Some(crate::mir::Terminator::ForwardError { operation }) = function
@@ -483,6 +550,9 @@ impl<'a> Machine<'a> {
 
     pub(super) fn result_value_matches(&self, value: &Value, expected: ValueType) -> bool {
         match (value, expected) {
+            (Value::Resource { ty: actual, .. }, ValueType::Resource(expected)) => {
+                *actual == expected
+            }
             (Value::Result(id), ValueType::Result(ty)) => self.result_cell(*id).is_ok_and(|cell| {
                 cell.ty == ty
                     && cell.payload.is_some()

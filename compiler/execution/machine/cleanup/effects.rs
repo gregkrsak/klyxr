@@ -262,7 +262,10 @@ fn abort_request(
     let site = flow
         .sites
         .iter()
-        .find(|s| s.plan == Some(hir::RecordId(1)) && s.children.len() == 3)
+        .find(|s| {
+            s.plan == Some(hir::resources::CleanupType::Record(hir::RecordId(1)))
+                && s.children.len() == 3
+        })
         .unwrap()
         .id;
     crate::execution::domain::AbortRequest {

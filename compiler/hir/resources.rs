@@ -4,6 +4,21 @@
 //! no spelling, source declaration or public constructor registers authority.
 use super::*;
 
+/// A public Resource never acquires a RecordId or activates synthetic field rules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum CleanupType {
+    Record(super::RecordId),
+    Resource(super::ResourceTypeId),
+}
+impl CleanupType {
+    pub(crate) fn value_type(self) -> super::ValueType {
+        match self {
+            Self::Record(id) => super::ValueType::Record(id),
+            Self::Resource(id) => super::ValueType::Resource(id),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ResourceId(pub(crate) usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -294,7 +309,8 @@ impl Catalog {
     }
     fn temporaries(&self, p: &Program, plans: &[Option<CleanupPlan>]) -> Result<(), &'static str> {
         fn bearing(e: &TypedExpr, plans: &[Option<CleanupPlan>]) -> bool {
-            matches!(e.ty,ExprType::Record(id) if plans.get(id.0).is_some_and(Option::is_some))
+            matches!(e.ty, ExprType::Resource(_))
+                || matches!(e.ty,ExprType::Record(id) if plans.get(id.0).is_some_and(Option::is_some))
         }
         fn expression(
             e: &TypedExpr,
@@ -325,7 +341,7 @@ impl Catalog {
                         expression(&f.value, plans, leaves, true)?;
                     }
                 }
-                ExprKind::Call { arguments, .. } => {
+                ExprKind::Call { arguments, .. } | ExprKind::TrustedCall { arguments, .. } => {
                     for a in arguments {
                         expression(a, plans, leaves, true)?;
                     }
@@ -576,7 +592,7 @@ pub(crate) fn fixture_with(extra: &str) -> Program {
             }
             ExprKind::CopyFieldRead { field: id, .. }
             | ExprKind::CopyReferenceFieldRead { field: id, .. } => field(id),
-            ExprKind::Call { arguments, .. } => {
+            ExprKind::Call { arguments, .. } | ExprKind::TrustedCall { arguments, .. } => {
                 for a in arguments {
                     expression(a);
                 }

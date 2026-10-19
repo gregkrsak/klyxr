@@ -1538,3 +1538,47 @@ an expression; `?`, `try`, fallback/abort spellings, conversions, public resourc
 APIs, Result replacement, references, verified/harness execution, conditional
 Result initializers, exceptions, unwind, retry and rollback remain excluded.
 All Host, Limit, Integrity, trap and cleanup failures remain tool outcomes.
+
+## Frozen KED-033 — First selected trusted effectful Resource slice
+
+**Status:** Frozen Draft 2, separately implementation-authorized in Issue #78.
+The branch supplies implementation evidence; independent exact-head review and
+Greg's acceptance remain separate. No new Accepted KD number is assigned here.
+
+One explicit immutable sensor-demo selection contributes callable sensor_open,
+sensor_read, exact nominal ranges Reading 0..4095 and SensorError 1..3, and opaque
+Move Resource Sensor before ordinary signature collection. Same-namespace collisions
+reject without overwrite; cross-namespace spellings and existing case rules remain.
+Selected denied rows still occupy their names; unselected rows occupy nothing.
+Catalog origins are distinct from source spans. Open returns Result<Sensor,
+SensorError> (Error only 1 or 3); read takes shared &Sensor and returns Result<Reading,
+SensorError> (Error only 2 or 3). Both effects are io. Read Error leaves the owner
+valid. Fixed cleanup-only release has io, no source Result and no source-callable
+alias. Complete effects never confer grants; acquisition requires exact release.
+
+Existing ordinary moves/parameters/internal protected returns/shared helpers,
+Result payloads and KD-044 custody compose. Ownership-derived cleanup effects
+require io on retire(sensor)->bool but not on relay(sensor)->Sensor transfer.
+Mutable Sensor references, conditional Sensor initialization, replacement/reinit,
+public record fields, representation operations and public live-Sensor egress are
+excluded. Whole-Result cleanup does not acknowledge ordinary unresolved outcomes.
+
+Canonical typed trusted calls and MIR plans bind exact signatures, grants,
+bindings, cleanup/Result plans, argument destinations, roots and honest origins.
+Opaque approval seals composition. Runtime has no source/HIR/name/host fallback.
+Only persistent session execution may invoke; an already-owned pre-reserved receipt
+holds actual payload across every fallible validation/publication boundary.
+External success followed by a stop retains responsibility and completed prefix.
+Host, Limit, Integrity, traps, denial and cleanup failure never become source Error.
+Protected Results are delivered only after required cleanup succeeds; terminal
+advance never resumes, retries or unwinds. Teardown is not successful release.
+
+Bounded deterministic audit follows all structural call edges from sealed roots,
+including zero-effect helpers and alternatives, and distinguishes grants, reachable
+source-callable use and cleanup-only authority. Catalog, configuration, runtime
+receipt/session, audit and diagnostic budgets are explicit even for tiny source.
+The demonstration supplies no device proof, general FFI, modules, capabilities,
+concurrency, verified/harness trusted execution or arbitrary resource declarations.
+Release promises no flush/commit/durability/completion; fallible completion is
+explicitly deferred to KED-034. Historical public-resource exclusions above are
+narrowed only for this exact frozen family. See its implementation guide and ledger.

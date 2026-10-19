@@ -151,7 +151,7 @@ pub(super) struct State {
     fail_replacement: Option<replacement::Phase>,
     pub(super) protected: Option<Value>,
     pub(super) detached: Option<Value>,
-    current: Option<Value>,
+    pub(super) current: Option<Value>,
     pub(super) failure_at: Option<u64>,
     pub(super) terminal: bool,
     pending: Vec<Pending>,
@@ -604,6 +604,7 @@ impl<'a> Machine<'a> {
             match value {
                 Value::Result(id) => self.result_cleanup(id)?,
                 Value::Leaf { .. } => self.release_leaf(value)?,
+                Value::Resource { .. } => self.release_sensor(value)?,
                 Value::Aggregate { record, fields } => {
                     let Some(hir::resources::CleanupPlan::Fields(plan)) = self
                         .executable
@@ -653,7 +654,7 @@ impl<'a> Machine<'a> {
         }
         if !matches!(
             self.frames[f].slots[i].1,
-            Slot::Available(Value::Leaf { .. } | Value::Aggregate { .. })
+            Slot::Available(Value::Leaf { .. } | Value::Aggregate { .. } | Value::Resource { .. })
         ) {
             return Err(
                 self.integrity("cleanup owner has no validated live or transferred responsibility")

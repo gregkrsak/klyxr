@@ -105,7 +105,7 @@ fn exact_canonical_result_count_succeeds_and_next_distinct_pair_is_limit() {
             name: format!("R{i}"),
             min: 0,
             max: 1,
-            span: START,
+            origin: crate::hir::DeclarationOrigin::Source(START),
         });
     }
     for index in 0..MAX_RESULT_TYPES {

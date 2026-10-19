@@ -23,13 +23,13 @@ pub(super) fn with_allocation_failure<T>(f: impl FnOnce() -> T) -> T {
     f()
 }
 
-struct Output {
+pub(super) struct Output {
     text: String,
     limit: usize,
     failure: Option<ErrorKind>,
 }
 impl Output {
-    fn new(limit: usize) -> Result<Self, ExecutionError> {
+    pub(super) fn new(limit: usize) -> Result<Self, ExecutionError> {
         if limit == 0 || limit > ExecutionLimits::MAX.rendered_output {
             return Err(ResourceFailure::limit("rendered output override", START).into());
         }
@@ -39,7 +39,7 @@ impl Output {
             failure: None,
         })
     }
-    fn finish(self) -> Result<String, ExecutionError> {
+    pub(super) fn finish(self) -> Result<String, ExecutionError> {
         match self.failure {
             Some(k) => Err(ExecutionError::new(k, START)),
             None => Ok(self.text),

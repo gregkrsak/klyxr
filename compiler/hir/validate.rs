@@ -17,6 +17,49 @@ impl Program {
     }
     // Bounded admission has already checked the catalog with typed failure propagation.
     pub(crate) fn validate_record_expressions_without_resources(&self) -> Result {
+        let valid_resource_type = |ty| match ty {
+            ValueType::Resource(id) | ValueType::SharedRef(ReferentType::Resource(id)) => {
+                self.trusted.as_ref().is_some_and(|c| c.sensor == id)
+            }
+            ValueType::MutableRef(ReferentType::Resource(_)) => false,
+            _ => true,
+        };
+        if self
+            .parameters
+            .iter()
+            .any(|p| matches!(p.ty, ParameterType::Value(ty) if !valid_resource_type(ty)))
+            || self.locals.iter().any(|l| !valid_resource_type(l.ty))
+            || self
+                .functions
+                .iter()
+                .filter_map(Function::as_ordinary)
+                .any(|f| f.return_type.is_some_and(|ty| !valid_resource_type(ty)))
+            || self
+                .results
+                .iter()
+                .any(|r| !valid_resource_type(r.success) || !valid_resource_type(r.failure))
+        {
+            return Err(Box::new(Diagnostic::semantic(crate::bounded::START, "invalid opaque Resource interface", "Resource identity must belong to this exact catalog and mutable Resource references are excluded")));
+        }
+        if let Some(catalog) = &self.trusted {
+            catalog.validate(self).map_err(|message| {
+                Box::new(Diagnostic::semantic(
+                    crate::bounded::START,
+                    message,
+                    "every selected catalog row must preserve its exact contract and honest origin",
+                ))
+            })?;
+        } else if self
+            .ranges
+            .iter()
+            .any(|r| matches!(r.origin, DeclarationOrigin::Catalog(_)))
+        {
+            return Err(Box::new(Diagnostic::semantic(
+                crate::bounded::START,
+                "catalog range without selection",
+                "catalog origins require their exact compilation",
+            )));
+        }
         self.validate_result_tables().map_err(|message| {
             Box::new(Diagnostic::semantic(
                 crate::bounded::START,
@@ -445,12 +488,41 @@ impl Program {
                 then_value,
                 else_value,
             } => {
-                if !conditional {
+                if !conditional || matches!(expression.ty, ExprType::Resource(_)) {
                     return Err(invalid("conditional values are permitted only as complete local initializers or their complete branch results"));
                 }
                 self.record_expression(function, condition, ordinary, false)?;
                 self.record_expression(function, then_value, ordinary, true)?;
                 self.record_expression(function, else_value, ordinary, true)?;
+            }
+            ExprKind::TrustedCall {
+                operation,
+                arguments,
+            } => {
+                let catalog = self
+                    .trusted
+                    .as_ref()
+                    .ok_or_else(|| invalid("trusted call without selected catalog"))?;
+                let op = catalog
+                    .operation(*operation)
+                    .filter(|op| op.source_name.is_some() && catalog.granted(op.id))
+                    .ok_or_else(|| invalid("foreign, denied or cleanup-only trusted target"))?;
+                if !ordinary
+                    || op.result.map(ExprType::Result) != Some(expression.ty)
+                    || arguments.len() != usize::from(op.parameter.is_some())
+                    || (op.class == crate::trusted::OperationClass::Acquisition
+                        && !catalog.granted(catalog.resource.release))
+                {
+                    return Err(invalid(
+                        "trusted call signature or release authority mismatch",
+                    ));
+                }
+                for argument in arguments {
+                    if Some(argument.ty) != op.parameter.map(|p| ExprType::from(p.value_type())) {
+                        return Err(invalid("trusted argument type or passing mode mismatch"));
+                    }
+                    self.record_expression(function, argument, true, false)?;
+                }
             }
             ExprKind::Call { arguments, .. } => {
                 for argument in arguments {
@@ -1131,7 +1203,9 @@ mod multiple_fields {
     #[test]
     fn formed_literal_integrity_rejects_forged_leaves_without_panicking() {
         let mut p = fixture();
-        let span = p.ranges[0].span;
+        let DeclarationOrigin::Source(span) = p.ranges[0].origin else {
+            panic!("expected source range")
+        };
         let range = p.ranges[0].id;
         let formed = TypedExpr {
             kind: ExprKind::FormedRangeLiteral(80),

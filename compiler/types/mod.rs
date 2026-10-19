@@ -143,28 +143,47 @@ fn call_arguments(
     arguments: &[ResolvedExpr],
     span: crate::lexer::Span,
 ) -> TypeResult<Vec<TypedExpr>> {
-    if arguments.len() != callee.parameters.len() {
+    value_arguments(
+        program,
+        functions,
+        arguments,
+        callee.parameters.len(),
+        &callee.name,
+        span,
+        |index| {
+            let ParameterType::Value(expected) = program.parameter(callee.parameters[index]).ty
+            else {
+                return Err(Diagnostic::semantic(
+                    span,
+                    "invalid ordinary parameter type",
+                    "ordinary signatures require bool, named ranges, or records",
+                )
+                .into());
+            };
+            Ok(expected)
+        },
+    )
+}
+fn value_arguments(
+    program: &Program,
+    functions: &[ResolvedFunction],
+    arguments: &[ResolvedExpr],
+    arity: usize,
+    name: &str,
+    span: crate::lexer::Span,
+    mut expected: impl FnMut(usize) -> TypeResult<ValueType>,
+) -> TypeResult<Vec<TypedExpr>> {
+    if arguments.len() != arity {
         return Err(Diagnostic::semantic(
             span,
-            format!("wrong argument count for `{}`", callee.name),
-            format!(
-                "expected {} arguments, found {}",
-                callee.parameters.len(),
-                arguments.len()
-            ),
+            format!("wrong argument count for `{name}`"),
+            format!("expected {} arguments, found {}", arity, arguments.len()),
         )
         .into());
     }
     let mut typed = Vec::new();
-    for (argument, parameter) in arguments.iter().zip(&callee.parameters) {
-        let ParameterType::Value(expected) = program.parameter(*parameter).ty else {
-            return Err(Diagnostic::semantic(
-                span,
-                "invalid ordinary parameter type",
-                "ordinary signatures require bool, named ranges, or records",
-            )
-            .into());
-        };
+    for (index, argument) in arguments.iter().enumerate() {
+        let expected = expected(index)?;
         let argument = check_value(program, functions, argument, expected, "call argument")?;
         typed.push(argument);
     }
@@ -385,6 +404,7 @@ fn value_statements(
                         ExprType::Bool => ValueType::Bool,
                         ExprType::Range(id) => ValueType::Range(id),
                         ExprType::Record(id) => ValueType::Record(id),
+                        ExprType::Resource(id) => ValueType::Resource(id),
                         ExprType::SharedRef(ty) => ValueType::SharedRef(ty),
                         ExprType::MutableRef(ty) => ValueType::MutableRef(ty),
                         ExprType::IntegerLiteral => {
@@ -597,6 +617,7 @@ fn value_type(ty: ResolvedValueType, span: crate::lexer::Span) -> TypeResult<Val
         ResolvedValueType::Bool => ValueType::Bool,
         ResolvedValueType::Range(id) => ValueType::Range(id),
         ResolvedValueType::Record(id) => ValueType::Record(id),
+        ResolvedValueType::Resource(id) => ValueType::Resource(id),
         ResolvedValueType::SharedRef(ty) => ValueType::SharedRef(ty),
         ResolvedValueType::MutableRef(ty) => ValueType::MutableRef(ty),
         ResolvedValueType::NestedReference => return Err(Diagnostic::semantic(span, "nested reference types are not supported", "reference referents must be bool, a named range, or a record; reborrowing remains unsupported").into()),
@@ -724,6 +745,7 @@ fn display_type(program: &Program, ty: ExprType) -> String {
         ExprType::IntegerLiteral => "IntegerLiteral".into(),
         ExprType::Range(id) => format!("range `{}`", program.range(id).name),
         ExprType::Record(id) => format!("record `{}`", program.record(id).name),
+        ExprType::Resource(_) => "resource `Sensor`".into(),
         ExprType::SharedRef(ty) => format!("&{}", display_referent(program, ty)),
         ExprType::MutableRef(ty) => format!("&mut {}", display_referent(program, ty)),
     }
@@ -733,6 +755,7 @@ fn display_referent(program: &Program, ty: hir::ReferentType) -> String {
         hir::ReferentType::Bool => "bool".into(),
         hir::ReferentType::Range(id) => program.range(id).name.clone(),
         hir::ReferentType::Record(id) => program.record(id).name.clone(),
+        hir::ReferentType::Resource(_) => "Sensor".into(),
     }
 }
 fn incompatible(
@@ -856,6 +879,7 @@ fn expression(
             let else_value = expression(program, functions, else_value)?;
             for value in [&then_value, &else_value] {
                 match value.ty {
+                    ExprType::Resource(_) => return Err(Diagnostic::semantic(value.span, "conditional initializer cannot produce an opaque Resource", "Sensor conditional initialization is excluded").into()),
                     ExprType::Result(_) => return Err(Diagnostic::semantic(value.span, "conditional initializer cannot produce a Result value", "KD-025 permits only bool, named-range, and record conditional results").into()),
                     ExprType::SharedRef(_) | ExprType::MutableRef(_) => {
                         return Err(Diagnostic::semantic(
@@ -1000,6 +1024,9 @@ fn expression(
         ResolvedExprKind::Local(id) => (ExprKind::Local(*id), program.local(*id).ty.into()),
         ResolvedExprKind::Deref { reference } => {
             let (_, referent) = reference_type(program, *reference, span)?;
+            if matches!(referent, hir::ReferentType::Resource(_)) {
+                return Err(Diagnostic::semantic(span, "opaque resources cannot be read through dereference", "shared observation cannot copy or move the Sensor owner").into());
+            }
             (
                 ExprKind::Deref {
                     reference: *reference,
@@ -1027,6 +1054,12 @@ fn expression(
                     ValueType::Bool => hir::ReferentType::Bool,
                 ValueType::Range(id) => hir::ReferentType::Range(id),
                 ValueType::Record(id) => hir::ReferentType::Record(id),
+                ValueType::Resource(id) => {
+                    if *kind == hir::BorrowKind::Mutable {
+                        return Err(Diagnostic::semantic(span, "mutable Sensor references are excluded", "opaque resources permit shared observation only").into());
+                    }
+                    hir::ReferentType::Resource(id)
+                }
                 ValueType::SharedRef(_) | ValueType::MutableRef(_) => return Err(Diagnostic::semantic(span, "cannot borrow an existing reference value", "nested references and reborrowing are not supported; borrow an owned non-reference parameter or local").into()),
             };
             let ty = match kind {
@@ -1058,6 +1091,13 @@ fn expression(
                 },
                 ty,
             )
+        }
+        ResolvedExprKind::TrustedCall { operation, arguments } => {
+            let catalog = program.trusted.as_ref().expect("resolved selected catalog");
+            let op = catalog.operation(*operation).expect("resolved trusted operation");
+            let name = op.source_name.expect("resolved source-callable operation");
+            let typed = value_arguments(program, functions, arguments, usize::from(op.parameter.is_some()), name, span, |_| Ok(op.parameter.expect("checked trusted arity").value_type()))?;
+            (ExprKind::TrustedCall { operation: *operation, arguments: typed }, ExprType::Result(op.result.expect("source-callable trusted Result")))
         }
         ResolvedExprKind::FieldAccess(access) => {
             let ty = ExprType::Range(access.ty);

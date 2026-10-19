@@ -1832,3 +1832,21 @@ Run `examples/result_propagation.klx` with `--function demo` for
 `Ok(Reading(42))`, or `failure_demo` for `Error(ReadError(1))`. The nominally distinct
 failure types in `result_propagation_mismatch.klx` reject. Full authority, scope,
 conservation and bound evidence is recorded in the KED-032 implementation ledger.
+
+## Frozen KED-033 selected trusted Sensor slice
+
+The first public trusted Resource family is available only by explicit immutable
+sensor-demo selection. Run the real defining example with:
+
+```bash
+cargo run --locked --bin klyxr -- run examples/trusted_sensor.klx --function sample --profile sensor-demo
+cargo run --locked --bin klyxr -- audit examples/trusted_sensor.klx --function sample --profile sensor-demo
+```
+
+See the [trusted Sensor guide](../docs/engineering/KED-033-TRUSTED-SENSOR.md) for the
+five deterministic scenarios, exact Error subsets, grant options, eligibility,
+persistent ExecutionSession API, bounded audit/execution and terminal custody.
+The [ledger](../docs/engineering/KED-033-IMPLEMENTATION-LEDGER.md) and evidence
+manifest separate frozen semantics, implementation tests and pending independent
+review. This is not a physical driver, general FFI or a new verifier claim.
+Release is cleanup-only; explicit fallible completion remains deferred to KED-034.

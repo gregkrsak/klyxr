@@ -128,6 +128,9 @@ pub(crate) struct Context {
     envelope_source: Cell<usize>,
     outcome_extra: Cell<usize>,
     cleanup_extra: Cell<usize>,
+    catalog_storage: Cell<usize>,
+    catalog_work: Cell<u64>,
+    catalog_diagnostics: Cell<usize>,
     pub(crate) outcome_limit: Cell<usize>,
 }
 impl Context {
@@ -142,8 +145,36 @@ impl Context {
             envelope_source: Cell::new(0),
             outcome_extra: Cell::new(0),
             cleanup_extra: Cell::new(0),
+            catalog_storage: Cell::new(0),
+            catalog_work: Cell::new(0),
+            catalog_diagnostics: Cell::new(0),
             outcome_limit: Cell::new(0),
         }
+    }
+    /// Source-independent catalog/selection/approval costs. This reservation is
+    /// retained in every later envelope, including an empty source program.
+    pub(crate) fn reserve_catalog(
+        &self,
+        roots: usize,
+        names: usize,
+    ) -> Result<(), ResourceFailure> {
+        let storage = roots
+            .checked_mul(4096)
+            .and_then(|n| n.checked_add(names.checked_mul(16)?))
+            .and_then(|n| n.checked_add(65_536))
+            .ok_or_else(|| ResourceFailure::limit("trusted catalog storage", START))?;
+        let work = (roots as u64)
+            .checked_mul(4096)
+            .and_then(|n| n.checked_add(65_536))
+            .ok_or_else(|| ResourceFailure::limit("trusted catalog work", START))?;
+        let diagnostics = names
+            .checked_mul(16)
+            .and_then(|n| n.checked_add(4096))
+            .ok_or_else(|| ResourceFailure::limit("trusted catalog diagnostics", START))?;
+        self.catalog_storage.set(storage);
+        self.catalog_work.set(work);
+        self.catalog_diagnostics.set(diagnostics);
+        self.reserve_frontend(self.envelope_nodes.get(), self.envelope_source.get())
     }
     /// Additional retained cleanup witnesses are bounded before checker snapshots.
     /// Inactive/all-empty cleanup effects retain the predecessor envelope exactly.
@@ -186,6 +217,7 @@ impl Context {
                 extra
                     .and_then(|e| b.checked_add(e))
                     .and_then(|b| b.checked_add(self.outcome_extra.get()))
+                    .and_then(|b| b.checked_add(self.catalog_storage.get()))
             })
             .map_or(true, |e| e > self.limits.working_storage)
         {
@@ -203,7 +235,8 @@ impl Context {
                     896
                 })
             })
-            .and_then(|e| e.checked_add(self.envelope_source.get() as u64));
+            .and_then(|e| e.checked_add(self.envelope_source.get() as u64))
+            .and_then(|e| e.checked_add(self.catalog_work.get()));
         if work.map_or(true, |w| w > self.limits.frontend_work) {
             return Err(ResourceFailure::limit("cleanup effect witness work", START));
         }
@@ -236,6 +269,7 @@ impl Context {
                 storage
                     .and_then(|v| b.checked_add(v))
                     .and_then(|v| v.checked_add(self.cleanup_extra.get()))
+                    .and_then(|v| v.checked_add(self.catalog_storage.get()))
             })
             .map_or(true, |v| v > self.limits.working_storage)
         {
@@ -254,6 +288,7 @@ impl Context {
                 })
             })
             .and_then(|v| v.checked_add(self.envelope_source.get() as u64))
+            .and_then(|v| v.checked_add(self.catalog_work.get()))
             .map_or(true, |v| v > self.limits.frontend_work)
         {
             return Err(ResourceFailure::limit(
@@ -323,7 +358,8 @@ impl Context {
         let work = (n as u64)
             .checked_pow(4)
             .and_then(|v| v.checked_mul(128))
-            .and_then(|v| v.checked_add(source as u64));
+            .and_then(|v| v.checked_add(source as u64))
+            .and_then(|v| v.checked_add(self.catalog_work.get()));
         if work.map_or(true, |v| v > self.limits.frontend_work) {
             return Err(ResourceFailure::limit("frontend work reservation", START));
         }
@@ -334,7 +370,8 @@ impl Context {
             .and_then(|v| v.checked_add(32))
             .and_then(|v| v.checked_mul(n))
             .and_then(|v| v.checked_mul(self.limits.identifier_bytes + 512))
-            .and_then(|v| source.checked_mul(8).and_then(|s| v.checked_add(s)));
+            .and_then(|v| source.checked_mul(8).and_then(|s| v.checked_add(s)))
+            .and_then(|v| v.checked_add(self.catalog_storage.get()));
         if storage.map_or(true, |v| v > self.limits.working_storage) {
             return Err(ResourceFailure::limit(
                 "frontend storage reservation",
@@ -344,7 +381,8 @@ impl Context {
         let diagnostics = n
             .checked_mul(self.limits.identifier_bytes + 128)
             .and_then(|v| v.checked_mul(4))
-            .and_then(|v| v.checked_add(512));
+            .and_then(|v| v.checked_add(512))
+            .and_then(|v| v.checked_add(self.catalog_diagnostics.get()));
         if diagnostics.map_or(true, |v| v > self.limits.diagnostic_storage) {
             return Err(ResourceFailure::limit(
                 "diagnostic storage reservation",

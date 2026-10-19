@@ -4,6 +4,7 @@ use super::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum VariantChild {
     Record(RecordId),
+    Resource(ResourceTypeId),
     Result(ResultTypeId),
 }
 
@@ -68,6 +69,15 @@ impl Program {
         for ty in &self.results {
             let child = |value| -> std::result::Result<_, resources::PlanError> {
                 Ok(match value {
+                    ValueType::Resource(id)
+                        if self.trusted.as_ref().is_some_and(|c| c.sensor == id) =>
+                    {
+                        (
+                            Some(VariantChild::Resource(id)),
+                            self.trusted.as_ref().unwrap().operations[2].effects,
+                            true,
+                        )
+                    }
                     ValueType::Record(id) if records.get(id.0).is_some_and(Option::is_some) => (
                         Some(VariantChild::Record(id)),
                         if effects.is_empty() {
@@ -171,6 +181,9 @@ impl Program {
             ValueType::Bool => Ok(0),
             ValueType::Range(id) if self.ranges.get(id.0).is_some_and(|r| r.id == id) => Ok(0),
             ValueType::Record(id) if self.records.get(id.0).is_some_and(|r| r.id == id) => Ok(0),
+            ValueType::Resource(id) if self.trusted.as_ref().is_some_and(|c| c.sensor == id) => {
+                Ok(0)
+            }
             ValueType::Result(id) if id.0 < before => self
                 .result_type(id)
                 .map(|r| r.depth)

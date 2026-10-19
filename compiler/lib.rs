@@ -11,6 +11,7 @@ pub mod parser;
 pub mod resolve;
 #[cfg(test)]
 mod run_reporting;
+pub mod trusted;
 pub mod types;
 pub mod verify;
 

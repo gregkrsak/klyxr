@@ -3,6 +3,7 @@
 // Keep immediate origins and the wide trap value inline: exhaustion reporting
 // must not require an additional allocation merely to return the error itself.
 #![allow(clippy::result_large_err)]
+mod audit;
 mod domain;
 mod machine;
 mod render;
@@ -14,6 +15,7 @@ use crate::{
     lexer::Span,
     mir::{self, Origin},
 };
+pub use machine::trusted::{Event as TrustedEvent, ExecutionSession};
 pub use render::write_output;
 use std::{io::Read, rc::Rc};
 pub fn render_admission_error(
@@ -196,6 +198,7 @@ struct Approval {
     program: hir::Program,
     cleanup_sites: Vec<crate::effects::custody::Site>,
     domain: domain::Domain,
+    trusted: Option<crate::trusted::approval::Approved>,
 }
 
 /// No public fields, constructors, mutation, or independent HIR/MIR pairing.
@@ -219,8 +222,13 @@ pub struct CheckedExecutable {
     cleanup_effects: Vec<crate::effects::EffectSet>,
     result_plans: Vec<hir::results::VariantPlan>,
     domain: domain::Domain,
+    trusted: Option<crate::trusted::approval::Approved>,
 }
 impl CheckedExecutable {
+    /// Static rooted authority, requiring no binding invocation or source lookup.
+    pub fn render_authority(&self, limits: ExecutionLimits) -> Result<String, ExecutionError> {
+        audit::render(self, limits, 0)
+    }
     pub fn entry(&self, name: &str) -> Result<FunctionId, ExecutionError> {
         let f = self
             .program
@@ -239,6 +247,13 @@ impl CheckedExecutable {
                 ErrorKind::Integrity("selected entry must have zero parameters"),
                 ordinary.span,
             ));
+        }
+        if let Some(trusted) = &self.trusted {
+            if !trusted.roots.contains(&ordinary.id) {
+                return Err(ExecutionError::integrity(
+                    "selected entry is outside the sealed trusted roots",
+                ));
+            }
         }
         Ok(ordinary.id)
     }
@@ -280,9 +295,21 @@ impl CheckedExecutable {
             ));
         }
         let c = Context::new(self.limits);
+        if let Some(catalog) = &self.program.trusted {
+            c.reserve_catalog(
+                catalog.selection.roots().len(),
+                catalog.selection.roots().iter().map(String::len).sum(),
+            )?;
+        }
         // Admission already bounds this private immutable representation. Check
         // shape before any recursive comparison/re-lowering, including injections.
         validate::program_shape(&self.program, &c)?;
+        for trusted in [self.trusted.as_ref(), self.approval.trusted.as_ref()]
+            .into_iter()
+            .flatten()
+        {
+            trusted.shape(self.limits)?;
+        }
         self.domain.shape(self.limits)?;
         if self.domain != self.approval.domain {
             return Err(ExecutionError::integrity(
@@ -355,6 +382,18 @@ impl CheckedExecutable {
             return Err(ExecutionError::integrity("origin/function correspondence"));
         }
         validate::mir_shape(&self.program, &self.mir, &c)?;
+        if self.trusted != self.approval.trusted
+            || self.trusted
+                != crate::trusted::approval::Approved::derive(
+                    &self.program,
+                    &self.mir,
+                    self.limits,
+                )?
+        {
+            return Err(ExecutionError::integrity(
+                "trusted runtime/invocation/root authority correspondence",
+            ));
+        }
         for f in self.mir.functions() {
             f.validate_bounded().map_err(ExecutionError::from)?;
         }
@@ -390,6 +429,24 @@ impl CheckedExecutable {
 pub fn prepare_execution(
     source: &str,
     limits: AdmissionLimits,
+) -> Result<CheckedExecutable, ExecutionError> {
+    prepare_selected(source, limits, None)
+}
+
+/// Explicit selection uses the same bounded frontend and opaque preparation.
+/// No profile is implicitly selected by the resource-free convenience API.
+pub fn prepare_execution_with_profile(
+    source: &str,
+    limits: AdmissionLimits,
+    selection: &crate::trusted::Selection,
+) -> Result<CheckedExecutable, ExecutionError> {
+    prepare_selected(source, limits, Some(selection))
+}
+
+fn prepare_selected(
+    source: &str,
+    limits: AdmissionLimits,
+    selection: Option<&crate::trusted::Selection>,
 ) -> Result<CheckedExecutable, ExecutionError> {
     limits.validate()?;
     if source.len() > limits.source_bytes {
@@ -438,8 +495,11 @@ pub fn prepare_execution(
                 )
             })
     })?;
-    let resolved = crate::resolve::resolve_bounded(&ast, &context)
-        .map_err(|e| frontend("resolve", e, &context))?;
+    let resolved = match selection {
+        Some(selection) => crate::resolve::resolve_profile(&ast, &context, selection),
+        None => crate::resolve::resolve_bounded(&ast, &context),
+    }
+    .map_err(|e| frontend("resolve", e, &context))?;
     let program = crate::types::check(resolved).map_err(|e| frontend("type", e, &context))?;
     let (cleanup_sites, outcomes) = crate::ownership::evidence_bounded(&program, &context)
         .map_err(|e| frontend("ownership", e, &context))?;
@@ -491,6 +551,7 @@ fn seal_in_domain(
 ) -> Result<CheckedExecutable, ExecutionError> {
     let (mut mir, origins) = mir::lower_with_origins(&program).map_err(ExecutionError::from)?;
     mir::attach_cleanup_effects(&mut mir, &cleanup_sites).map_err(ExecutionError::from)?;
+    let trusted = crate::trusted::approval::Approved::derive(&program, &mir, limits)?;
     let cleanup_plans = if program.resources.leaves.is_empty() {
         Vec::new()
     } else {
@@ -536,6 +597,7 @@ fn seal_in_domain(
         program: program.clone(),
         cleanup_sites,
         domain: domain.clone(),
+        trusted: trusted.clone(),
     });
     let executable = CheckedExecutable {
         outcomes,
@@ -550,6 +612,7 @@ fn seal_in_domain(
         cleanup_effects,
         result_plans,
         domain,
+        trusted,
     };
     executable.validate()?;
     Ok(executable)
@@ -577,8 +640,24 @@ fn frontend(
 /// Reads at most source_bytes + one lookahead byte; oversized input is never
 /// accumulated. The fixed read buffer also bounds rejected-input housekeeping.
 pub fn prepare_execution_from_reader(
+    input: impl Read,
+    limits: AdmissionLimits,
+) -> Result<CheckedExecutable, ExecutionError> {
+    prepare_from_reader(input, limits, None)
+}
+
+/// The same bounded input path with one explicit immutable profile selection.
+pub fn prepare_execution_from_reader_with_profile(
+    input: impl Read,
+    limits: AdmissionLimits,
+    selection: &crate::trusted::Selection,
+) -> Result<CheckedExecutable, ExecutionError> {
+    prepare_from_reader(input, limits, Some(selection))
+}
+fn prepare_from_reader(
     mut input: impl Read,
     limits: AdmissionLimits,
+    selection: Option<&crate::trusted::Selection>,
 ) -> Result<CheckedExecutable, ExecutionError> {
     limits.validate()?;
     let mut source = Vec::new();
@@ -611,7 +690,10 @@ pub fn prepare_execution_from_reader(
     }
     let source = std::str::from_utf8(&source)
         .map_err(|_| ExecutionError::new(ErrorKind::Host("source UTF-8 decoding"), START))?;
-    prepare_execution(source, limits)
+    match selection {
+        Some(selection) => prepare_execution_with_profile(source, limits, selection),
+        None => prepare_execution(source, limits),
+    }
 }
 
 pub fn execute(
@@ -619,6 +701,19 @@ pub fn execute(
     entry: FunctionId,
     limits: ExecutionLimits,
 ) -> Result<ExecutionResult, ExecutionError> {
+    checked_entry(executable, entry, limits)?;
+    if executable.program.trusted.is_some() {
+        return Err(ExecutionError::integrity(
+            "selected profile execution requires persistent session custody",
+        ));
+    }
+    machine::Machine::new(executable, limits).run(entry)
+}
+fn checked_entry(
+    executable: &CheckedExecutable,
+    entry: FunctionId,
+    limits: ExecutionLimits,
+) -> Result<(), ExecutionError> {
     limits.validate()?;
     executable.validate()?;
     let f = executable
@@ -632,6 +727,15 @@ pub fn execute(
         return Err(ExecutionError::new(
             ErrorKind::Integrity("selected entry must have zero parameters"),
             f.span,
+        ));
+    }
+    if executable
+        .trusted
+        .as_ref()
+        .is_some_and(|t| !t.roots.contains(&entry))
+    {
+        return Err(ExecutionError::integrity(
+            "selected entry is outside the sealed trusted roots",
         ));
     }
     if matches!(
@@ -654,6 +758,11 @@ pub fn execute(
             ));
         }
     }
+    if matches!(f.return_type, Some(ValueType::Resource(_))) {
+        return Err(ExecutionError::integrity(
+            "public live-resource egress is excluded",
+        ));
+    }
     if let Some(ValueType::Result(id)) = f.return_type {
         if executable
             .result_plans
@@ -665,13 +774,15 @@ pub fn execute(
             ));
         }
     }
-    machine::Machine::new(executable, limits).run(entry)
+    Ok(())
 }
 
 #[cfg(test)]
 mod result_admission_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod trusted_authority_tests;
 mod validate;
 
 #[cfg(test)]
@@ -752,7 +863,7 @@ mod effect_authority_tests {
             .push(crate::effects::custody::Site {
                 function: f.id,
                 holder: hir::Place::Local(local),
-                record: hir::RecordId(0),
+                plan: hir::resources::CleanupType::Record(hir::RecordId(0)),
                 effects,
                 kind: crate::effects::custody::Kind::Return,
                 origin: *span,
@@ -933,7 +1044,7 @@ mod effect_authority_tests {
                 2 => sites.swap(0, 1),
                 3 => sites[0].function = FunctionId(0),
                 4 => sites[0].holder = hir::Place::Local(hir::LocalId(999)),
-                5 => sites[0].record = hir::RecordId(1),
+                5 => sites[0].plan = hir::resources::CleanupType::Record(hir::RecordId(1)),
                 6 => sites[0].effects = EffectSet::EMPTY,
                 7 => sites[0].origin.start += 1,
                 8 => {
@@ -999,7 +1110,7 @@ mod effect_authority_tests {
                 }
                 6 => sites[0].origin.start += 1,
                 7 => sites[0].ordinal += 10,
-                _ => sites[0].callee = FunctionId(1),
+                _ => sites[0].callee = crate::effects::calls::Callee::Source(FunctionId(1)),
             }
             assert!(e.validate().is_err(), "mutation {mutation}");
         }
@@ -1037,7 +1148,10 @@ mod temporary_authority_tests {
                         flow.regions[0].roots.push(root);
                     }
                     3 => flow.sites[0].id = SiteId(usize::MAX),
-                    4 => flow.sites[0].plan = Some(hir::RecordId(999)),
+                    4 => {
+                        flow.sites[0].plan =
+                            Some(hir::resources::CleanupType::Record(hir::RecordId(999)))
+                    }
                     5 => flow.sites[0].destination = Destination::Parameter(hir::ParameterId(999)),
                     6 => flow.regions[0].parent = Some(RegionId(0)),
                     7 => flow.regions[0].origin.kind = mir::OriginKind::FunctionBoundary,
