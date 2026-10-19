@@ -273,8 +273,18 @@ fn run_execution(mut args: impl Iterator<Item = String>, audit: bool) -> Result<
         let grants = match grants.as_deref().unwrap_or("all") {
             "all" => Grants::ALL,
             "none" => Grants::NONE,
-            "finish-release" => Grants { open:false, read:false, release:true, finish:true },
-            "open-finish-release" => Grants { open:true, read:false, release:true, finish:true },
+            "finish-release" => Grants {
+                open: false,
+                read: false,
+                release: true,
+                finish: true,
+            },
+            "open-finish-release" => Grants {
+                open: true,
+                read: false,
+                release: true,
+                finish: true,
+            },
             "open-release" => Grants {
                 open: true,
                 read: false,
