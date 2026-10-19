@@ -41,7 +41,7 @@ nominal ranges and Result rules remain authoritative.
 
 Completion dispatch is explicitly disabled until M4. M1 adds only a terminal
 guard at that runtime seam; no external finish operation is implemented or
-simulated. Twelve proposed regression identities cover the contract, source
+simulated. Twelve regression identities cover the contract, source
 composition, independent denial/release grants, receipt status formation,
 nominal/literal/type rejection, direct effects, malformed unused descriptors
 and retained Sensor custody at disabled dispatch. All eight Actions runs passed at `65f9b8344768019ecd4fc686f0b8bd5e9a920f34`
@@ -212,9 +212,9 @@ phases/events, exact pair, independent direct/cleanup effects, both ordinary
 outcomes, release-only paths and terminal non-delivery. It remains static and
 never treats source status data or a selected scenario as an execution trace.
 CLI scenarios expose immediate and partial completion Error; exact grant
-selections and rejection examples remain explicit. New real-binary CLI and
+selections and rejection examples remain explicit. Real-binary CLI and
 static/recursive audit tests, the implementation guide and candidate-labelled
-canonical context are pending Actions. No Accepted decision is changed.
+canonical context passed Actions. No Accepted decision is changed.
 
 All eight Actions runs passed at `cb081c18ca289d8f73daccc1a670a6ac8d976503`,
 tree `82ed30696c94c6cd099bf248995669b15761a78c`, 2,041 identities per profile.
@@ -225,7 +225,7 @@ Run/job pairs: 39321772556/118297348689, 39321772314/118297346490,
 M8 audit output is 6,193 bytes on the measured artifact; audit work 65,584,
 storage 65,617. Other M7 numeric neighbors remained identical in all four logs.
 
-## M9: final exact-head conformance (validation pending)
+## M9: final conformance and exact-head handoff
 
 The manifest and conformance index map all 26 section 13 obligations, all 12
 section 14 families, P01-P09 and M0-M9 to exact assertions and production
@@ -237,7 +237,37 @@ presence; the index is not a proof of semantic coverage over all programs.
 Final additional controls pressure finish-only approval Host allocations,
 coordinated protected payload/provenance Error-subset forgery, and the exact
 stopped-session audit/report storage neighbor with cursor, outcome and prefix
-retained. Final workflow evidence and integration status remain pending.
+retained. The final input activation/frame correspondence guard and malformed control also
+passed: no handoff or attempt occurs when the dynamic input frame is corrupted.
+
+The complete runtime checkpoint is `038defe990882d83eaf6a3460c3f06bfe5f24938`,
+tree `2d90aba75dcec41807376635839d3a775702ad33`. All eight runs and every
+job/step passed. Push and PR debug/release independently reconcile 2,045 passing
+identities: all 1,981 frozen predecessors plus 64 classified additions, with zero
+failed, ignored, filtered or migrated identities. Run/job pairs:
+39323549408/118303453295, 39323549495/118303454499,
+39323549749/118303454203, 39323549295/118303452395,
+39323542092/118303429493, 39323542042/118303430239,
+39323542026/118303430106, 39323542075/118303429615.
+
+GitHub Actions reports repository-pinned Rust 1.80.0 (051478957), Cargo 1.80.0
+(376290515), Rustdoc 1.80.0, x86_64-unknown-linux-gnu, LLVM 18.1.7. Formatting,
+locked all-target compilation, warnings-denied Clippy/Rustdoc, authority doctest,
+both 1,800-case affine checks, CLI/examples/rejections, assets/scaffold and
+generated-context reproducibility passed. No local Rust execution occurred.
+
+`ked-034-budget-neighbors.json` retains all four measured event/profile records
+from this runtime checkpoint. The stopped completion retains 4,352 bytes and
+needs 69,969 bytes for the combined authority report, with its insufficient
+neighbor checked; report failure preserves its cursor, protected outcome and
+actual prefix. Audit output is 6,193 bytes; source result output 20 and full
+diagnostic 126, with the existing shorter fallback checked independently.
+
+The final documentation-only commit reruns this same complete gate. The PR/Issue
+completion reports identify its exact final head/tree, eight fresh run/job IDs,
+reconciliation, integration status and evidence links. Those reports distinguish
+Actions execution, local source/Python analysis, private malformed controls and
+finite-fixture limits. Independent Sarah review and Greg acceptance remain pending.
 
 ## Historical milestone sequence
 
