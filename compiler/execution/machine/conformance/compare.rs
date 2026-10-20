@@ -136,7 +136,8 @@ pub(super) fn compatibility_shapes() -> [usize; 8] {
 }
 impl Scratch {
     fn new(limits: ComparisonLimits, schedule: contract::Schedule) -> Valid<Self> {
-        let units: usize = schedule.comparison[..6].iter().sum::<usize>() + 2 * schedule.observation[0];
+        let units: usize =
+            schedule.comparison[..6].iter().sum::<usize>() + 2 * schedule.observation[0];
         let bytes = limits
             .nodes
             .checked_mul(units)
@@ -185,7 +186,9 @@ impl Scratch {
         s.temporaries
             .try_reserve_exact(limits.nodes)
             .map_err(|_| Incomplete::Allocation)?;
-        s.controls.try_reserve_exact(limits.nodes).map_err(|_| Incomplete::Allocation)?;
+        s.controls
+            .try_reserve_exact(limits.nodes)
+            .map_err(|_| Incomplete::Allocation)?;
         Ok(s)
     }
     fn clear(&mut self) {
@@ -1117,13 +1120,13 @@ impl Validator<'_, '_> {
             )?;
             self.scratch.nodes[index].born = true;
             self.scratch.nodes[index].status = p[5] as u8;
-            self.scratch.nodes[index].edge = (p[6]!=ABSENT).then_some(key(Kind::Sensor,p[6]));
+            self.scratch.nodes[index].edge = (p[6] != ABSENT).then_some(key(Kind::Sensor, p[6]));
             self.reference(key(Kind::Result, p[2]))?;
             let cell = self.node(key(Kind::Result, p[2]))?;
             let (payload, end) = cell.payload.ok_or(Incomplete::InvalidState)?;
             if let Some(Record::Range(ty, value)) = self.peek() {
                 require(p[6] == ABSENT)?;
-                self.response_value(p[4],p[3] as usize,p[5],ty,value)?;
+                self.response_value(p[4], p[3] as usize, p[5], ty, value)?;
                 require(end == payload + 1 && self.records[payload] == Record::Range(ty, value))?;
                 let expected = self
                     .contract
@@ -1155,7 +1158,11 @@ impl Validator<'_, '_> {
                 }
             } else {
                 require(self.take()? == Record::Absent && p[6] != ABSENT)?;
-                if let Some(response)=self.recorded_response(p[4],p[3] as usize)? {require(response==replay::Response::Open(approved.catalog.sensor) && p[5]==0)?;}
+                if let Some(response) = self.recorded_response(p[4], p[3] as usize)? {
+                    require(
+                        response == replay::Response::Open(approved.catalog.sensor) && p[5] == 0,
+                    )?;
+                }
                 let Record::Meta(Part::SensorHandle, active) = self.records[payload] else {
                     return Err(Incomplete::InvalidState);
                 };
@@ -1186,17 +1193,31 @@ impl Validator<'_, '_> {
         }
         require(productions <= d[4])?;
         if self.is_meta(Part::PendingReceipt) {
-            self.pending_states+=1;
-            let receipt=self.meta(Part::PendingReceipt)?;
-            self.shape(&receipt,3)?;
-            require(receipt[2]==255)?;
-            let address=self.model_host.ok_or(Incomplete::InvalidState)?;
-            require(address.site==replay::Site::Invocation(receipt[1] as usize)
-                && matches!(address.phase,replay::Phase::HandoffAccepted|replay::Phase::BeforeAttempt|replay::Phase::Attempt))?;
-            let control=self.control.ok_or(Incomplete::InvalidState)?;
-            require(control.raw_for_birth(replay::Birth{plan:receipt[1] as usize,activation:address.activation,occurrence:address.occurrence})==Some(receipt[0]))?;
-            self.invocation(receipt[0],receipt[1] as usize,None)?;
-            require(self.take()?==Record::Absent)?;self.end()?;
+            self.pending_states += 1;
+            let receipt = self.meta(Part::PendingReceipt)?;
+            self.shape(&receipt, 3)?;
+            require(receipt[2] == 255)?;
+            let address = self.model_host.ok_or(Incomplete::InvalidState)?;
+            require(
+                address.site == replay::Site::Invocation(receipt[1] as usize)
+                    && matches!(
+                        address.phase,
+                        replay::Phase::HandoffAccepted
+                            | replay::Phase::BeforeAttempt
+                            | replay::Phase::Attempt
+                    ),
+            )?;
+            let control = self.control.ok_or(Incomplete::InvalidState)?;
+            require(
+                control.raw_for_birth(replay::Birth {
+                    plan: receipt[1] as usize,
+                    activation: address.activation,
+                    occurrence: address.occurrence,
+                }) == Some(receipt[0]),
+            )?;
+            self.invocation(receipt[0], receipt[1] as usize, None)?;
+            require(self.take()? == Record::Absent)?;
+            self.end()?;
         }
         if self.is_meta(Part::Receipt) {
             self.pending_states += 1;
@@ -1222,7 +1243,11 @@ impl Validator<'_, '_> {
                 )
                 .ok_or(Incomplete::InvalidState)?;
             if self.is_meta(Part::Token) {
-                if let Some(response)=self.recorded_response(r[0],r[1] as usize)? {require(response==replay::Response::Open(approved.catalog.sensor) && r[2]==0)?;}
+                if let Some(response) = self.recorded_response(r[0], r[1] as usize)? {
+                    require(
+                        response == replay::Response::Open(approved.catalog.sensor) && r[2] == 0,
+                    )?;
+                }
                 let t = self.meta(Part::Token)?;
                 self.shape(&t, 2)?;
                 require(t[0] == d[0] && expected == ValueType::Resource(approved.catalog.sensor))?;
@@ -1237,8 +1262,10 @@ impl Validator<'_, '_> {
                 self.scratch.nodes[n].status = 2;
                 self.scratch.nodes[n].born = true;
             } else {
-                let Some(Record::Range(ty,number))=self.peek() else {return Err(Incomplete::InvalidState);};
-                self.response_value(r[0],r[1] as usize,r[2],ty,number)?;
+                let Some(Record::Range(ty, number)) = self.peek() else {
+                    return Err(Incomplete::InvalidState);
+                };
+                self.response_value(r[0], r[1] as usize, r[2], ty, number)?;
                 if r[2] == 1 {
                     let Some(Record::Range(_, code)) = self.peek() else {
                         return Err(Incomplete::InvalidState);
@@ -1994,133 +2021,241 @@ impl Validator<'_, '_> {
         }
         Ok(())
     }
-    fn control_address(&mut self,address:replay::Address)->Valid {
-        let control=self.control.ok_or(Incomplete::InvalidState)?;
-        self.work.0=self.work.0.checked_sub(control.site_work()+1).ok_or(Incomplete::Work)?;
-        require(address.occurrence>0 && control.has_site(address.site))?;
-        let (function,_,_,_)=control.activation(address.activation).ok_or(Incomplete::InvalidState)?;
-        if address.activation==0 {require(function==self.contract.entry())?;}
-        else {require(self.node(key(Kind::Logical,address.activation as u64))?.a==function.0 as u64)?;}
+    fn control_address(&mut self, address: replay::Address) -> Valid {
+        let control = self.control.ok_or(Incomplete::InvalidState)?;
+        self.work.0 = self
+            .work
+            .0
+            .checked_sub(control.site_work() + 1)
+            .ok_or(Incomplete::Work)?;
+        require(address.occurrence > 0 && control.has_site(address.site))?;
+        let (function, _, _, _) = control
+            .activation(address.activation)
+            .ok_or(Incomplete::InvalidState)?;
+        if address.activation == 0 {
+            require(function == self.contract.entry())?;
+        } else {
+            require(
+                self.node(key(Kind::Logical, address.activation as u64))?.a == function.0 as u64,
+            )?;
+        }
         match address.site {
-            replay::Site::Capacity(actual,span)=> {
-                require(actual==function && address.phase==replay::Phase::Reservation)?;
+            replay::Site::Capacity(actual, span) => {
+                require(actual == function && address.phase == replay::Phase::Reservation)?;
                 self.span(span)?;
             }
-            replay::Site::Release(actual,span)=> {
-                require(actual==function && matches!(address.phase,replay::Phase::BeforeAttempt|replay::Phase::ReleaseAttempt|replay::Phase::ReleaseComplete|replay::Phase::ReleaseFailure))?;
+            replay::Site::Release(actual, span) => {
+                require(
+                    actual == function
+                        && matches!(
+                            address.phase,
+                            replay::Phase::BeforeAttempt
+                                | replay::Phase::ReleaseAttempt
+                                | replay::Phase::ReleaseComplete
+                                | replay::Phase::ReleaseFailure
+                        ),
+                )?;
                 self.span(span)?;
             }
-            replay::Site::Invocation(plan)=> {
-                let invocation=self.contract.executable.trusted.as_ref().ok_or(Incomplete::InvalidState)?.invocations.get(plan).ok_or(Incomplete::InvalidState)?;
-                require(invocation.function==function)?;
+            replay::Site::Invocation(plan) => {
+                let invocation = self
+                    .contract
+                    .executable
+                    .trusted
+                    .as_ref()
+                    .ok_or(Incomplete::InvalidState)?
+                    .invocations
+                    .get(plan)
+                    .ok_or(Incomplete::InvalidState)?;
+                require(invocation.function == function)?;
                 require(match address.phase {
-                    replay::Phase::BeforeHandoff|replay::Phase::HandoffAccepted|replay::Phase::BeforeAttempt|replay::Phase::Attempt|replay::Phase::Response|replay::Phase::Validation|replay::Phase::Delivery=>true,
-                    replay::Phase::Protection=>invocation.completion.is_some(),
-                    _=>false,
+                    replay::Phase::BeforeHandoff
+                    | replay::Phase::HandoffAccepted
+                    | replay::Phase::BeforeAttempt
+                    | replay::Phase::Attempt
+                    | replay::Phase::Response
+                    | replay::Phase::Validation
+                    | replay::Phase::Delivery => true,
+                    replay::Phase::Protection => invocation.completion.is_some(),
+                    _ => false,
                 })?;
             }
-            replay::Site::Call(..)=>return Err(Incomplete::InvalidState),
+            replay::Site::Call(..) => return Err(Incomplete::InvalidState),
         }
         Ok(())
     }
-    fn recorded_response(&mut self,raw:u64,plan:usize)->Valid<Option<replay::Response>> {
-        let Some(control)=self.control else {return Ok(None);};
-        self.work.0=self.work.0.checked_sub(control.history_work()+1).ok_or(Incomplete::Work)?;
-        let birth=control.birth_for_raw(raw).ok_or(Incomplete::InvalidState)?;
-        require(birth.plan==plan)?;
-        let address=replay::Address{site:replay::Site::Invocation(plan),activation:birth.activation,occurrence:birth.occurrence,phase:replay::Phase::Response};
+    fn recorded_response(&mut self, raw: u64, plan: usize) -> Valid<Option<replay::Response>> {
+        let Some(control) = self.control else {
+            return Ok(None);
+        };
+        self.work.0 = self
+            .work
+            .0
+            .checked_sub(control.history_work() + 1)
+            .ok_or(Incomplete::Work)?;
+        let birth = control.birth_for_raw(raw).ok_or(Incomplete::InvalidState)?;
+        require(birth.plan == plan)?;
+        let address = replay::Address {
+            site: replay::Site::Invocation(plan),
+            activation: birth.activation,
+            occurrence: birth.occurrence,
+            phase: replay::Phase::Response,
+        };
         for record in &self.scratch.controls {
             self.work.spend()?;
-            if let Record::ControlledResponse(actual,response)=record {
-                if *actual==address {return Ok(Some(*response));}
+            if let Record::ControlledResponse(actual, response) = record {
+                if *actual == address {
+                    return Ok(Some(*response));
+                }
             }
         }
         Err(Incomplete::InvalidState)
     }
-    fn response_value(&mut self,raw:u64,plan:usize,tag:u64,ty:hir::RangeTypeId,value:i64)->Valid {
-        if let Some(response)=self.recorded_response(raw,plan)? {
+    fn response_value(
+        &mut self,
+        raw: u64,
+        plan: usize,
+        tag: u64,
+        ty: hir::RangeTypeId,
+        value: i64,
+    ) -> Valid {
+        if let Some(response) = self.recorded_response(raw, plan)? {
             require(match response {
-                replay::Response::Value(expected,number,_)=>tag==0 && expected==ty && number==value,
-                replay::Response::Error(expected,number,_)=>tag==1 && expected==ty && number==value,
-                _=>false,
+                replay::Response::Value(expected, number, _) => {
+                    tag == 0 && expected == ty && number == value
+                }
+                replay::Response::Error(expected, number, _) => {
+                    tag == 1 && expected == ty && number == value
+                }
+                _ => false,
             })?;
         }
         Ok(())
     }
-    fn control_history(&mut self,record:Record)->Valid {
-        if self.scratch.controls.len()==self.scratch.cap {return Err(Incomplete::Records);}
+    fn control_history(&mut self, record: Record) -> Valid {
+        if self.scratch.controls.len() == self.scratch.cap {
+            return Err(Incomplete::Records);
+        }
         for previous in &self.scratch.controls {
             self.work.spend()?;
-            let duplicate=match (*previous,record) {
-                (Record::Control(a,1),Record::Control(b,1))=>a==b,
-                (Record::Control(a,0),Record::Control(b,0))=>a==b,
-                (Record::ControlledResponse(a,_),Record::ControlledResponse(b,_))=>a==b,
-                (Record::Releasing(a,_,_),Record::Releasing(b,_,_))=>a==b,
-                _=>false,
+            let duplicate = match (*previous, record) {
+                (Record::Control(a, 1), Record::Control(b, 1)) => a == b,
+                (Record::Control(a, 0), Record::Control(b, 0)) => a == b,
+                (Record::ControlledResponse(a, _), Record::ControlledResponse(b, _)) => a == b,
+                (Record::Releasing(a, _, _), Record::Releasing(b, _, _)) => a == b,
+                _ => false,
             };
             require(!duplicate)?;
         }
-        self.scratch.controls.push(record);Ok(())
+        self.scratch.controls.push(record);
+        Ok(())
     }
-    fn finish_controls(&mut self)->Valid {
-        let Some(control)=self.control else {return Ok(());};
-        self.work.0=self.work.0.checked_sub(control.input_work()).ok_or(Incomplete::Work)?;
-        require(self.logical_count==control.activation_count() && self.model_host==control.stopped())?;
-        let mut consumed=0;
+    fn finish_controls(&mut self) -> Valid {
+        let Some(control) = self.control else {
+            return Ok(());
+        };
+        self.work.0 = self
+            .work
+            .0
+            .checked_sub(control.input_work())
+            .ok_or(Incomplete::Work)?;
+        require(
+            self.logical_count == control.activation_count()
+                && self.model_host == control.stopped(),
+        )?;
+        let mut consumed = 0;
         for index in 0..self.scratch.controls.len() {
             self.work.spend()?;
-            let record=self.scratch.controls[index];
-            if matches!(record,Record::Control(_,1)) {consumed+=1;}
-            if let Record::ControlledResponse(address,response)=record {
+            let record = self.scratch.controls[index];
+            if matches!(record, Record::Control(_, 1)) {
+                consumed += 1;
+            }
+            if let Record::ControlledResponse(address, response) = record {
                 match address.site {
-                    replay::Site::Invocation(plan)=> {
-                        self.work.0=self.work.0.checked_sub(control.history_work()+1).ok_or(Incomplete::Work)?;
-                        let raw=control.raw_for_birth(replay::Birth{plan,activation:address.activation,occurrence:address.occurrence}).ok_or(Incomplete::InvalidState)?;
-                        let invocation=self.node(key(Kind::Invocation,raw))?;
-                        let (tag,prefix)=match response {
-                            replay::Response::Open(_)=>(0,0),
-                            replay::Response::Value(_,_,prefix)=>(0,prefix),
-                            replay::Response::Error(_,_,prefix)=>(1,prefix),
-                            _=>return Err(Incomplete::InvalidState),
+                    replay::Site::Invocation(plan) => {
+                        self.work.0 = self
+                            .work
+                            .0
+                            .checked_sub(control.history_work() + 1)
+                            .ok_or(Incomplete::Work)?;
+                        let raw = control
+                            .raw_for_birth(replay::Birth {
+                                plan,
+                                activation: address.activation,
+                                occurrence: address.occurrence,
+                            })
+                            .ok_or(Incomplete::InvalidState)?;
+                        let invocation = self.node(key(Kind::Invocation, raw))?;
+                        let (tag, prefix) = match response {
+                            replay::Response::Open(_) => (0, 0),
+                            replay::Response::Value(_, _, prefix) => (0, prefix),
+                            replay::Response::Error(_, _, prefix) => (1, prefix),
+                            _ => return Err(Incomplete::InvalidState),
                         };
-                        require(invocation.status>=2 && invocation.tag==tag && invocation.statement==prefix as usize)?;
+                        require(
+                            invocation.status >= 2
+                                && invocation.tag == tag
+                                && invocation.statement == prefix as usize,
+                        )?;
                     }
-                    replay::Site::Release(..)=> {
-                        let replay::Response::Release(birth,success)=response else {return Err(Incomplete::InvalidState);};
-                        let mut binding=address;binding.phase=replay::Phase::BeforeAttempt;
-                        let mut sensor=None;
+                    replay::Site::Release(..) => {
+                        let replay::Response::Release(birth, success) = response else {
+                            return Err(Incomplete::InvalidState);
+                        };
+                        let mut binding = address;
+                        binding.phase = replay::Phase::BeforeAttempt;
+                        let mut sensor = None;
                         for other in &self.scratch.controls {
                             self.work.spend()?;
-                            if let Record::Releasing(actual,1,raw)=other {if *actual==binding {sensor=Some(*raw);}}
+                            if let Record::Releasing(actual, 1, raw) = other {
+                                if *actual == binding {
+                                    sensor = Some(*raw);
+                                }
+                            }
                         }
-                        let sensor=sensor.ok_or(Incomplete::InvalidState)?;
-                        let state=self.node(key(Kind::Sensor,sensor))?;
-                        require(state.statement==if success {2}else{3})?;
-                        self.work.0=self.work.0.checked_sub(control.history_work()+1).ok_or(Incomplete::Work)?;
-                        let invocation=control.raw_for_birth(birth).ok_or(Incomplete::InvalidState)?;
-                        let mut associated=false;
+                        let sensor = sensor.ok_or(Incomplete::InvalidState)?;
+                        let state = self.node(key(Kind::Sensor, sensor))?;
+                        require(state.statement == if success { 2 } else { 3 })?;
+                        self.work.0 = self
+                            .work
+                            .0
+                            .checked_sub(control.history_work() + 1)
+                            .ok_or(Incomplete::Work)?;
+                        let invocation = control
+                            .raw_for_birth(birth)
+                            .ok_or(Incomplete::InvalidState)?;
+                        let mut associated = false;
                         for production in &self.scratch.nodes {
                             self.work.spend()?;
-                            if production.key.0==Kind::Production && production.edge==Some(key(Kind::Sensor,sensor))
-                                && production.parent==Some(key(Kind::Invocation,invocation)) && production.a==birth.plan as u64 {associated=true;}
+                            if production.key.0 == Kind::Production
+                                && production.edge == Some(key(Kind::Sensor, sensor))
+                                && production.parent == Some(key(Kind::Invocation, invocation))
+                                && production.a == birth.plan as u64
+                            {
+                                associated = true;
+                            }
                         }
                         require(associated)?;
                     }
-                    _=>return Err(Incomplete::InvalidState),
+                    _ => return Err(Incomplete::InvalidState),
                 }
-                let mut reached=false;
+                let mut reached = false;
                 for other in &self.scratch.controls {
                     self.work.spend()?;
-                    if *other==Record::Control(address,0) {reached=true;}
+                    if *other == Record::Control(address, 0) {
+                        reached = true;
+                    }
                 }
                 require(reached)?;
             }
         }
-        require(consumed==control.used_responses())?;
+        require(consumed == control.used_responses())?;
         for index in 0..self.scratch.nodes.len() {
             self.work.spend()?;
-            let node=self.scratch.nodes[index];
-            if node.key.0==Kind::Invocation && node.status>=2 {self.recorded_response(node.key.1,node.b as usize)?;}
+            let node = self.scratch.nodes[index];
+            if node.key.0 == Kind::Invocation && node.status >= 2 {
+                self.recorded_response(node.key.1, node.b as usize)?;
+            }
         }
         Ok(())
     }
@@ -2256,11 +2391,15 @@ impl Validator<'_, '_> {
         for index in 0..self.scratch.nodes.len() {
             self.work.spend()?;
             let node = self.scratch.nodes[index];
-            if node.key.0==Kind::Logical {
-                let frame=self.node(node.edge.ok_or(Incomplete::InvalidState)?)?;
-                require(frame.a==node.a && frame.origin==node.origin)?;
-                let parent=if let Some(parent)=node.parent {self.node(parent)?.edge}else{None};
-                require(frame.parent==parent)?;
+            if node.key.0 == Kind::Logical {
+                let frame = self.node(node.edge.ok_or(Incomplete::InvalidState)?)?;
+                require(frame.a == node.a && frame.origin == node.origin)?;
+                let parent = if let Some(parent) = node.parent {
+                    self.node(parent)?.edge
+                } else {
+                    None
+                };
+                require(frame.parent == parent)?;
             }
             if node.key.0 == Kind::Frame && node.declared != self.stamp {
                 self.scratch.nodes[index].status = 1;
@@ -2327,7 +2466,9 @@ impl Validator<'_, '_> {
         require(
             fuel >= self.last_fuel && fuel <= self.limits.steps && depth <= self.limits.call_depth,
         )?;
-        if self.model_host.is_some() {require(matches!(cut,Cut::Transition|Cut::Final))?;}
+        if self.model_host.is_some() {
+            require(matches!(cut, Cut::Transition | Cut::Final))?;
+        }
         self.last_fuel = fuel;
         require(!self.last_terminal || terminal)?;
         self.last_depth = depth;
@@ -2415,8 +2556,10 @@ impl Validator<'_, '_> {
                 None,
                 true,
             )?;
-            if let Some(previous)=self.scratch.nodes[index].origin {require(previous==call_site)?;}
-            self.scratch.nodes[index].origin=Some(call_site);
+            if let Some(previous) = self.scratch.nodes[index].origin {
+                require(previous == call_site)?;
+            }
+            self.scratch.nodes[index].origin = Some(call_site);
             self.scratch.nodes[index].block = block.0;
             self.scratch.nodes[index].statement = statement;
             parent = Some(id);
@@ -2553,9 +2696,11 @@ fn validate<'a>(
     };
     let result = (|| {
         require(capture.controlled == control.is_some())?;
-        if let Some(control)=control {
-            require(control.bound(contract.executable,contract.entry(),limits))?;
-            if control.rejected() {return Err(Incomplete::Admission);}
+        if let Some(control) = control {
+            require(control.bound(contract.executable, contract.entry(), limits))?;
+            if control.rejected() {
+                return Err(Incomplete::Admission);
+            }
         }
         require(v.snapshot()? == Cut::Start)?;
         let mut last = Cut::Start;
@@ -2565,61 +2710,125 @@ fn validate<'a>(
             }
             match v.peek() {
                 Some(Record::Cut(..)) => last = v.snapshot()?,
-                Some(Record::LogicalActivation(id,raw,function,parent,call_site,occurrence))=> {
-                    v.take()?;require(v.model_host.is_none() && id==v.logical_count)?;
-                    let control=v.control.ok_or(Incomplete::InvalidState)?;
-                    require(control.activation(id)==Some((function,parent,call_site,occurrence)))?;
-                    if id==0 {require(function==contract.entry() && parent.is_none() && occurrence==0)?;}
-                    else {require(parent.is_some_and(|parent|parent<id) && occurrence>0)?;}
-                    let index=v.declaration(key(Kind::Logical,id as u64),function.0 as u64,occurrence,parent.map(|id|key(Kind::Logical,id as u64)),None,true)?;
-                    v.scratch.nodes[index].edge=Some(key(Kind::Frame,raw));
-                    v.scratch.nodes[index].origin=Some(call_site);
-                    v.logical_count+=1;
-                }
-                Some(Record::Releasing(address,kind,raw))=> {
-                    v.take()?;require(v.model_host.is_none() && kind<=1 && address.phase==replay::Phase::BeforeAttempt)?;
-                    v.control_address(address)?;
-                    let resource=key(if kind==0 {Kind::Leaf}else{Kind::Sensor},raw);
-                    let node=v.node(resource)?;
-                    require(if kind==0 {node.born && node.status!=2}else{node.status==1})?;
-                    let mut held=false;
-                    for link in &v.scratch.links {v.work.spend()?;if matches!(link,Link::Owner(k,_) if *k==resource) {held=true;}}
-                    require(held)?;
-                    v.control_history(Record::Releasing(address,kind,raw))?;
-                }
-                Some(Record::ControlledResponse(address,response))=> {
-                    v.take()?;require(v.model_host.is_none())?;v.control_address(address)?;
-                    let control=v.control.ok_or(Incomplete::InvalidState)?;
-                    v.work.0=v.work.0.checked_sub(control.site_work()+1).ok_or(Incomplete::Work)?;
-                    control.response_valid(contract,replay::Item{address,response}).map_err(|_|Incomplete::InvalidState)?;
-                    v.control_history(Record::ControlledResponse(address,response))?;
-                }
-                Some(Record::Control(address,status))=> {
-                    v.take()?;v.control_address(address)?;require(status<=2)?;
-                    let control=v.control.ok_or(Incomplete::InvalidState)?;
-                    if v.model_host.is_some() {
-                        let mut failure=v.model_host.unwrap();failure.phase=replay::Phase::ReleaseFailure;
-                        require(status==0 && address==failure)?;
-                    }
-                    if status==0 {
-                        if address.phase==replay::Phase::Reservation {
-                            let Cut::Storage(bytes)=last else {return Err(Incomplete::InvalidState);};
-                            require(bytes>0 && v.storage.checked_add(bytes).is_some_and(|n|n<=limits.working_storage))?;
-                        }
-                        if address.phase==replay::Phase::BeforeHandoff {
-                            let replay::Site::Invocation(plan)=address.site else {return Err(Incomplete::InvalidState);};
-                            require(v.action_plan==Some(plan))?;
-                        }
-                        v.last_reached=Some(address);
-                        v.control_history(Record::Control(address,0))?;
-                    } else if status==1 {
-                        v.work.0=v.work.0.checked_sub(control.input_work()).ok_or(Incomplete::Work)?;
-                        require(control.consumed(address))?;
-                        v.control_history(Record::Control(address,1))?;
+                Some(Record::LogicalActivation(
+                    id,
+                    raw,
+                    function,
+                    parent,
+                    call_site,
+                    occurrence,
+                )) => {
+                    v.take()?;
+                    require(v.model_host.is_none() && id == v.logical_count)?;
+                    let control = v.control.ok_or(Incomplete::InvalidState)?;
+                    require(
+                        control.activation(id) == Some((function, parent, call_site, occurrence)),
+                    )?;
+                    if id == 0 {
+                        require(
+                            function == contract.entry() && parent.is_none() && occurrence == 0,
+                        )?;
                     } else {
-                        v.work.0=v.work.0.checked_sub(control.input_work()).ok_or(Incomplete::Work)?;
-                        require(v.last_reached==Some(address) && control.modeled(address))?;
-                        v.model_host=Some(address);
+                        require(parent.is_some_and(|parent| parent < id) && occurrence > 0)?;
+                    }
+                    let index = v.declaration(
+                        key(Kind::Logical, id as u64),
+                        function.0 as u64,
+                        occurrence,
+                        parent.map(|id| key(Kind::Logical, id as u64)),
+                        None,
+                        true,
+                    )?;
+                    v.scratch.nodes[index].edge = Some(key(Kind::Frame, raw));
+                    v.scratch.nodes[index].origin = Some(call_site);
+                    v.logical_count += 1;
+                }
+                Some(Record::Releasing(address, kind, raw)) => {
+                    v.take()?;
+                    require(
+                        v.model_host.is_none()
+                            && kind <= 1
+                            && address.phase == replay::Phase::BeforeAttempt,
+                    )?;
+                    v.control_address(address)?;
+                    let resource = key(if kind == 0 { Kind::Leaf } else { Kind::Sensor }, raw);
+                    let node = v.node(resource)?;
+                    require(if kind == 0 {
+                        node.born && node.status != 2
+                    } else {
+                        node.status == 1
+                    })?;
+                    let mut held = false;
+                    for link in &v.scratch.links {
+                        v.work.spend()?;
+                        if matches!(link,Link::Owner(k,_) if *k==resource) {
+                            held = true;
+                        }
+                    }
+                    require(held)?;
+                    v.control_history(Record::Releasing(address, kind, raw))?;
+                }
+                Some(Record::ControlledResponse(address, response)) => {
+                    v.take()?;
+                    require(v.model_host.is_none())?;
+                    v.control_address(address)?;
+                    let control = v.control.ok_or(Incomplete::InvalidState)?;
+                    v.work.0 = v
+                        .work
+                        .0
+                        .checked_sub(control.site_work() + 1)
+                        .ok_or(Incomplete::Work)?;
+                    control
+                        .response_valid(contract, replay::Item { address, response })
+                        .map_err(|_| Incomplete::InvalidState)?;
+                    v.control_history(Record::ControlledResponse(address, response))?;
+                }
+                Some(Record::Control(address, status)) => {
+                    v.take()?;
+                    v.control_address(address)?;
+                    require(status <= 2)?;
+                    let control = v.control.ok_or(Incomplete::InvalidState)?;
+                    if v.model_host.is_some() {
+                        let mut failure = v.model_host.unwrap();
+                        failure.phase = replay::Phase::ReleaseFailure;
+                        require(status == 0 && address == failure)?;
+                    }
+                    if status == 0 {
+                        if address.phase == replay::Phase::Reservation {
+                            let Cut::Storage(bytes) = last else {
+                                return Err(Incomplete::InvalidState);
+                            };
+                            require(
+                                bytes > 0
+                                    && v.storage
+                                        .checked_add(bytes)
+                                        .is_some_and(|n| n <= limits.working_storage),
+                            )?;
+                        }
+                        if address.phase == replay::Phase::BeforeHandoff {
+                            let replay::Site::Invocation(plan) = address.site else {
+                                return Err(Incomplete::InvalidState);
+                            };
+                            require(v.action_plan == Some(plan))?;
+                        }
+                        v.last_reached = Some(address);
+                        v.control_history(Record::Control(address, 0))?;
+                    } else if status == 1 {
+                        v.work.0 = v
+                            .work
+                            .0
+                            .checked_sub(control.input_work())
+                            .ok_or(Incomplete::Work)?;
+                        require(control.consumed(address))?;
+                        v.control_history(Record::Control(address, 1))?;
+                    } else {
+                        v.work.0 = v
+                            .work
+                            .0
+                            .checked_sub(control.input_work())
+                            .ok_or(Incomplete::Work)?;
+                        require(v.last_reached == Some(address) && control.modeled(address))?;
+                        v.model_host = Some(address);
                     }
                 }
                 Some(Record::Executing) => {
@@ -2767,11 +2976,15 @@ fn validate<'a>(
                 };
                 require(class == actual_class)?;
                 if class == 4 {
-                    let modeled=v.model_host.is_some_and(|address| control.is_some_and(|c| c.modeled(address)));
-                    if !modeled || actual.kind!=ErrorKind::Host("modeled abstract Host") {
+                    let modeled = v
+                        .model_host
+                        .is_some_and(|address| control.is_some_and(|c| c.modeled(address)));
+                    if !modeled || actual.kind != ErrorKind::Host("modeled abstract Host") {
                         return Err(Incomplete::UnmatchedPhysicalFailure);
                     }
-                } else { require(v.model_host.is_none())?; }
+                } else {
+                    require(v.model_host.is_none())?;
+                }
                 if class == 1 {
                     let Record::Trap(ty, min, max, computed) = v.take()? else {
                         return Err(Incomplete::InvalidState);

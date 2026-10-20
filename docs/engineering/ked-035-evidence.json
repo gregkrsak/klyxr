@@ -1265,7 +1265,9 @@
     "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery",
     "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release",
     "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties",
-    "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed"
+    "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed",
+    "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+    "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal"
   ],
   "fixture_adaptations": [
     {
@@ -1347,7 +1349,9 @@
     "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery": "private_addressed_replay",
     "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release": "private_addressed_replay",
     "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties": "private_addressed_replay",
-    "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed": "private_addressed_replay"
+    "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed": "private_addressed_replay",
+    "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry": "private_addressed_replay",
+    "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal": "private_addressed_replay"
   },
   "m5_checkpoint": {
     "commit": "e31f6104d8222ee201bc392a3daf87bcb03734ab",

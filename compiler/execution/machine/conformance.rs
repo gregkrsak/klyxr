@@ -803,7 +803,9 @@ impl<'a> Session<'a> {
     ) -> Result<Self, ExecutionError> {
         contract.validate()?;
         checked_entry(contract.executable, contract.entry(), execution)?;
-        let controller = input.map(|input| replay::Controller::admit(contract, execution, input)).transpose()?;
+        let controller = input
+            .map(|input| replay::Controller::admit(contract, execution, input))
+            .transpose()?;
         let engine = if contract.executable.trusted.is_some() {
             Engine::Selected(trusted::ExecutionSession::new(
                 contract.executable,
@@ -822,8 +824,8 @@ impl<'a> Session<'a> {
             entry: contract.entry(),
         };
         *session.machine_mut().control.get_mut() = controller;
-        let mut capture=Capture::new(observation, contract);
-        capture.controlled=session.machine().control.borrow().is_some();
+        let mut capture = Capture::new(observation, contract);
+        capture.controlled = session.machine().control.borrow().is_some();
         *session.machine_mut().observation.get_mut() = Some(capture);
         session.machine().observe(Cut::Start);
         Ok(session)

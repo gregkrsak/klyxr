@@ -179,27 +179,38 @@ impl<'a> Machine<'a> {
         });
         state.events.push(Event::Attempt(invocation, operation.id));
         self.control_phase(conformance::replay::Phase::Attempt)?;
-        let controlled=self.control_response(true)?;
-        let (failed,prefix,ty,value)=match controlled {
-            Some(conformance::replay::Response::Value(ty,value,0))=>(false,0,ty,value),
-            Some(conformance::replay::Response::Error(ty,value,prefix))=>(true,prefix,ty,value),
-            Some(_)=>return Err(self.integrity("controlled completion response mismatch")),
-            None=>(failed,u8::from(scenario==Scenario::FinishPartialIoFailure),if failed {approved.catalog.error}else{approved.catalog.finish_receipt},if failed {3}else{1}),
+        let controlled = self.control_response(true)?;
+        let (failed, prefix, ty, value) = match controlled {
+            Some(conformance::replay::Response::Value(ty, value, 0)) => (false, 0, ty, value),
+            Some(conformance::replay::Response::Error(ty, value, prefix)) => {
+                (true, prefix, ty, value)
+            }
+            Some(_) => return Err(self.integrity("controlled completion response mismatch")),
+            None => (
+                failed,
+                u8::from(scenario == Scenario::FinishPartialIoFailure),
+                if failed {
+                    approved.catalog.error
+                } else {
+                    approved.catalog.finish_receipt
+                },
+                if failed { 3 } else { 1 },
+            ),
         };
-        let state=self.trusted.as_mut().unwrap();
+        let state = self.trusted.as_mut().unwrap();
         // Fixed deterministic binding: one irreversible prefix unit is realized
         // only in the partial-Error scenario. It is never success or rollback.
         if prefix != 0 {
             state.events.push(Event::FinishPrefix(invocation, prefix));
         }
-        state.receipt.as_mut().unwrap().tag=u8::from(failed);
-        state.receipt.as_mut().unwrap().payload = Some(Payload::Range(RangeValue {ty,value}));
+        state.receipt.as_mut().unwrap().tag = u8::from(failed);
+        state.receipt.as_mut().unwrap().payload = Some(Payload::Range(RangeValue { ty, value }));
         state
             .events
             .push(Event::Received(invocation, u8::from(failed)));
         self.control_committed_response()?;
         #[cfg(test)]
-        let state=self.trusted.as_mut().unwrap();
+        let state = self.trusted.as_mut().unwrap();
         #[cfg(test)]
         if let Some((fault, _)) = state.fault.filter(|(_, selected)| *selected == invocation) {
             let receipt = state.receipt.as_mut().unwrap();

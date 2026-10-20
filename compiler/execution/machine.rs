@@ -319,7 +319,9 @@ impl<'a> Machine<'a> {
         if wanted.map_or(true, |n| n > self.limits.working_storage) {
             return Err(self.failure(ErrorKind::ConfiguredLimit("working storage")));
         }
-        if bytes > 0 { self.control_capacity()?; }
+        if bytes > 0 {
+            self.control_capacity()?;
+        }
         Ok(())
     }
     fn task(
