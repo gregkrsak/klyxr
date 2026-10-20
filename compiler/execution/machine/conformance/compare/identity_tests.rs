@@ -208,3 +208,17 @@ fn private_resource_protocol_cleanup_and_replacement_are_separate_positive_evide
         );
     }
 }
+
+#[test]
+fn no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence() {
+    for source in [
+        "fn helper(){let value=true;}fn demo(){helper();}",
+        "fn never()->bool{while true{}return true;}fn demo()->bool{return true||never();}",
+        "type N=range 0..5;record Pair{left:N,right:N}fn demo()->Pair{return Pair{right:2,left:1};}",
+    ] {
+        let e=prepare_execution(source,AdmissionLimits::default()).unwrap();
+        let c=contract::Contract::extract(&e,e.entry("demo").unwrap(),contract::Limits::default()).unwrap();
+        let a=ordinary(&c,0);let b=ordinary(&c,700);
+        assert_eq!(compare(&a,&b,comparison()),Comparison::Equal,"{source}");
+    }
+}

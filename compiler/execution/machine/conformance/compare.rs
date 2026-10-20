@@ -329,8 +329,45 @@ impl Validator<'_, '_> {
     fn shape(&self, d: &[u64; 8], count: usize) -> Valid {
         require(d[count..].iter().all(|n| *n == ABSENT))
     }
-    fn span(&self, s: Span) -> Valid {
-        require(s.line > 0 && s.column > 0 && s.start <= s.end)
+    fn span(&mut self, span: Span) -> Valid {
+        require(span.line > 0 && span.column > 0 && span.start <= span.end)?;
+        if span == START { return Ok(()); }
+        for site in self.contract.sites() {
+            self.work.spend()?;
+            if site.origin == span { return Ok(()); }
+        }
+        for id in self.contract.functions() {
+            self.work.spend()?;
+            let function = self.contract.executable.program.function(*id);
+            if function.span() == span { return Ok(()); }
+            let definition = self.contract.executable.function(*id).map_err(|_| Incomplete::InvalidState)?;
+            if let Some(flow) = &definition.temporaries {
+                for region in &flow.regions {
+                    self.work.spend()?;
+                    if [region.origin.span, region.retirement.span, region.publication.span].contains(&span) { return Ok(()); }
+                }
+                for site in &flow.sites {
+                    self.work.spend()?;
+                    if [site.origin.span, site.transfer.span, site.cleanup.span].contains(&span) { return Ok(()); }
+                }
+            }
+            if let Some(flow) = &definition.cleanup {
+                for scope in &flow.scopes {
+                    self.work.spend()?;
+                    if scope.span == span { return Ok(()); }
+                }
+                for block in &flow.blocks {
+                    self.work.spend()?;
+                    if block.enter.is_some_and(|(_, origin)| origin.span == span)
+                        || block.exit_origin.is_some_and(|origin| origin.span == span) { return Ok(()); }
+                    for initialized in &block.initialize {
+                        self.work.spend()?;
+                        if initialized.origin.span == span { return Ok(()); }
+                    }
+                }
+            }
+        }
+        Err(Incomplete::InvalidState)
     }
     fn origin(&mut self) -> Valid<Span> {
         match self.take()? {
@@ -794,6 +831,16 @@ impl Validator<'_, '_> {
                     {
                         found = true;
                         break;
+                    }
+                }
+                if !found {
+                    for (_, body) in definition.blocks() {
+                        for statement in body.statements() {
+                            self.work.spend()?;
+                            if matches!(statement, Statement::CallNoValue {function: target, span, ..} if target.0 as u64 == d[1] && *span == callsite) {
+                                found = true;
+                            }
+                        }
                     }
                 }
                 require(found)?;
@@ -1767,7 +1814,7 @@ impl Validator<'_, '_> {
                     self.optional_value(false)?;
                     self.end()?;
                 }
-                require(activation_count <= d[1])?;
+                require(activation_count as u64 <= d[1])?;
                 let mut count = 0;
                 loop {
                     if let Some(
