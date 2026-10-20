@@ -1267,7 +1267,11 @@
     "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties",
     "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed",
     "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
-    "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal"
+    "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal",
+    "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames",
+    "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop",
+    "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host",
+    "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error"
   ],
   "fixture_adaptations": [
     {
@@ -1351,7 +1355,11 @@
     "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties": "private_addressed_replay",
     "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed": "private_addressed_replay",
     "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry": "private_addressed_replay",
-    "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal": "private_addressed_replay"
+    "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal": "private_addressed_replay",
+    "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames": "private_addressed_replay",
+    "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop": "private_addressed_replay",
+    "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host": "analytic_representation",
+    "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error": "private_addressed_replay"
   },
   "m5_checkpoint": {
     "commit": "e31f6104d8222ee201bc392a3daf87bcb03734ab",

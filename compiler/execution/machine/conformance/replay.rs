@@ -519,9 +519,16 @@ impl Controller {
                 let definition = contract.executable.function(function)?;
                 let cleanup = definition.cleanup.is_some()
                     || definition.temporaries.as_ref().is_some_and(|flow| {
-                        flow.sites
-                            .iter()
-                            .any(|site| site.plan.is_some() || site.result_plan.is_some_and(|id| contract.executable.result_plans.get(id.0).is_some_and(hir::results::VariantPlan::bearing)))
+                        flow.sites.iter().any(|site| {
+                            site.plan.is_some()
+                                || site.result_plan.is_some_and(|id| {
+                                    contract
+                                        .executable
+                                        .result_plans
+                                        .get(id.0)
+                                        .is_some_and(hir::results::VariantPlan::bearing)
+                                })
+                        })
                     });
                 cleanup
                     && matches!(
@@ -569,7 +576,7 @@ impl Controller {
                     .operation(invocation.operation)
                     .ok_or_else(invalid)?;
                 if operation.binding != crate::trusted::Binding::SensorOpenV1
-                    || birth.activation==0 && invocation.function!=contract.entry()
+                    || birth.activation == 0 && invocation.function != contract.entry()
                     || birth.occurrence == 0
                     || birth.activation >= self.history
                     || birth.occurrence > self.occurrence_bound

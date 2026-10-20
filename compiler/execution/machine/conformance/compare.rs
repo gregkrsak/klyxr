@@ -3069,16 +3069,21 @@ fn compare_inner(a: &Session<'_>, b: &Session<'_>, limits: ComparisonLimits) -> 
     }
     let mut scratch = Scratch::new(limits, a.contract.schedule())?;
     let mut work = Work(limits.work);
-    let control_a=a.machine().control.borrow();
-    let control_b=b.machine().control.borrow();
-    match (control_a.as_ref(),control_b.as_ref()) {
-        (None,None)=>(),
-        (Some(left),Some(right))=> {
-            let amount=left.input_work().checked_add(right.input_work()).ok_or(Incomplete::Work)?;
-            work.0=work.0.checked_sub(amount).ok_or(Incomplete::Work)?;
-            if !left.same_input(right) {return Err(Incomplete::Admission);}
+    let control_a = a.machine().control.borrow();
+    let control_b = b.machine().control.borrow();
+    match (control_a.as_ref(), control_b.as_ref()) {
+        (None, None) => (),
+        (Some(left), Some(right)) => {
+            let amount = left
+                .input_work()
+                .checked_add(right.input_work())
+                .ok_or(Incomplete::Work)?;
+            work.0 = work.0.checked_sub(amount).ok_or(Incomplete::Work)?;
+            if !left.same_input(right) {
+                return Err(Incomplete::Admission);
+            }
         }
-        _=>return Err(Incomplete::Admission),
+        _ => return Err(Incomplete::Admission),
     }
 
     let left = a.capture();
@@ -3161,7 +3166,9 @@ fn meta_kind(part: Part, d: [u64; 8], index: usize) -> Option<Kind> {
         (Part::Replacement, 0) => Some(Replacement),
         (Part::InertRecord, 0) => Some(Staging),
         (Part::TrustedState, 0) | (Part::Token, 0) | (Part::Production, 1) => Some(Realm),
-        (Part::Receipt | Part::PendingReceipt, 0) | (Part::Production, 4) | (Part::Completion, 1) => Some(Invocation),
+        (Part::Receipt | Part::PendingReceipt, 0)
+        | (Part::Production, 4)
+        | (Part::Completion, 1) => Some(Invocation),
         (Part::Production, 0) => Some(Production),
         (Part::Production, 2) => Some(Result),
         (Part::Task, 1) => match d[0] {
@@ -3293,12 +3300,18 @@ fn equal_record(a: Record, b: Record, s: &mut Scratch, w: &mut Work, stamp: usiz
         (Record::TemporaryRetire(x), Record::TemporaryRetire(y)) => {
             s.pair(key(Kind::Temporary, x), key(Kind::Temporary, y), stamp, w)
         }
-        (Record::LogicalActivation(id,frame,function,parent,span,occurrence),Record::LogicalActivation(other,raw,target,ancestor,origin,count))=> {
-            Ok(id==other && function==target && parent==ancestor && span==origin && occurrence==count && s.pair(key(Kind::Frame,frame),key(Kind::Frame,raw),stamp,w)?)
-        }
-        (Record::Releasing(address,kind,raw),Record::Releasing(other,tag,value))=> {
-            let k=if kind==0 {Kind::Leaf}else{Kind::Sensor};
-            Ok(address==other && kind==tag && s.pair(key(k,raw),key(k,value),stamp,w)?)
+        (
+            Record::LogicalActivation(id, frame, function, parent, span, occurrence),
+            Record::LogicalActivation(other, raw, target, ancestor, origin, count),
+        ) => Ok(id == other
+            && function == target
+            && parent == ancestor
+            && span == origin
+            && occurrence == count
+            && s.pair(key(Kind::Frame, frame), key(Kind::Frame, raw), stamp, w)?),
+        (Record::Releasing(address, kind, raw), Record::Releasing(other, tag, value)) => {
+            let k = if kind == 0 { Kind::Leaf } else { Kind::Sensor };
+            Ok(address == other && kind == tag && s.pair(key(k, raw), key(k, value), stamp, w)?)
         }
         (Record::CleanupLeaf(x, finished), Record::CleanupLeaf(y, other)) => {
             Ok(finished == other && s.pair(key(Kind::Leaf, x), key(Kind::Leaf, y), stamp, w)?)
