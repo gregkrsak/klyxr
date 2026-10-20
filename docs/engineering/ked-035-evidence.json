@@ -1,5 +1,5 @@
 {
-  "stage": "M3",
+  "stage": "M4-in-progress",
   "baseline_commit": "5f28977a42a7df1817e5cac46b3f6660a38435d3",
   "baseline_tree": "0b330328f3f213a26b6fc4af9f45ca06a98876b8",
   "m0_commit": "0443dfd32dec70e0c72f1a0a886b9eedc284fb9c",
@@ -981,10 +981,10 @@
       "status": "candidate tested; formatting corrected in M3"
     },
     "M3": {
-      "status": "pending"
+      "status": "candidate with successful full gate; consumption refinement in progress"
     },
     "M4": {
-      "status": "pending"
+      "status": "in progress; initial ordinary capture; uncovered custody explicitly incomplete; no comparator yet"
     },
     "M5": {
       "status": "pending"
@@ -1009,7 +1009,9 @@
     "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
     "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
     "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
-    "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result"
+    "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result",
+    "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
+    "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution"
   ],
   "fixture_adaptations": [
     {
@@ -1027,5 +1029,19 @@
       "pull_request": 39484945516
     },
     "result": "debug/release 2045 predecessors plus four additions pass; build formatting check required correction; not a complete milestone gate"
+  },
+  "m3_evidence": {
+    "commit": "230eca5148dee0d7d3c1090bede5285318b3492e",
+    "runs": [
+      39485858877,
+      39485858955,
+      39485859016,
+      39485858942,
+      39485849599,
+      39485849552,
+      39485849586,
+      39485849541
+    ],
+    "status": "all eight workflows successful; schedule consumption expanded in M4 candidate"
   }
 }

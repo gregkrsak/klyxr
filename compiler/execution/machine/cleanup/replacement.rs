@@ -106,7 +106,7 @@ impl<'a> Machine<'a> {
             .ok_or_else(|| self.integrity("replacement identity exhausted"))?;
         let grow = s.replacements.len() == s.replacements.capacity();
         if grow {
-            self.reserve(size_of::<Prepared>())?;
+            self.reserve(self.executable.approval.schedule.cleanup[8])?;
             self.resources
                 .as_mut()
                 .unwrap()
@@ -242,7 +242,7 @@ impl<'a> Machine<'a> {
         let next_generation = if old.is_some() {
             let history = &self.resources.as_ref().unwrap().frames[r].scopes[a].initialized;
             if history.len() == history.capacity() {
-                self.reserve(size_of::<Generation>())?;
+                self.reserve(self.executable.approval.schedule.cleanup[4])?;
                 self.resources.as_mut().unwrap().frames[r].scopes[a]
                     .initialized
                     .try_reserve_exact(1)

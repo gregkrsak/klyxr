@@ -221,20 +221,20 @@ impl State {
         self.work.push(value);
     }
     pub(super) fn storage(&self) -> Option<usize> {
-        let mut n = size_of::<Self>()
-            .checked_add(self.events.capacity().checked_mul(size_of::<Event>())?)?
+        let mut n = contract::Schedule::reference().cleanup[0]
+            .checked_add(self.events.capacity().checked_mul(contract::Schedule::reference().cleanup[1])?)?
             .checked_add(
                 self.frames
                     .capacity()
-                    .checked_mul(size_of::<ResourceFrame>())?,
+                    .checked_mul(contract::Schedule::reference().cleanup[2])?,
             )?;
         n = n
-            .checked_add(self.pending.capacity().checked_mul(size_of::<Pending>())?)?
-            .checked_add(self.work.capacity().checked_mul(size_of::<Value>())?)?
+            .checked_add(self.pending.capacity().checked_mul(contract::Schedule::reference().cleanup[5])?)?
+            .checked_add(self.work.capacity().checked_mul(contract::Schedule::reference().machine[2])?)?
             .checked_add(
                 self.replacements
                     .capacity()
-                    .checked_mul(size_of::<replacement::Prepared>())?,
+                    .checked_mul(contract::Schedule::reference().cleanup[8])?,
             )?;
         for r in &self.replacements {
             n = n.checked_add(r.payload_storage()?)?;
@@ -243,7 +243,7 @@ impl State {
             n = n.checked_add(
                 p.initialized
                     .capacity()
-                    .checked_mul(size_of::<(hir::FieldId, Value)>())?,
+                    .checked_mul(contract::Schedule::reference().cleanup[7])?,
             )?;
             for (_, v) in &p.initialized {
                 n = n.checked_add(v.extra_storage())?;
@@ -253,17 +253,17 @@ impl State {
             n = n.checked_add(v.extra_storage())?;
         }
         for f in &self.frames {
-            n = n.checked_add(f.scopes.capacity().checked_mul(size_of::<Activation>())?)?;
+            n = n.checked_add(f.scopes.capacity().checked_mul(contract::Schedule::reference().cleanup[3])?)?;
             n = n.checked_add(
                 f.generations
                     .capacity()
-                    .checked_mul(size_of::<(hir::LocalId, u64)>())?,
+                    .checked_mul(contract::Schedule::reference().cleanup[6])?,
             )?;
             for a in &f.scopes {
                 n = n.checked_add(
                     a.initialized
                         .capacity()
-                        .checked_mul(size_of::<Generation>())?,
+                        .checked_mul(contract::Schedule::reference().cleanup[4])?,
                 )?;
             }
         }
@@ -286,8 +286,8 @@ impl<'a> Machine<'a> {
         let bytes = self
             .resources
             .as_ref()
-            .map_or(size_of::<State>() + size_of::<Value>(), |s| {
-                usize::from(s.work.len() == s.work.capacity()) * size_of::<Value>()
+            .map_or(self.executable.approval.schedule.cleanup[0] + self.executable.approval.schedule.machine[2], |s| {
+                usize::from(s.work.len() == s.work.capacity()) * self.executable.approval.schedule.machine[2]
             });
         Ok(bytes)
     }
@@ -297,7 +297,7 @@ impl<'a> Machine<'a> {
         let growth = self.resources.as_ref().unwrap().work.len()
             == self.resources.as_ref().unwrap().work.capacity();
         if growth {
-            self.reserve(size_of::<Value>())?;
+            self.reserve(self.executable.approval.schedule.machine[2])?;
             #[cfg(test)]
             self.trusted_allocation(super::trusted::Allocation::CompletionCleanup, true)?;
             self.resources
@@ -312,7 +312,7 @@ impl<'a> Machine<'a> {
 
     pub(super) fn enable_resources(&mut self) -> Result<(), ExecutionError> {
         if self.resources.is_none() {
-            self.reserve(size_of::<State>())?;
+            self.reserve(self.executable.approval.schedule.cleanup[0])?;
             self.resources = Some(State::default());
         }
         Ok(())
@@ -331,7 +331,7 @@ impl<'a> Machine<'a> {
         if self.resources.as_ref().unwrap().events.len()
             == self.resources.as_ref().unwrap().events.capacity()
         {
-            self.reserve(size_of::<Event>())?;
+            self.reserve(self.executable.approval.schedule.cleanup[1])?;
             #[cfg(test)]
             self.temporary_allocation()?;
             self.resources
@@ -354,7 +354,7 @@ impl<'a> Machine<'a> {
         }
         let s = self.resources.as_ref().unwrap();
         if s.frames.len() == s.frames.capacity() {
-            self.reserve(size_of::<ResourceFrame>())?;
+            self.reserve(self.executable.approval.schedule.cleanup[2])?;
             #[cfg(test)]
             self.temporary_allocation()?;
             self.resources
@@ -408,7 +408,7 @@ impl<'a> Machine<'a> {
                 v.len() == v.capacity()
             };
             if grow {
-                self.reserve(size_of::<Activation>())?;
+                self.reserve(self.executable.approval.schedule.cleanup[3])?;
                 #[cfg(test)]
                 self.temporary_allocation()?;
                 self.resources.as_mut().unwrap().frames[r]
@@ -514,9 +514,9 @@ impl<'a> Machine<'a> {
         self.origin = init.origin;
         self.charge()?;
         self.reserve(
-            (if grow { size_of::<Generation>() } else { 0 })
+            (if grow { self.executable.approval.schedule.cleanup[4] } else { 0 })
                 + if map_grow {
-                    size_of::<(hir::LocalId, u64)>()
+                    self.executable.approval.schedule.cleanup[6]
                 } else {
                     0
                 },
@@ -607,7 +607,7 @@ impl<'a> Machine<'a> {
         if needed > 0 {
             self.reserve(
                 needed
-                    .checked_mul(size_of::<Event>())
+                    .checked_mul(self.executable.approval.schedule.cleanup[1])
                     .ok_or_else(|| self.integrity("release event reservation overflow"))?,
             )?;
             #[cfg(test)]
@@ -636,7 +636,7 @@ impl<'a> Machine<'a> {
         self.resources.as_mut().unwrap().detached = Some(value);
         let grow = self.resources.as_ref().unwrap().work.len()
             == self.resources.as_ref().unwrap().work.capacity();
-        self.reserve(if grow { size_of::<Value>() } else { 0 })?;
+        self.reserve(if grow { self.executable.approval.schedule.machine[2] } else { 0 })?;
         if grow {
             #[cfg(test)]
             self.temporary_allocation()?;
@@ -836,7 +836,7 @@ impl<'a> Machine<'a> {
     }
     fn deliver_protected_value(&mut self) -> Result<(), ExecutionError> {
         let grow = self.values.len() == self.values.capacity();
-        self.reserve(if grow { size_of::<Value>() } else { 0 })?;
+        self.reserve(if grow { self.executable.approval.schedule.machine[2] } else { 0 })?;
         if grow {
             #[cfg(test)]
             self.temporary_allocation()?;
@@ -870,7 +870,7 @@ impl<'a> Machine<'a> {
         let grow = self.resources.as_ref().unwrap().pending.len()
             == self.resources.as_ref().unwrap().pending.capacity();
         if grow {
-            self.reserve(size_of::<Pending>())?;
+            self.reserve(self.executable.approval.schedule.cleanup[5])?;
             #[cfg(test)]
             self.temporary_allocation()?;
             self.resources
@@ -983,7 +983,7 @@ impl<'a> Machine<'a> {
                 fields: pending.initialized,
             });
             let grow = self.values.len() == self.values.capacity();
-            self.reserve(if grow { size_of::<Value>() } else { 0 })?;
+            self.reserve(if grow { self.executable.approval.schedule.machine[2] } else { 0 })?;
             if grow {
                 #[cfg(test)]
                 self.temporary_allocation()?;
@@ -1029,7 +1029,7 @@ impl<'a> Machine<'a> {
             v.len() == v.capacity()
         };
         self.reserve(if grow {
-            size_of::<(hir::FieldId, Value)>()
+            self.executable.approval.schedule.cleanup[7]
         } else {
             0
         })?;
@@ -1210,8 +1210,8 @@ impl<'a> Machine<'a> {
                 let event_grow = self.resources.as_ref().unwrap().events.len()
                     == self.resources.as_ref().unwrap().events.capacity();
                 self.reserve(
-                    (if value_grow { size_of::<Value>() } else { 0 })
-                        + (if event_grow { size_of::<Event>() } else { 0 }),
+                    (if value_grow { self.executable.approval.schedule.machine[2] } else { 0 })
+                        + (if event_grow { self.executable.approval.schedule.cleanup[1] } else { 0 }),
                 )?;
                 if value_grow {
                     #[cfg(test)]

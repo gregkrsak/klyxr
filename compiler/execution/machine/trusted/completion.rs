@@ -419,12 +419,12 @@ impl<'a> Machine<'a> {
         let production = state.productions.len();
         let events = 7usize.saturating_sub(state.events.capacity() - state.events.len());
         let provenance =
-            usize::from(production == state.productions.capacity()) * size_of::<Production>();
+            usize::from(production == state.productions.capacity()) * self.executable.approval.schedule.trusted[2];
         let operands =
-            usize::from(self.values.len() == self.values.capacity()) * size_of::<Value>();
+            usize::from(self.values.len() == self.values.capacity()) * self.executable.approval.schedule.machine[2];
         let tasks = 2usize
             .saturating_sub(self.tasks.capacity() - self.tasks.len())
-            .checked_mul(size_of::<Task<'_>>())
+            .checked_mul(self.executable.approval.schedule.machine[1])
             .ok_or_else(|| self.integrity("completion continuation overflow"))?;
         // Evaluating the owned argument already required its evaluation and
         // registration continuations above this caller's retained stack. Their
@@ -437,7 +437,7 @@ impl<'a> Machine<'a> {
         let total = [
             provenance,
             events
-                .checked_mul(size_of::<Event>())
+                .checked_mul(self.executable.approval.schedule.trusted[3])
                 .ok_or_else(|| self.integrity("completion events overflow"))?,
             operands,
             tasks,
@@ -455,7 +455,7 @@ impl<'a> Machine<'a> {
                 total,
                 [
                     provenance,
-                    events * size_of::<Event>(),
+                    events * self.executable.approval.schedule.trusted[3],
                     operands,
                     self.completion_result_growth(),
                     self.completion_temporary_growth(activation, invocation.site)

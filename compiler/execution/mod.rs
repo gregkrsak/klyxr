@@ -17,6 +17,7 @@ use crate::{
     mir::{self, Origin},
 };
 pub use machine::trusted::{Event as TrustedEvent, ExecutionSession};
+pub use machine::conformance;
 pub use render::write_output;
 use std::{io::Read, rc::Rc};
 pub fn render_admission_error(

@@ -136,26 +136,26 @@ impl State {
         self.diagnostic.borrow_mut().take()
     }
     pub(super) fn storage(&self) -> Option<usize> {
-        let mut n = size_of::<Self>()
-            .checked_add(self.entries.capacity().checked_mul(size_of::<Entry>())?)?
+        let mut n = contract::Schedule::reference().trusted[0]
+            .checked_add(self.entries.capacity().checked_mul(contract::Schedule::reference().trusted[1])?)?
             .checked_add(
                 self.productions
                     .capacity()
-                    .checked_mul(size_of::<Production>())?,
+                    .checked_mul(contract::Schedule::reference().trusted[2])?,
             )?
-            .checked_add(self.events.capacity().checked_mul(size_of::<Event>())?)?;
+            .checked_add(self.events.capacity().checked_mul(contract::Schedule::reference().trusted[3])?)?;
         let outcome = match &self.status {
-            Status::Stopped(e) => e.trace.capacity().checked_mul(size_of::<CallTrace>())?,
+            Status::Stopped(e) => e.trace.capacity().checked_mul(contract::Schedule::reference().machine[6])?,
             Status::Complete(ExecutionResult::Value(RuntimeValue::Result(v))) => {
-                v.capacity().checked_mul(size_of::<ResultLayer>())?
+                v.capacity().checked_mul(contract::Schedule::reference().machine[7])?
             }
             Status::Complete(ExecutionResult::Value(RuntimeValue::Record { fields, .. })) => fields
                 .capacity()
-                .checked_mul(size_of::<(hir::FieldId, RangeValue)>())?,
+                .checked_mul(contract::Schedule::reference().machine[5])?,
             _ => 0,
         };
         let diagnostic = self.diagnostic.borrow().as_ref().map_or(Some(0), |trace| {
-            trace.capacity().checked_mul(size_of::<CallTrace>())
+            trace.capacity().checked_mul(contract::Schedule::reference().machine[6])
         })?;
         n = n.checked_add(self.stop_storage.max(outcome.checked_add(diagnostic)?))?;
         Some(n)
@@ -173,7 +173,7 @@ impl State {
 /// One opaque owner remains alive through completion or terminal reporting.
 /// Repeated advancement returns the recorded outcome without executing again.
 pub struct ExecutionSession<'a> {
-    machine: Machine<'a>,
+    pub(in crate::execution::machine) machine: Machine<'a>,
 }
 impl<'a> ExecutionSession<'a> {
     /// Private milestone control: preserve the tested pre-enable boundary.
@@ -203,7 +203,7 @@ impl<'a> ExecutionSession<'a> {
             })?;
         let stop_storage = limits
             .trace_depth
-            .checked_mul(size_of::<CallTrace>())
+            .checked_mul(contract::Schedule::reference().machine[6])
             .ok_or_else(|| ExecutionError::integrity("stopped diagnostic storage overflow"))?;
         let mut machine = Machine::new(executable, limits);
         machine.trusted = Some(State {
@@ -293,7 +293,7 @@ impl<'a> Machine<'a> {
     }
     fn reserve_trusted_operand(&mut self) -> Result<(), ExecutionError> {
         if self.values.len() == self.values.capacity() {
-            self.reserve(size_of::<Value>())?;
+            self.reserve(self.executable.approval.schedule.machine[2])?;
             #[cfg(test)]
             self.trusted_allocation(Allocation::Operand, true)?;
             self.values
@@ -313,14 +313,14 @@ impl<'a> Machine<'a> {
         let entry_growth = usize::from(
             open && state.entries.iter().all(|e| e.token.is_some())
                 && state.entries.len() == state.entries.capacity(),
-        ) * size_of::<Entry>();
+        ) * self.executable.approval.schedule.trusted[1];
         let production_growth =
             usize::from(state.productions.len() == state.productions.capacity())
-                * size_of::<Production>();
+                * self.executable.approval.schedule.trusted[2];
         let events = 3usize.saturating_sub(state.events.capacity() - state.events.len());
         let bytes = entry_growth
             .checked_add(production_growth)
-            .and_then(|n| n.checked_add(events.checked_mul(size_of::<Event>())?))
+            .and_then(|n| n.checked_add(events.checked_mul(self.executable.approval.schedule.trusted[3])?))
             .ok_or_else(|| self.integrity("trusted reservation overflow"))?;
         self.reserve(bytes)?;
         if entry_growth > 0 {
@@ -472,7 +472,7 @@ impl<'a> Machine<'a> {
         if open && !approved.catalog.granted(approved.catalog.resource.release) {
             return Err(self.integrity("Sensor acquisition lacks exact release authority"));
         }
-        if size_of::<Payload>() > approved.catalog.resource.payload_bytes {
+        if self.executable.approval.schedule.trusted[7] > approved.catalog.resource.payload_bytes {
             return Err(self.integrity("binding payload exceeds sealed reservation bound"));
         }
         #[cfg(test)]
@@ -897,7 +897,7 @@ impl<'a> Machine<'a> {
         let needed = 2usize.saturating_sub(state.events.capacity() - state.events.len());
         self.reserve(
             needed
-                .checked_mul(size_of::<Event>())
+                .checked_mul(self.executable.approval.schedule.trusted[3])
                 .ok_or_else(|| self.integrity("Sensor release audit overflow"))?,
         )?;
         #[cfg(test)]

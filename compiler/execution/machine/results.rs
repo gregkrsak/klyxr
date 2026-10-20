@@ -90,17 +90,17 @@ pub(super) fn compatibility_shapes() -> [usize; 5] {
 
 impl State {
     pub(super) fn storage(&self) -> Option<usize> {
-        let base = size_of::<Self>()
-            .checked_add(self.cells.capacity().checked_mul(size_of::<Cell>())?)?
+        let base = contract::Schedule::reference().results[0]
+            .checked_add(self.cells.capacity().checked_mul(contract::Schedule::reference().results[1])?)?
             .checked_add(
                 self.matches
                     .capacity()
-                    .checked_mul(size_of::<(u64, OwnerId)>())?,
+                    .checked_mul(contract::Schedule::reference().results[2])?,
             )?;
         let base = base.checked_add(
             self.records
                 .capacity()
-                .checked_mul(size_of::<InertRecord>())?,
+                .checked_mul(contract::Schedule::reference().results[3])?,
         )?;
         self.cells
             .iter()
@@ -113,8 +113,8 @@ impl<'a> Machine<'a> {
     pub(super) fn completion_result_growth(&self) -> usize {
         self.results
             .as_ref()
-            .map_or(size_of::<State>() + size_of::<Cell>(), |s| {
-                usize::from(s.cells.len() == s.cells.capacity()) * size_of::<Cell>()
+            .map_or(self.executable.approval.schedule.results[0] + self.executable.approval.schedule.results[1], |s| {
+                usize::from(s.cells.len() == s.cells.capacity()) * self.executable.approval.schedule.results[1]
             })
     }
 
@@ -128,7 +128,7 @@ impl<'a> Machine<'a> {
         if self.results.as_ref().unwrap().cells.len()
             == self.results.as_ref().unwrap().cells.capacity()
         {
-            self.reserve(size_of::<Cell>())?;
+            self.reserve(self.executable.approval.schedule.results[1])?;
             #[cfg(test)]
             self.trusted_allocation(super::trusted::Allocation::ResultCell, true)?;
             self.results
@@ -251,7 +251,7 @@ impl<'a> Machine<'a> {
         }
         self.reserve(
             count
-                .checked_mul(size_of::<ResultLayer>())
+                .checked_mul(self.executable.approval.schedule.results[4])
                 .ok_or_else(|| self.integrity("Result export size overflow"))?,
         )?;
         #[cfg(test)]
@@ -328,7 +328,7 @@ impl<'a> Machine<'a> {
                 .as_ref()
                 .ok_or_else(|| self.integrity("Result cleanup without protocol state"))?;
             if state.work_is_full() {
-                self.reserve(size_of::<Value>())?;
+                self.reserve(self.executable.approval.schedule.machine[2])?;
                 #[cfg(test)]
                 self.temporary_allocation()?;
                 self.resources
@@ -367,7 +367,7 @@ impl<'a> Machine<'a> {
         if self.results.as_ref().unwrap().records.len()
             == self.results.as_ref().unwrap().records.capacity()
         {
-            self.reserve(size_of::<InertRecord>())?;
+            self.reserve(self.executable.approval.schedule.results[3])?;
             #[cfg(test)]
             self.temporary_allocation()?;
             self.results
@@ -488,7 +488,7 @@ impl<'a> Machine<'a> {
     }
     fn enable_results(&mut self) -> Result<(), ExecutionError> {
         if self.results.is_none() {
-            self.reserve(size_of::<State>())?;
+            self.reserve(self.executable.approval.schedule.results[0])?;
             self.results = Some(State::default());
         }
         Ok(())
@@ -522,7 +522,7 @@ impl<'a> Machine<'a> {
         if self.results.as_ref().unwrap().cells.len()
             == self.results.as_ref().unwrap().cells.capacity()
         {
-            self.reserve(size_of::<Cell>())?;
+            self.reserve(self.executable.approval.schedule.results[1])?;
             #[cfg(test)]
             self.temporary_allocation()?;
             self.results
@@ -703,7 +703,7 @@ impl<'a> Machine<'a> {
         if self.results.as_ref().unwrap().matches.len()
             == self.results.as_ref().unwrap().matches.capacity()
         {
-            self.reserve(size_of::<(u64, OwnerId)>())?;
+            self.reserve(self.executable.approval.schedule.results[2])?;
             #[cfg(test)]
             self.temporary_allocation()?;
             self.results
@@ -770,8 +770,8 @@ impl<'a> Machine<'a> {
         // the protected input. No fallible operation follows active detachment.
         self.charge()?;
         self.reserve(
-            (if cell_grow { size_of::<Cell>() } else { 0 })
-                + (if value_grow { size_of::<Value>() } else { 0 }),
+            (if cell_grow { self.executable.approval.schedule.results[1] } else { 0 })
+                + (if value_grow { self.executable.approval.schedule.machine[2] } else { 0 }),
         )?;
         if cell_grow {
             #[cfg(test)]

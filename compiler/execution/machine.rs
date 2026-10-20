@@ -6,6 +6,7 @@ mod cleanup;
 mod results;
 mod temporaries;
 pub(super) mod trusted;
+pub mod conformance;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Location {
@@ -64,14 +65,14 @@ impl Value {
                 .try_fold(
                     fields
                         .capacity()
-                        .checked_mul(size_of::<(hir::FieldId, Value)>())
+                        .checked_mul(contract::Schedule::reference().machine[4])
                         .unwrap_or(usize::MAX),
                     |sum, (_, v)| sum.checked_add(v.extra_storage()),
                 )
                 .unwrap_or(usize::MAX),
             Self::Public(RuntimeValue::Record { fields, .. }) => fields
                 .capacity()
-                .checked_mul(size_of::<(hir::FieldId, RangeValue)>())
+                .checked_mul(contract::Schedule::reference().machine[5])
                 .unwrap_or(usize::MAX),
             _ => 0,
         }
@@ -142,6 +143,7 @@ struct Task<'a> {
 }
 
 pub(super) struct Machine<'a> {
+    observation: std::cell::RefCell<Option<conformance::Capture>>,
     executable: &'a CheckedExecutable,
     limits: ExecutionLimits,
     frames: Vec<Frame>,
@@ -183,6 +185,7 @@ pub(super) fn compatibility_schedule() -> contract::Schedule {
 impl<'a> Machine<'a> {
     pub fn new(executable: &'a CheckedExecutable, limits: ExecutionLimits) -> Self {
         Self {
+            observation: std::cell::RefCell::new(None),
             executable,
             limits,
             frames: Vec::new(),
@@ -246,6 +249,7 @@ impl<'a> Machine<'a> {
         self.failure(ErrorKind::Integrity(message))
     }
     fn charge(&mut self) -> Result<(), ExecutionError> {
+        self.observe(conformance::Cut::Fuel);
         let next = self
             .steps
             .checked_add(self.executable.approval.schema.fuel_unit())
@@ -260,11 +264,11 @@ impl<'a> Machine<'a> {
         let mut n = self
             .frames
             .capacity()
-            .checked_mul(size_of::<Frame>())?
-            .checked_add(self.tasks.capacity().checked_mul(size_of::<Task<'_>>())?)?
-            .checked_add(self.values.capacity().checked_mul(size_of::<Value>())?)?;
+            .checked_mul(self.executable.approval.schedule.machine[0])?
+            .checked_add(self.tasks.capacity().checked_mul(self.executable.approval.schedule.machine[1])?)?
+            .checked_add(self.values.capacity().checked_mul(self.executable.approval.schedule.machine[2])?)?;
         for f in &self.frames {
-            n = n.checked_add(f.slots.capacity().checked_mul(size_of::<(Place, Slot)>())?)?;
+            n = n.checked_add(f.slots.capacity().checked_mul(self.executable.approval.schedule.machine[3])?)?;
             for (_, s) in &f.slots {
                 if let Slot::Available(v) = s {
                     n = n.checked_add(v.extra_storage())?;
@@ -289,6 +293,7 @@ impl<'a> Machine<'a> {
         Some(n)
     }
     fn reserve(&self, bytes: usize) -> Result<(), ExecutionError> {
+        self.observe(conformance::Cut::Storage(bytes));
         let wanted = self.storage().and_then(|n| n.checked_add(bytes));
         #[cfg(test)]
         if let Some(n) = wanted {
@@ -307,7 +312,7 @@ impl<'a> Machine<'a> {
         action: Action<'a>,
     ) -> Result<(), ExecutionError> {
         if self.tasks.len() == self.tasks.capacity() {
-            self.reserve(size_of::<Task<'_>>())?;
+            self.reserve(self.executable.approval.schedule.machine[1])?;
             #[cfg(test)]
             self.temporary_allocation()?;
             self.tasks
@@ -371,7 +376,7 @@ impl<'a> Machine<'a> {
             ordinary
                 .as_ref()
                 .map_or(0, Value::extra_storage)
-                .checked_add(if grow { size_of::<Value>() } else { 0 })
+                .checked_add(if grow { self.executable.approval.schedule.machine[2] } else { 0 })
                 .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
         )?;
         if grow {
@@ -421,7 +426,7 @@ impl<'a> Machine<'a> {
         let grow = self.frames[f].slots.len() == self.frames[f].slots.capacity();
         self.reserve(
             payload
-                .checked_add(if grow { size_of::<(Place, Slot)>() } else { 0 })
+                .checked_add(if grow { self.executable.approval.schedule.machine[3] } else { 0 })
                 .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
         )?;
         if grow {
@@ -594,10 +599,10 @@ impl<'a> Machine<'a> {
             self.enable_resources()?;
         }
         let bytes = count
-            .checked_mul(size_of::<(Place, Slot)>())
+            .checked_mul(self.executable.approval.schedule.machine[3])
             .and_then(|n| {
                 n.checked_add(if self.frames.len() == self.frames.capacity() {
-                    size_of::<Frame>()
+                    self.executable.approval.schedule.machine[0]
                 } else {
                     0
                 })
@@ -1237,7 +1242,7 @@ impl<'a> Machine<'a> {
         self.reserve(
             fields
                 .len()
-                .checked_mul(size_of::<(hir::FieldId, RangeValue)>())
+                .checked_mul(self.executable.approval.schedule.machine[5])
                 .ok_or_else(|| self.integrity("record storage overflow"))?,
         )?;
         let mut result = Vec::new();
@@ -1331,6 +1336,7 @@ impl<'a> Machine<'a> {
         if result.is_err() {
             self.terminal = true;
         }
+        self.observe(conformance::Cut::Transition);
         result
     }
     fn step_inner(&mut self, task: Task<'a>) -> Result<(), ExecutionError> {
