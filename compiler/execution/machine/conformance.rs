@@ -7,6 +7,7 @@ thread_local! {
     static SWAP_PARAMETERS:std::cell::Cell<Option<(FunctionId,Place,Place)>>=const {std::cell::Cell::new(None)};
 }
 mod compare;
+mod authority;
 pub(super) mod replay;
 pub use compare::{compare, Comparison, ComparisonLimits};
 
@@ -786,6 +787,7 @@ pub struct Session<'a> {
     contract: &'a contract::Contract<'a>,
     engine: Engine<'a>,
     entry: FunctionId,
+    authority: Option<authority::View<'a>>,
 }
 impl<'a> Session<'a> {
     pub fn new(
@@ -806,6 +808,7 @@ impl<'a> Session<'a> {
         let controller = input
             .map(|input| replay::Controller::admit(contract, execution, input))
             .transpose()?;
+        let authority=authority::View::extract(contract,authority::Limits::default());
         let engine = if contract.executable.trusted.is_some() {
             Engine::Selected(trusted::ExecutionSession::new(
                 contract.executable,
@@ -822,9 +825,11 @@ impl<'a> Session<'a> {
             contract,
             engine,
             entry: contract.entry(),
+            authority: None,
         };
         *session.machine_mut().control.get_mut() = controller;
         let mut capture = Capture::new(observation, contract);
+        match authority {Ok(view)=>session.authority=Some(view),Err(reason)=>capture.fail(reason)};
         capture.controlled = session.machine().control.borrow().is_some();
         *session.machine_mut().observation.get_mut() = Some(capture);
         session.machine().observe(Cut::Start);
@@ -841,6 +846,11 @@ impl<'a> Session<'a> {
             Engine::Ordinary { machine, .. } => machine,
             Engine::Selected(s) => &mut s.machine,
         }
+    }
+    /// Human presentation is separate from complete structured authority.
+    /// Rendering failure does not advance or modify the retained execution.
+    pub fn render_authority_summary(&self, allowance: usize, verbose: bool) -> Result<String, ExecutionError> {
+        self.authority.as_ref().ok_or_else(||ExecutionError::integrity("structured authority evidence incomplete"))?.render_summary(allowance,verbose)
     }
     pub fn advance(&mut self) -> Result<&ExecutionResult, &ExecutionError> {
         match &mut self.engine {

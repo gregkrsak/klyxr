@@ -3086,6 +3086,10 @@ fn compare_inner(a: &Session<'_>, b: &Session<'_>, limits: ComparisonLimits) -> 
         _ => return Err(Incomplete::Admission),
     }
 
+    let (Some(authority_a),Some(authority_b))=(&a.authority,&b.authority) else {return Err(Incomplete::UncoveredState);};
+    let amount=authority_a.comparison_work().checked_add(authority_b.comparison_work()).ok_or(Incomplete::Work)?;
+    work.0=work.0.checked_sub(amount).ok_or(Incomplete::Work)?;
+    if !authority_a.equivalent(authority_b)? {return Err(Incomplete::InvalidState);}
     let left = a.capture();
     let right = b.capture();
     for capture in [&*left, &*right] {

@@ -1,5 +1,5 @@
 {
-  "stage": "M6-in-progress",
+  "stage": "M7-in-progress",
   "baseline_commit": "5f28977a42a7df1817e5cac46b3f6660a38435d3",
   "baseline_tree": "0b330328f3f213a26b6fc4af9f45ca06a98876b8",
   "m0_commit": "0443dfd32dec70e0c72f1a0a886b9eedc284fb9c",
@@ -1222,10 +1222,10 @@
       "status": "preserved and gated; all eight exact-head workflows succeeded before any M6 source change"
     },
     "M6": {
-      "status": "in progress: private addressed replay, modeled Host and independent custody/prefix assertions; candidate not yet tested"
+      "status": "implemented; full exact-head gate passed at 79c5166 before M7"
     },
     "M7": {
-      "status": "pending"
+      "status": "in progress: structured static authority, presentation separation and full interpreter-contract integration"
     },
     "M8": {
       "status": "pending"
@@ -1271,7 +1271,10 @@
     "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames",
     "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop",
     "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host",
-    "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error"
+    "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error",
+    "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+    "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+    "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution"
   ],
   "fixture_adaptations": [
     {
@@ -1359,7 +1362,10 @@
     "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames": "private_addressed_replay",
     "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop": "private_addressed_replay",
     "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host": "analytic_representation",
-    "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error": "private_addressed_replay"
+    "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error": "private_addressed_replay",
+    "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority": "structured_authority",
+    "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects": "structured_authority",
+    "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution": "structured_authority"
   },
   "m5_checkpoint": {
     "commit": "e31f6104d8222ee201bc392a3daf87bcb03734ab",
@@ -1387,6 +1393,27 @@
     "per_profile": 2071,
     "exact_predecessors": 2045,
     "additions": 26,
+    "all_jobs_steps_success": true
+  },
+  "m6_gate": {
+    "commit": "79c5166f0a8178d73f1a3085f9178f89939b7e46",
+    "runs": {
+      "push": {
+        "build": 39512059731,
+        "tests": 39512060152,
+        "verify": 39512059905,
+        "docs": 39512059892
+      },
+      "pull_request": {
+        "build": 39512066473,
+        "tests": 39512066352,
+        "verify": 39512066196,
+        "docs": 39512066538
+      }
+    },
+    "per_profile": 2082,
+    "predecessors": 2045,
+    "additions": 37,
     "all_jobs_steps_success": true
   }
 }
