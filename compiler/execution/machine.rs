@@ -161,6 +161,19 @@ pub(super) struct Machine<'a> {
     #[cfg(test)]
     max_storage: std::cell::Cell<usize>,
 }
+
+pub(super) fn compatibility_schedule() -> contract::Schedule {
+    contract::Schedule {
+        machine: [size_of::<Frame>(), size_of::<Task<'_>>(), size_of::<Value>(),
+            size_of::<(Place, Slot)>(), size_of::<(hir::FieldId, Value)>(),
+            size_of::<(hir::FieldId, RangeValue)>(), size_of::<CallTrace>(),
+            size_of::<ResultLayer>()],
+        cleanup: cleanup::compatibility_shapes(),
+        results: results::compatibility_shapes(),
+        temporaries: temporaries::compatibility_shapes(),
+        trusted: trusted::compatibility_shapes(),
+    }
+}
 impl<'a> Machine<'a> {
     pub fn new(executable: &'a CheckedExecutable, limits: ExecutionLimits) -> Self {
         Self {

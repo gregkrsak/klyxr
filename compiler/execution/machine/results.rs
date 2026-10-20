@@ -78,6 +78,10 @@ pub(super) struct State {
     pub(super) matches: Vec<(u64, OwnerId)>,
     records: Vec<InertRecord>,
 }
+pub(super) fn compatibility_shapes() -> [usize; 5] {
+    [size_of::<State>(), size_of::<Cell>(), size_of::<(u64, OwnerId)>(),
+        size_of::<InertRecord>(), size_of::<ResultLayer>()]
+}
 
 impl State {
     pub(super) fn storage(&self) -> Option<usize> {

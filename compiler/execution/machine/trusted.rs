@@ -119,6 +119,11 @@ pub(super) struct State {
     #[cfg(test)]
     fault: Option<(Fault, u64)>,
 }
+pub(super) fn compatibility_shapes() -> [usize; 7] {
+    [size_of::<State>(), size_of::<Entry>(), size_of::<Production>(),
+        size_of::<Event>(), size_of::<Sensor>(), size_of::<Receipt>(),
+        size_of::<completion::Pending>()]
+}
 impl State {
     pub(super) fn take_diagnostic(&self) -> Option<Vec<CallTrace>> {
         self.diagnostic.borrow_mut().take()

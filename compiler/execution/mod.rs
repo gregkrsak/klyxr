@@ -196,6 +196,7 @@ impl std::error::Error for ExecutionError {}
 // numeric-ID-aligned substitutions; this never re-runs ownership at execution.
 struct Approval {
     schema: contract::Schema,
+    schedule: contract::Schedule,
     outcomes: Vec<crate::ownership::outcomes::Witness>,
     program: hir::Program,
     cleanup_sites: Vec<crate::effects::custody::Site>,
@@ -290,6 +291,7 @@ impl CheckedExecutable {
     }
     fn validate(&self) -> Result<(), ExecutionError> {
         self.approval.schema.validate()?;
+        self.approval.schedule.validate()?;
         if !Rc::ptr_eq(&self.approval, &self.mir_approval)
             || !Rc::ptr_eq(&self.approval, &self.origin_approval)
         {
@@ -599,6 +601,7 @@ fn seal_in_domain(
     approved_outcomes.extend_from_slice(&outcomes);
     let approval = Rc::new(Approval {
         schema: contract::Schema::V1,
+        schedule: contract::Schedule::reference(),
         outcomes: approved_outcomes,
         program: program.clone(),
         cleanup_sites,

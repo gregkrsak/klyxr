@@ -226,6 +226,7 @@ fn altered_all_runtime_approval_copies_still_require_exact_mir_derivation() {
     e.trusted.as_mut().unwrap().invocations[0].source.start += 1;
     let approved = Rc::new(Approval {
         schema: e.approval.schema,
+        schedule: e.approval.schedule,
         outcomes: e.approval.outcomes.clone(),
         program: e.approval.program.clone(),
         cleanup_sites: e.approval.cleanup_sites.clone(),

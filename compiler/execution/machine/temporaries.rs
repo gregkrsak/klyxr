@@ -55,6 +55,9 @@ pub(super) struct State {
     frames: Vec<Activation>,
     pub(super) events: Vec<Event>,
 }
+pub(super) fn compatibility_shapes() -> [usize; 4] {
+    [size_of::<State>(), size_of::<Activation>(), size_of::<Owner>(), size_of::<Event>()]
+}
 #[derive(Clone, Copy)]
 pub(super) struct Context {
     pub(super) activation: u64,

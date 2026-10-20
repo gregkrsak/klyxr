@@ -1,5 +1,5 @@
 {
-  "stage": "M2",
+  "stage": "M3",
   "baseline_commit": "5f28977a42a7df1817e5cac46b3f6660a38435d3",
   "baseline_tree": "0b330328f3f213a26b6fc4af9f45ca06a98876b8",
   "m0_commit": "0443dfd32dec70e0c72f1a0a886b9eedc284fb9c",
@@ -978,7 +978,7 @@
       "status": "inventory"
     },
     "M2": {
-      "status": "pending"
+      "status": "candidate tested; formatting corrected in M3"
     },
     "M3": {
       "status": "pending"
@@ -1003,6 +1003,9 @@
     }
   },
   "additions": [
+    "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
+    "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel",
+    "lib.rs::execution::contract::tests::logical_fuel_neighbors_and_extraction_storage_are_separate",
     "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
     "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
     "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
@@ -1016,5 +1019,13 @@
       ],
       "reason": "Supply the original sealed schema in explicitly forged Approval literals; original malformed predicates unchanged."
     }
-  ]
+  ],
+  "m2_evidence": {
+    "commit": "5369e73ba0c18f95eea3e13abf9d8bc9283da53c",
+    "tests": {
+      "push": 39484939679,
+      "pull_request": 39484945516
+    },
+    "result": "debug/release 2045 predecessors plus four additions pass; build formatting check required correction; not a complete milestone gate"
+  }
 }

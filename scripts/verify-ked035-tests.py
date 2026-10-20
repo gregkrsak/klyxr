@@ -106,7 +106,7 @@ if manifest["stage"] == "M9":
         assert adaptation["reason"] and adaptation["affected_identities"]
         assert set(adaptation["affected_identities"]) <= set(expected) | set(additions)
     print("Frozen KED-034 map: 26 semantic obligations, 12 malformed families, P01-P09, M0-M9; production symbols and exact assertions present")
-print(f"KED-034 {manifest['stage']} reconciliation: 1,981 exact predecessors + {len(additions)} additions = {len(actual)} passed")
+print(f"KED-034 {manifest['stage']} reconciliation: 1,981 exact predecessors + {len(additions)} additions = {manifest['expected_per_profile']} retained")
 print("KED-033 retained: 1,875 predecessors + 106 additions = 1,981")
 print("identity migrations: 0; failed/ignored/filtered: 0/0/0")
 print("compile-fail authority doctest: passed; affine cross-check: 1,800 cases passed")
