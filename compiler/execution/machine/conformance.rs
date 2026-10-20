@@ -556,20 +556,29 @@ impl Capture {
 
 impl Machine<'_> {
     #[cfg(test)]
-    pub(super) fn conformance_parameter_control(&mut self, function:FunctionId) {
-        if self.observation.borrow().is_none() {return;}
-        let control=SWAP_PARAMETERS.with(|slot|slot.get());
-        let Some((target,first,second))=control else {return;};
-        if target!=function {return;}
-        SWAP_PARAMETERS.with(|slot|slot.set(None));
-        let slots=&mut self.frames.last_mut().unwrap().slots;
-        let a=slots.iter().position(|(place,_)|*place==first).unwrap();
-        let b=slots.iter().position(|(place,_)|*place==second).unwrap();
-        let (a,b)=if a<b {(a,b)}else{(b,a)};
-        let (left,right)=slots.split_at_mut(b);
+    pub(super) fn conformance_parameter_control(&mut self, function: FunctionId) {
+        if self.observation.borrow().is_none() {
+            return;
+        }
+        let control = SWAP_PARAMETERS.with(|slot| slot.get());
+        let Some((target, first, second)) = control else {
+            return;
+        };
+        if target != function {
+            return;
+        }
+        SWAP_PARAMETERS.with(|slot| slot.set(None));
+        let slots = &mut self.frames.last_mut().unwrap().slots;
+        let a = slots.iter().position(|(place, _)| *place == first).unwrap();
+        let b = slots
+            .iter()
+            .position(|(place, _)| *place == second)
+            .unwrap();
+        let (a, b) = if a < b { (a, b) } else { (b, a) };
+        let (left, right) = slots.split_at_mut(b);
         // A deliberately wrong, but locally typed and conserving, engine
         // transfer. Actual payloads move; no token or Result is cloned.
-        std::mem::swap(&mut left[a].1,&mut right[0].1);
+        std::mem::swap(&mut left[a].1, &mut right[0].1);
     }
     pub(super) fn observe_transit(
         &self,
@@ -609,7 +618,10 @@ impl Machine<'_> {
         if c.incomplete.is_some() {
             return;
         }
-        if self.frames.len()>c.limits.lineage {c.fail(Incomplete::Lineage);return;}
+        if self.frames.len() > c.limits.lineage {
+            c.fail(Incomplete::Lineage);
+            return;
+        }
         c.push(Record::Cut(
             cut,
             self.steps,

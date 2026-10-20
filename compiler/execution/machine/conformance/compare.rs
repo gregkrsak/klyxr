@@ -1001,7 +1001,7 @@ impl Validator<'_, '_> {
                         .catalog
                         .operation(plan.operation)
                         .ok_or(Incomplete::InvalidState)?;
-                    require(value < 8 && operation.errors & (1u8 << value) != 0)?;
+                    require((0..8).contains(&value) && operation.errors & (1u8 << value) != 0)?;
                 }
                 if plan.completion.is_some() {
                     require(
@@ -1086,7 +1086,7 @@ impl Validator<'_, '_> {
                         .catalog
                         .operation(plan.operation)
                         .ok_or(Incomplete::InvalidState)?;
-                    require(code < 8 && operation.errors & (1u8 << code) != 0)?;
+                    require((0..8).contains(&code) && operation.errors & (1u8 << code) != 0)?;
                 }
                 let v = self.value(0, false)?;
                 self.expected(v, expected)?;

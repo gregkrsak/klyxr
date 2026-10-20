@@ -65,7 +65,10 @@ fn conserving_wrong_parameter_association_is_different_despite_the_same_value() 
     result.unwrap();
     assert_eq!(a.primary(), b.primary());
     let compared = compare(&a, &b, comparison());
-    assert!(matches!(compared, Comparison::Different { .. }), "{compared:?}");
+    assert!(
+        matches!(compared, Comparison::Different { .. }),
+        "{compared:?}"
+    );
 }
 
 #[test]
@@ -147,5 +150,32 @@ fn foreign_realm_stale_generation_and_bad_payload_reject_before_projection() {
             matches!(compare(&a, &b, comparison()), Comparison::Inconclusive(_)),
             "mutation {mutation}"
         );
+    }
+}
+
+#[test]
+fn nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence() {
+    for body in [
+        "if true{let x=produce() or return;return Ok(x);}else{return Error(false);}",
+        "match produce(){Ok(flag)=>{let x=produce() or return;return Ok(x);}Error(e)=>{return Error(e);}}",
+        "let mut flag=true;while flag{let x=produce() or return;flag=false;continue;}return Ok(true);",
+        "while true{let x=produce() or return;break;}return Ok(true);",
+        "let mut flag=true;while flag{while true{let x=produce() or return;break;}flag=false;continue;}return Ok(true);",
+    ] {
+        let source=format!("fn produce()->Result<success:bool,failure:bool>{{return Ok(true);}}fn demo()->Result<success:bool,failure:bool>{{{body}}}");
+        let e=prepare_execution(&source,AdmissionLimits::default()).unwrap();
+        let c=contract::Contract::extract(&e,e.entry("demo").unwrap(),contract::Limits::default()).unwrap();
+        let a=ordinary(&c,0);let b=ordinary(&c,700);
+        let compared=compare(&a,&b,comparison());
+        assert_eq!(compared,Comparison::Equal,"{body}");
+    }
+    for source in [
+        "fn p()->Result<success:Result<success:bool,failure:bool>,failure:bool>{return Ok(Error(false));}fn demo()->Result<success:bool,failure:bool>{let inner=p() or return;let x=inner or return;return Ok(x);}",
+        "fn p()->Result<success:bool,failure:Result<success:bool,failure:bool>>{return Error(Ok(true));}fn demo()->Result<success:bool,failure:Result<success:bool,failure:bool>>{let x=p() or return;return Ok(x);}",
+    ] {
+        let e=prepare_execution(source,AdmissionLimits::default()).unwrap();
+        let c=contract::Contract::extract(&e,e.entry("demo").unwrap(),contract::Limits::default()).unwrap();
+        let a=ordinary(&c,0);let b=ordinary(&c,700);
+        assert_eq!(compare(&a,&b,comparison()),Comparison::Equal,"{source}");
     }
 }

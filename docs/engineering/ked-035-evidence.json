@@ -1023,7 +1023,8 @@
     "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
     "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
     "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
-    "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection"
+    "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
+    "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence"
   ],
   "fixture_adaptations": [
     {
