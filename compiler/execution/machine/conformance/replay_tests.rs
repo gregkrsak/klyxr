@@ -10,7 +10,7 @@ fn run<'a>(c:&'a contract::Contract<'a>,responses:Option<&[Item]>,failures:&[Add
 fn compare_pair(a:&Session<'_>,b:&Session<'_>)->Comparison {compare(a,b,ComparisonLimits{work:100_000_000,..ComparisonLimits::default()})}
 fn selected()->CheckedExecutable {
     let selection=crate::trusted::Selection::sensor_demo(crate::trusted::Scenario::Sample,crate::trusted::Grants::ALL,&["sample"]).unwrap();
-    prepare_execution_with_profile(include_str!("../../../examples/sensor_finish.klx"),AdmissionLimits::default(),&selection).unwrap()
+    prepare_execution_with_profile(include_str!("../../../../examples/sensor_finish.klx"),AdmissionLimits::default(),&selection).unwrap()
 }
 fn call(plan:usize,phase:Phase)->Address {Address{site:Site::Invocation(plan),activation:0,occurrence:1,phase}}
 fn release(c:&contract::Contract<'_>,phase:Phase)->Address {

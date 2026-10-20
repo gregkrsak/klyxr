@@ -1127,6 +1127,7 @@ impl<'a> Machine<'a> {
             .try_reserve_exact(2)
             .map_err(|_| self.failure(ErrorKind::Host("Sensor release audit reservation")))?;
         let controlled_invocation=if self.control.borrow().is_some() {
+            let state=self.trusted.as_ref().unwrap();
             Some(state.productions.iter().find(|row|row.sensor==Some(identity) && row.realm==state.realm).ok_or_else(|| self.integrity("controlled release provenance"))?.invocation)
         } else {None};
         self.control_begin_release()?;
