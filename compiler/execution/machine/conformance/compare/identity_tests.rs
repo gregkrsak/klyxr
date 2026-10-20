@@ -190,10 +190,21 @@ fn private_resource_protocol_cleanup_and_replacement_are_separate_positive_evide
         "let mutable first=acquire();first=acquire();",
         "let mutable again=true;while again{let next=acquire();again=false;continue;}",
     ] {
-        let source=format!("fn demo() effects io{{{body}}}");
-        let e=crate::execution::prepare_ordinary_synthetic(hir::resources::fixture_effects(&source,io,io),AdmissionLimits::MAX).unwrap();
-        let c=contract::Contract::extract(&e,e.entry("demo").unwrap(),contract::Limits::default()).unwrap();
-        let a=ordinary(&c,0);let b=ordinary(&c,700);
-        assert_eq!(compare(&a,&b,comparison()),Comparison::Equal,"private protocol: {body}");
+        let source = format!("fn demo() effects io{{{body}}}");
+        let e = crate::execution::prepare_ordinary_synthetic(
+            hir::resources::fixture_effects(&source, io, io),
+            AdmissionLimits::MAX,
+        )
+        .unwrap();
+        let c =
+            contract::Contract::extract(&e, e.entry("demo").unwrap(), contract::Limits::default())
+                .unwrap();
+        let a = ordinary(&c, 0);
+        let b = ordinary(&c, 700);
+        assert_eq!(
+            compare(&a, &b, comparison()),
+            Comparison::Equal,
+            "private protocol: {body}"
+        );
     }
 }

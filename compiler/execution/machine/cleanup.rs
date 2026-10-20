@@ -725,7 +725,10 @@ impl<'a> Machine<'a> {
             return Err(self.integrity("cleanup cursor already occupied"));
         }
         self.resources.as_mut().unwrap().current = Some(value);
-        self.observe_cleanup_leaf(self.resources.as_ref().unwrap().current.as_ref().unwrap(), true);
+        self.observe_cleanup_leaf(
+            self.resources.as_ref().unwrap().current.as_ref().unwrap(),
+            true,
+        );
         self.charge()?;
         let (resource, record, identity) =
             match self.resources.as_ref().unwrap().current.as_ref().unwrap() {

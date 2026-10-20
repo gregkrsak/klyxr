@@ -580,7 +580,9 @@ impl Machine<'_> {
         std::mem::swap(&mut left[a].1, &mut right[0].1);
     }
     pub(super) fn observe_cleanup_leaf(&self, value: &Value, finished: bool) {
-        let Value::Leaf { identity, .. } = value else { return; };
+        let Value::Leaf { identity, .. } = value else {
+            return;
+        };
         if let Some(capture) = self.observation.borrow_mut().as_mut() {
             capture.push(Record::CleanupLeaf(*identity, finished));
         }

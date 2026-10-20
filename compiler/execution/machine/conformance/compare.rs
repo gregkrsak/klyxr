@@ -1179,7 +1179,9 @@ impl Validator<'_, '_> {
                 node.tag = 255;
                 node.statement = 0;
             }
-            if node.key.0 == Kind::Sensor { node.statement = 0; }
+            if node.key.0 == Kind::Sensor {
+                node.statement = 0;
+            }
         }
         self.trusted_count = 0;
         while let Some(Record::TrustedEvent(event)) = self.peek() {
@@ -1195,48 +1197,92 @@ impl Validator<'_, '_> {
             self.trusted_count += 1;
             match event {
                 trusted::Event::Attempt(id, operation) => {
-                    let at = self.scratch.find(key(Kind::Invocation, id), self.work)?.ok_or(Incomplete::InvalidState)?;
+                    let at = self
+                        .scratch
+                        .find(key(Kind::Invocation, id), self.work)?
+                        .ok_or(Incomplete::InvalidState)?;
                     let node = &mut self.scratch.nodes[at];
                     require(node.a == operation.0 as u64 && node.status == 0)?;
                     node.born = true;
                     node.status = 1;
                 }
                 trusted::Event::Received(id, tag) => {
-                    let at = self.scratch.find(key(Kind::Invocation, id), self.work)?.ok_or(Incomplete::InvalidState)?;
+                    let at = self
+                        .scratch
+                        .find(key(Kind::Invocation, id), self.work)?
+                        .ok_or(Incomplete::InvalidState)?;
                     let node = &mut self.scratch.nodes[at];
                     require(tag <= 1 && node.status == 1)?;
                     node.status = 2;
                     node.tag = tag;
                 }
                 trusted::Event::Published(id, tag) | trusted::Event::FinishProtected(id, tag) => {
-                    let at = self.scratch.find(key(Kind::Invocation, id), self.work)?.ok_or(Incomplete::InvalidState)?;
+                    let at = self
+                        .scratch
+                        .find(key(Kind::Invocation, id), self.work)?
+                        .ok_or(Incomplete::InvalidState)?;
                     let node = self.scratch.nodes[at];
-                    let completion = approved.invocations.get(node.b as usize).ok_or(Incomplete::InvalidState)?.completion.is_some();
+                    let completion = approved
+                        .invocations
+                        .get(node.b as usize)
+                        .ok_or(Incomplete::InvalidState)?
+                        .completion
+                        .is_some();
                     let protected = matches!(event, trusted::Event::FinishProtected(..));
                     require(node.tag == u8::from(tag == hir::ResultTag::Error))?;
-                    require(if protected { completion && node.status == 2 } else if completion {node.status == 3} else {node.status == 2})?;
-                    self.scratch.nodes[at].status = if protected {3} else {4};
+                    require(if protected {
+                        completion && node.status == 2
+                    } else if completion {
+                        node.status == 3
+                    } else {
+                        node.status == 2
+                    })?;
+                    self.scratch.nodes[at].status = if protected { 3 } else { 4 };
                 }
                 trusted::Event::FinishPrefix(id, prefix) => {
-                    let at = self.scratch.find(key(Kind::Invocation, id), self.work)?.ok_or(Incomplete::InvalidState)?;
+                    let at = self
+                        .scratch
+                        .find(key(Kind::Invocation, id), self.work)?
+                        .ok_or(Incomplete::InvalidState)?;
                     let node = self.scratch.nodes[at];
-                    require(approved.invocations.get(node.b as usize).ok_or(Incomplete::InvalidState)?.completion.is_some() && node.status == 1 && node.statement == 0 && prefix == 1)?;
+                    require(
+                        approved
+                            .invocations
+                            .get(node.b as usize)
+                            .ok_or(Incomplete::InvalidState)?
+                            .completion
+                            .is_some()
+                            && node.status == 1
+                            && node.statement == 0
+                            && prefix == 1,
+                    )?;
                     self.scratch.nodes[at].statement = 1;
                 }
                 trusted::Event::ReleaseAttempt(id, operation) => {
                     require(operation == approved.catalog.resource.release)?;
-                    let at = self.scratch.find(key(Kind::Sensor, id), self.work)?.ok_or(Incomplete::InvalidState)?;
+                    let at = self
+                        .scratch
+                        .find(key(Kind::Sensor, id), self.work)?
+                        .ok_or(Incomplete::InvalidState)?;
                     require(self.scratch.nodes[at].statement == 0)?;
                     self.scratch.nodes[at].statement = 1;
                 }
                 trusted::Event::ReleaseComplete(id) | trusted::Event::ReleaseFailure(id) => {
-                    let at = self.scratch.find(key(Kind::Sensor, id), self.work)?.ok_or(Incomplete::InvalidState)?;
+                    let at = self
+                        .scratch
+                        .find(key(Kind::Sensor, id), self.work)?
+                        .ok_or(Incomplete::InvalidState)?;
                     require(self.scratch.nodes[at].statement == 1)?;
-                    self.scratch.nodes[at].statement = if matches!(event, trusted::Event::ReleaseComplete(_)) {2} else {3};
+                    self.scratch.nodes[at].statement =
+                        if matches!(event, trusted::Event::ReleaseComplete(_)) {
+                            2
+                        } else {
+                            3
+                        };
                 }
             }
         }
-        require(self.trusted_count == self.scratch.trusted.len())?;
+        require(self.trusted_count == self.scratch.trusted.len() && self.trusted_count as u64 <= d[5])?;
         Ok(())
     }
     fn state(&mut self, which: u64) -> Valid {
@@ -1453,7 +1499,7 @@ impl Validator<'_, '_> {
                         }
                     }
                 }
-                require(self.leaf_count == self.scratch.leaves.len())?;
+                require(self.leaf_count == self.scratch.leaves.len() && self.leaf_count as u64 <= d[1])?;
             }
             1 => {
                 self.shape(&d, 4)?;
@@ -1599,13 +1645,18 @@ impl Validator<'_, '_> {
                     count += 1;
                 }
                 require(count <= d[1])?;
+                let mut matches = 0;
                 while self.is_meta(Part::ResultMatch) {
+                    matches += 1;
                     let r = self.meta(Part::ResultMatch)?;
                     self.shape(&r, 2)?;
                     self.reference(key(Kind::Frame, r[0]))?;
                     self.owner(key(Kind::Result, r[1]), 2)?;
                 }
+                require(matches <= d[2])?;
+                let mut inert = 0;
                 while self.is_meta(Part::InertRecord) {
+                    inert += 1;
                     self.pending_states += 1;
                     let r = self.meta(Part::InertRecord)?;
                     self.declaration(
@@ -1624,16 +1675,25 @@ impl Validator<'_, '_> {
                         self.reference(key(Kind::Temporary, r[7]))?;
                     }
                 }
+                require(inert <= d[3])?;
             }
             2 => {
                 self.shape(&d, 3)?;
                 self.add_storage(units.temporaries[0])?;
                 self.capacity(d[1], units.temporaries[1])?;
                 self.capacity(d[2], units.temporaries[3])?;
+                let mut activation_count = 0;
+                let mut previous_activation = None;
                 while self.is_meta(Part::TemporaryActivation) {
                     self.pending_states += 1;
                     let t = self.meta(Part::TemporaryActivation)?;
-                    require(t[5] <= 2)?;
+                    require(t[5] <= 2 && (t[4] != ABSENT).then_some(t[4]) == previous_activation)?;
+                    activation_count += 1;
+                    require(activation_count <= self.lineage)?;
+                    if let Some(parent) = previous_activation {
+                        require(self.node(key(Kind::Temporary, parent))?.status == 0)?;
+                    }
+                    previous_activation = Some(t[0]);
                     require(self.function(t[1])?.0 as u64 == t[2])?;
                     let flow = self
                         .contract
@@ -1656,6 +1716,19 @@ impl Validator<'_, '_> {
                         None,
                         true,
                     )?;
+                    let frame = key(Kind::Frame, t[1]);
+                    if self.scratch.nodes[index].born {
+                        require(self.scratch.nodes[index].edge == Some(frame))?;
+                    }
+                    self.scratch.nodes[index].born = true;
+                    self.scratch.nodes[index].edge = Some(frame);
+                    let description = &flow.regions[t[3] as usize];
+                    if let Some(parent) = self.scratch.nodes[index].parent {
+                        let parent = self.node(parent)?;
+                        require(if let Some(expected) = description.parent {
+                            parent.edge == Some(frame) && parent.a == t[2] && parent.b == expected.0 as u64
+                        } else { parent.edge != Some(frame) })?;
+                    } else { require(description.parent.is_none())?; }
                     self.scratch.nodes[index].status = t[5] as u8;
                     self.capacity(t[7], units.temporaries[2])?;
                     let mut count = 0;
@@ -1694,6 +1767,7 @@ impl Validator<'_, '_> {
                     self.optional_value(false)?;
                     self.end()?;
                 }
+                require(activation_count <= d[1])?;
                 let mut count = 0;
                 loop {
                     if let Some(
@@ -1764,7 +1838,7 @@ impl Validator<'_, '_> {
                         _ => break,
                     }
                 }
-                require(count == self.scratch.temporaries.len())?;
+                require(count == self.scratch.temporaries.len() && count as u64 <= d[2])?;
             }
             _ => return Err(Incomplete::InvalidState),
         }
