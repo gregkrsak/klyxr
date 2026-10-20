@@ -567,7 +567,8 @@ impl Validator<'_, '_> {
             }
             Record::Raw(_) | Record::NoValue => (),
             Record::Reference(kind, referent, frame, place) => {
-                self.scratch.link(Link::Borrow(key(Kind::Frame, frame), place, kind))?;
+                self.scratch
+                    .link(Link::Borrow(key(Kind::Frame, frame), place, kind))?;
                 let target = self.place(frame, place)?;
                 require(target == referent.value_type())?;
                 info.ty = Some(match kind {
@@ -907,7 +908,7 @@ impl Validator<'_, '_> {
                 let control = self.node(key(Kind::Frame, frame))?;
                 let body = definition
                     .blocks()
-                    .find(|(id, _)| id.0 == control.block)
+                    .nth(control.block)
                     .map(|(_, b)| b)
                     .ok_or(Incomplete::InvalidState)?;
                 let Terminator::Branch {
@@ -929,7 +930,7 @@ impl Validator<'_, '_> {
                 let control = self.node(key(Kind::Frame, frame))?;
                 let body = definition
                     .blocks()
-                    .find(|(id, _)| id.0 == control.block)
+                    .nth(control.block)
                     .map(|(_, b)| b)
                     .ok_or(Incomplete::InvalidState)?;
                 let (result, yes, no) = match body.terminator() {
@@ -1450,7 +1451,12 @@ impl Validator<'_, '_> {
                             self.shape(&g, 4)?;
                             require(g[0] == s[2] && g[3] <= 1)?;
                             let local = hir::LocalId(g[1] as usize);
-                            require(scope.owners.contains(&local))?;
+                            let mut member = false;
+                            for owner in &scope.owners {
+                                self.work.spend()?;
+                                if *owner == local { member = true; }
+                            }
+                            require(member)?;
                             let index = self.declaration(
                                 key(Kind::Generation, g[2]),
                                 g[1],
@@ -1692,7 +1698,7 @@ impl Validator<'_, '_> {
                             .function(function)
                             .map_err(|_| Incomplete::InvalidState)?
                             .blocks()
-                            .find(|(id, _)| id.0 as u64 == cell[3])
+                            .nth(usize::try_from(cell[3]).map_err(|_| Incomplete::InvalidState)?)
                             .map(|(_, b)| b)
                             .ok_or(Incomplete::InvalidState)?;
                         let Terminator::ForwardError { operation } = block.terminator() else {
@@ -1974,14 +1980,18 @@ impl Validator<'_, '_> {
                     let mut available = false;
                     for slot in &self.scratch.slots {
                         self.work.spend()?;
-                        if slot.frame == frame.1 && slot.place == place && slot.state == 1 { available = true; }
+                        if slot.frame == frame.1 && slot.place == place && slot.state == 1 {
+                            available = true;
+                        }
                     }
                     require(available)?;
                     for prior in &self.scratch.links[..index] {
                         self.work.spend()?;
                         if let Link::Borrow(other, location, access) = prior {
                             if *other == frame && *location == place {
-                                require(kind == BorrowKind::Shared && *access == BorrowKind::Shared)?;
+                                require(
+                                    kind == BorrowKind::Shared && *access == BorrowKind::Shared,
+                                )?;
                             }
                         }
                     }
