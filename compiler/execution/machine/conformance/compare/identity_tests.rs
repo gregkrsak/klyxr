@@ -222,3 +222,57 @@ fn no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence() {
         assert_eq!(compare(&a,&b,comparison()),Comparison::Equal,"{source}");
     }
 }
+
+// Analytic representation fixture, not independent execution or native evidence.
+fn relabel(record: Record) -> Record {
+    fn id(raw: u64) -> u64 { if raw == ABSENT { raw } else { raw + 10_000 } }
+    match record {
+        Record::Meta(part, mut d) => {
+            let original = d;
+            for (index, value) in d.iter_mut().enumerate() {
+                if meta_kind(part, original, index).is_some()
+                    || matches!((part,index),(Part::TemporaryHandle | Part::TemporaryOwner,1) | (Part::Completion,4)) {
+                    *value = id(*value);
+                }
+            }
+            Record::Meta(part,d)
+        }
+        Record::Frame(frame,function,block,statement,parent,span) => Record::Frame(id(frame),function,block,statement,parent.map(id),span),
+        Record::Reference(kind,ty,frame,place) => Record::Reference(kind,ty,id(frame),place),
+        Record::TemporaryBegin(act,frame,region,parent) => Record::TemporaryBegin(id(act),id(frame),region,parent.map(id)),
+        Record::TemporaryRegister(act,owner,site) => Record::TemporaryRegister(id(act),id(owner as u64) as usize,site),
+        Record::TemporaryTransfer(act,owner,destination) => Record::TemporaryTransfer(id(act),id(owner as u64) as usize,destination),
+        Record::TemporaryCleanup(act,owner) => Record::TemporaryCleanup(id(act),id(owner as u64) as usize),
+        Record::TemporaryRetire(act) => Record::TemporaryRetire(id(act)),
+        Record::ResourceEvent(kind,raw) => Record::ResourceEvent(kind,id(raw)),
+        Record::Continuation(frame) => Record::Continuation(id(frame)),
+        Record::Destination(frame,place,field) => Record::Destination(id(frame),place,field),
+        Record::Publication(result,done) => Record::Publication(id(result as u64) as usize,done),
+        Record::Transit(result,done) => Record::Transit(id(result as u64) as usize,done),
+        Record::CleanupLeaf(leaf,done) => Record::CleanupLeaf(id(leaf),done),
+        Record::TrustedEvent(event) => {
+            use trusted::Event::*;
+            Record::TrustedEvent(match event {
+                Attempt(inv,op)=>Attempt(id(inv),op),Received(inv,tag)=>Received(id(inv),tag),
+                Published(inv,tag)=>Published(id(inv),tag),FinishProtected(inv,tag)=>FinishProtected(id(inv),tag),
+                FinishPrefix(inv,prefix)=>FinishPrefix(id(inv),prefix),ReleaseAttempt(sensor,op)=>ReleaseAttempt(id(sensor),op),
+                ReleaseComplete(sensor)=>ReleaseComplete(id(sensor)),ReleaseFailure(sensor)=>ReleaseFailure(id(sensor)),
+            })
+        }
+        other=>other,
+    }
+}
+
+#[test]
+fn schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets() {
+    use crate::trusted::{Grants,Scenario,Selection};
+    let selection=Selection::sensor_demo(Scenario::Sample,Grants::ALL,&["sample"]).unwrap();
+    let e=prepare_execution_with_profile(include_str!("../../../../../examples/sensor_finish.klx"),AdmissionLimits::default(),&selection).unwrap();
+    let c=contract::Contract::extract(&e,e.entry("sample").unwrap(),contract::Limits::default()).unwrap();
+    let mut a=Session::new(&c,ExecutionLimits::default(),observation()).unwrap();a.advance().unwrap();
+    let mut b=Session::new(&c,ExecutionLimits::default(),observation()).unwrap();b.advance().unwrap();
+    let mut observer=b.machine().observation.borrow_mut();
+    for record in &mut observer.as_mut().unwrap().records { *record=relabel(*record); }
+    drop(observer);
+    assert_eq!(compare(&a,&b,comparison()),Comparison::Equal);
+}

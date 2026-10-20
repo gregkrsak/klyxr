@@ -331,42 +331,81 @@ impl Validator<'_, '_> {
     }
     fn span(&mut self, span: Span) -> Valid {
         require(span.line > 0 && span.column > 0 && span.start <= span.end)?;
-        if span == START { return Ok(()); }
+        if span == START {
+            return Ok(());
+        }
         for site in self.contract.sites() {
             self.work.spend()?;
-            if site.origin == span { return Ok(()); }
+            if site.origin == span {
+                return Ok(());
+            }
         }
         for id in self.contract.functions() {
             self.work.spend()?;
             let function = self.contract.executable.program.function(*id);
-            if function.span() == span { return Ok(()); }
-            let definition = self.contract.executable.function(*id).map_err(|_| Incomplete::InvalidState)?;
+            if function.span() == span {
+                return Ok(());
+            }
+            let definition = self
+                .contract
+                .executable
+                .function(*id)
+                .map_err(|_| Incomplete::InvalidState)?;
+            for (_, block) in definition.blocks() {
+                self.work.spend()?;
+                for statement in block.statements() {
+                    self.work.spend()?;
+                    if matches!(statement, Statement::BindResult {pattern_origin, ..} if *pattern_origin == span) { return Ok(()); }
+                }
+                if let Terminator::Propagate {operation, ..} | Terminator::ForwardError {operation} = block.terminator() {
+                    if [operation.span, operation.syntax.phrase, operation.syntax.binding].contains(&span) { return Ok(()); }
+                }
+            }
             if let Some(flow) = &definition.temporaries {
                 for region in &flow.regions {
                     self.work.spend()?;
-                    if [region.origin.span, region.retirement.span, region.publication.span].contains(&span) { return Ok(()); }
+                    if [
+                        region.origin.span,
+                        region.retirement.span,
+                        region.publication.span,
+                    ]
+                    .contains(&span)
+                    {
+                        return Ok(());
+                    }
                 }
                 for site in &flow.sites {
                     self.work.spend()?;
-                    if [site.origin.span, site.transfer.span, site.cleanup.span].contains(&span) { return Ok(()); }
+                    if [site.origin.span, site.transfer.span, site.cleanup.span].contains(&span) {
+                        return Ok(());
+                    }
                 }
             }
             if let Some(flow) = &definition.cleanup {
                 for scope in &flow.scopes {
                     self.work.spend()?;
-                    if scope.span == span { return Ok(()); }
+                    if scope.span == span {
+                        return Ok(());
+                    }
                 }
                 for block in &flow.blocks {
                     self.work.spend()?;
                     if block.enter.is_some_and(|(_, origin)| origin.span == span)
-                        || block.exit_origin.is_some_and(|origin| origin.span == span) { return Ok(()); }
+                        || block.exit_origin.is_some_and(|origin| origin.span == span)
+                    {
+                        return Ok(());
+                    }
                     for initialized in &block.initialize {
                         self.work.spend()?;
-                        if initialized.origin.span == span { return Ok(()); }
+                        if initialized.origin.span == span {
+                            return Ok(());
+                        }
                     }
                 }
             }
         }
+        #[cfg(test)]
+        eprintln!("unbound observation origin: {span:?}");
         Err(Incomplete::InvalidState)
     }
     fn origin(&mut self) -> Valid<Span> {
@@ -837,7 +876,8 @@ impl Validator<'_, '_> {
                     for (_, body) in definition.blocks() {
                         for statement in body.statements() {
                             self.work.spend()?;
-                            if matches!(statement, Statement::CallNoValue {function: target, span, ..} if target.0 as u64 == d[1] && *span == callsite) {
+                            if matches!(statement, Statement::CallNoValue {function: target, span, ..} if target.0 as u64 == d[1] && *span == callsite)
+                            {
                                 found = true;
                             }
                         }
@@ -1329,7 +1369,9 @@ impl Validator<'_, '_> {
                 }
             }
         }
-        require(self.trusted_count == self.scratch.trusted.len() && self.trusted_count as u64 <= d[5])?;
+        require(
+            self.trusted_count == self.scratch.trusted.len() && self.trusted_count as u64 <= d[5],
+        )?;
         Ok(())
     }
     fn state(&mut self, which: u64) -> Valid {
@@ -1546,7 +1588,9 @@ impl Validator<'_, '_> {
                         }
                     }
                 }
-                require(self.leaf_count == self.scratch.leaves.len() && self.leaf_count as u64 <= d[1])?;
+                require(
+                    self.leaf_count == self.scratch.leaves.len() && self.leaf_count as u64 <= d[1],
+                )?;
             }
             1 => {
                 self.shape(&d, 4)?;
@@ -1773,9 +1817,15 @@ impl Validator<'_, '_> {
                     if let Some(parent) = self.scratch.nodes[index].parent {
                         let parent = self.node(parent)?;
                         require(if let Some(expected) = description.parent {
-                            parent.edge == Some(frame) && parent.a == t[2] && parent.b == expected.0 as u64
-                        } else { parent.edge != Some(frame) })?;
-                    } else { require(description.parent.is_none())?; }
+                            parent.edge == Some(frame)
+                                && parent.a == t[2]
+                                && parent.b == expected.0 as u64
+                        } else {
+                            parent.edge != Some(frame)
+                        })?;
+                    } else {
+                        require(description.parent.is_none())?;
+                    }
                     self.scratch.nodes[index].status = t[5] as u8;
                     self.capacity(t[7], units.temporaries[2])?;
                     let mut count = 0;
