@@ -57,6 +57,12 @@ additions = manifest["additions"]
 k35 = json.loads((root / "docs/engineering/ked-035-evidence.json").read_text())
 new = k35["additions"]
 assert len(new) == len(set(new))
+assert set(k35["classifications"]) == set(new), "unclassified KED-035 evidence"
+assert set(k35["classifications"].values()) <= {
+    "independent_oracle", "private_malformed_observation", "private_malformed_contract",
+    "private_approval_identity", "private_canonical_protocol", "analytic_representation",
+    "private_engine_control", "logical_or_observation_boundary", "selected_source", "ordinary_source",
+}, "unknown KED-035 evidence class"
 assert not set(new) & (set(expected) | set(additions))
 assert len(additions) == len(set(additions))
 assert set(actual) - set(expected) == set(additions) | set(new), "missing or unclassified KED-034 identity"

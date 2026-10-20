@@ -1025,6 +1025,9 @@ impl Validator<'_, '_> {
             require(self.function(f)? == p.function)?;
             Some(key(Kind::Frame, f))
         };
+        if let Some(frame) = frame {
+            require(parent == Some(key(Kind::Frame, frame)))?;
+        }
         self.declaration(
             key(Kind::Invocation, id),
             p.operation.0 as u64,
@@ -1454,7 +1457,9 @@ impl Validator<'_, '_> {
                             let mut member = false;
                             for owner in &scope.owners {
                                 self.work.spend()?;
-                                if *owner == local { member = true; }
+                                if *owner == local {
+                                    member = true;
+                                }
                             }
                             require(member)?;
                             let index = self.declaration(

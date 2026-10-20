@@ -86,7 +86,9 @@ comparison possible. Terminal advance remains idempotent and non-resuming.
 
 ## Evidence status
 
-M1 is static inventory, not conformance. M2–M9 remain pending. Stage I must produce
+M1 is static inventory, not conformance. M2–M5 code and evidence are recorded
+in `KED-035-STAGE-I-LEDGER.md`; the distinct M5 checkpoint still requires its
+complete Actions gate. M6–M9 remain pending. Stage I must produce
 independent expected observations, full Equal/Different and genuine Inconclusive
 controls, malformed independent copies, all applicable finite fixture cuts,
 predecessor/budget reconciliation and verified publications. Differential prefixes

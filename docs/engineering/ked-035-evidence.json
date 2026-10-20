@@ -1,5 +1,5 @@
 {
-  "stage": "M5-in-progress",
+  "stage": "M5-checkpoint-candidate",
   "baseline_commit": "5f28977a42a7df1817e5cac46b3f6660a38435d3",
   "baseline_tree": "0b330328f3f213a26b6fc4af9f45ca06a98876b8",
   "m0_commit": "0443dfd32dec70e0c72f1a0a886b9eedc284fb9c",
@@ -17,7 +17,7 @@
       "docs": 39484065607
     }
   },
-  "evidence_kind": "static inventory; no KED-035 executable claim",
+  "evidence_kind": "M0 baseline gate; M1 static inventory; M2-M5 interpreter/contract candidates and independently derived finite oracle; M6-M9 pending",
   "runtime_encoding": false,
   "baseline_accounting_occurrences": [
     {
@@ -843,14 +843,48 @@
   ],
   "requirements": {
     "4": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "status": "M2-M5 evidence present; M6-M9 integration and final acceptance pending",
+      "code": [
+        "compiler/execution/contract.rs",
+        "compiler/execution/mod.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
+        "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel",
+        "lib.rs::execution::contract::tests::logical_fuel_neighbors_and_extraction_storage_are_separate",
+        "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
+        "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result"
+      ]
     },
     "5": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "status": "M2-M5 evidence present; M6-M9 integration and final acceptance pending",
+      "code": [
+        "compiler/execution/machine/conformance.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
+        "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
+        "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
+        "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution",
+        "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
+        "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
+        "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
+        "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
+        "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+      ]
     },
     "6": {
       "status": "pending",
@@ -863,19 +897,66 @@
       "tests": []
     },
     "8": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "status": "M2-M5 evidence present; M6-M9 integration and final acceptance pending",
+      "code": [
+        "compiler/execution/contract.rs",
+        "compiler/execution/machine.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
+        "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel",
+        "lib.rs::execution::contract::tests::logical_fuel_neighbors_and_extraction_storage_are_separate",
+        "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
+        "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result",
+        "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
+        "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
+        "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
+        "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution"
+      ]
     },
     "9": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "status": "M2-M5 evidence present; M6-M9 integration and final acceptance pending",
+      "code": [
+        "compiler/execution/machine/conformance.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
+        "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
+        "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
+        "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution",
+        "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
+        "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
+        "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
+        "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
+        "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+      ]
     },
     "10": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "status": "M2-M5 evidence present; M6-M9 integration and final acceptance pending",
+      "code": [
+        "compiler/execution/contract.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
+        "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel",
+        "lib.rs::execution::contract::tests::logical_fuel_neighbors_and_extraction_storage_are_separate",
+        "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
+        "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result"
+      ]
     },
     "11": {
       "status": "pending",
@@ -888,9 +969,28 @@
       "tests": []
     },
     "13": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "status": "M2-M5 evidence present; M6-M9 integration and final acceptance pending",
+      "code": [
+        "compiler/execution/machine/conformance/compare/oracle_tests.rs",
+        "scripts/verify-ked035-tests.py"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
+        "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
+        "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
+        "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
+        "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+      ]
     },
     "14": {
       "status": "pending",
@@ -903,9 +1003,20 @@
       "tests": []
     },
     "16": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "status": "M2-M5 evidence present; M6-M9 integration and final acceptance pending",
+      "code": [
+        "compiler/execution/mod.rs",
+        "compiler/execution/contract.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
+        "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel",
+        "lib.rs::execution::contract::tests::logical_fuel_neighbors_and_extraction_storage_are_separate",
+        "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
+        "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result"
+      ]
     },
     "17": {
       "status": "pending",
@@ -920,24 +1031,86 @@
   },
   "constraints": {
     "K35-P01": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "status": "M2-M5 evidence present; remaining Stage I obligations pending",
+      "code": [
+        "compiler/execution/contract.rs",
+        "compiler/execution/mod.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
+        "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel",
+        "lib.rs::execution::contract::tests::logical_fuel_neighbors_and_extraction_storage_are_separate",
+        "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
+        "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result"
+      ]
     },
     "K35-P02": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "status": "M2-M5 evidence present; remaining Stage I obligations pending",
+      "code": [
+        "compiler/execution/contract.rs",
+        "compiler/execution/machine.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
+        "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel",
+        "lib.rs::execution::contract::tests::logical_fuel_neighbors_and_extraction_storage_are_separate",
+        "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
+        "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result"
+      ]
     },
     "K35-P03": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "status": "M2-M5 evidence present; remaining Stage I obligations pending",
+      "code": [
+        "compiler/execution/machine/conformance.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
+        "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
+        "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
+        "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution",
+        "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
+        "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
+        "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
+        "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
+        "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+      ]
     },
     "K35-P04": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "status": "M2-M5 evidence present; remaining Stage I obligations pending",
+      "code": [
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
+        "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
+        "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
+        "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
+        "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+      ]
     },
     "K35-P05": {
       "status": "pending",
@@ -950,19 +1123,78 @@
       "tests": []
     },
     "K35-P07": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "status": "M2-M5 evidence present; remaining Stage I obligations pending",
+      "code": [
+        "compiler/execution/machine/conformance/compare/oracle_tests.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
+        "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
+        "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
+        "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
+        "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+      ]
     },
     "K35-P08": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "status": "M2-M5 evidence present; remaining Stage I obligations pending",
+      "code": [
+        "compiler/execution/machine/conformance.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
+        "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
+        "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
+        "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution",
+        "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
+        "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
+        "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
+        "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
+        "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+      ]
     },
     "K35-P09": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "status": "M2-M5 evidence present; remaining Stage I obligations pending",
+      "code": [
+        "compiler/execution/contract.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
+        "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
+        "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
+        "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
+        "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+      ]
     },
     "K35-P10": {
       "status": "deferred Stage N",
@@ -978,16 +1210,16 @@
       "status": "inventory"
     },
     "M2": {
-      "status": "candidate tested; formatting corrected in M3"
+      "status": "implemented; full gates recorded, acceptance pending"
     },
     "M3": {
-      "status": "candidate with successful full gate; consumption refinement in progress"
+      "status": "implemented; exact predecessor boundary suites retained, acceptance pending"
     },
     "M4": {
-      "status": "in progress: full state census and ordinary/selected capture candidates; independent validation/comparison pending"
+      "status": "implemented and independently validated in M5 candidate; final Stage I acceptance pending"
     },
     "M5": {
-      "status": "in progress: comparator candidate, independent validation and discriminator controls; checkpoint not yet preserved or gated"
+      "status": "checkpoint candidate: required code and discriminator families present; exact checkpoint and complete gate still pending"
     },
     "M6": {
       "status": "pending"
@@ -1062,11 +1294,49 @@
     "status": "all eight workflows successful; schedule consumption expanded in M4 candidate"
   },
   "m5_candidate_evidence": {
-    "commit": "6f2c8a2e915db0b6f9bb40802cc50a54c81ab2ce",
-    "tests": [
-      39494246109,
-      39494235801
-    ],
-    "result": "all 2045 exact predecessors plus 16 additions passed in debug/release; formatting then two Clippy corrections; not M5 checkpoint"
+    "commit": "1534de5dd8b5eea75728dec520280778d5033be6",
+    "runs": {
+      "push": {
+        "build": 39505136209,
+        "tests": 39505136171,
+        "verify": 39505136144,
+        "docs": 39505136148
+      },
+      "pull_request": {
+        "build": 39505142853,
+        "tests": 39505142942,
+        "verify": 39505142862,
+        "docs": 39505142971
+      }
+    },
+    "status": "all eight successful; final malformed-alias and membership-work refinements follow; not preserved M5 checkpoint"
+  },
+  "classifications": {
+    "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects": "private_malformed_contract",
+    "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel": "private_malformed_contract",
+    "lib.rs::execution::contract::tests::logical_fuel_neighbors_and_extraction_storage_are_separate": "logical_or_observation_boundary",
+    "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite": "ordinary_source",
+    "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval": "private_approval_identity",
+    "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject": "private_malformed_contract",
+    "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result": "logical_or_observation_boundary",
+    "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat": "selected_source",
+    "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop": "logical_or_observation_boundary",
+    "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only": "ordinary_source",
+    "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution": "logical_or_observation_boundary",
+    "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal": "ordinary_source",
+    "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle": "private_engine_control",
+    "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence": "selected_source",
+    "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match": "independent_oracle",
+    "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary": "independent_oracle",
+    "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry": "private_engine_control",
+    "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value": "private_engine_control",
+    "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence": "ordinary_source",
+    "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence": "private_canonical_protocol",
+    "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence": "ordinary_source",
+    "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets": "analytic_representation",
+    "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify": "private_malformed_observation"
   }
 }
