@@ -15,6 +15,25 @@ pub(super) struct Pending {
     pub(super) value: Option<Value>,
     pub(super) protected: Option<results::OwnerId>,
 }
+impl Pending {
+    pub(in crate::execution::machine) fn observe(&self, c: &mut conformance::Capture) {
+        use conformance::{Part, Record, ABSENT};
+        c.row(Part::Completion, &[self.frame, self.invocation, self.plan as u64,
+            self.input.activation, self.input.ordinal as u64, self.sensor,
+            match self.phase {
+                CompletionPhase::Reserved => 0, CompletionPhase::Consumed => 1,
+                CompletionPhase::Attempted => 2, CompletionPhase::OutcomeProtected => 3,
+                CompletionPhase::ReleasePending => 4, CompletionPhase::Releasing => 5,
+                CompletionPhase::Released => 6, CompletionPhase::Delivered => 7,
+            }]);
+        if let Some(ticket) = &self.ticket { ticket.observe(c); }
+        else { c.push(Record::Absent); }
+        c.row(Part::CompletionOutcome, &[self.protected.map_or(ABSENT, |id| id.0 as u64)]);
+        if let Some(value) = &self.value { c.push(Record::Payload); c.value(value); }
+        else { c.push(Record::Absent); }
+        c.push(Record::End);
+    }
+}
 
 impl<'a> Machine<'a> {
     pub(in crate::execution::machine) fn completion_consume(
@@ -418,10 +437,10 @@ impl<'a> Machine<'a> {
         })?;
         let production = state.productions.len();
         let events = 7usize.saturating_sub(state.events.capacity() - state.events.len());
-        let provenance =
-            usize::from(production == state.productions.capacity()) * self.executable.approval.schedule.trusted[2];
-        let operands =
-            usize::from(self.values.len() == self.values.capacity()) * self.executable.approval.schedule.machine[2];
+        let provenance = usize::from(production == state.productions.capacity())
+            * self.executable.approval.schedule.trusted[2];
+        let operands = usize::from(self.values.len() == self.values.capacity())
+            * self.executable.approval.schedule.machine[2];
         let tasks = 2usize
             .saturating_sub(self.tasks.capacity() - self.tasks.len())
             .checked_mul(self.executable.approval.schedule.machine[1])

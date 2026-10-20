@@ -984,7 +984,7 @@
       "status": "candidate with successful full gate; consumption refinement in progress"
     },
     "M4": {
-      "status": "in progress; initial ordinary capture; uncovered custody explicitly incomplete; no comparator yet"
+      "status": "in progress: full state census and ordinary/selected capture candidates; independent validation/comparison pending"
     },
     "M5": {
       "status": "pending"
@@ -1010,6 +1010,8 @@
     "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
     "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
     "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result",
+    "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
+    "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
     "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
     "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution"
   ],

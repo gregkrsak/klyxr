@@ -16,8 +16,8 @@ use crate::{
     lexer::Span,
     mir::{self, Origin},
 };
-pub use machine::trusted::{Event as TrustedEvent, ExecutionSession};
 pub use machine::conformance;
+pub use machine::trusted::{Event as TrustedEvent, ExecutionSession};
 pub use render::write_output;
 use std::{io::Read, rc::Rc};
 pub fn render_admission_error(

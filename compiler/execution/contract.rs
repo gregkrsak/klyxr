@@ -126,6 +126,9 @@ pub struct Contract<'a> {
     entry: FunctionId,
     functions: Vec<FunctionId>,
     sites: Vec<Site>,
+    // Private lookup keys only. Addresses never enter semantic comparison;
+    // runtime operands are projected to their exact approved static ordinal.
+    expressions: Vec<(usize, usize)>,
     limits: Limits,
 }
 impl<'a> Contract<'a> {
@@ -147,7 +150,7 @@ impl<'a> Contract<'a> {
         }
         let bytes = limits
             .nodes
-            .checked_mul(size_of::<Site>() + size_of::<FunctionId>())
+            .checked_mul(size_of::<Site>() + size_of::<FunctionId>() + size_of::<(usize, usize)>())
             .and_then(|n| n.checked_mul(2))
             .and_then(|n| n.checked_add(2 * size_of::<Self>()))
             .ok_or_else(|| ExecutionError::integrity("contract storage overflow"))?;
@@ -161,6 +164,7 @@ impl<'a> Contract<'a> {
             entry,
             functions: Vec::new(),
             sites: Vec::new(),
+            expressions: Vec::new(),
             limits,
         };
         contract
@@ -173,6 +177,8 @@ impl<'a> Contract<'a> {
             .sites
             .try_reserve_exact(limits.nodes)
             .map_err(|_| ExecutionError::new(ErrorKind::Host("contract site allocation"), START))?;
+        contract.expressions.try_reserve_exact(limits.nodes)
+            .map_err(|_| ExecutionError::new(ErrorKind::Host("contract operand index allocation"), START))?;
         contract.functions.push(entry);
         let mut work = limits.work;
         let mut cursor = 0;
@@ -246,6 +252,7 @@ impl<'a> Contract<'a> {
     pub fn sites(&self) -> &[Site] {
         &self.sites
     }
+    pub(crate) fn expressions(&self) -> &[(usize, usize)] { &self.expressions }
     /// Identity comparison does not equate independent source compilations.
     pub fn same_approval(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.executable.approval, &other.executable.approval)
@@ -260,6 +267,7 @@ impl<'a> Contract<'a> {
             || self.schedule != self.executable.approval.schedule
             || self.functions != expected.functions
             || self.sites != expected.sites
+            || self.expressions != expected.expressions
         {
             return Err(ExecutionError::integrity(
                 "execution contract correspondence",
@@ -326,6 +334,7 @@ impl<'a> Contract<'a> {
             value.span,
             work,
         )?;
+        self.expressions.push((value as *const TypedExpr as usize, self.sites.len() - 1));
         // Executable shape validation already bounded expression depth.
         match &value.kind {
             ExprKind::Call {
@@ -453,7 +462,7 @@ mod tests {
         let limits = Limits {
             nodes: 2,
             work: 100,
-            storage: 2 * (size_of::<Site>() + size_of::<FunctionId>()) * 2
+            storage: 2 * (size_of::<Site>() + size_of::<FunctionId>() + size_of::<(usize, usize)>()) * 2
                 + 2 * size_of::<Contract<'_>>(),
         };
         Contract::extract(&e, entry, limits)

@@ -71,6 +71,41 @@ pub(super) struct Context {
 }
 
 impl State {
+    pub(super) fn observe(&self, c: &mut conformance::Capture) {
+        use conformance::{Part, Record, ABSENT};
+        c.row(Part::State, &[2, self.frames.capacity() as u64,
+            self.events.capacity() as u64]);
+        for frame in &self.frames {
+            if !c.spend() { return; }
+            c.row(Part::TemporaryActivation, &[frame.id, frame.frame,
+                frame.function.0 as u64, frame.region.0 as u64,
+                frame.parent.unwrap_or(ABSENT), match frame.phase {
+                    Phase::Active => 0, Phase::Retiring => 1, Phase::Retired => 2,
+                }, frame.cursor as u64]);
+            for (index, owner) in frame.owners.iter().enumerate() {
+                if !c.spend() { return; }
+                c.row(Part::TemporaryOwner, &[frame.id, index as u64, owner.site.0 as u64,
+                    match owner.custody { Custody::Owned => 0, Custody::Transferred => 1,
+                        Custody::Cleaning => 2, Custody::Cleaned => 3 }]);
+                if let Some(value) = &owner.value { c.push(Record::Payload); c.value(value); }
+                else { c.push(Record::Absent); }
+                c.push(Record::End);
+            }
+            if let Some(value) = &frame.protected { c.push(Record::Payload); c.value(value); }
+            else { c.push(Record::Absent); }
+            c.push(Record::End);
+        }
+        for event in &self.events {
+            if !c.spend() { return; }
+            c.push(match *event {
+                Event::Begin(id, frame, region, parent) => Record::TemporaryBegin(id, frame, region, parent),
+                Event::Register(id, site) => Record::TemporaryRegister(id.activation, id.ordinal, site),
+                Event::Transfer(id, at) => Record::TemporaryTransfer(id.activation, id.ordinal, at),
+                Event::Cleanup(id) => Record::TemporaryCleanup(id.activation, id.ordinal),
+                Event::Retire(id) => Record::TemporaryRetire(id),
+            });
+        }
+    }
     pub(super) fn owned_value(&self, id: OwnerId) -> Option<&Value> {
         self.frames
             .iter()
@@ -88,9 +123,17 @@ impl State {
                     .capacity()
                     .checked_mul(contract::Schedule::reference().temporaries[1])?,
             )?
-            .checked_add(self.events.capacity().checked_mul(contract::Schedule::reference().temporaries[3])?)?;
+            .checked_add(
+                self.events
+                    .capacity()
+                    .checked_mul(contract::Schedule::reference().temporaries[3])?,
+            )?;
         for f in &self.frames {
-            n = n.checked_add(f.owners.capacity().checked_mul(contract::Schedule::reference().temporaries[2])?)?;
+            n = n.checked_add(
+                f.owners
+                    .capacity()
+                    .checked_mul(contract::Schedule::reference().temporaries[2])?,
+            )?;
             for value in f
                 .owners
                 .iter()
@@ -154,8 +197,8 @@ impl<'a> Machine<'a> {
         {
             return Err(self.integrity("completion receiving region mismatch"));
         }
-        let owners =
-            usize::from(frame.owners.len() == frame.owners.capacity()) * self.executable.approval.schedule.temporaries[2];
+        let owners = usize::from(frame.owners.len() == frame.owners.capacity())
+            * self.executable.approval.schedule.temporaries[2];
         let events = &self.temporaries.as_ref().unwrap().events;
         owners
             .checked_add(

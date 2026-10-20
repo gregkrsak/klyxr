@@ -3,10 +3,10 @@ use crate::hir::{BinaryOp, BorrowKind, ExprKind, ExprType, Place, ReferentType, 
 use crate::mir::{BasicBlockId, OriginKind, Statement, Terminator};
 use std::mem::size_of;
 mod cleanup;
+pub mod conformance;
 mod results;
 mod temporaries;
 pub(super) mod trusted;
-pub mod conformance;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Location {
@@ -265,10 +265,22 @@ impl<'a> Machine<'a> {
             .frames
             .capacity()
             .checked_mul(self.executable.approval.schedule.machine[0])?
-            .checked_add(self.tasks.capacity().checked_mul(self.executable.approval.schedule.machine[1])?)?
-            .checked_add(self.values.capacity().checked_mul(self.executable.approval.schedule.machine[2])?)?;
+            .checked_add(
+                self.tasks
+                    .capacity()
+                    .checked_mul(self.executable.approval.schedule.machine[1])?,
+            )?
+            .checked_add(
+                self.values
+                    .capacity()
+                    .checked_mul(self.executable.approval.schedule.machine[2])?,
+            )?;
         for f in &self.frames {
-            n = n.checked_add(f.slots.capacity().checked_mul(self.executable.approval.schedule.machine[3])?)?;
+            n = n.checked_add(
+                f.slots
+                    .capacity()
+                    .checked_mul(self.executable.approval.schedule.machine[3])?,
+            )?;
             for (_, s) in &f.slots {
                 if let Slot::Available(v) = s {
                     n = n.checked_add(v.extra_storage())?;
@@ -376,7 +388,11 @@ impl<'a> Machine<'a> {
             ordinary
                 .as_ref()
                 .map_or(0, Value::extra_storage)
-                .checked_add(if grow { self.executable.approval.schedule.machine[2] } else { 0 })
+                .checked_add(if grow {
+                    self.executable.approval.schedule.machine[2]
+                } else {
+                    0
+                })
                 .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
         )?;
         if grow {
@@ -426,7 +442,11 @@ impl<'a> Machine<'a> {
         let grow = self.frames[f].slots.len() == self.frames[f].slots.capacity();
         self.reserve(
             payload
-                .checked_add(if grow { self.executable.approval.schedule.machine[3] } else { 0 })
+                .checked_add(if grow {
+                    self.executable.approval.schedule.machine[3]
+                } else {
+                    0
+                })
                 .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
         )?;
         if grow {

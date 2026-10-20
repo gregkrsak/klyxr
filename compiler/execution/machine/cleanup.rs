@@ -201,6 +201,68 @@ struct Activation {
     initialized: Vec<Generation>,
 }
 impl State {
+    pub(super) fn observe(&self, c: &mut conformance::Capture) {
+        use conformance::{Part, Record, ABSENT};
+        c.row(Part::State, &[0, self.events.capacity() as u64,
+            self.frames.capacity() as u64, self.pending.capacity() as u64,
+            self.work.capacity() as u64, self.replacements.capacity() as u64,
+            u64::from(self.terminal)]);
+        for frame in &self.frames {
+            if !c.spend() { return; }
+            c.row(Part::ResourceFrame, &[frame.id, u64::from(frame.entered),
+                frame.scopes.capacity() as u64, frame.generations.capacity() as u64]);
+            for scope in &frame.scopes {
+                if !c.spend() { return; }
+                c.row(Part::Scope, &[frame.id, scope.scope.0 as u64, scope.identity,
+                    scope.initialized.capacity() as u64]);
+                for generation in &scope.initialized {
+                    if !c.spend() { return; }
+                    c.row(Part::Generation, &[scope.identity, generation.local.0 as u64,
+                        generation.identity, u64::from(generation.discharged)]);
+                }
+            }
+            for (local, generation) in &frame.generations {
+                if !c.spend() { return; }
+                c.row(Part::GenerationSlot, &[frame.id, local.0 as u64, *generation]);
+            }
+        }
+        for (holder, value) in [(0, &self.protected), (1, &self.detached), (2, &self.current)] {
+            c.row(Part::Holder, &[holder]);
+            if let Some(value) = value { c.push(Record::Payload); c.value(value); }
+            else { c.push(Record::Absent); }
+            c.push(Record::End);
+        }
+        for (index, value) in self.work.iter().enumerate() {
+            if !c.spend() { return; }
+            c.row(Part::Holder, &[3, index as u64]); c.value(value); c.push(Record::End);
+        }
+        for record in &self.pending {
+            if !c.spend() { return; }
+            c.row(Part::PendingRecord, &[record.id, record.frame, record.record.0 as u64,
+                u64::from(record.complete), record.temporary_site.map_or(ABSENT, |s| s.0),
+                record.temporary_site.map_or(ABSENT, |s| s.1.0 as u64),
+                record.child_activation.unwrap_or(ABSENT), record.initialized.capacity() as u64]);
+            for (field, value) in &record.initialized {
+                if !c.spend() { return; }
+                c.row(Part::PendingField, &[field.0 as u64]); c.value(value);
+            }
+            c.push(Record::End);
+        }
+        for replacement in &self.replacements {
+            if !c.spend() { return; }
+            replacement.observe(c);
+        }
+        for event in &self.events {
+            if !c.spend() { return; }
+            c.push(match *event {
+                Event::Acquire(id) => Record::ResourceEvent(0, id),
+                Event::Attempt(id) => Record::ResourceEvent(1, id),
+                Event::Complete(id) => Record::ResourceEvent(2, id),
+                Event::Failure(id) => Record::ResourceEvent(3, id),
+                Event::Retire(id) => Record::ResourceEvent(4, id),
+            });
+        }
+    }
     #[cfg(test)]
     pub(super) fn visit_completion_custody(&self, mut visit: impl FnMut(&Value)) {
         for value in [&self.protected, &self.current, &self.detached]
@@ -222,15 +284,27 @@ impl State {
     }
     pub(super) fn storage(&self) -> Option<usize> {
         let mut n = contract::Schedule::reference().cleanup[0]
-            .checked_add(self.events.capacity().checked_mul(contract::Schedule::reference().cleanup[1])?)?
+            .checked_add(
+                self.events
+                    .capacity()
+                    .checked_mul(contract::Schedule::reference().cleanup[1])?,
+            )?
             .checked_add(
                 self.frames
                     .capacity()
                     .checked_mul(contract::Schedule::reference().cleanup[2])?,
             )?;
         n = n
-            .checked_add(self.pending.capacity().checked_mul(contract::Schedule::reference().cleanup[5])?)?
-            .checked_add(self.work.capacity().checked_mul(contract::Schedule::reference().machine[2])?)?
+            .checked_add(
+                self.pending
+                    .capacity()
+                    .checked_mul(contract::Schedule::reference().cleanup[5])?,
+            )?
+            .checked_add(
+                self.work
+                    .capacity()
+                    .checked_mul(contract::Schedule::reference().machine[2])?,
+            )?
             .checked_add(
                 self.replacements
                     .capacity()
@@ -253,7 +327,11 @@ impl State {
             n = n.checked_add(v.extra_storage())?;
         }
         for f in &self.frames {
-            n = n.checked_add(f.scopes.capacity().checked_mul(contract::Schedule::reference().cleanup[3])?)?;
+            n = n.checked_add(
+                f.scopes
+                    .capacity()
+                    .checked_mul(contract::Schedule::reference().cleanup[3])?,
+            )?;
             n = n.checked_add(
                 f.generations
                     .capacity()
@@ -283,12 +361,14 @@ impl<'a> Machine<'a> {
             .is_some_and(|s| s.detached.is_none() && s.current.is_none() && s.work.is_empty())
     }
     pub(super) fn completion_cleanup_growth(&self) -> Result<usize, ExecutionError> {
-        let bytes = self
-            .resources
-            .as_ref()
-            .map_or(self.executable.approval.schedule.cleanup[0] + self.executable.approval.schedule.machine[2], |s| {
-                usize::from(s.work.len() == s.work.capacity()) * self.executable.approval.schedule.machine[2]
-            });
+        let bytes = self.resources.as_ref().map_or(
+            self.executable.approval.schedule.cleanup[0]
+                + self.executable.approval.schedule.machine[2],
+            |s| {
+                usize::from(s.work.len() == s.work.capacity())
+                    * self.executable.approval.schedule.machine[2]
+            },
+        );
         Ok(bytes)
     }
 
@@ -514,12 +594,15 @@ impl<'a> Machine<'a> {
         self.origin = init.origin;
         self.charge()?;
         self.reserve(
-            (if grow { self.executable.approval.schedule.cleanup[4] } else { 0 })
-                + if map_grow {
-                    self.executable.approval.schedule.cleanup[6]
-                } else {
-                    0
-                },
+            (if grow {
+                self.executable.approval.schedule.cleanup[4]
+            } else {
+                0
+            }) + if map_grow {
+                self.executable.approval.schedule.cleanup[6]
+            } else {
+                0
+            },
         )?;
         if grow {
             #[cfg(test)]
@@ -636,7 +719,11 @@ impl<'a> Machine<'a> {
         self.resources.as_mut().unwrap().detached = Some(value);
         let grow = self.resources.as_ref().unwrap().work.len()
             == self.resources.as_ref().unwrap().work.capacity();
-        self.reserve(if grow { self.executable.approval.schedule.machine[2] } else { 0 })?;
+        self.reserve(if grow {
+            self.executable.approval.schedule.machine[2]
+        } else {
+            0
+        })?;
         if grow {
             #[cfg(test)]
             self.temporary_allocation()?;
@@ -836,7 +923,11 @@ impl<'a> Machine<'a> {
     }
     fn deliver_protected_value(&mut self) -> Result<(), ExecutionError> {
         let grow = self.values.len() == self.values.capacity();
-        self.reserve(if grow { self.executable.approval.schedule.machine[2] } else { 0 })?;
+        self.reserve(if grow {
+            self.executable.approval.schedule.machine[2]
+        } else {
+            0
+        })?;
         if grow {
             #[cfg(test)]
             self.temporary_allocation()?;
@@ -983,7 +1074,11 @@ impl<'a> Machine<'a> {
                 fields: pending.initialized,
             });
             let grow = self.values.len() == self.values.capacity();
-            self.reserve(if grow { self.executable.approval.schedule.machine[2] } else { 0 })?;
+            self.reserve(if grow {
+                self.executable.approval.schedule.machine[2]
+            } else {
+                0
+            })?;
             if grow {
                 #[cfg(test)]
                 self.temporary_allocation()?;
@@ -1210,8 +1305,15 @@ impl<'a> Machine<'a> {
                 let event_grow = self.resources.as_ref().unwrap().events.len()
                     == self.resources.as_ref().unwrap().events.capacity();
                 self.reserve(
-                    (if value_grow { self.executable.approval.schedule.machine[2] } else { 0 })
-                        + (if event_grow { self.executable.approval.schedule.cleanup[1] } else { 0 }),
+                    (if value_grow {
+                        self.executable.approval.schedule.machine[2]
+                    } else {
+                        0
+                    }) + (if event_grow {
+                        self.executable.approval.schedule.cleanup[1]
+                    } else {
+                        0
+                    }),
                 )?;
                 if value_grow {
                     #[cfg(test)]

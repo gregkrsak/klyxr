@@ -132,30 +132,108 @@ pub(super) fn compatibility_shapes() -> [usize; 8] {
     ]
 }
 impl State {
+    pub(in crate::execution::machine) fn observe(&self, c: &mut conformance::Capture) {
+        use conformance::{Part, Record, ABSENT};
+        c.row(Part::TrustedState, &[self.realm, self.entry.0 as u64,
+            self.entries.len() as u64, self.entries.capacity() as u64,
+            self.productions.capacity() as u64, self.events.capacity() as u64,
+            self.stop_storage as u64]);
+        // Token-table positions are physical. Emit actual tokens in their
+        // logical acquisition order; retain only the abstract table history
+        // quantities needed by the compatibility schedule.
+        let mut seen = 0;
+        for production in &self.productions {
+            if !c.spend() { return; }
+            c.row(Part::Production, &[production.realm, production.cell.0 as u64,
+                production.plan as u64, production.invocation,
+                match production.tag { hir::ResultTag::Ok => 0, hir::ResultTag::Error => 1 },
+                production.sensor.unwrap_or(ABSENT)]);
+            if let Some(value) = &production.range { c.push(Record::Range(value.ty, value.value)); }
+            else { c.push(Record::Absent); }
+            if let Some(sensor) = production.sensor {
+                for entry in &self.entries {
+                    if !c.spend() { return; }
+                    if let Some(token) = &entry.token {
+                        if token.identity == sensor {
+                            if token.realm != self.realm { c.fail(conformance::Incomplete::InvalidState); return; }
+                            c.row(Part::Token, &[token.realm, token.identity]); seen += 1;
+                        }
+                    }
+                }
+            }
+            c.push(Record::End);
+        }
+        let mut live = 0;
+        for (index, entry) in self.entries.iter().enumerate() {
+            if !c.spend() { return; }
+            if let Some(token) = &entry.token {
+                live += 1;
+                if token.realm != self.realm { c.fail(conformance::Incomplete::InvalidState); return; }
+                for other in &self.entries[..index] {
+                    if !c.spend() { return; }
+                    if other.token.as_ref().is_some_and(|v| v.identity == token.identity) {
+                        c.fail(conformance::Incomplete::InvalidState); return;
+                    }
+                }
+            }
+        }
+        if seen != live { c.fail(conformance::Incomplete::InvalidState); return; }
+        if let Some(receipt) = &self.receipt {
+            c.row(Part::Receipt, &[receipt.invocation, receipt.plan as u64,
+                receipt.tag as u64]);
+            match &receipt.payload {
+                Some(Payload::Sensor(token)) => {
+                    if token.realm != self.realm { c.fail(conformance::Incomplete::InvalidState); return; }
+                    c.row(Part::Token, &[token.realm, token.identity]);
+                }
+                Some(Payload::Range(value)) => c.push(Record::Range(value.ty, value.value)),
+                None => c.push(Record::Absent),
+            }
+            c.push(Record::End);
+        }
+        if let Some(pending) = &self.completion { pending.observe(c); }
+        for event in &self.events {
+            if !c.spend() { return; }
+            c.push(Record::TrustedEvent(*event));
+        }
+    }
     pub(super) fn take_diagnostic(&self) -> Option<Vec<CallTrace>> {
         self.diagnostic.borrow_mut().take()
     }
     pub(super) fn storage(&self) -> Option<usize> {
         let mut n = contract::Schedule::reference().trusted[0]
-            .checked_add(self.entries.capacity().checked_mul(contract::Schedule::reference().trusted[1])?)?
+            .checked_add(
+                self.entries
+                    .capacity()
+                    .checked_mul(contract::Schedule::reference().trusted[1])?,
+            )?
             .checked_add(
                 self.productions
                     .capacity()
                     .checked_mul(contract::Schedule::reference().trusted[2])?,
             )?
-            .checked_add(self.events.capacity().checked_mul(contract::Schedule::reference().trusted[3])?)?;
+            .checked_add(
+                self.events
+                    .capacity()
+                    .checked_mul(contract::Schedule::reference().trusted[3])?,
+            )?;
         let outcome = match &self.status {
-            Status::Stopped(e) => e.trace.capacity().checked_mul(contract::Schedule::reference().machine[6])?,
-            Status::Complete(ExecutionResult::Value(RuntimeValue::Result(v))) => {
-                v.capacity().checked_mul(contract::Schedule::reference().machine[7])?
-            }
+            Status::Stopped(e) => e
+                .trace
+                .capacity()
+                .checked_mul(contract::Schedule::reference().machine[6])?,
+            Status::Complete(ExecutionResult::Value(RuntimeValue::Result(v))) => v
+                .capacity()
+                .checked_mul(contract::Schedule::reference().machine[7])?,
             Status::Complete(ExecutionResult::Value(RuntimeValue::Record { fields, .. })) => fields
                 .capacity()
                 .checked_mul(contract::Schedule::reference().machine[5])?,
             _ => 0,
         };
         let diagnostic = self.diagnostic.borrow().as_ref().map_or(Some(0), |trace| {
-            trace.capacity().checked_mul(contract::Schedule::reference().machine[6])
+            trace
+                .capacity()
+                .checked_mul(contract::Schedule::reference().machine[6])
         })?;
         n = n.checked_add(self.stop_storage.max(outcome.checked_add(diagnostic)?))?;
         Some(n)
@@ -242,6 +320,15 @@ impl<'a> ExecutionSession<'a> {
                 Ok(v) => Status::Complete(v),
                 Err(e) => Status::Stopped(e),
             };
+            self.machine.observe(conformance::Cut::Final);
+            let state = self.machine.trusted.as_ref().unwrap();
+            if let Some(capture) = self.machine.observation.borrow_mut().as_mut() {
+                capture.outcome(match &state.status {
+                    Status::Complete(value) => Ok(value),
+                    Status::Stopped(error) => Err(error),
+                    Status::Pending => unreachable!(),
+                });
+            }
         }
         match &self.machine.trusted.as_ref().unwrap().status {
             Status::Complete(v) => Ok(v),
@@ -320,7 +407,9 @@ impl<'a> Machine<'a> {
         let events = 3usize.saturating_sub(state.events.capacity() - state.events.len());
         let bytes = entry_growth
             .checked_add(production_growth)
-            .and_then(|n| n.checked_add(events.checked_mul(self.executable.approval.schedule.trusted[3])?))
+            .and_then(|n| {
+                n.checked_add(events.checked_mul(self.executable.approval.schedule.trusted[3])?)
+            })
             .ok_or_else(|| self.integrity("trusted reservation overflow"))?;
         self.reserve(bytes)?;
         if entry_growth > 0 {

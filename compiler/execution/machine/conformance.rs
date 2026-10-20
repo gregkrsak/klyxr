@@ -9,10 +9,16 @@ pub struct Limits {
     pub records: usize,
     pub work: usize,
     pub storage: usize,
+    pub lineage: usize,
 }
 impl Default for Limits {
     fn default() -> Self {
-        Self { records: 32_768, work: 1_000_000, storage: 16_777_216 }
+        Self {
+            records: 32_768,
+            work: 1_000_000,
+            storage: 16_777_216,
+            lineage: 128,
+        }
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,6 +30,7 @@ pub enum Incomplete {
     UncoveredState,
     InvalidState,
     Pending,
+    Lineage,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Cut {
@@ -39,6 +46,7 @@ pub(super) enum Cut {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Record {
     Cut(Cut, u64, usize, Span, Option<Span>, bool),
+    Accounting(ExecutionLimits, Option<usize>),
     Frame(u64, FunctionId, BasicBlockId, usize, Option<u64>),
     Slot(Place, u8),
     Operand,
@@ -52,29 +60,102 @@ pub(super) enum Record {
     Stop(u8, Span, Option<Span>),
     Trap(hir::RangeTypeId, i64, i64, i128),
     Limit(&'static str),
+    Meta(Part, [u64; 8]),
+    Origin(Span),
+    Payload,
+    Absent,
+    TemporaryBegin(u64, u64, crate::mir::temporaries::RegionId, Option<u64>),
+    TemporaryRegister(u64, usize, crate::mir::temporaries::SiteId),
+    TemporaryTransfer(u64, usize, crate::mir::temporaries::Destination),
+    TemporaryCleanup(u64, usize),
+    TemporaryRetire(u64),
+    ResourceEvent(u8, u64),
+    TrustedEvent(trusted::Event),
+    Continuation(u64, Span, Option<Span>),
+    Expression(usize),
+    ExprType(ExprType),
+    Binary(BinaryOp),
+    Destination(u64, Place, Option<(hir::RecordId, hir::FieldId)>),
+    OriginKind(OriginKind),
 }
+/// Fixed-shape relational rows. Positions are defined by the named row schema,
+/// not by a Rust struct layout, address or renderer representation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Part {
+    Record,
+    Field,
+    ResultLayer,
+    ResultHandle,
+    TemporaryHandle,
+    SensorHandle,
+    Leaf,
+    ResultCell,
+    ResultMatch,
+    ResultMatchFrame,
+    InertRecord,
+    TemporaryActivation,
+    TemporaryOwner,
+    State,
+    ResourceFrame,
+    Scope,
+    Generation,
+    GenerationSlot,
+    PendingRecord,
+    PendingField,
+    Replacement,
+    ReplacementState,
+    Holder,
+    Buffers,
+    TrustedState,
+    Token,
+    Receipt,
+    Production,
+    Completion,
+    CompletionOutcome,
+    ResultTicket,
+    Task,
+    Initializer,
+}
+pub(super) const ABSENT: u64 = u64::MAX;
 pub(super) struct Capture {
     pub(super) records: Vec<Record>,
     limits: Limits,
     work: usize,
     pub(super) incomplete: Option<Incomplete>,
     finished: bool,
+    expressions: Vec<(usize, usize)>,
 }
 impl Capture {
-    fn new(limits: Limits) -> Self {
+    fn new(limits: Limits, contract: &contract::Contract<'_>) -> Self {
         let mut capture = Self {
-            records: Vec::new(), limits, work: 0,
-            incomplete: None, finished: false,
+            records: Vec::new(),
+            limits,
+            work: 0,
+            incomplete: None,
+            finished: false,
+            expressions: Vec::new(),
         };
-        let bytes = limits.records.checked_mul(size_of::<Record>())
+        let bytes = limits
+            .records
+            .checked_mul(size_of::<Record>())
             .and_then(|n| n.checked_add(size_of::<Self>()));
-        if limits.records == 0 || limits.records > 1_048_576
-            || limits.work == 0 || limits.work > 100_000_000
+        let bytes = bytes.and_then(|n| n.checked_add(contract.expressions().len()
+            .checked_mul(size_of::<(usize, usize)>())?));
+        if limits.records == 0
+            || limits.records > 1_048_576
+            || limits.work == 0
+            || limits.work > 100_000_000
             || limits.storage > 268_435_456
-            || bytes.map_or(true, |n| n > limits.storage) {
+            || limits.lineage == 0 || limits.lineage > 256
+            || bytes.map_or(true, |n| n > limits.storage)
+        {
             capture.incomplete = Some(Incomplete::Admission);
         } else if capture.records.try_reserve_exact(limits.records).is_err() {
             capture.incomplete = Some(Incomplete::Allocation);
+        } else if capture.expressions.try_reserve_exact(contract.expressions().len()).is_err() {
+            capture.incomplete = Some(Incomplete::Allocation);
+        } else {
+            capture.expressions.extend_from_slice(contract.expressions());
         }
         capture
     }
@@ -83,8 +164,7 @@ impl Capture {
     }
     pub(super) fn push(&mut self, record: Record) {
         if self.incomplete.is_some() { return; }
-        if self.work == self.limits.work { self.fail(Incomplete::Work); return; }
-        self.work += 1;
+        if !self.spend() { return; }
         if self.records.len() == self.limits.records {
             self.fail(Incomplete::Records);
         } else {
@@ -92,25 +172,172 @@ impl Capture {
             self.records.push(record);
         }
     }
+    pub(super) fn spend(&mut self) -> bool {
+        if self.incomplete.is_some() { return false; }
+        if self.work == self.limits.work { self.fail(Incomplete::Work); return false; }
+        self.work += 1;
+        true
+    }
+    fn spend_many(&mut self, amount: usize) -> bool {
+        if self.incomplete.is_some() { return false; }
+        let Some(work) = self.work.checked_add(amount).filter(|n| *n <= self.limits.work) else {
+            self.fail(Incomplete::Work); return false;
+        };
+        self.work = work;
+        true
+    }
+    pub(super) fn row(&mut self, part: Part, values: &[u64]) {
+        if values.len() > 8 { self.fail(Incomplete::InvalidState); return; }
+        let mut data = [ABSENT; 8];
+        data[..values.len()].copy_from_slice(values);
+        self.push(Record::Meta(part, data));
+    }
+    fn expression(&mut self, value: &TypedExpr) {
+        for index in 0..self.expressions.len() {
+            if !self.spend() { return; }
+            let (address, ordinal) = self.expressions[index];
+            if address == value as *const TypedExpr as usize {
+                self.push(Record::Expression(ordinal)); return;
+            }
+        }
+        self.fail(Incomplete::InvalidState);
+    }
+    fn fields(&mut self, fields: &[hir::RecordFieldInit]) {
+        for field in fields {
+            if !self.spend() { return; }
+            self.row(Part::Initializer, &[field.field.0 as u64]);
+            self.expression(&field.value);
+        }
+        self.push(Record::End);
+    }
+    fn task(&mut self, task: &Task<'_>) {
+        self.push(Record::Continuation(task.frame, task.origin.span, task.expression));
+        self.push(Record::OriginKind(task.origin.kind));
+        match &task.action {
+            Action::Drive => self.row(Part::Task, &[0]),
+            Action::Eval(e, d) => { self.row(Part::Task, &[1, *d as u64]); self.expression(e); }
+            Action::SiteEval(e, d, a, s) => {
+                self.row(Part::Task, &[2, *d as u64, *a, s.0 as u64]); self.expression(e);
+            }
+            Action::RegisterTemporary(a, s) => self.row(Part::Task, &[3, *a, s.0 as u64]),
+            Action::FinishTemporary(a) => self.row(Part::Task, &[4, *a]),
+            Action::SiteShortCircuit(op, e, d, a, s) => {
+                self.row(Part::Task, &[5, *d as u64, *a, s.0 as u64]);
+                self.push(Record::Binary(*op)); self.expression(e);
+            }
+            Action::Negate => self.row(Part::Task, &[6]),
+            Action::Binary(op, ty) => {
+                self.row(Part::Task, &[7]); self.push(Record::Binary(*op)); self.push(Record::ExprType(*ty));
+            }
+            Action::ShortCircuit(op, e, d) => {
+                self.row(Part::Task, &[8, *d as u64]); self.push(Record::Binary(*op)); self.expression(e);
+            }
+            Action::Record(r, fields) => { self.row(Part::Task, &[9, r.0 as u64]); self.fields(fields); }
+            Action::Invoke(f, count) => self.row(Part::Task, &[10, f.0 as u64, *count as u64]),
+            Action::Commit(destination) => {
+                self.row(Part::Task, &[11]);
+                match destination {
+                    Destination::Slot(at) => self.push(Record::Destination(at.frame, at.place, None)),
+                    Destination::Field(at, r, f) => self.push(Record::Destination(at.frame, at.place, Some((*r, *f)))),
+                }
+            }
+            Action::ReplaceCommit(id) => self.row(Part::Task, &[12, *id]),
+            Action::Select(yes, no) => self.row(Part::Task, &[13, yes.0 as u64, no.0 as u64]),
+            Action::Return => self.row(Part::Task, &[14]),
+            Action::DropNoValue => self.row(Part::Task, &[15]),
+            Action::PendingNext(id, fields, index, depth) => {
+                self.row(Part::Task, &[16, *id, *index as u64, *depth as u64]); self.fields(fields);
+            }
+            Action::PendingField(id, field) => self.row(Part::Task, &[17, *id, field.0 as u64]),
+            Action::ResultRecordNext(id, fields, depth) => {
+                self.row(Part::Task, &[18, *id as u64, *depth as u64]); self.fields(fields);
+            }
+            Action::ResultRecordField(id, fields, depth) => {
+                self.row(Part::Task, &[19, *id as u64, *depth as u64]); self.fields(fields);
+            }
+            Action::ResultComplete(id) => self.row(Part::Task, &[20, id.0 as u64]),
+            Action::ResultSelect(ty, yes, no) => self.row(Part::Task, &[21, ty.0 as u64, yes.0 as u64, no.0 as u64]),
+            Action::TrustedInvoke(plan, count, activation) =>
+                self.row(Part::Task, &[22, *plan as u64, *count as u64, *activation]),
+            Action::CompletionAttempt => self.row(Part::Task, &[23]),
+            Action::CompletionRelease => self.row(Part::Task, &[24]),
+            Action::CompletionDeliver => self.row(Part::Task, &[25]),
+        }
+        self.push(Record::End);
+    }
     fn public(&mut self, value: &RuntimeValue) {
         match value {
             RuntimeValue::Bool(v) => self.push(Record::Bool(*v)),
             RuntimeValue::Range(v) => self.push(Record::Range(v.ty, v.value)),
-            // Coverage is explicit. An unimplemented census can never be Equal.
-            _ => self.fail(Incomplete::UncoveredState),
+            RuntimeValue::Record { record, fields } => {
+                self.row(Part::Record, &[record.0 as u64]);
+                for (field, value) in fields {
+                    if !self.spend() { return; }
+                    self.row(Part::Field, &[field.0 as u64]);
+                    self.push(Record::Range(value.ty, value.value));
+                }
+                self.push(Record::End);
+            }
+            RuntimeValue::Result(layers) => {
+                for layer in layers {
+                    if !self.spend() { return; }
+                    self.row(Part::ResultLayer, &[layer.ty.0 as u64,
+                        match layer.tag { hir::ResultTag::Ok => 0, hir::ResultTag::Error => 1 }]);
+                    match &layer.payload {
+                        None => self.push(Record::Absent),
+                        Some(ResultPayload::Bool(value)) => self.push(Record::Bool(*value)),
+                        Some(ResultPayload::Range(value)) => self.push(Record::Range(value.ty, value.value)),
+                        Some(ResultPayload::Record { record, fields }) => {
+                            self.row(Part::Record, &[record.0 as u64]);
+                            for (field, value) in fields {
+                                if !self.spend() { return; }
+                                self.row(Part::Field, &[field.0 as u64]);
+                                self.push(Record::Range(value.ty, value.value));
+                            }
+                            self.push(Record::End);
+                        }
+                    }
+                }
+                self.push(Record::End);
+            }
         }
     }
     pub(super) fn value(&mut self, value: &Value) {
+        self.value_at(value, 0);
+    }
+    fn value_at(&mut self, value: &Value, depth: usize) {
+        if !self.spend() { return; }
+        if depth == self.limits.lineage { self.fail(Incomplete::Lineage); return; }
         match value {
             Value::Public(v) => self.public(v),
             Value::Raw(v) => self.push(Record::Raw(*v)),
-            Value::Reference { kind, referent, location } =>
-                self.push(Record::Reference(*kind, *referent, location.frame, location.place)),
+            Value::Reference {
+                kind,
+                referent,
+                location,
+            } => self.push(Record::Reference(
+                *kind,
+                *referent,
+                location.frame,
+                location.place,
+            )),
             Value::Completion => self.push(Record::NoValue),
-            _ => self.fail(Incomplete::UncoveredState),
+            Value::Result(id) => self.row(Part::ResultHandle, &[id.0 as u64]),
+            Value::Temporary(id) => self.row(Part::TemporaryHandle, &[id.activation, id.ordinal as u64]),
+            Value::Resource { ty, identity } => self.row(Part::SensorHandle, &[ty.0 as u64, *identity]),
+            Value::Leaf { resource, record, identity } => self.row(Part::Leaf, &[resource.0 as u64, record.0 as u64, *identity]),
+            Value::Aggregate { record, fields } => {
+                self.row(Part::Record, &[record.0 as u64]);
+                for (field, value) in fields {
+                    if !self.spend() { return; }
+                    self.row(Part::Field, &[field.0 as u64]);
+                    self.value_at(value, depth + 1);
+                }
+                self.push(Record::End);
+            }
         }
     }
-    fn outcome(&mut self, outcome: Result<&ExecutionResult, &ExecutionError>) {
+    pub(super) fn outcome(&mut self, outcome: Result<&ExecutionResult, &ExecutionError>) {
         match outcome {
             Ok(v) => {
                 self.push(Record::Delivered);
@@ -125,12 +352,19 @@ impl Capture {
                     ErrorKind::ConfiguredLimit(_) => 2,
                     ErrorKind::Integrity(_) => 3,
                     ErrorKind::Host(_) => 4,
-                    _ => { self.fail(Incomplete::UncoveredState); return; }
+                    _ => {
+                        self.fail(Incomplete::UncoveredState);
+                        return;
+                    }
                 };
                 self.push(Record::Stop(class, e.origin, e.expression));
                 match e.kind {
-                    ErrorKind::RangeTrap { ty, min, max, computed } =>
-                        self.push(Record::Trap(ty, min, max, computed)),
+                    ErrorKind::RangeTrap {
+                        ty,
+                        min,
+                        max,
+                        computed,
+                    } => self.push(Record::Trap(ty, min, max, computed)),
                     ErrorKind::ConfiguredLimit(name) => self.push(Record::Limit(name)),
                     _ => (),
                 }
@@ -151,40 +385,75 @@ impl Machine<'_> {
         if c.incomplete.is_some() { return; }
         c.push(Record::Cut(cut, self.steps, self.frames.len(), self.origin.span,
             self.expression, self.terminal));
+        c.push(Record::OriginKind(self.origin.kind));
+        let start = c.records.len();
         let mut parent = None;
         for f in &self.frames {
+            if c.incomplete.is_some() { return; }
             let Ok(definition) = self.executable.function(f.function) else {
                 c.fail(Incomplete::InvalidState); return;
             };
-            if definition.blocks().find(|(id, _)| *id == f.block).is_none() {
+            let mut found = false;
+            for (id, block) in definition.blocks() {
+                if c.incomplete.is_some() { return; }
+                if !c.spend() { return; }
+                if id == f.block {
+                    found = f.statement <= block.statements().len();
+                    break;
+                }
+            }
+            if !found {
                 c.fail(Incomplete::InvalidState); return;
             }
             c.push(Record::Frame(f.id, f.function, f.block, f.statement, parent));
             parent = Some(f.id);
             for (place, slot) in &f.slots {
+                if c.incomplete.is_some() { return; }
                 let state = match slot {
-                    Slot::Uninitialized => 0, Slot::Available(_) => 1,
-                    Slot::Vacant => 2, Slot::Transferred => 3,
-                    Slot::Cleaned => 4, Slot::Replacing => 5,
+                    Slot::Uninitialized => 0,
+                    Slot::Available(_) => 1,
+                    Slot::Vacant => 2,
+                    Slot::Transferred => 3,
+                    Slot::Cleaned => 4,
+                    Slot::Replacing => 5,
                 };
                 c.push(Record::Slot(*place, state));
-                if let Slot::Available(value) = slot { c.value(value); }
+                if let Slot::Available(value) = slot {
+                    c.value(value);
+                }
             }
             c.push(Record::End);
         }
         for value in &self.values {
+            if c.incomplete.is_some() { return; }
             c.push(Record::Operand); c.value(value);
         }
-        if self.resources.is_some() || self.results.is_some()
-            || self.temporaries.is_some() || self.trusted.is_some() {
-            c.fail(Incomplete::UncoveredState);
+        for task in &self.tasks {
+            if !c.spend() { return; }
+            c.task(task);
         }
+        if let Some(s) = &self.resources { s.observe(c); }
+        if let Some(s) = &self.results { s.observe(c); }
+        if let Some(s) = &self.temporaries { s.observe(c); }
+        if let Some(s) = &self.trusted { s.observe(c); }
+        // Each storage traversal element has a row above. Admit a conservative
+        // multiple before the second walk, including nested payloads.
+        let work = c.records.len().saturating_sub(start).saturating_mul(4).saturating_add(1);
+        if !c.spend_many(work) { return; }
+        c.push(Record::Accounting(self.limits, self.storage()));
+        c.row(Part::Buffers, &[self.frames.capacity() as u64,
+            self.tasks.capacity() as u64, self.values.capacity() as u64,
+            self.staged_return.unwrap_or(ABSENT), self.site.map_or(ABSENT, |s| s.0),
+            self.site.map_or(ABSENT, |s| s.1.0 as u64)]);
         c.push(Record::End);
     }
 }
 
 enum Engine<'a> {
-    Ordinary { machine: Machine<'a>, outcome: Option<Result<ExecutionResult, ExecutionError>> },
+    Ordinary {
+        machine: Machine<'a>,
+        outcome: Option<Result<ExecutionResult, ExecutionError>>,
+    },
     Selected(trusted::ExecutionSession<'a>),
 }
 /// Retains the actual interpreter session; evidence owns no resource token.
@@ -195,36 +464,59 @@ pub struct Session<'a> {
     entry: FunctionId,
 }
 impl<'a> Session<'a> {
-    pub fn new(contract: &contract::Contract<'a>, execution: ExecutionLimits,
-        observation: Limits) -> Result<Self, ExecutionError> {
+    pub fn new(
+        contract: &contract::Contract<'a>,
+        execution: ExecutionLimits,
+        observation: Limits,
+    ) -> Result<Self, ExecutionError> {
         contract.validate()?;
         checked_entry(contract.executable, contract.entry(), execution)?;
         let engine = if contract.executable.trusted.is_some() {
-            Engine::Selected(trusted::ExecutionSession::new(contract.executable, contract.entry(), execution)?)
+            Engine::Selected(trusted::ExecutionSession::new(
+                contract.executable,
+                contract.entry(),
+                execution,
+            )?)
         } else {
-            Engine::Ordinary { machine: Machine::new(contract.executable, execution), outcome: None }
+            Engine::Ordinary {
+                machine: Machine::new(contract.executable, execution),
+                outcome: None,
+            }
         };
-        let mut session = Self { engine, entry: contract.entry() };
-        *session.machine_mut().observation.get_mut() = Some(Capture::new(observation));
+        let mut session = Self {
+            engine,
+            entry: contract.entry(),
+        };
+        *session.machine_mut().observation.get_mut() = Some(Capture::new(observation, contract));
         session.machine().observe(Cut::Start);
         Ok(session)
     }
     fn machine(&self) -> &Machine<'a> {
-        match &self.engine { Engine::Ordinary { machine, .. } => machine,
-            Engine::Selected(s) => &s.machine }
+        match &self.engine {
+            Engine::Ordinary { machine, .. } => machine,
+            Engine::Selected(s) => &s.machine,
+        }
     }
     fn machine_mut(&mut self) -> &mut Machine<'a> {
-        match &mut self.engine { Engine::Ordinary { machine, .. } => machine,
-            Engine::Selected(s) => &mut s.machine }
+        match &mut self.engine {
+            Engine::Ordinary { machine, .. } => machine,
+            Engine::Selected(s) => &mut s.machine,
+        }
     }
     pub fn advance(&mut self) -> Result<&ExecutionResult, &ExecutionError> {
         match &mut self.engine {
             Engine::Ordinary { machine, outcome } => {
                 if outcome.is_none() {
                     *outcome = Some(machine.start(self.entry).and_then(|_| machine.resume()));
-                    if outcome.as_ref().unwrap().is_err() { machine.terminal = true; }
+                    if outcome.as_ref().unwrap().is_err() {
+                        machine.terminal = true;
+                    }
                     machine.observe(Cut::Final);
-                    machine.observation.borrow_mut().as_mut().unwrap()
+                    machine
+                        .observation
+                        .borrow_mut()
+                        .as_mut()
+                        .unwrap()
                         .outcome(outcome.as_ref().unwrap().as_ref());
                 }
                 outcome.as_ref().unwrap().as_ref()
@@ -237,22 +529,74 @@ impl<'a> Session<'a> {
     }
     pub fn completeness(&self) -> Result<(), Incomplete> {
         let c = self.capture();
-        if let Some(reason) = c.incomplete { Err(reason) }
-        else if !c.finished { Err(Incomplete::Pending) } else { Ok(()) }
+        if let Some(reason) = c.incomplete {
+            Err(reason)
+        } else if !c.finished {
+            Err(Incomplete::Pending)
+        } else {
+            Ok(())
+        }
     }
-    pub fn record_count(&self) -> usize { self.capture().records.len() }
+    pub fn record_count(&self) -> usize {
+        self.capture().records.len()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn generous() -> Limits {
+        Limits { records: 262_144, work: 10_000_000, storage: 67_108_864, lineage: 128 }
+    }
+    #[test]
+    fn selected_completion_census_preserves_real_delivery_and_repeat() {
+        use crate::trusted::{Grants, Scenario, Selection};
+        for scenario in [Scenario::Sample, Scenario::FinishIoFailure, Scenario::FinishPartialIoFailure] {
+            let selection = Selection::sensor_demo(scenario, Grants::ALL, &["sample"]).unwrap();
+            let e = prepare_execution_with_profile(include_str!("../../../examples/sensor_finish.klx"), AdmissionLimits::default(), &selection).unwrap();
+            let c = contract::Contract::extract(&e, e.entry("sample").unwrap(), contract::Limits::default()).unwrap();
+            let mut session = Session::new(&c, ExecutionLimits::default(), generous()).unwrap();
+            let mut reference = trusted::ExecutionSession::new(&e, c.entry(), ExecutionLimits::default()).unwrap();
+            assert_eq!(session.advance().unwrap(), reference.advance().unwrap());
+            assert_eq!(session.completeness(), Ok(()));
+            let count = session.record_count();
+            session.advance().unwrap();
+            assert_eq!(session.record_count(), count);
+            let Engine::Selected(actual) = &session.engine else { unreachable!() };
+            assert_eq!(actual.events(), reference.events());
+            assert_eq!(actual.live_sensors(), 0);
+        }
+    }
+    #[test]
+    fn selected_observation_exhaustion_never_reclassifies_a_fuel_stop() {
+        use crate::trusted::{Grants, Scenario, Selection};
+        let selection = Selection::sensor_demo(Scenario::Sample, Grants::ALL, &["sample"]).unwrap();
+        let e = prepare_execution_with_profile(include_str!("../../../examples/sensor_finish.klx"), AdmissionLimits::default(), &selection).unwrap();
+        let c = contract::Contract::extract(&e, e.entry("sample").unwrap(), contract::Limits::default()).unwrap();
+        for steps in [1, 3, 20, 40, 80, 120] {
+            let limits = ExecutionLimits { steps, ..ExecutionLimits::default() };
+            let mut reference = trusted::ExecutionSession::new(&e, c.entry(), limits).unwrap();
+            let mut session = Session::new(&c, limits, Limits { records: 1, ..Limits::default() }).unwrap();
+            assert_eq!(session.advance(), reference.advance());
+            assert!(session.completeness().is_err());
+            let Engine::Selected(actual) = &session.engine else { unreachable!() };
+            assert_eq!(actual.events(), reference.events());
+            assert_eq!(actual.live_sensors(), reference.live_sensors());
+        }
+    }
     #[test]
     fn ordinary_capture_is_admitted_separately_and_repeat_is_read_only() {
-        let e = prepare_execution("fn demo()->bool{return true;}", AdmissionLimits::default()).unwrap();
-        let c = contract::Contract::extract(&e, e.entry("demo").unwrap(), contract::Limits::default()).unwrap();
+        let e =
+            prepare_execution("fn demo()->bool{return true;}", AdmissionLimits::default()).unwrap();
+        let c =
+            contract::Contract::extract(&e, e.entry("demo").unwrap(), contract::Limits::default())
+                .unwrap();
         let mut s = Session::new(&c, ExecutionLimits::default(), Limits::default()).unwrap();
         assert_eq!(s.completeness(), Err(Incomplete::Pending));
-        assert_eq!(s.advance().unwrap(), &ExecutionResult::Value(RuntimeValue::Bool(true)));
+        assert_eq!(
+            s.advance().unwrap(),
+            &ExecutionResult::Value(RuntimeValue::Bool(true))
+        );
         assert_eq!(s.completeness(), Ok(()));
         let count = s.record_count();
         s.advance().unwrap();
@@ -260,13 +604,30 @@ mod tests {
     }
     #[test]
     fn exhausted_observation_preserves_primary_execution() {
-        let e = prepare_execution("fn demo()->bool{return true;}", AdmissionLimits::default()).unwrap();
-        let c = contract::Contract::extract(&e, e.entry("demo").unwrap(), contract::Limits::default()).unwrap();
-        for limits in [Limits { records: 1, ..Limits::default() },
-            Limits { work: 1, ..Limits::default() },
-            Limits { storage: 1, ..Limits::default() }] {
+        let e =
+            prepare_execution("fn demo()->bool{return true;}", AdmissionLimits::default()).unwrap();
+        let c =
+            contract::Contract::extract(&e, e.entry("demo").unwrap(), contract::Limits::default())
+                .unwrap();
+        for limits in [
+            Limits {
+                records: 1,
+                ..Limits::default()
+            },
+            Limits {
+                work: 1,
+                ..Limits::default()
+            },
+            Limits {
+                storage: 1,
+                ..Limits::default()
+            },
+        ] {
             let mut s = Session::new(&c, ExecutionLimits::default(), limits).unwrap();
-            assert_eq!(s.advance().unwrap(), &execute(&e, c.entry(), ExecutionLimits::default()).unwrap());
+            assert_eq!(
+                s.advance().unwrap(),
+                &execute(&e, c.entry(), ExecutionLimits::default()).unwrap()
+            );
             assert!(s.completeness().is_err());
         }
     }
