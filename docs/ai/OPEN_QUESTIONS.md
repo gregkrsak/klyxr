@@ -691,3 +691,20 @@ public live-resource egress, native execution and verified trusted execution rem
 open or excluded. Automatic release promises no flush/commit/durability/completion;
 explicit fallible completion and ownership after its failure remain deferred to
 KED-034. No such follow-on work is authorized by KED-033 implementation.
+
+### KED-035 staged engine-equivalence boundary
+
+Frozen Issue #84 Draft 2 fixes the approved-MIR semantic relation independently of
+any backend. The Stage I candidate extracts/validates the interpreter contract,
+separates logical and evidence accounts, captures/validates bounded observations,
+compares anchored identities, and implements private addressed replay/modeled Host.
+Review and acceptance are pending; this records no new language or proof claim.
+
+Native backend, target, ABI/data layout, emitter, optimizer, object/runtime/linker,
+portable artifact binding, transport, serialization, signing and packaging remain
+unselected. Actual native installation, optimized/unoptimized execution, interpreter/
+native equality and native physical-failure evidence remain mandatory Stage N
+questions for a separately authorized KED. Analytic preallocation/address fixtures
+are protocol evidence only. Incomplete observations and substrate destruction do
+not acquire equality or survival guarantees. Public inputs, resources, profiles,
+verified/harness execution and existing predecessor boundaries are not widened.

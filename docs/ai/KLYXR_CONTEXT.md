@@ -863,3 +863,38 @@ See `docs/engineering/KED-034-COMPLETION-CUSTODY.md` and the implementation ledg
 and manifest for source examples, exact boundaries, malformed controls, workflow
 evidence and limitations. This candidate changes no Accepted decision or proof
 claim and still requires Sarah's independent exact-head review and Greg's decision.
+
+## Frozen KED-035 Stage I implementation candidate
+
+Issue #84 Draft 2 is frozen under record 6295819136. Greg's directive
+6296001700 authorizes only Stage I on baseline
+5f28977a42a7df1817e5cac46b3f6660a38435d3 (tree
+0b330328f3f213a26b6fc4af9f45ca06a98876b8). Draft PR #85 contains an implementation
+candidate; Sarah's independent review and Greg's acceptance remain pending.
+
+The engine contract is an immutable bounded view of the same opaque approved
+HIR/MIR/origin/outcome/effect/cleanup/domain/trusted composite. Versioned semantic,
+logical-accounting, cut, observation and replay identities are sealed into that
+approval. Ordinary empty-effect calls, both alternatives and recursive closure
+are included. No new checker or ownership authority is introduced.
+
+Opt-in conformance sessions capture real interpreter history and final custody
+under separate admission. Independent validation precedes one anchored injective
+dynamic correspondence and Equal/Different/Inconclusive. Capture completion alone
+is not validity. Private addressed replay supplies only already approved binding
+behavior; it adds no public input ABI, profile, grant, source operation or resource.
+Modeled Host, unmatched surviving physical Host and loss of the execution substrate
+remain distinct. Terminal advance never resumes or fabricates source Error.
+
+Structured rooted authority and bounded human presentation have separate evidence
+accounts. Existing public preparation, run, session, audit, diagnostics and reporting
+boundaries remain governed by their predecessors. Version-one capacity/scan charges
+are logical compatibility facts, not a native ABI or a mandate for physical frames,
+allocations or dead stores. Stage I tests include independent expected observations,
+finite cuts, malformed controls and exact predecessor reconciliation through Actions.
+
+No native backend, target, ABI, layout, emitter, linker, optimizer, runtime ABI,
+transport, serialization, signing or packaging is selected. Native installation,
+actual optimized/unoptimized comparisons and native physical-failure evidence are
+mandatory deferred Stage N work requiring separate authority. See
+`docs/engineering/KED-035-STAGE-I-LEDGER.md` and its evidence manifest.

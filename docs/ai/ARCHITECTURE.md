@@ -1244,3 +1244,55 @@ sites and independent effect derivations without running a binding. Actions-only
 conformance, malformed controls and measured finite-fixture bounds are recorded
 in the KED-034 engineering guide, ledger and manifest. This is an implementation
 candidate awaiting independent review and acceptance, not a new proof guarantee.
+
+## KED-035 Stage I implementation candidate
+
+Frozen Issue #84 Draft 2 and directive 6296001700 bind this candidate on baseline
+5f28977a42a7df1817e5cac46b3f6660a38435d3. Acceptance remains pending.
+`execution::contract::Contract` borrows the same checked executable, consumes its
+canonical/opaque gates, indexes exact MIR operands/sites and builds bounded
+structural ordinary closure. `Approval` seals semantic/accounting/cut/observation/
+replay schemas and the version-one compatibility schedule. Accounted predecessor
+runtime structs/enums are not expanded for conformance instrumentation.
+
+`execution::conformance::Session` retains the actual ordinary or selected-profile
+interpreter session. Pre-reserved flat Copy evidence records contain metadata,
+never owning Sensor tokens, recursive heap payloads or release authority. Actual
+slots/continuations/counters, aliases, Result parents and active payloads,
+initialization/generation/scope associations, pending/replacement/temporary custody,
+receipts/provenance/completion, protected outcomes and event histories are observed
+read-only. Transit markers describe primary local custody without creating it.
+Failure of capture leaves the primary execution intact. `completeness()` reports
+capture status only; independent validation and comparison establish evidence.
+
+`conformance/compare.rs` validates both full traces and final censuses before one
+bounded forward/inverse correspondence. Exact static IDs are not alpha-renamed.
+Dynamic IDs preserve ancestry, alias equality, sole holders, generations, resource
+birth and release/delivery association. Missing coverage or budget yields
+Inconclusive, never truncated equality. `conformance/replay.rs` is a private
+conformance context, not a public source/runtime input interface. It binds the
+same approval and canonical site inventory, retains logical activation ancestry
+and per-site occurrences, and supplies only admitted selected binding responses.
+Its metadata is pre-admitted separately; no fallible observer allocation is inserted
+inside an atomic handoff. Positive logical receiving growth has an abstract Host
+cut after its storage gate; a physical allocator callback is not its identity.
+Open/read keep a shorter phase set around atomic publication. Completion preserves
+consumed input, committed prefix, protected Result, fixed release and non-delivery
+as distinct existing phases. Repeated terminal advancement consumes nothing.
+
+`conformance/authority.rs` adds bounded typed rooted static content from sealed
+facts, independently of runtime events and text. Full catalog/grants, structural
+edges, operations, plans, effects and possible cleanup remain inspectable. Its
+bounded summary renderer is an evidence presentation and never replaces primary
+execution. The existing public `audit::render` path and predecessor byte/work/storage
+boundaries remain unchanged. Logical execution, observation/comparison, replay,
+structured audit, renderer, physical resource and provenance domains stay distinct.
+
+M5 is preserved at e31f6104d8222ee201bc392a3daf87bcb03734ab, tree
+34466f3032475e6b03931f59e61e712fab3b54e2, with every applicable Actions workflow
+successful before M6. Independent full bool/fuel traces, protocol expectations,
+semantic-defect controls, malformed independence and finite cut enumeration are
+recorded in the engineering ledger/manifest. Exact KED-034/033/032 predecessors,
+opaque-authority doctest and affine cases are reconciled in debug/release Actions.
+No local Rust execution is used. No native implementation, physical optimized
+execution or portable artifact identity is claimed; K35-P10 remains Stage N.

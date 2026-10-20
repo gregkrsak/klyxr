@@ -90,3 +90,16 @@ after failure. Structural audit, bounded work/storage and deterministic private
 failure evidence expose this trust boundary. Implementation does not itself grant
 independent acceptance or verify the host/device; explicit fallible completion is
 deferred and human-only merge authority remains unchanged.
+
+Frozen KED-035 applies the existing trust, explicit-cost and audit principles to
+engine equivalence. Approved semantics and independently derived evidence constrain
+an interpreter as well as a future engine. Complete validated observations can
+establish Equal or Different; missing or malformed evidence yields Inconclusive.
+Observation and rendering failure neither acknowledge an outcome nor change the
+retained primary execution. A canonical cleanup plan supplies no new authority to
+execute cleanup. Versioned logical charges and semantic cuts remain visible even
+when a later implementation removes their physical work.
+
+Its Stage I candidate selects no native design, makes no performance or new proof
+claim, and supplies no Stage N execution evidence. Independent review, acceptance,
+later backend authorization and human-only merge remain separate decisions.

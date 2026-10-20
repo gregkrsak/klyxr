@@ -756,14 +756,26 @@ fn surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host() {
 fn finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix() {
     // Exact source of KED-034's retained 72-fuel measurement.
     let source="fn demo()->Result<success:FinishReceipt,failure:SensorError>effects io{let sensor=sensor_open()or return;return sensor_finish(sensor);}";
-    let selection=crate::trusted::Selection::sensor_demo(crate::trusted::Scenario::Sample,crate::trusted::Grants::ALL,&["demo"]).unwrap();
-    let e=prepare_execution_with_profile(source,AdmissionLimits::default(),&selection).unwrap();
-    let c=contract::Contract::extract(&e,e.entry("demo").unwrap(),contract::Limits::default()).unwrap();
-    let approved=e.trusted.as_ref().unwrap();
-    let expected=[
-        trusted::Event::Attempt(0,approved.invocations[0].operation),trusted::Event::Received(0,0),trusted::Event::Published(0,hir::ResultTag::Ok),
-        trusted::Event::Attempt(1,approved.invocations[1].operation),trusted::Event::Received(1,0),trusted::Event::FinishProtected(1,hir::ResultTag::Ok),
-        trusted::Event::ReleaseAttempt(0,approved.catalog.resource.release),trusted::Event::ReleaseComplete(0),trusted::Event::Published(1,hir::ResultTag::Ok),
+    let selection = crate::trusted::Selection::sensor_demo(
+        crate::trusted::Scenario::Sample,
+        crate::trusted::Grants::ALL,
+        &["demo"],
+    )
+    .unwrap();
+    let e = prepare_execution_with_profile(source, AdmissionLimits::default(), &selection).unwrap();
+    let c = contract::Contract::extract(&e, e.entry("demo").unwrap(), contract::Limits::default())
+        .unwrap();
+    let approved = e.trusted.as_ref().unwrap();
+    let expected = [
+        trusted::Event::Attempt(0, approved.invocations[0].operation),
+        trusted::Event::Received(0, 0),
+        trusted::Event::Published(0, hir::ResultTag::Ok),
+        trusted::Event::Attempt(1, approved.invocations[1].operation),
+        trusted::Event::Received(1, 0),
+        trusted::Event::FinishProtected(1, hir::ResultTag::Ok),
+        trusted::Event::ReleaseAttempt(0, approved.catalog.resource.release),
+        trusted::Event::ReleaseComplete(0),
+        trusted::Event::Published(1, hir::ResultTag::Ok),
     ];
     // 72 is the independently retained exact KED-034 sufficient fuel neighbor.
     for fuel in 1..=72 {
@@ -906,4 +918,57 @@ fn coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusi
             "mutation {mutation}"
         );
     }
+}
+
+fn storage_gates(session:&Session<'_>)->Vec<usize> {
+    let mut growth=None;let mut gates=Vec::new();
+    for record in &session.capture().records {
+        match record {
+            Record::Cut(Cut::Storage(bytes),..)=>growth=Some(*bytes),
+            Record::Cut(..)=>growth=None,
+            Record::Accounting(_,Some(retained))=> {if let Some(bytes)=growth.take() {gates.push(retained.checked_add(bytes).unwrap());}},
+            _=>(),
+        }
+    }
+    gates
+}
+#[test]
+fn finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate() {
+    let e=selected();let c=contract::Contract::extract(&e,e.entry("sample").unwrap(),contract::Limits::default()).unwrap();
+    let discovery=run(&c,None,&[],execution());assert!(discovery.primary().unwrap().is_ok());
+    let mut wanted=storage_gates(&discovery);wanted.sort_unstable();wanted.dedup();assert!(wanted.len()>10);
+    let maximum=*wanted.last().unwrap();
+    for budget in wanted.into_iter().map(|wanted|wanted-1).chain([maximum]) {
+        let limits=ExecutionLimits{working_storage:budget,..execution()};
+        let make=||Session::new_inner(&c,limits,Limits{records:262_144,work:10_000_000,storage:67_108_864,lineage:128},Some(Input{responses:None,failures:&[],limits:replay::Limits{work:1_000_000_000,..replay::Limits::default()}}));
+        let mut a=match make() {Ok(session)=>session,Err(error)=>{assert!(matches!(error.kind,ErrorKind::ConfiguredLimit(_)));continue;}};
+        let mut b=make().unwrap();let _=a.advance();let _=b.advance();
+        if budget==maximum {assert!(a.primary().unwrap().is_ok());}
+        else {
+            assert_eq!(a.primary().unwrap().unwrap_err().kind,ErrorKind::ConfiguredLimit("working storage"));
+            let gates=storage_gates(&a);assert!(*gates.last().unwrap()>budget);assert!(gates[..gates.len()-1].iter().all(|wanted|*wanted<=budget));
+        }
+        assert_eq!(compare_pair(&a,&b),Comparison::Equal,"storage {budget}");
+    }
+}
+
+#[test]
+fn independent_continuation_scope_completion_and_provenance_corruption_rejects() {
+    let e=selected();let c=contract::Contract::extract(&e,e.entry("sample").unwrap(),contract::Limits::default()).unwrap();
+    for mutation in 0..4 {
+        let a=run(&c,None,&[],execution());let b=run(&c,None,&[],execution());
+        let mut observer=b.machine().observation.borrow_mut();let records=&mut observer.as_mut().unwrap().records;
+        match mutation {
+            0=>{let record=records.iter_mut().find(|record|matches!(record,Record::Expression(_))).unwrap();*record=Record::Expression(usize::MAX);}
+            1=>{let data=records.iter_mut().find_map(|record|if let Record::Meta(Part::Scope,data)=record{Some(data)}else{None}).unwrap();data[1]=u64::MAX;}
+            2=>{let data=records.iter_mut().find_map(|record|if let Record::Meta(Part::Completion,data)=record{Some(data)}else{None}).unwrap();data[6]=255;}
+            _=>{let data=records.iter_mut().find_map(|record|if let Record::Meta(Part::Production,data)=record{Some(data)}else{None}).unwrap();data[4]=9_000_000;}
+        }
+        drop(observer);
+        assert!(matches!(compare_pair(&a,&b),Comparison::Inconclusive(_)),"mutation {mutation}");
+    }
+    let e=prepare_execution("fn demo()->bool{if true{return true;}else{return false;}}",AdmissionLimits::default()).unwrap();let c=contract::Contract::extract(&e,e.entry("demo").unwrap(),contract::Limits::default()).unwrap();
+    let a=run(&c,None,&[],execution());let b=run(&c,None,&[],execution());let mut observer=b.machine().observation.borrow_mut();
+    let data=observer.as_mut().unwrap().records.iter_mut().find_map(|record|if let Record::Meta(Part::Task,data)=record{if data[0]==13{return Some(data);}None}else{None}).unwrap();data[1]=9_000_000;
+    drop(observer);assert!(matches!(compare_pair(&a,&b),Comparison::Inconclusive(_)));
 }

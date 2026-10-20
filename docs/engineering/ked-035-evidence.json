@@ -1280,7 +1280,9 @@
     "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix",
     "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication",
     "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity",
-    "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive"
+    "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+    "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate",
+    "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects"
   ],
   "fixture_adaptations": [
     {
@@ -1377,7 +1379,9 @@
     "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix": "independent_oracle",
     "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication": "independent_oracle",
     "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity": "private_addressed_replay",
-    "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive": "private_malformed_observation"
+    "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate": "logical_or_observation_boundary",
+    "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects": "private_malformed_observation"
   },
   "m5_checkpoint": {
     "commit": "e31f6104d8222ee201bc392a3daf87bcb03734ab",
