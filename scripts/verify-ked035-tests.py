@@ -59,7 +59,7 @@ new = k35["additions"]
 assert len(new) == len(set(new))
 assert set(k35["classifications"]) == set(new), "unclassified KED-035 evidence"
 assert set(k35["classifications"].values()) <= {
-    "independent_oracle", "private_malformed_observation", "private_malformed_contract",
+    "independent_oracle", "private_addressed_replay", "private_malformed_observation", "private_malformed_contract",
     "private_approval_identity", "private_canonical_protocol", "analytic_representation",
     "private_engine_control", "logical_or_observation_boundary", "selected_source", "ordinary_source",
 }, "unknown KED-035 evidence class"

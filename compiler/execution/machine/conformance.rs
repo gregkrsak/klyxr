@@ -7,6 +7,7 @@ thread_local! {
     static SWAP_PARAMETERS:std::cell::Cell<Option<(FunctionId,Place,Place)>>=const {std::cell::Cell::new(None)};
 }
 mod compare;
+pub(super) mod replay;
 pub use compare::{compare, Comparison, ComparisonLimits};
 
 /// All limits belong to observation, never to ordinary fuel or storage.
@@ -94,6 +95,10 @@ pub(super) enum Record {
     Publication(usize, bool),
     Transit(usize, bool),
     CleanupLeaf(u64, bool),
+    LogicalActivation(usize, u64, FunctionId, Option<usize>, Span, u64),
+    Control(replay::Address, u8),
+    ControlledResponse(replay::Address, replay::Response),
+    Releasing(replay::Address, u8, u64),
 }
 /// Fixed-shape relational rows. Positions are defined by the named row schema,
 /// not by a Rust struct layout, address or renderer representation.
@@ -127,6 +132,7 @@ pub(super) enum Part {
     TrustedState,
     Token,
     Receipt,
+    PendingReceipt,
     Production,
     Completion,
     CompletionOutcome,
@@ -145,6 +151,7 @@ pub(super) struct Capture {
     expressions: Vec<(usize, usize)>,
     snapshots: usize,
     sealed_count: Option<usize>,
+    controlled: bool,
 }
 pub(super) fn compatibility_shapes() -> [usize; 2] {
     [
@@ -166,6 +173,7 @@ impl Capture {
             expressions: Vec::new(),
             snapshots: 0,
             sealed_count: None,
+            controlled: false,
         };
         let units = contract.schedule();
         let bytes = limits
@@ -785,8 +793,17 @@ impl<'a> Session<'a> {
         execution: ExecutionLimits,
         observation: Limits,
     ) -> Result<Self, ExecutionError> {
+        Self::new_inner(contract, execution, observation, None)
+    }
+    fn new_inner(
+        contract: &'a contract::Contract<'a>,
+        execution: ExecutionLimits,
+        observation: Limits,
+        input: Option<replay::Input<'_>>,
+    ) -> Result<Self, ExecutionError> {
         contract.validate()?;
         checked_entry(contract.executable, contract.entry(), execution)?;
+        let controller = input.map(|input| replay::Controller::admit(contract, execution, input)).transpose()?;
         let engine = if contract.executable.trusted.is_some() {
             Engine::Selected(trusted::ExecutionSession::new(
                 contract.executable,
@@ -804,7 +821,10 @@ impl<'a> Session<'a> {
             engine,
             entry: contract.entry(),
         };
-        *session.machine_mut().observation.get_mut() = Some(Capture::new(observation, contract));
+        *session.machine_mut().control.get_mut() = controller;
+        let mut capture=Capture::new(observation, contract);
+        capture.controlled=session.machine().control.borrow().is_some();
+        *session.machine_mut().observation.get_mut() = Some(capture);
         session.machine().observe(Cut::Start);
         Ok(session)
     }
@@ -1000,3 +1020,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod replay_tests;

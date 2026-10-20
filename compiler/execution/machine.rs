@@ -149,6 +149,7 @@ pub(super) struct Machine<'a> {
     frames: Vec<Frame>,
     tasks: Vec<Task<'a>>,
     values: Vec<Value>,
+    control: std::cell::RefCell<Option<conformance::replay::Controller>>,
     next_frame: u64,
     steps: u64,
     origin: Origin,
@@ -189,6 +190,7 @@ impl<'a> Machine<'a> {
     pub fn new(executable: &'a CheckedExecutable, limits: ExecutionLimits) -> Self {
         Self {
             observation: std::cell::RefCell::new(None),
+            control: std::cell::RefCell::new(None),
             executable,
             limits,
             frames: Vec::new(),
@@ -317,6 +319,7 @@ impl<'a> Machine<'a> {
         if wanted.map_or(true, |n| n > self.limits.working_storage) {
             return Err(self.failure(ErrorKind::ConfiguredLimit("working storage")));
         }
+        if bytes > 0 { self.control_capacity()?; }
         Ok(())
     }
     fn task(
@@ -682,6 +685,7 @@ impl<'a> Machine<'a> {
             slots,
             call_site: self.expression.unwrap_or(self.origin.span),
         });
+        self.control_activate(id, function, self.expression.unwrap_or(self.origin.span))?;
         self.cleanup_frame(id)?;
         for (offset, parameter) in definition.parameters.iter().enumerate() {
             let value = std::mem::replace(&mut self.values[start + offset], Value::Completion);
@@ -1379,6 +1383,7 @@ impl<'a> Machine<'a> {
                 }),
             );
         }
+        self.control_position(task.frame)?;
         self.observe_action(&task);
         let result = self.step_inner(task);
         if result.is_err() {
@@ -1481,6 +1486,7 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     fn start(&mut self, entry: FunctionId) -> Result<(), ExecutionError> {
+        self.control_check_entry(entry)?;
         if self
             .executable
             .program

@@ -132,6 +132,22 @@ pub(super) fn compatibility_shapes() -> [usize; 8] {
     ]
 }
 impl State {
+    pub(in crate::execution::machine) fn controlled_response(&self,sensor:hir::ResourceTypeId)->Option<conformance::replay::Response> {
+        use conformance::replay::Response;
+        let receipt=self.receipt.as_ref()?;
+        let prefix=self.events.iter().try_fold(0u8,|sum,event| {
+            if let Event::FinishPrefix(invocation,units)=event {
+                if *invocation==receipt.invocation {return sum.checked_add(*units);}
+            }
+            Some(sum)
+        })?;
+        match (receipt.tag,receipt.payload.as_ref()) {
+            (0,Some(Payload::Sensor(_)))=>Some(Response::Open(sensor)),
+            (0,Some(Payload::Range(value)))=>Some(Response::Value(value.ty,value.value,prefix)),
+            (1,Some(Payload::Range(value)))=>Some(Response::Error(value.ty,value.value,prefix)),
+            _=>None,
+        }
+    }
     pub(in crate::execution::machine) fn observe(&self, c: &mut conformance::Capture) {
         use conformance::{Part, Record, ABSENT};
         c.row(
@@ -245,7 +261,7 @@ impl State {
         }
         if let Some(receipt) = &self.receipt {
             c.row(
-                Part::Receipt,
+                if receipt.payload.is_none() { Part::PendingReceipt } else { Part::Receipt },
                 &[receipt.invocation, receipt.plan as u64, receipt.tag as u64],
             );
             match &receipt.payload {
@@ -703,6 +719,7 @@ impl<'a> Machine<'a> {
         let ticket = self.trusted_result_prepare(production)?;
         self.reserve_trusted_operand()?;
         self.temporary_reserve_register(activation, plan.site)?;
+        self.control_begin(index, invocation)?;
         #[cfg(test)]
         if self.trusted.as_ref().unwrap().fault == Some((Fault::BeforeInvocationHost, invocation)) {
             return Err(self.failure(ErrorKind::Host("injected trusted invocation boundary")));
@@ -718,8 +735,30 @@ impl<'a> Machine<'a> {
             tag: 255,
             payload: None,
         });
-        state.events.push(Event::Attempt(invocation, op.id));
-        match op.binding {
+        self.control_phase(conformance::replay::Phase::HandoffAccepted)?;
+        self.control_phase(conformance::replay::Phase::BeforeAttempt)?;
+        self.control_response(false)?;
+        self.trusted.as_mut().unwrap().events.push(Event::Attempt(invocation, op.id));
+        self.control_phase(conformance::replay::Phase::Attempt)?;
+        let controlled=self.control_response(true)?;
+        let state=self.trusted.as_mut().unwrap();
+        match controlled {
+            Some(conformance::replay::Response::Open(ty)) if open && ty==approved.catalog.sensor => {
+                let receipt=state.receipt.as_mut().unwrap();
+                receipt.tag=0;
+                receipt.payload=Some(Payload::Sensor(Sensor{realm:state.realm,identity:expected_sensor}));
+                state.next_sensor=expected_sensor+1;
+            }
+            Some(conformance::replay::Response::Value(ty,value,0)) if !open => {
+                let receipt=state.receipt.as_mut().unwrap();receipt.tag=0;
+                receipt.payload=Some(Payload::Range(RangeValue{ty,value}));
+            }
+            Some(conformance::replay::Response::Error(ty,value,0)) => {
+                let receipt=state.receipt.as_mut().unwrap();receipt.tag=1;
+                receipt.payload=Some(Payload::Range(RangeValue{ty,value}));
+            }
+            Some(_)=>return Err(self.integrity("controlled binding response mismatch")),
+            None=>match op.binding {
             Binding::SensorOpenV1 if open && observed.is_none() => {
                 let receipt = state.receipt.as_mut().unwrap();
                 match approved.catalog.selection.scenario() {
@@ -765,9 +804,13 @@ impl<'a> Machine<'a> {
                 }));
             }
             _ => return Err(self.integrity("exact trusted runtime binding mismatch; no fallback")),
+            },
         }
         let tag = state.receipt.as_ref().unwrap().tag;
         state.events.push(Event::Received(invocation, tag));
+        self.control_committed_response()?;
+        #[cfg(test)]
+        let state=self.trusted.as_mut().unwrap();
         #[cfg(test)]
         if let Some((fault, _)) = state.fault.filter(|(_, selected)| *selected == invocation) {
             match fault {
@@ -817,6 +860,7 @@ impl<'a> Machine<'a> {
             }
         }
         self.validate_receipt(plan, open)?;
+        self.control_phase(conformance::replay::Phase::Validation)?;
         #[cfg(test)]
         if self.trusted.as_ref().unwrap().fault == Some((Fault::PublicationLimit, invocation)) {
             return Err(self.failure(ErrorKind::ConfiguredLimit("trusted publication storage")));
@@ -832,6 +876,7 @@ impl<'a> Machine<'a> {
         {
             return Err(self.failure(ErrorKind::ConfiguredLimit("trusted publication storage")));
         }
+        self.control_phase(conformance::replay::Phase::Delivery)?;
         // No fallible operation follows removal from the receipt. The physical
         // Sensor enters a reserved machine-owned table; the non-Copy value is
         // its sole language-level ticket. A terminal session retains both.
@@ -879,6 +924,7 @@ impl<'a> Machine<'a> {
             self.values.pop();
         }
         self.trusted_result_commit(ticket, plan, tag, payload);
+        self.control_end();
         Ok(())
     }
 
@@ -1080,6 +1126,11 @@ impl<'a> Machine<'a> {
             .events
             .try_reserve_exact(2)
             .map_err(|_| self.failure(ErrorKind::Host("Sensor release audit reservation")))?;
+        let controlled_invocation=if self.control.borrow().is_some() {
+            Some(state.productions.iter().find(|row|row.sensor==Some(identity) && row.realm==state.realm).ok_or_else(|| self.integrity("controlled release provenance"))?.invocation)
+        } else {None};
+        self.control_begin_release()?;
+        self.control_release_response(controlled_invocation,false)?;
         let state = self.trusted.as_mut().unwrap();
         state
             .events
@@ -1090,12 +1141,24 @@ impl<'a> Machine<'a> {
             .is_some_and(|(fault, _)| fault == Fault::ReleaseFailure)
         {
             state.events.push(Event::ReleaseFailure(identity));
+            self.control_release_failed();
             return Err(self.failure(ErrorKind::Host("injected fixed Sensor release")));
         }
+        let modeled=self.control_release_attempt()?;
+        let response=if modeled {None}else{self.control_release_response(controlled_invocation,true)?};
+        if modeled || response==Some(false) {
+            self.trusted.as_mut().unwrap().events.push(Event::ReleaseFailure(identity));
+            self.control_release_failed();
+            return Err(self.failure(ErrorKind::Host("modeled abstract Host")));
+        }
+        let state=self.trusted.as_mut().unwrap();
         // Ordinary source gains no explicit completion Result from fixed release.
         state.entries[index].token = None;
         state.events.push(Event::ReleaseComplete(identity));
         self.resources.as_mut().unwrap().current = None;
+        if !self.trusted.as_ref().unwrap().completion.as_ref().is_some_and(|pending|pending.phase==crate::trusted::approval::CompletionPhase::Releasing) {
+            self.control_release_complete()?;
+        }
         Ok(())
     }
 }

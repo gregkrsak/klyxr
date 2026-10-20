@@ -777,14 +777,23 @@ impl<'a> Machine<'a> {
                 .try_reserve_exact(2)
                 .map_err(|_| self.failure(ErrorKind::Host("release event allocation")))?;
         }
+        self.control_begin_release()?;
         self.event(Event::Attempt(identity))?;
         if self.resources.as_ref().unwrap().failure_at == Some(identity) {
             self.event(Event::Failure(identity))?;
             self.resources.as_mut().unwrap().terminal = true;
+            self.control_release_failed();
             return Err(self.failure(ErrorKind::Host("synthetic trusted release")));
+        }
+        if self.control_release_attempt()? {
+            self.event(Event::Failure(identity))?;
+            self.resources.as_mut().unwrap().terminal = true;
+            self.control_release_failed();
+            return Err(self.failure(ErrorKind::Host("modeled abstract Host")));
         }
         self.event(Event::Complete(identity))?;
         self.resources.as_mut().unwrap().current = None;
+        self.control_release_complete()?;
         Ok(())
     }
     fn queue_cleanup(&mut self, value: Value) -> Result<(), ExecutionError> {

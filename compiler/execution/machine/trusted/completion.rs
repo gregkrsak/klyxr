@@ -67,6 +67,7 @@ impl<'a> Machine<'a> {
         let state = self.trusted.as_ref().unwrap();
         let pending = state.completion.as_ref().unwrap();
         let invocation = &self.executable.trusted.as_ref().unwrap().invocations[pending.plan];
+        self.control_begin(invocation.ordinal, pending.invocation)?;
         #[cfg(test)]
         if state.fault == Some((Fault::BeforeInvocationHost, pending.invocation)) {
             return Err(self.failure(ErrorKind::Host("injected trusted invocation boundary")));
@@ -80,6 +81,7 @@ impl<'a> Machine<'a> {
         let pending = self.trusted.as_mut().unwrap().completion.as_mut().unwrap();
         pending.value = Some(value);
         pending.phase = CompletionPhase::Consumed;
+        self.control_phase(conformance::replay::Phase::HandoffAccepted)?;
         #[cfg(test)]
         {
             let state = self.trusted.as_mut().unwrap();
@@ -158,6 +160,8 @@ impl<'a> Machine<'a> {
         let next = invocation.checked_add(1).ok_or_else(|| {
             self.failure(ErrorKind::ConfiguredLimit("trusted invocation identities"))
         })?;
+        self.control_phase(conformance::replay::Phase::BeforeAttempt)?;
+        self.control_response(false)?;
         let scenario = approved.catalog.selection.scenario();
         let failed = matches!(
             scenario,
@@ -170,26 +174,32 @@ impl<'a> Machine<'a> {
             invocation,
             plan: plan.ordinal,
             expected_sensor: state.completion.as_ref().unwrap().sensor,
-            tag: u8::from(failed),
+            tag: 255,
             payload: None,
         });
         state.events.push(Event::Attempt(invocation, operation.id));
+        self.control_phase(conformance::replay::Phase::Attempt)?;
+        let controlled=self.control_response(true)?;
+        let (failed,prefix,ty,value)=match controlled {
+            Some(conformance::replay::Response::Value(ty,value,0))=>(false,0,ty,value),
+            Some(conformance::replay::Response::Error(ty,value,prefix))=>(true,prefix,ty,value),
+            Some(_)=>return Err(self.integrity("controlled completion response mismatch")),
+            None=>(failed,u8::from(scenario==Scenario::FinishPartialIoFailure),if failed {approved.catalog.error}else{approved.catalog.finish_receipt},if failed {3}else{1}),
+        };
+        let state=self.trusted.as_mut().unwrap();
         // Fixed deterministic binding: one irreversible prefix unit is realized
         // only in the partial-Error scenario. It is never success or rollback.
-        if scenario == Scenario::FinishPartialIoFailure {
-            state.events.push(Event::FinishPrefix(invocation, 1));
+        if prefix != 0 {
+            state.events.push(Event::FinishPrefix(invocation, prefix));
         }
-        state.receipt.as_mut().unwrap().payload = Some(Payload::Range(RangeValue {
-            ty: if failed {
-                approved.catalog.error
-            } else {
-                approved.catalog.finish_receipt
-            },
-            value: if failed { 3 } else { 1 },
-        }));
+        state.receipt.as_mut().unwrap().tag=u8::from(failed);
+        state.receipt.as_mut().unwrap().payload = Some(Payload::Range(RangeValue {ty,value}));
         state
             .events
             .push(Event::Received(invocation, u8::from(failed)));
+        self.control_committed_response()?;
+        #[cfg(test)]
+        let state=self.trusted.as_mut().unwrap();
         #[cfg(test)]
         if let Some((fault, _)) = state.fault.filter(|(_, selected)| *selected == invocation) {
             let receipt = state.receipt.as_mut().unwrap();
@@ -224,6 +234,7 @@ impl<'a> Machine<'a> {
             }
         }
         self.completion_receipt_validate(plan)?;
+        self.control_phase(conformance::replay::Phase::Validation)?;
         let state = self.trusted.as_mut().unwrap();
         let receipt = state.receipt.take().unwrap();
         let tag = if receipt.tag == 0 {
@@ -304,6 +315,7 @@ impl<'a> Machine<'a> {
         if state.fault == Some((Fault::AfterReceiptHost, invocation)) {
             return Err(self.failure(ErrorKind::Host("injected trusted receipt boundary")));
         }
+        self.control_phase(conformance::replay::Phase::Protection)?;
         self.task(
             frame,
             plan.completion.as_ref().unwrap().delivery,
@@ -383,6 +395,7 @@ impl<'a> Machine<'a> {
             .as_mut()
             .unwrap()
             .phase = CompletionPhase::Released;
+        self.control_release_complete()?;
         Ok(())
     }
 
@@ -418,11 +431,13 @@ impl<'a> Machine<'a> {
             return Err(self.failure(ErrorKind::ConfiguredLimit("completion delivery envelope")));
         }
         let invocation = pending.invocation;
+        self.control_phase(conformance::replay::Phase::Delivery)?;
         self.completion_result_deliver(owner);
         let state = self.trusted.as_mut().unwrap();
         state.completion.as_mut().unwrap().phase = CompletionPhase::Delivered;
         state.events.push(Event::Published(invocation, tag));
         state.completion = None;
+        self.control_end();
         Ok(())
     }
 

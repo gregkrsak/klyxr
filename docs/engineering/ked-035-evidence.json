@@ -1,5 +1,5 @@
 {
-  "stage": "M5-checkpoint-candidate",
+  "stage": "M6-in-progress",
   "baseline_commit": "5f28977a42a7df1817e5cac46b3f6660a38435d3",
   "baseline_tree": "0b330328f3f213a26b6fc4af9f45ca06a98876b8",
   "m0_commit": "0443dfd32dec70e0c72f1a0a886b9eedc284fb9c",
@@ -1219,10 +1219,10 @@
       "status": "implemented and independently validated in M5 candidate; final Stage I acceptance pending"
     },
     "M5": {
-      "status": "checkpoint candidate: required code and discriminator families present; exact checkpoint and complete gate still pending"
+      "status": "preserved and gated; all eight exact-head workflows succeeded before any M6 source change"
     },
     "M6": {
-      "status": "pending"
+      "status": "in progress: private addressed replay, modeled Host and independent custody/prefix assertions; candidate not yet tested"
     },
     "M7": {
       "status": "pending"
@@ -1260,7 +1260,12 @@
     "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
     "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
     "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
-    "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+    "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify",
+    "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption",
+    "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery",
+    "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release",
+    "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties",
+    "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed"
   ],
   "fixture_adaptations": [
     {
@@ -1337,6 +1342,39 @@
     "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence": "private_canonical_protocol",
     "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence": "ordinary_source",
     "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets": "analytic_representation",
-    "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify": "private_malformed_observation"
+    "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption": "private_addressed_replay",
+    "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery": "private_addressed_replay",
+    "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release": "private_addressed_replay",
+    "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties": "private_addressed_replay",
+    "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed": "private_addressed_replay"
+  },
+  "m5_checkpoint": {
+    "commit": "e31f6104d8222ee201bc392a3daf87bcb03734ab",
+    "tree": "34466f3032475e6b03931f59e61e712fab3b54e2",
+    "report": "https://github.com/gregkrsak/klyxr/pull/85#issuecomment-6302901461",
+    "readback_verified": true,
+    "runs": {
+      "push": {
+        "build": 39505777791,
+        "tests": 39505777832,
+        "verify": 39505777798,
+        "docs": 39505777828
+      },
+      "pull_request": {
+        "build": 39505787391,
+        "tests": 39505787793,
+        "verify": 39505787807,
+        "docs": 39505787589
+      }
+    },
+    "test_jobs": [
+      118914201649,
+      118914234908
+    ],
+    "per_profile": 2071,
+    "exact_predecessors": 2045,
+    "additions": 26,
+    "all_jobs_steps_success": true
   }
 }

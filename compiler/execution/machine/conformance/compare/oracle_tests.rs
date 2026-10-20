@@ -176,6 +176,7 @@ fn oracle(c: &contract::Contract<'_>, execution: ExecutionLimits) -> Capture {
         expressions: Vec::new(),
         snapshots: rows.len(),
         sealed_count,
+        controlled: false,
     }
 }
 
@@ -209,6 +210,7 @@ fn hand_derived_full_success_and_first_insufficient_observations_match() {
             &mut work,
             execution,
             Some(result.as_ref()),
+            None,
         )
         .unwrap();
         let evidence = actual.capture();
@@ -219,6 +221,7 @@ fn hand_derived_full_success_and_first_insufficient_observations_match() {
             &mut work,
             execution,
             actual.primary(),
+            None,
         )
         .unwrap();
         assert_eq!(

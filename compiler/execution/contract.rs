@@ -400,7 +400,7 @@ impl<'a> Contract<'a> {
     }
 }
 
-fn statement_span(statement: &Statement) -> Span {
+pub(super) fn statement_span(statement: &Statement) -> Span {
     match statement {
         Statement::BindResult { match_origin, .. } => *match_origin,
         Statement::CallNoValue { span, .. }
