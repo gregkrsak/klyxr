@@ -164,10 +164,16 @@ pub(super) struct Machine<'a> {
 
 pub(super) fn compatibility_schedule() -> contract::Schedule {
     contract::Schedule {
-        machine: [size_of::<Frame>(), size_of::<Task<'_>>(), size_of::<Value>(),
-            size_of::<(Place, Slot)>(), size_of::<(hir::FieldId, Value)>(),
-            size_of::<(hir::FieldId, RangeValue)>(), size_of::<CallTrace>(),
-            size_of::<ResultLayer>()],
+        machine: [
+            size_of::<Frame>(),
+            size_of::<Task<'_>>(),
+            size_of::<Value>(),
+            size_of::<(Place, Slot)>(),
+            size_of::<(hir::FieldId, Value)>(),
+            size_of::<(hir::FieldId, RangeValue)>(),
+            size_of::<CallTrace>(),
+            size_of::<ResultLayer>(),
+        ],
         cleanup: cleanup::compatibility_shapes(),
         results: results::compatibility_shapes(),
         temporaries: temporaries::compatibility_shapes(),

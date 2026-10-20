@@ -46,7 +46,7 @@ pub struct Schedule {
     pub(super) cleanup: [usize; 9],
     pub(super) results: [usize; 5],
     pub(super) temporaries: [usize; 4],
-    pub(super) trusted: [usize; 7],
+    pub(super) trusted: [usize; 8],
 }
 impl Schedule {
     pub(crate) fn reference() -> Self {
@@ -54,13 +54,20 @@ impl Schedule {
     }
     pub(crate) fn validate(self) -> Result<(), ExecutionError> {
         if self != Self::reference() {
-            return Err(ExecutionError::integrity("execution compatibility schedule mismatch"));
+            return Err(ExecutionError::integrity(
+                "execution compatibility schedule mismatch",
+            ));
         }
         Ok(())
     }
     pub fn quantities(&self) -> impl Iterator<Item = usize> + '_ {
-        self.machine.iter().chain(&self.cleanup).chain(&self.results)
-            .chain(&self.temporaries).chain(&self.trusted).copied()
+        self.machine
+            .iter()
+            .chain(&self.cleanup)
+            .chain(&self.results)
+            .chain(&self.temporaries)
+            .chain(&self.trusted)
+            .copied()
     }
 }
 
@@ -375,17 +382,22 @@ mod tests {
 
     #[test]
     fn compatibility_schedule_is_sealed_and_independent_mutation_rejects() {
-        let e = prepare_execution("fn demo()->bool{return true;}", AdmissionLimits::default()).unwrap();
+        let e =
+            prepare_execution("fn demo()->bool{return true;}", AdmissionLimits::default()).unwrap();
         let mut c = Contract::extract(&e, e.entry("demo").unwrap(), Limits::default()).unwrap();
-        assert_eq!(c.schedule().quantities().count(), 33);
+        assert_eq!(c.schedule().quantities().count(), 34);
         assert!(c.schedule().quantities().all(|n| n > 0));
         c.schedule.machine[2] += 1;
-        assert!(matches!(c.validate().unwrap_err().kind, ErrorKind::Integrity(_)));
+        assert!(matches!(
+            c.validate().unwrap_err().kind,
+            ErrorKind::Integrity(_)
+        ));
     }
 
     #[test]
     fn schema_is_consumed_before_execution_and_cannot_change_fuel() {
-        let mut e = prepare_execution("fn demo()->bool{return true;}", AdmissionLimits::default()).unwrap();
+        let mut e =
+            prepare_execution("fn demo()->bool{return true;}", AdmissionLimits::default()).unwrap();
         let mut schema = e.approval.schema;
         schema.fuel_unit = 0;
         let approval = Rc::new(Approval {
@@ -400,19 +412,72 @@ mod tests {
         e.approval = approval.clone();
         e.mir_approval = approval.clone();
         e.origin_approval = approval;
-        assert!(matches!(execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).unwrap_err().kind, ErrorKind::Integrity(_)));
+        assert!(matches!(
+            execute(&e, e.entry("demo").unwrap(), ExecutionLimits::default())
+                .unwrap_err()
+                .kind,
+            ErrorKind::Integrity(_)
+        ));
     }
 
     #[test]
     fn logical_fuel_neighbors_and_extraction_storage_are_separate() {
-        let e = prepare_execution("fn demo()->bool{return true;}", AdmissionLimits::default()).unwrap();
+        let e =
+            prepare_execution("fn demo()->bool{return true;}", AdmissionLimits::default()).unwrap();
         let entry = e.entry("demo").unwrap();
-        assert_eq!(execute(&e, entry, ExecutionLimits { steps: 3, ..ExecutionLimits::default() }).unwrap(), ExecutionResult::Value(RuntimeValue::Bool(true)));
-        assert_eq!(execute(&e, entry, ExecutionLimits { steps: 2, ..ExecutionLimits::default() }).unwrap_err().kind, ErrorKind::ConfiguredLimit("steps"));
-        let limits = Limits { nodes: 2, work: 100, storage: 2 * (size_of::<Site>() + size_of::<FunctionId>()) * 2 + 2 * size_of::<Contract<'_>>() };
-        Contract::extract(&e, entry, limits).unwrap().validate().unwrap();
-        assert!(matches!(Contract::extract(&e, entry, Limits { storage: limits.storage - 1, ..limits }).err().unwrap().kind, ErrorKind::ConfiguredLimit("contract extraction storage")));
-        assert_eq!(execute(&e, entry, ExecutionLimits::default()).unwrap(), ExecutionResult::Value(RuntimeValue::Bool(true)));
+        assert_eq!(
+            execute(
+                &e,
+                entry,
+                ExecutionLimits {
+                    steps: 3,
+                    ..ExecutionLimits::default()
+                }
+            )
+            .unwrap(),
+            ExecutionResult::Value(RuntimeValue::Bool(true))
+        );
+        assert_eq!(
+            execute(
+                &e,
+                entry,
+                ExecutionLimits {
+                    steps: 2,
+                    ..ExecutionLimits::default()
+                }
+            )
+            .unwrap_err()
+            .kind,
+            ErrorKind::ConfiguredLimit("steps")
+        );
+        let limits = Limits {
+            nodes: 2,
+            work: 100,
+            storage: 2 * (size_of::<Site>() + size_of::<FunctionId>()) * 2
+                + 2 * size_of::<Contract<'_>>(),
+        };
+        Contract::extract(&e, entry, limits)
+            .unwrap()
+            .validate()
+            .unwrap();
+        assert!(matches!(
+            Contract::extract(
+                &e,
+                entry,
+                Limits {
+                    storage: limits.storage - 1,
+                    ..limits
+                }
+            )
+            .err()
+            .unwrap()
+            .kind,
+            ErrorKind::ConfiguredLimit("contract extraction storage")
+        ));
+        assert_eq!(
+            execute(&e, entry, ExecutionLimits::default()).unwrap(),
+            ExecutionResult::Value(RuntimeValue::Bool(true))
+        );
     }
 
     #[test]

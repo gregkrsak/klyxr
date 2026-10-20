@@ -161,10 +161,17 @@ pub(super) struct State {
     pub(super) fail_field_skip: usize,
 }
 pub(super) fn compatibility_shapes() -> [usize; 9] {
-    [size_of::<State>(), size_of::<Event>(), size_of::<ResourceFrame>(),
-        size_of::<Activation>(), size_of::<Generation>(), size_of::<Pending>(),
-        size_of::<(hir::LocalId, u64)>(), size_of::<(hir::FieldId, Value)>(),
-        size_of::<replacement::Prepared>()]
+    [
+        size_of::<State>(),
+        size_of::<Event>(),
+        size_of::<ResourceFrame>(),
+        size_of::<Activation>(),
+        size_of::<Generation>(),
+        size_of::<Pending>(),
+        size_of::<(hir::LocalId, u64)>(),
+        size_of::<(hir::FieldId, Value)>(),
+        size_of::<replacement::Prepared>(),
+    ]
 }
 struct Pending {
     id: u64,
