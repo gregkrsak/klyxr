@@ -2,6 +2,10 @@
 //! execute source or grant an operation. The ordinary driver remains unchanged.
 use super::*;
 use std::cell::Ref;
+#[cfg(test)]
+thread_local! {
+    static SWAP_PARAMETERS:std::cell::Cell<Option<(FunctionId,Place,Place)>>=const {std::cell::Cell::new(None)};
+}
 mod compare;
 pub use compare::{compare, Comparison, ComparisonLimits};
 
@@ -79,6 +83,7 @@ pub(super) enum Record {
     ResourceEvent(u8, u64),
     TrustedEvent(trusted::Event),
     Continuation(u64),
+    CallSite(Span),
     Expression(usize),
     ExprType(ExprType),
     Binary(BinaryOp),
@@ -184,16 +189,20 @@ impl Capture {
             || bytes.map_or(true, |n| n > limits.storage)
         {
             capture.incomplete = Some(Incomplete::Admission);
-        } else if capture.records.try_reserve_exact(limits.records).is_err() || capture
-            .expressions
-            .try_reserve_exact(contract.expressions().len())
-            .is_err()
+        } else if capture.records.try_reserve_exact(limits.records).is_err()
+            || capture
+                .expressions
+                .try_reserve_exact(contract.expressions().len())
+                .is_err()
         {
             capture.incomplete = Some(Incomplete::Allocation);
         } else {
-            capture
-                .expressions
-                .extend_from_slice(contract.expressions());
+            if contract.expressions().len()>limits.work {capture.incomplete=Some(Incomplete::Work);}
+            else {
+                capture.work=contract.expressions().len();
+                capture.expressions.extend(contract.expressions().iter().map(|(value,ordinal)|
+                    (*value as *const TypedExpr as usize,*ordinal)));
+            }
         }
         capture
     }
@@ -310,7 +319,10 @@ impl Capture {
                 self.row(Part::Task, &[9, r.0 as u64]);
                 self.fields(fields);
             }
-            Action::Invoke(f, count) => self.row(Part::Task, &[10, f.0 as u64, *count as u64]),
+            Action::Invoke(f, count) => {
+                self.row(Part::Task, &[10, f.0 as u64, *count as u64]);
+                self.push(Record::CallSite(task.expression.unwrap_or(task.origin.span)));
+            }
             Action::Commit(destination) => {
                 self.row(Part::Task, &[11]);
                 match destination {
@@ -536,21 +548,44 @@ impl Capture {
 }
 
 impl Machine<'_> {
-    pub(super) fn observe_transit(&self, id:results::OwnerId, finished:bool, destination:Option<Destination>) {
-        if let Some(c)=self.observation.borrow_mut().as_mut() {
-            c.push(Record::Transit(id.0,finished));
+    #[cfg(test)]
+    pub(super) fn conformance_parameter_control(&mut self, function:FunctionId) {
+        if self.observation.borrow().is_none() {return;}
+        let control=SWAP_PARAMETERS.with(|slot|slot.get());
+        let Some((target,first,second))=control else {return;};
+        if target!=function {return;}
+        SWAP_PARAMETERS.with(|slot|slot.set(None));
+        let slots=&mut self.frames.last_mut().unwrap().slots;
+        let a=slots.iter().position(|(place,_)|*place==first).unwrap();
+        let b=slots.iter().position(|(place,_)|*place==second).unwrap();
+        let (a,b)=if a<b {(a,b)}else{(b,a)};
+        let (left,right)=slots.split_at_mut(b);
+        // A deliberately wrong, but locally typed and conserving, engine
+        // transfer. Actual payloads move; no token or Result is cloned.
+        std::mem::swap(&mut left[a].1,&mut right[0].1);
+    }
+    pub(super) fn observe_transit(
+        &self,
+        id: results::OwnerId,
+        finished: bool,
+        destination: Option<Destination>,
+    ) {
+        if let Some(c) = self.observation.borrow_mut().as_mut() {
+            c.push(Record::Transit(id.0, finished));
             if !finished {
                 c.push(match destination {
-                    None=>Record::Operand,
-                    Some(Destination::Slot(at))=>Record::Destination(at.frame,at.place,None),
-                    Some(Destination::Field(at,record,field))=>Record::Destination(at.frame,at.place,Some((record,field))),
+                    None => Record::Operand,
+                    Some(Destination::Slot(at)) => Record::Destination(at.frame, at.place, None),
+                    Some(Destination::Field(at, record, field)) => {
+                        Record::Destination(at.frame, at.place, Some((record, field)))
+                    }
                 });
             }
         }
     }
     pub(super) fn observe_publication(&self, root: results::OwnerId, delivered: bool) {
-        if let Some(c)=self.observation.borrow_mut().as_mut() {
-            c.push(Record::Publication(root.0,delivered));
+        if let Some(c) = self.observation.borrow_mut().as_mut() {
+            c.push(Record::Publication(root.0, delivered));
         }
     }
     pub(super) fn observe_action(&self, task: &Task<'_>) {
@@ -567,6 +602,7 @@ impl Machine<'_> {
         if c.incomplete.is_some() {
             return;
         }
+        if self.frames.len()>c.limits.lineage {c.fail(Incomplete::Lineage);return;}
         c.push(Record::Cut(
             cut,
             self.steps,

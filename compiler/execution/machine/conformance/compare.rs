@@ -76,7 +76,7 @@ struct Node {
     block: usize,
     statement: usize,
     declared: usize,
-    payload: Option<(usize,usize)>,
+    payload: Option<(usize, usize)>,
     child: Option<Key>,
     tag: u8,
     origin: Option<Span>,
@@ -113,6 +113,7 @@ struct Scratch {
     pairs: Vec<Pair>,
     trusted: Vec<trusted::Event>,
     leaves: Vec<(u8, u64)>,
+    temporaries: Vec<Record>,
     cap: usize,
 }
 pub(super) fn compatibility_shapes() -> [usize; 8] {
@@ -129,7 +130,7 @@ pub(super) fn compatibility_shapes() -> [usize; 8] {
 }
 impl Scratch {
     fn new(limits: ComparisonLimits, schedule: contract::Schedule) -> Valid<Self> {
-        let units: usize = schedule.comparison[..6].iter().sum();
+        let units: usize = schedule.comparison[..6].iter().sum::<usize>() + schedule.observation[0];
         let bytes = limits
             .nodes
             .checked_mul(units)
@@ -153,6 +154,7 @@ impl Scratch {
             pairs: Vec::new(),
             trusted: Vec::new(),
             leaves: Vec::new(),
+            temporaries: Vec::new(),
             cap: limits.nodes,
         };
         s.nodes
@@ -173,6 +175,9 @@ impl Scratch {
         s.leaves
             .try_reserve_exact(limits.nodes)
             .map_err(|_| Incomplete::Allocation)?;
+        s.temporaries
+            .try_reserve_exact(limits.nodes)
+            .map_err(|_| Incomplete::Allocation)?;
         Ok(s)
     }
     fn clear(&mut self) {
@@ -181,6 +186,7 @@ impl Scratch {
         self.slots.clear();
         self.trusted.clear();
         self.leaves.clear();
+        self.temporaries.clear();
     }
     fn find(&self, k: Key, work: &mut Work) -> Valid<Option<usize>> {
         for (index, n) in self.nodes.iter().enumerate() {
@@ -206,9 +212,11 @@ impl Scratch {
                 require(a == b)?;
             }
             if declaration {
-                if n.key.0==Kind::Frame {require(old.status==0)?;}
+                if n.key.0 == Kind::Frame {
+                    require(old.status == 0)?;
+                }
                 require(old.declared != n.stamp)?;
-                self.nodes[index].declared=n.stamp;
+                self.nodes[index].declared = n.stamp;
             }
             self.nodes[index].stamp = n.stamp;
             self.nodes[index].ty = old.ty.or(n.ty);
@@ -273,11 +281,15 @@ struct Validator<'a, 'b> {
     snapshots: usize,
     trusted_count: usize,
     leaf_count: usize,
+    lineage: usize,
+    mask: u8,
     storage: usize,
     limits: ExecutionLimits,
     delivered: bool,
     action_frame: Option<u64>,
     action_plan: Option<usize>,
+    action_callee: Option<FunctionId>,
+    action_callsite: Option<Span>,
     publication: Option<u64>,
     delivered_root: Option<u64>,
     transit: Option<u64>,
@@ -349,7 +361,7 @@ impl Validator<'_, '_> {
                 edge: None,
                 block: 0,
                 statement: 0,
-                declared: if unique {self.stamp}else{usize::MAX},
+                declared: if unique { self.stamp } else { usize::MAX },
                 payload: None,
                 child: None,
                 tag: 0,
@@ -431,13 +443,13 @@ impl Validator<'_, '_> {
         self.add_storage(bytes)
     }
     fn held_value(&mut self, cleanup: bool) -> Valid<ValueInfo> {
-        self.held=self.held.checked_add(1).ok_or(Incomplete::InvalidState)?;
+        self.held = self.held.checked_add(1).ok_or(Incomplete::InvalidState)?;
         let value = self.value(0, cleanup)?;
         self.add_storage(value.extra)?;
         Ok(value)
     }
     fn value(&mut self, depth: usize, cleanup: bool) -> Valid<ValueInfo> {
-        require(depth < 256)?;
+        if depth >= self.lineage { return Err(Incomplete::Lineage); }
         let mut info = ValueInfo {
             ty: None,
             handle: None,
@@ -708,6 +720,7 @@ impl Validator<'_, '_> {
             } else {
                 None
             };
+            self.action_callee=None;self.action_callsite=None;
         }
         let count = match d[0] {
             0 | 6 | 7 | 11 | 14 | 15 | 23 | 24 | 25 => 1,
@@ -738,6 +751,17 @@ impl Validator<'_, '_> {
                     .and_then(|f| f.as_ordinary())
                     .ok_or(Incomplete::InvalidState)?;
                 require(callee.parameters.len() as u64 == d[2])?;
+                let Record::CallSite(callsite)=self.take()? else {return Err(Incomplete::InvalidState);};
+                let mut found=false;
+                for (expression,site) in self.contract.expressions() {
+                    self.work.spend()?;
+                    if self.contract.sites()[*site].function==function && expression.span==callsite
+                        && matches!(&expression.kind,ExprKind::Call{function:target,..} if target.0 as u64==d[1]) {
+                        found=true;break;
+                    }
+                }
+                require(found)?;
+                if executing {self.action_callee=Some(callee.id);self.action_callsite=Some(callsite);}
             }
             13 => {
                 let control = self.node(key(Kind::Frame, frame))?;
@@ -941,11 +965,11 @@ impl Validator<'_, '_> {
             self.scratch.nodes[index].born = true;
             self.scratch.nodes[index].status = p[5] as u8;
             self.reference(key(Kind::Result, p[2]))?;
-            let cell=self.node(key(Kind::Result,p[2]))?;
-            let (payload,end)=cell.payload.ok_or(Incomplete::InvalidState)?;
+            let cell = self.node(key(Kind::Result, p[2]))?;
+            let (payload, end) = cell.payload.ok_or(Incomplete::InvalidState)?;
             if let Some(Record::Range(ty, value)) = self.peek() {
                 require(p[6] == ABSENT)?;
-                require(end==payload+1 && self.records[payload]==Record::Range(ty,value))?;
+                require(end == payload + 1 && self.records[payload] == Record::Range(ty, value))?;
                 let expected = self
                     .contract
                     .executable
@@ -961,6 +985,10 @@ impl Validator<'_, '_> {
                     .ok_or(Incomplete::InvalidState)?;
                 let v = self.value(0, false)?;
                 self.expected(v, expected)?;
+                if p[5] == 1 {
+                    let operation = approved.catalog.operation(plan.operation).ok_or(Incomplete::InvalidState)?;
+                    require(value < 8 && operation.errors & (1u8 << value) != 0)?;
+                }
                 if plan.completion.is_some() {
                     require(
                         (p[5] == 0 && ty == approved.catalog.finish_receipt && value == 1)
@@ -969,8 +997,14 @@ impl Validator<'_, '_> {
                 }
             } else {
                 require(self.take()? == Record::Absent && p[6] != ABSENT)?;
-                let Record::Meta(Part::SensorHandle,active)=self.records[payload] else {return Err(Incomplete::InvalidState);};
-                require(end==payload+1 && active[0]==approved.catalog.sensor.0 as u64 && active[1]==p[6])?;
+                let Record::Meta(Part::SensorHandle, active) = self.records[payload] else {
+                    return Err(Incomplete::InvalidState);
+                };
+                require(
+                    end == payload + 1
+                        && active[0] == approved.catalog.sensor.0 as u64
+                        && active[1] == p[6],
+                )?;
                 self.reference(key(Kind::Sensor, p[6]))?;
             }
             if self.is_meta(Part::Token) {
@@ -993,7 +1027,7 @@ impl Validator<'_, '_> {
         }
         require(productions <= d[4])?;
         if self.is_meta(Part::Receipt) {
-            self.pending_states+=1;
+            self.pending_states += 1;
             let r = self.meta(Part::Receipt)?;
             self.shape(&r, 3)?;
             require(r[2] <= 1)?;
@@ -1030,13 +1064,18 @@ impl Validator<'_, '_> {
                 self.scratch.nodes[n].status = 2;
                 self.scratch.nodes[n].born = true;
             } else {
+                if r[2] == 1 {
+                    let Some(Record::Range(_, code)) = self.peek() else { return Err(Incomplete::InvalidState); };
+                    let operation = approved.catalog.operation(plan.operation).ok_or(Incomplete::InvalidState)?;
+                    require(code < 8 && operation.errors & (1u8 << code) != 0)?;
+                }
                 let v = self.value(0, false)?;
                 self.expected(v, expected)?;
             }
             self.end()?;
         }
         if self.is_meta(Part::Completion) {
-            self.pending_states+=1;
+            self.pending_states += 1;
             let p = self.meta(Part::Completion)?;
             self.shape(&p, 7)?;
             require(p[6] <= 7)?;
@@ -1077,7 +1116,11 @@ impl Validator<'_, '_> {
             if result[0] != ABSENT {
                 require(p[6] >= 3)?;
                 self.owner(key(Kind::Result, result[0]), 3)?;
-                self.scratch.link(Link::Completion(key(Kind::Result,result[0]),key(Kind::Invocation,p[1]),p[2] as usize))?;
+                self.scratch.link(Link::Completion(
+                    key(Kind::Result, result[0]),
+                    key(Kind::Invocation, p[1]),
+                    p[2] as usize,
+                ))?;
             }
             self.optional_value(false)?;
             self.end()?;
@@ -1143,7 +1186,7 @@ impl Validator<'_, '_> {
                     self.capacity(d[i], u)?;
                 }
                 while self.is_meta(Part::ResourceFrame) {
-                    self.pending_states+=1;
+                    self.pending_states += 1;
                     let f = self.meta(Part::ResourceFrame)?;
                     self.shape(&f, 4)?;
                     require(f[1] <= 1)?;
@@ -1235,7 +1278,7 @@ impl Validator<'_, '_> {
                 }
                 require(index <= d[4])?;
                 while self.is_meta(Part::PendingRecord) {
-                    self.pending_states+=1;
+                    self.pending_states += 1;
                     let p = self.meta(Part::PendingRecord)?;
                     self.shape(&p, 8)?;
                     require(p[3] <= 1)?;
@@ -1276,7 +1319,7 @@ impl Validator<'_, '_> {
                     self.end()?;
                 }
                 while self.is_meta(Part::Replacement) {
-                    self.pending_states+=1;
+                    self.pending_states += 1;
                     let r = self.meta(Part::Replacement)?;
                     require(r[2] <= 1)?;
                     let place = if r[2] == 0 {
@@ -1371,13 +1414,13 @@ impl Validator<'_, '_> {
                         Some(ValueType::Result(ty)),
                         true,
                     )?;
-                    if self.scratch.nodes[index].born && self.scratch.nodes[index].status>=4 {
-                        require(self.scratch.nodes[index].status==cell[7] as u8)?;
+                    if self.scratch.nodes[index].born && self.scratch.nodes[index].status >= 4 {
+                        require(self.scratch.nodes[index].status == cell[7] as u8)?;
                     }
                     self.scratch.nodes[index].status = cell[7] as u8;
-                    self.scratch.nodes[index].block=cell[3] as usize;
-                    self.scratch.nodes[index].statement=cell[2] as usize;
-                    self.scratch.nodes[index].tag=cell[5] as u8;
+                    self.scratch.nodes[index].block = cell[3] as usize;
+                    self.scratch.nodes[index].statement = cell[2] as usize;
+                    self.scratch.nodes[index].tag = cell[5] as u8;
                     self.scratch.nodes[index].born = true;
                     self.scratch.nodes[index].edge = if cell[6] == ABSENT {
                         None
@@ -1388,7 +1431,7 @@ impl Validator<'_, '_> {
                         self.reference(key(Kind::Result, cell[6]))?;
                     }
                     let origin = self.origin()?;
-                    self.scratch.nodes[index].origin=Some(origin);
+                    self.scratch.nodes[index].origin = Some(origin);
                     if cell[2] == 0 {
                         let flow = self
                             .contract
@@ -1403,10 +1446,22 @@ impl Validator<'_, '_> {
                             .get(cell[3] as usize)
                             .ok_or(Incomplete::InvalidState)?;
                         require(site.ty == ExprType::Result(ty) && site.origin.span == origin)?;
-                        require(site.children.len()==1)?;
-                        let child=flow.sites.get(site.children[0].0).ok_or(Incomplete::InvalidState)?;
-                        require(child.destination==crate::mir::temporaries::Destination::ResultPayload(ty,
-                            if cell[5]==0 {hir::ResultTag::Ok}else{hir::ResultTag::Error}))?;
+                        require(site.children.len() == 1)?;
+                        let child = flow
+                            .sites
+                            .get(site.children[0].0)
+                            .ok_or(Incomplete::InvalidState)?;
+                        require(
+                            child.destination
+                                == crate::mir::temporaries::Destination::ResultPayload(
+                                    ty,
+                                    if cell[5] == 0 {
+                                        hir::ResultTag::Ok
+                                    } else {
+                                        hir::ResultTag::Error
+                                    },
+                                ),
+                        )?;
                     } else if cell[2] == 1 {
                         let block = self
                             .contract
@@ -1427,7 +1482,10 @@ impl Validator<'_, '_> {
                         )?;
                     } else {
                         self.reference(key(Kind::Production, cell[3]))?;
-                        self.scratch.link(Link::ProductionCell(key(Kind::Result,cell[0]),key(Kind::Production,cell[3])))?;
+                        self.scratch.link(Link::ProductionCell(
+                            key(Kind::Result, cell[0]),
+                            key(Kind::Production, cell[3]),
+                        ))?;
                     }
                     if cell[7] == 2 {
                         let f = self.meta(Part::ResultMatchFrame)?;
@@ -1439,17 +1497,21 @@ impl Validator<'_, '_> {
                         Record::Absent => require(matches!(cell[7], 0 | 4 | 5))?,
                         Record::Payload => {
                             require(matches!(cell[7], 1..=3))?;
-                            let begin=self.at;
+                            let begin = self.at;
                             let value = self.held_value(false)?;
-                            if let Some((previous,end))=self.scratch.nodes[index].payload {
-                                require(end-previous==self.at-begin)?;
-                                for offset in 0..end-previous {
+                            if let Some((previous, end)) = self.scratch.nodes[index].payload {
+                                require(end - previous == self.at - begin)?;
+                                for offset in 0..end - previous {
                                     self.work.spend()?;
-                                    require(self.records[previous+offset]==self.records[begin+offset])?;
+                                    require(
+                                        self.records[previous + offset]
+                                            == self.records[begin + offset],
+                                    )?;
                                 }
                             }
-                            self.scratch.nodes[index].payload=Some((begin,self.at));
-                            self.scratch.nodes[index].child=value.handle.filter(|k|k.0==Kind::Result);
+                            self.scratch.nodes[index].payload = Some((begin, self.at));
+                            self.scratch.nodes[index].child =
+                                value.handle.filter(|k| k.0 == Kind::Result);
                             if let Some(k) = value.handle {
                                 require(k.0 != Kind::Owner)?;
                                 if k.0 == Kind::Result {
@@ -1472,7 +1534,7 @@ impl Validator<'_, '_> {
                     self.owner(key(Kind::Result, r[1]), 2)?;
                 }
                 while self.is_meta(Part::InertRecord) {
-                    self.pending_states+=1;
+                    self.pending_states += 1;
                     let r = self.meta(Part::InertRecord)?;
                     self.declaration(
                         key(Kind::Staging, r[0]),
@@ -1497,7 +1559,7 @@ impl Validator<'_, '_> {
                 self.capacity(d[1], units.temporaries[1])?;
                 self.capacity(d[2], units.temporaries[3])?;
                 while self.is_meta(Part::TemporaryActivation) {
-                    self.pending_states+=1;
+                    self.pending_states += 1;
                     let t = self.meta(Part::TemporaryActivation)?;
                     require(t[5] <= 2)?;
                     require(self.function(t[1])?.0 as u64 == t[2])?;
@@ -1560,7 +1622,17 @@ impl Validator<'_, '_> {
                     self.optional_value(false)?;
                     self.end()?;
                 }
+                let mut count = 0;
                 loop {
+                    if let Some(event @ (Record::TemporaryBegin(..) | Record::TemporaryRegister(..) | Record::TemporaryTransfer(..) | Record::TemporaryCleanup(..) | Record::TemporaryRetire(..))) = self.peek() {
+                        if count < self.scratch.temporaries.len() {
+                            require(self.scratch.temporaries[count] == event)?;
+                        } else {
+                            if self.scratch.temporaries.len() == self.scratch.cap { return Err(Incomplete::Records); }
+                            self.scratch.temporaries.push(event);
+                        }
+                        count += 1;
+                    }
                     match self.peek() {
                         Some(Record::TemporaryBegin(id, frame, region, parent)) => {
                             self.take()?;
@@ -1611,16 +1683,19 @@ impl Validator<'_, '_> {
                         _ => break,
                     }
                 }
+                require(count == self.scratch.temporaries.len())?;
             }
             _ => return Err(Incomplete::InvalidState),
         }
         Ok(())
     }
     fn finish_graph(&mut self) -> Valid {
-        if let Some(root)=self.transit {
-            let node=self.node(key(Kind::Result,root))?;
-            require(node.status==1 && node.edge.is_none())?;
-            if let Some(expected)=self.transit_type {require(node.ty==Some(expected))?;}
+        if let Some(root) = self.transit {
+            let node = self.node(key(Kind::Result, root))?;
+            require(node.status == 1 && node.edge.is_none())?;
+            if let Some(expected) = self.transit_type {
+                require(node.ty == Some(expected))?;
+            }
         }
         for index in 0..self.scratch.links.len() {
             self.work.spend()?;
@@ -1638,8 +1713,11 @@ impl Validator<'_, '_> {
                             && slot.place == Place::Local(local)
                             && slot.state == 1
                         {
-                            require(generation.status == 0 && generation.declared==self.stamp
-                                && scope.declared==self.stamp)?;
+                            require(
+                                generation.status == 0
+                                    && generation.declared == self.stamp
+                                    && scope.declared == self.stamp,
+                            )?;
                         }
                     }
                     continue;
@@ -1649,25 +1727,40 @@ impl Validator<'_, '_> {
                     require(node.edge == Some(parent))?;
                     continue;
                 }
-                Link::ProductionCell(cell,production)=>{
-                    let cell=self.node(cell)?;let row=self.node(production)?;
-                    let approved=self.contract.executable.trusted.as_ref().ok_or(Incomplete::InvalidState)?;
-                    let plan=approved.invocations.get(row.a as usize).ok_or(Incomplete::InvalidState)?;
-                    require(row.b==cell.key.1 && row.born && row.status==cell.tag
-                        && cell.ty==Some(ValueType::Result(plan.result)) && cell.b==plan.function.0 as u64
-                        && cell.origin==Some(plan.source))?;
+                Link::ProductionCell(cell, production) => {
+                    let cell = self.node(cell)?;
+                    let row = self.node(production)?;
+                    let approved = self
+                        .contract
+                        .executable
+                        .trusted
+                        .as_ref()
+                        .ok_or(Incomplete::InvalidState)?;
+                    let plan = approved
+                        .invocations
+                        .get(row.a as usize)
+                        .ok_or(Incomplete::InvalidState)?;
+                    require(
+                        row.b == cell.key.1
+                            && row.born
+                            && row.status == cell.tag
+                            && cell.ty == Some(ValueType::Result(plan.result))
+                            && cell.b == plan.function.0 as u64
+                            && cell.origin == Some(plan.source),
+                    )?;
                     continue;
                 }
-                Link::Completion(cell,invocation,plan)=>{
-                    let cell=self.node(cell)?;require(cell.status==3 && cell.statement==2)?;
-                    let production=self.node(key(Kind::Production,cell.block as u64))?;
-                    require(production.parent==Some(invocation) && production.a==plan as u64)?;
+                Link::Completion(cell, invocation, plan) => {
+                    let cell = self.node(cell)?;
+                    require(cell.status == 3 && cell.statement == 2)?;
+                    let production = self.node(key(Kind::Production, cell.block as u64))?;
+                    require(production.parent == Some(invocation) && production.a == plan as u64)?;
                     continue;
                 }
             };
             let node = self.node(k)?;
-            if matches!(k.0,Kind::Staging|Kind::Pending|Kind::Replacement) {
-                require(node.declared==self.stamp)?;
+            if matches!(k.0, Kind::Staging | Kind::Pending | Kind::Replacement) {
+                require(node.declared == self.stamp)?;
             }
             match link {
                 Link::Expected(_, ty) => require(node.ty == Some(ty))?,
@@ -1703,27 +1796,39 @@ impl Validator<'_, '_> {
         for index in 0..self.scratch.nodes.len() {
             self.work.spend()?;
             let node = self.scratch.nodes[index];
-            if node.key.0==Kind::Frame && node.declared!=self.stamp {
-                self.scratch.nodes[index].status=1;
+            if node.key.0 == Kind::Frame && node.declared != self.stamp {
+                self.scratch.nodes[index].status = 1;
             }
-            if node.key.0==Kind::Result && node.born {
-                let mut owners=0;let mut parents=0;
+            if node.key.0 == Kind::Result && node.born {
+                let mut owners = 0;
+                let mut parents = 0;
                 for link in &self.scratch.links {
                     self.work.spend()?;
                     match link {
-                        Link::Owner(k,role) if *k==node.key && !(node.status==4 && *role==1)=>owners+=1,
-                        Link::PayloadParent(k,_) if *k==node.key=>parents+=1,
-                        _=>(),
+                        Link::Owner(k, role)
+                            if *k == node.key && !(node.status == 4 && *role == 1) =>
+                        {
+                            owners += 1
+                        }
+                        Link::PayloadParent(k, _) if *k == node.key => parents += 1,
+                        _ => (),
                     }
                 }
-                require(parents==usize::from(node.edge.is_some()))?;
-                if node.status==1 && (self.publication==Some(node.key.1)||self.transit==Some(node.key.1)) {
-                    require(owners<=1)?;
-                } else {require(owners==usize::from(matches!(node.status,1..=3)))?;}
-                let mut edge=node.edge;let mut depth=0;
-                while let Some(parent)=edge {
-                    self.work.spend()?;depth+=1;require(depth<=32)?;
-                    edge=self.node(parent)?.edge;
+                require(parents == usize::from(node.edge.is_some()))?;
+                if node.status == 1
+                    && (self.publication == Some(node.key.1) || self.transit == Some(node.key.1))
+                {
+                    require(owners <= 1)?;
+                } else {
+                    require(owners == usize::from(matches!(node.status, 1..=3)))?;
+                }
+                let mut edge = node.edge;
+                let mut depth = 0;
+                while let Some(parent) = edge {
+                    self.work.spend()?;
+                    depth += 1;
+                    require(depth <= 32)?;
+                    edge = self.node(parent)?.edge;
                 }
             }
             if matches!(node.key.0, Kind::Sensor | Kind::Leaf) {
@@ -1754,7 +1859,8 @@ impl Validator<'_, '_> {
         )?;
         self.last_fuel = fuel;
         require(!self.last_terminal || terminal)?;
-        self.last_depth=depth;self.last_terminal=terminal;
+        self.last_depth = depth;
+        self.last_terminal = terminal;
         self.span(origin)?;
         if let Some(s) = expression {
             self.span(s)?;
@@ -1764,12 +1870,14 @@ impl Validator<'_, '_> {
             return Err(Incomplete::InvalidState);
         };
         require(stamp == self.snapshots && mask <= 15)?;
+        require(mask&self.mask==self.mask)?;self.mask=mask;
         self.stamp = stamp;
         self.snapshots += 1;
         self.scratch.links.clear();
         self.scratch.slots.clear();
         self.storage = 0;
-        self.held=0;self.pending_states=0;
+        self.held = 0;
+        self.pending_states = 0;
         for node in &mut self.scratch.nodes {
             self.work.spend()?;
             if node.key.0 == Kind::Sensor {
@@ -1808,6 +1916,15 @@ impl Validator<'_, '_> {
                 }
             }
             require(found)?;
+            if self.scratch.find(key(Kind::Frame,id),self.work)?.is_none() {
+                if let Some(parent)=parent {
+                    require(self.action_frame==Some(parent) && self.action_callee==Some(function)
+                        && self.action_callsite==Some(call_site))?;
+                }else{
+                    require(function==self.contract.entry()
+                        && call_site==self.contract.executable.program.function(function).span())?;
+                }
+            }
             let index = self.declaration(
                 key(Kind::Frame, id),
                 function.0 as u64,
@@ -1925,11 +2042,15 @@ fn validate<'a>(
         snapshots: 0,
         trusted_count: 0,
         leaf_count: 0,
+        lineage: capture.limits.lineage,
+        mask: 0,
         storage: 0,
         limits,
         delivered: false,
         action_frame: None,
         action_plan: None,
+        action_callee: None,
+        action_callsite: None,
         publication: None,
         delivered_root: None,
         transit: None,
@@ -1943,7 +2064,9 @@ fn validate<'a>(
         require(v.snapshot()? == Cut::Start)?;
         let mut last = Cut::Start;
         loop {
-            if last==Cut::Final {break;}
+            if last == Cut::Final {
+                break;
+            }
             match v.peek() {
                 Some(Record::Cut(..)) => last = v.snapshot()?,
                 Some(Record::Executing) => {
@@ -1955,31 +2078,49 @@ fn validate<'a>(
                     v.task(true)?;
                     v.finish_graph()?;
                 }
-                Some(Record::Publication(id,delivered))=>{
-                    v.take()?;let root=id as u64;
+                Some(Record::Publication(id, delivered)) => {
+                    v.take()?;
+                    let root = id as u64;
                     if delivered {
-                        require(v.publication==Some(root))?;
-                        v.publication=None;v.delivered_root=Some(root);
+                        require(v.publication == Some(root))?;
+                        v.publication = None;
+                        v.delivered_root = Some(root);
                     } else {
-                        require(v.publication.is_none() && v.delivered_root.is_none() && v.last_depth==0)?;
-                        let node=v.node(key(Kind::Result,root))?;
-                        let declared=contract.executable.program.function(contract.entry()).as_ordinary()
-                            .ok_or(Incomplete::InvalidState)?.return_type;
-                        require(node.status==1 && node.edge.is_none() && node.ty==declared)?;
-                        v.publication=Some(root);
+                        require(
+                            v.publication.is_none()
+                                && v.delivered_root.is_none()
+                                && v.last_depth == 0,
+                        )?;
+                        let node = v.node(key(Kind::Result, root))?;
+                        let declared = contract
+                            .executable
+                            .program
+                            .function(contract.entry())
+                            .as_ordinary()
+                            .ok_or(Incomplete::InvalidState)?
+                            .return_type;
+                        require(node.status == 1 && node.edge.is_none() && node.ty == declared)?;
+                        v.publication = Some(root);
                     }
                 }
-                Some(Record::Transit(id,finished))=>{
-                    v.take()?;let root=id as u64;
-                    if finished {require(v.transit==Some(root))?;v.finish_graph()?;v.transit=None;v.transit_type=None;}
-                    else {
+                Some(Record::Transit(id, finished)) => {
+                    v.take()?;
+                    let root = id as u64;
+                    if finished {
+                        require(v.transit == Some(root))?;
+                        v.finish_graph()?;
+                        v.transit = None;
+                        v.transit_type = None;
+                    } else {
                         require(v.transit.is_none())?;
                         match v.take()? {
-                            Record::Operand=>v.transit_type=None,
-                            Record::Destination(frame,place,None)=>v.transit_type=Some(v.place(frame,place)?),
-                            _=>return Err(Incomplete::InvalidState),
+                            Record::Operand => v.transit_type = None,
+                            Record::Destination(frame, place, None) => {
+                                v.transit_type = Some(v.place(frame, place)?)
+                            }
+                            _ => return Err(Incomplete::InvalidState),
                         }
-                        v.transit=Some(root);
+                        v.transit = Some(root);
                     }
                 }
                 _ => break,
@@ -1989,12 +2130,22 @@ fn validate<'a>(
         v.delivered = true;
         match v.take()? {
             Record::Delivered => {
-                require(v.last_depth==0 && !v.last_terminal && v.held==0 && v.pending_states==0
-                    && v.publication.is_none() && v.transit.is_none())?;
+                require(
+                    v.last_depth == 0
+                        && !v.last_terminal
+                        && v.held == 0
+                        && v.pending_states == 0
+                        && v.publication.is_none()
+                        && v.transit.is_none(),
+                )?;
                 for node in &v.scratch.nodes {
                     v.work.spend()?;
-                    if node.key.0==Kind::Result && node.born {require(node.status>=4)?;}
-                    if node.key.0==Kind::Temporary {require(node.status==3)?;}
+                    if node.key.0 == Kind::Result && node.born {
+                        require(node.status >= 4)?;
+                    }
+                    if node.key.0 == Kind::Temporary {
+                        require(node.status == 3)?;
+                    }
                 }
                 let actual = outcome
                     .ok_or(Incomplete::Pending)?
@@ -2006,11 +2157,13 @@ fn validate<'a>(
                     .function(contract.entry())
                     .as_ordinary()
                     .ok_or(Incomplete::InvalidState)?;
-                if let Some(ValueType::Result(ty))=definition.return_type {
-                    let root=v.delivered_root.ok_or(Incomplete::InvalidState)?;
-                    let node=v.node(key(Kind::Result,root))?;
-                    require(node.status==5 && node.ty==Some(ValueType::Result(ty)))?;
-                }else{require(v.delivered_root.is_none())?;}
+                if let Some(ValueType::Result(ty)) = definition.return_type {
+                    let root = v.delivered_root.ok_or(Incomplete::InvalidState)?;
+                    let node = v.node(key(Kind::Result, root))?;
+                    require(node.status == 5 && node.ty == Some(ValueType::Result(ty)))?;
+                } else {
+                    require(v.delivered_root.is_none())?;
+                }
                 match definition.return_type {
                     Some(ty) => {
                         let value = v.value(0, false)?;
@@ -2120,8 +2273,6 @@ pub fn compare(a: &Session<'_>, b: &Session<'_>, limits: ComparisonLimits) -> Co
     }
 }
 fn compare_inner(a: &Session<'_>, b: &Session<'_>, limits: ComparisonLimits) -> Valid<Comparison> {
-    let mut scratch = Scratch::new(limits, a.contract.schedule())?;
-    let mut work = Work(limits.work);
     if !a.contract.same_approval(b.contract) || a.entry != b.entry {
         return Err(Incomplete::Authority);
     }
@@ -2132,6 +2283,8 @@ fn compare_inner(a: &Session<'_>, b: &Session<'_>, limits: ComparisonLimits) -> 
     if common_a != common_b {
         return Err(Incomplete::Admission);
     }
+    let mut scratch = Scratch::new(limits, a.contract.schedule())?;
+    let mut work = Work(limits.work);
     let left = a.capture();
     let right = b.capture();
     for capture in [&*left, &*right] {
@@ -2265,8 +2418,17 @@ fn equal_record(a: Record, b: Record, s: &mut Scratch, w: &mut Work, stamp: usiz
         (Record::Continuation(x), Record::Continuation(y)) => {
             s.pair(key(Kind::Frame, x), key(Kind::Frame, y), stamp, w)
         }
-        (Record::Publication(x,a),Record::Publication(y,b))|(Record::Transit(x,a),Record::Transit(y,b))=>{
-            if a!=b {return Ok(false);}s.pair(key(Kind::Result,x as u64),key(Kind::Result,y as u64),stamp,w)
+        (Record::Publication(x, a), Record::Publication(y, b))
+        | (Record::Transit(x, a), Record::Transit(y, b)) => {
+            if a != b {
+                return Ok(false);
+            }
+            s.pair(
+                key(Kind::Result, x as u64),
+                key(Kind::Result, y as u64),
+                stamp,
+                w,
+            )
         }
         (Record::Destination(x, p, f), Record::Destination(y, q, g)) => {
             if p != q || f != g {
@@ -2609,3 +2771,6 @@ mod tests {
 
 #[cfg(test)]
 mod oracle_tests;
+
+#[cfg(test)]
+mod identity_tests;

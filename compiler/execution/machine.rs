@@ -384,8 +384,13 @@ impl<'a> Machine<'a> {
     }
     fn value(&mut self, value: Value) -> Result<(), ExecutionError> {
         let ordinary = self.retain_publication(value)?;
-        let transit=match ordinary.as_ref() {Some(Value::Result(id))=>Some(*id),_=>None};
-        if let Some(id)=transit {self.observe_transit(id,false,None);}
+        let transit = match ordinary.as_ref() {
+            Some(Value::Result(id)) => Some(*id),
+            _ => None,
+        };
+        if let Some(id) = transit {
+            self.observe_transit(id, false, None);
+        }
         let grow = self.values.len() == self.values.capacity();
         // Retained resources already participate in storage(); ordinary payloads
         // remain prospective until publication, preserving predecessor accounting.
@@ -409,7 +414,9 @@ impl<'a> Machine<'a> {
         }
         let value = self.take_publication(ordinary);
         self.values.push(value);
-        if let Some(id)=transit {self.observe_transit(id,true,None);}
+        if let Some(id) = transit {
+            self.observe_transit(id, true, None);
+        }
         Ok(())
     }
     fn pop(&mut self) -> Result<Value, ExecutionError> {
@@ -533,15 +540,22 @@ impl<'a> Machine<'a> {
         match destination {
             Destination::Slot(at) => {
                 let ordinary = self.retain_publication(value)?;
-                let transit=match ordinary.as_ref() {Some(Value::Result(id))=>Some(*id),_=>None};
-                if let Some(id)=transit {self.observe_transit(id,false,Some(Destination::Slot(at)));}
+                let transit = match ordinary.as_ref() {
+                    Some(Value::Result(id)) => Some(*id),
+                    _ => None,
+                };
+                if let Some(id) = transit {
+                    self.observe_transit(id, false, Some(Destination::Slot(at)));
+                }
                 let (f, i) = self.slot_index_with_payload(
                     at,
                     ordinary.as_ref().map_or(0, Value::extra_storage),
                 )?;
                 let value = self.take_publication(ordinary);
                 self.frames[f].slots[i].1 = Slot::Available(value);
-                if let Some(id)=transit {self.observe_transit(id,true,Some(Destination::Slot(at)));}
+                if let Some(id) = transit {
+                    self.observe_transit(id, true, Some(Destination::Slot(at)));
+                }
             }
             Destination::Field(at, record, field) => {
                 let Value::Public(RuntimeValue::Range(value)) = value else {
@@ -683,6 +697,8 @@ impl<'a> Machine<'a> {
                 .push((Place::Parameter(*parameter), Slot::Available(value)));
         }
         self.values.truncate(start);
+        #[cfg(test)]
+        self.conformance_parameter_control(function);
         Ok(id)
     }
     fn eval(&mut self, frame: u64, e: &'a TypedExpr, depth: usize) -> Result<(), ExecutionError> {
@@ -1525,9 +1541,9 @@ impl<'a> Machine<'a> {
             Value::Result(id) => {
                 // Cells remain the actual primary owner during fallible export.
                 // The observer records the non-owning publication association.
-                self.observe_publication(id,false);
-                let value=self.result_export(id)?;
-                self.observe_publication(id,true);
+                self.observe_publication(id, false);
+                let value = self.result_export(id)?;
+                self.observe_publication(id, true);
                 Ok(ExecutionResult::Value(value))
             }
             Value::Completion => Ok(ExecutionResult::NoValue),

@@ -136,7 +136,7 @@ pub struct Contract<'a> {
     sites: Vec<Site>,
     // Private lookup keys only. Addresses never enter semantic comparison;
     // runtime operands are projected to their exact approved static ordinal.
-    expressions: Vec<(usize, usize)>,
+    expressions: Vec<(&'a TypedExpr, usize)>,
     limits: Limits,
 }
 pub(super) fn compatibility_shapes() -> [usize; 4] {
@@ -273,7 +273,7 @@ impl<'a> Contract<'a> {
     pub fn sites(&self) -> &[Site] {
         &self.sites
     }
-    pub(crate) fn expressions(&self) -> &[(usize, usize)] {
+    pub(crate) fn expressions(&self) -> &[(&'a TypedExpr, usize)] {
         &self.expressions
     }
     /// Identity comparison does not equate independent source compilations.
@@ -290,7 +290,9 @@ impl<'a> Contract<'a> {
             || self.schedule != self.executable.approval.schedule
             || self.functions != expected.functions
             || self.sites != expected.sites
-            || self.expressions != expected.expressions
+            || self.expressions.len()!=expected.expressions.len()
+            || !self.expressions.iter().zip(&expected.expressions).all(|((a,i),(b,j))|
+                std::ptr::eq(*a,*b)&&i==j)
         {
             return Err(ExecutionError::integrity(
                 "execution contract correspondence",
@@ -346,7 +348,7 @@ impl<'a> Contract<'a> {
         function: FunctionId,
         block: BasicBlockId,
         statement: usize,
-        value: &TypedExpr,
+        value: &'a TypedExpr,
         work: &mut usize,
     ) -> Result<(), ExecutionError> {
         self.add(
@@ -358,7 +360,7 @@ impl<'a> Contract<'a> {
             work,
         )?;
         self.expressions
-            .push((value as *const TypedExpr as usize, self.sites.len() - 1));
+            .push((value, self.sites.len() - 1));
         // Executable shape validation already bounded expression depth.
         match &value.kind {
             ExprKind::Call {

@@ -1020,7 +1020,10 @@
     "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
     "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
     "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
-    "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary"
+    "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
+    "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+    "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
+    "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection"
   ],
   "fixture_adaptations": [
     {
