@@ -139,9 +139,14 @@ pub(super) struct Capture {
     sealed_count: Option<usize>,
 }
 pub(super) fn compatibility_shapes() -> [usize; 2] {
-    [size_of::<Record>(), size_of::<std::cell::RefCell<Option<Capture>>>()]
+    [
+        size_of::<Record>(),
+        size_of::<std::cell::RefCell<Option<Capture>>>(),
+    ]
 }
-pub(super) fn comparison_shapes() -> [usize; 8] { compare::compatibility_shapes() }
+pub(super) fn comparison_shapes() -> [usize; 8] {
+    compare::compatibility_shapes()
+}
 impl Capture {
     fn new(limits: Limits, contract: &contract::Contract<'_>) -> Self {
         let mut capture = Self {
@@ -154,7 +159,7 @@ impl Capture {
             snapshots: 0,
             sealed_count: None,
         };
-        let units=contract.schedule();
+        let units = contract.schedule();
         let bytes = limits
             .records
             .checked_mul(units.observation[0])
@@ -385,27 +390,48 @@ impl Capture {
             }
         }
     }
-    fn ordered_index<T>(&mut self, fields: &[(hir::FieldId, T)], previous: Option<usize>) -> Option<usize> {
+    fn ordered_index<T>(
+        &mut self,
+        fields: &[(hir::FieldId, T)],
+        previous: Option<usize>,
+    ) -> Option<usize> {
         let mut selected = None;
         for (index, (field, _)) in fields.iter().enumerate() {
-            if !self.spend() { return None; }
-            if previous.is_some_and(|p| field.0 <= p) { continue; }
+            if !self.spend() {
+                return None;
+            }
+            if previous.is_some_and(|p| field.0 <= p) {
+                continue;
+            }
             match selected {
                 None => selected = Some(index),
-                Some(old) if fields[old].0 == *field => { self.fail(Incomplete::InvalidState); return None; }
-                Some(old) if field.0 < fields[old].0.0 => selected = Some(index),
+                Some(old) if fields[old].0 == *field => {
+                    self.fail(Incomplete::InvalidState);
+                    return None;
+                }
+                Some(old) if field.0 < fields[old].0 .0 => selected = Some(index),
                 _ => (),
             }
         }
-        if selected.is_none() { self.fail(Incomplete::InvalidState); }
+        if selected.is_none() {
+            self.fail(Incomplete::InvalidState);
+        }
         selected
     }
-    fn range_record(&mut self, record: hir::RecordId, fields: &[(hir::FieldId, RangeValue)], capacity: usize) {
+    fn range_record(
+        &mut self,
+        record: hir::RecordId,
+        fields: &[(hir::FieldId, RangeValue)],
+        capacity: usize,
+    ) {
         self.row(Part::Record, &[record.0 as u64, capacity as u64, 0]);
         let mut previous = None;
         for _ in 0..fields.len() {
-            let Some(index) = self.ordered_index(fields, previous) else { return; };
-            let (field, value) = &fields[index]; previous = Some(field.0);
+            let Some(index) = self.ordered_index(fields, previous) else {
+                return;
+            };
+            let (field, value) = &fields[index];
+            previous = Some(field.0);
             self.row(Part::Field, &[field.0 as u64]);
             self.push(Record::Range(value.ty, value.value));
         }
@@ -449,11 +475,17 @@ impl Capture {
                 identity,
             } => self.row(Part::Leaf, &[resource.0 as u64, record.0 as u64, *identity]),
             Value::Aggregate { record, fields } => {
-                self.row(Part::Record, &[record.0 as u64, fields.capacity() as u64, 1]);
+                self.row(
+                    Part::Record,
+                    &[record.0 as u64, fields.capacity() as u64, 1],
+                );
                 let mut previous = None;
                 for _ in 0..fields.len() {
-                    let Some(index) = self.ordered_index(fields, previous) else { return; };
-                    let (field, value) = &fields[index]; previous = Some(field.0);
+                    let Some(index) = self.ordered_index(fields, previous) else {
+                        return;
+                    };
+                    let (field, value) = &fields[index];
+                    previous = Some(field.0);
                     self.row(Part::Field, &[field.0 as u64]);
                     self.value_at(value, depth + 1);
                 }
@@ -529,12 +561,21 @@ impl Machine<'_> {
         c.push(Record::OriginKind(self.origin.kind));
         let mut slots = 0usize;
         for frame in &self.frames {
-            if !c.spend() { return; }
+            if !c.spend() {
+                return;
+            }
             slots = slots.saturating_add(frame.slots.len());
         }
-        c.push(Record::Inventory(c.snapshots, slots, self.values.len(), self.tasks.len(),
-            u8::from(self.resources.is_some()) | (u8::from(self.results.is_some()) << 1)
-            | (u8::from(self.temporaries.is_some()) << 2) | (u8::from(self.trusted.is_some()) << 3)));
+        c.push(Record::Inventory(
+            c.snapshots,
+            slots,
+            self.values.len(),
+            self.tasks.len(),
+            u8::from(self.resources.is_some())
+                | (u8::from(self.results.is_some()) << 1)
+                | (u8::from(self.temporaries.is_some()) << 2)
+                | (u8::from(self.trusted.is_some()) << 3),
+        ));
         c.snapshots += 1;
         let start = c.records.len();
         let mut parent = None;

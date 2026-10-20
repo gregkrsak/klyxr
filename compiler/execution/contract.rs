@@ -140,7 +140,12 @@ pub struct Contract<'a> {
     limits: Limits,
 }
 pub(super) fn compatibility_shapes() -> [usize; 4] {
-    [size_of::<Site>(), size_of::<FunctionId>(), size_of::<(usize, usize)>(), size_of::<Contract<'_>>()]
+    [
+        size_of::<Site>(),
+        size_of::<FunctionId>(),
+        size_of::<(usize, usize)>(),
+        size_of::<Contract<'_>>(),
+    ]
 }
 impl<'a> Contract<'a> {
     pub fn extract(
@@ -159,7 +164,7 @@ impl<'a> Contract<'a> {
         {
             return Err(ResourceFailure::limit("contract extraction override", START).into());
         }
-        let units=executable.approval.schedule.extraction;
+        let units = executable.approval.schedule.extraction;
         let bytes = limits
             .nodes
             .checked_mul(units[..3].iter().sum())

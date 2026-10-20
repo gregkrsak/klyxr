@@ -149,12 +149,23 @@ impl State {
         let (status, kind, capacity) = match &self.status {
             Status::Pending => (0, 0, 0),
             Status::Stopped(error) => (2, 1, error.trace.capacity()),
-            Status::Complete(ExecutionResult::Value(RuntimeValue::Result(layers))) => (1, 2, layers.capacity()),
-            Status::Complete(ExecutionResult::Value(RuntimeValue::Record { fields, .. })) => (1, 3, fields.capacity()),
+            Status::Complete(ExecutionResult::Value(RuntimeValue::Result(layers))) => {
+                (1, 2, layers.capacity())
+            }
+            Status::Complete(ExecutionResult::Value(RuntimeValue::Record { fields, .. })) => {
+                (1, 3, fields.capacity())
+            }
             Status::Complete(_) => (1, 0, 0),
         };
-        c.row(Part::TrustedRetained, &[status, kind, capacity as u64,
-            self.diagnostic.borrow().as_ref().map_or(0, Vec::capacity) as u64]);
+        c.row(
+            Part::TrustedRetained,
+            &[
+                status,
+                kind,
+                capacity as u64,
+                self.diagnostic.borrow().as_ref().map_or(0, Vec::capacity) as u64,
+            ],
+        );
         // Token-table positions are physical. Emit actual tokens in their
         // logical acquisition order; retain only the abstract table history
         // quantities needed by the compatibility schedule.
@@ -317,9 +328,12 @@ pub struct ExecutionSession<'a> {
     pub(in crate::execution::machine) machine: Machine<'a>,
 }
 impl<'a> ExecutionSession<'a> {
-    pub(in crate::execution::machine) fn recorded(&self) -> Option<Result<&ExecutionResult, &ExecutionError>> {
+    pub(in crate::execution::machine) fn recorded(
+        &self,
+    ) -> Option<Result<&ExecutionResult, &ExecutionError>> {
         match &self.machine.trusted.as_ref().unwrap().status {
-            Status::Pending => None, Status::Complete(value) => Some(Ok(value)),
+            Status::Pending => None,
+            Status::Complete(value) => Some(Ok(value)),
             Status::Stopped(error) => Some(Err(error)),
         }
     }
