@@ -213,14 +213,23 @@ cleanup-effect unions remain static even though only one runtime payload is
 active. Primary local transit/publication markers observe custody without
 creating another owner or second cleanup authority.
 
-Exact KED-034 numeric neighbors remain unchanged: audit 6,193 output / 65,617
-storage / 65,584 work; diagnostic 126 and result 20; catalog diagnostics 9,792,
+KED-034 numeric measurements retain audit 65,617 storage / 65,584 work;
+diagnostic 126 and result 20; catalog diagnostics 9,792,
 protocol bytes/site 1,320, storage 1,695,808, work 102,656; combined receiving
 failure 3,848 (retained 3,672, largest 176, sum growth 680); physical growth probe
 mask 1,918; preparation diagnostics 44,608, identifier bytes 13, storage
 18,559,608, tokens 35, work 1,344,662,663; direct-open/finish runtime fuel 72 /
 storage 4,448; stopped-report audit storage 69,969 with 4,352 retained. These are
 reference Rust 1.80.0 x86_64 test-build evidence, not portable physical costs.
+
+Audit text output measured 6,193 bytes in the fresh M0 suite and 6,199 in the
+expanded Stage I suite. The unchanged renderer includes process-local catalog
+serials and packed operation identities in Debug text; extra preparations alter
+those identities and their decimal widths. A fixed cross-run text length is not
+a semantic invariant. The original tests still require exact sufficient and
+one-byte-short output allowances for each actual approved artifact, and the
+renderer, allowance rules and static authority are unchanged. No normalization,
+old-test relaxation or authorized-boundary migration is applied.
 
 ## Public API and changed-file accounting
 
