@@ -229,7 +229,7 @@ impl<'a> Machine<'a> {
     fn charge(&mut self) -> Result<(), ExecutionError> {
         let next = self
             .steps
-            .checked_add(1)
+            .checked_add(self.executable.approval.schema.fuel_unit())
             .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("steps")))?;
         if next > self.limits.steps {
             return Err(self.failure(ErrorKind::ConfiguredLimit("steps")));

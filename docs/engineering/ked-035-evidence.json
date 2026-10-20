@@ -1,5 +1,5 @@
 {
-  "stage": "M1",
+  "stage": "M2",
   "baseline_commit": "5f28977a42a7df1817e5cac46b3f6660a38435d3",
   "baseline_tree": "0b330328f3f213a26b6fc4af9f45ca06a98876b8",
   "m0_commit": "0443dfd32dec70e0c72f1a0a886b9eedc284fb9c",
@@ -1001,5 +1001,20 @@
     "M9": {
       "status": "pending"
     }
-  }
+  },
+  "additions": [
+    "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
+    "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
+    "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+    "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result"
+  ],
+  "fixture_adaptations": [
+    {
+      "paths": [
+        "compiler/execution/completion_authority_tests.rs",
+        "compiler/execution/trusted_authority_tests.rs"
+      ],
+      "reason": "Supply the original sealed schema in explicitly forged Approval literals; original malformed predicates unchanged."
+    }
+  ]
 }

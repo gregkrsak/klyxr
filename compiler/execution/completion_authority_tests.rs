@@ -133,6 +133,7 @@ fn completion_all_authority_copies_still_require_exact_mir_derivation() {
         .span
         .start += 1;
     let approved = Rc::new(Approval {
+        schema: e.approval.schema,
         outcomes: e.approval.outcomes.clone(),
         program: e.approval.program.clone(),
         cleanup_sites: e.approval.cleanup_sites.clone(),
@@ -208,6 +209,7 @@ fn m6_each_completion_event_identity_is_sealed_even_across_all_authority_copies(
             .unwrap();
         plan.events[index] = CompletionEvent::PROTOCOL[(index + 1) % 4];
         let approved = Rc::new(Approval {
+            schema: e.approval.schema,
             outcomes: e.approval.outcomes.clone(),
             program: e.approval.program.clone(),
             cleanup_sites: e.approval.cleanup_sites.clone(),
