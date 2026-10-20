@@ -93,6 +93,7 @@ pub(super) enum Record {
     Executing,
     Publication(usize, bool),
     Transit(usize, bool),
+    CleanupLeaf(u64, bool),
 }
 /// Fixed-shape relational rows. Positions are defined by the named row schema,
 /// not by a Rust struct layout, address or renderer representation.
@@ -577,6 +578,12 @@ impl Machine<'_> {
         // A deliberately wrong, but locally typed and conserving, engine
         // transfer. Actual payloads move; no token or Result is cloned.
         std::mem::swap(&mut left[a].1, &mut right[0].1);
+    }
+    pub(super) fn observe_cleanup_leaf(&self, value: &Value, finished: bool) {
+        let Value::Leaf { identity, .. } = value else { return; };
+        if let Some(capture) = self.observation.borrow_mut().as_mut() {
+            capture.push(Record::CleanupLeaf(*identity, finished));
+        }
     }
     pub(super) fn observe_transit(
         &self,

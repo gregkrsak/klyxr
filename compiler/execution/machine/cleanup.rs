@@ -719,11 +719,13 @@ impl<'a> Machine<'a> {
     fn release_leaf(&mut self, value: Value) -> Result<(), ExecutionError> {
         // Detachment does not evade accounting: the current cleanup payload stays
         // retained even when a terminal host outcome prevents completion.
+        self.observe_cleanup_leaf(&value, false);
         self.reserve(value.extra_storage())?;
         if self.resources.as_ref().unwrap().current.is_some() {
             return Err(self.integrity("cleanup cursor already occupied"));
         }
         self.resources.as_mut().unwrap().current = Some(value);
+        self.observe_cleanup_leaf(self.resources.as_ref().unwrap().current.as_ref().unwrap(), true);
         self.charge()?;
         let (resource, record, identity) =
             match self.resources.as_ref().unwrap().current.as_ref().unwrap() {

@@ -182,8 +182,9 @@ fn nested_results_branch_match_propagation_and_loop_controls_have_complete_evide
 
 #[test]
 fn private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence() {
-    use crate::effects::{Effect,EffectSet};
-    let mut io=EffectSet::EMPTY;io.insert(Effect::Io);
+    use crate::effects::{Effect, EffectSet};
+    let mut io = EffectSet::EMPTY;
+    io.insert(Effect::Io);
     for body in [
         "let first=acquire();let second=acquire();",
         "let mutable first=acquire();first=acquire();",

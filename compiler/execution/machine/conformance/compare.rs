@@ -294,6 +294,7 @@ struct Validator<'a, 'b> {
     action_callee: Option<FunctionId>,
     action_callsite: Option<Span>,
     leaf_birth: Option<u64>,
+    cleanup_leaf: Option<u64>,
     publication: Option<u64>,
     delivered_root: Option<u64>,
     transit: Option<u64>,
@@ -615,10 +616,12 @@ impl Validator<'_, '_> {
                             // pending birth; the observer creates no resource.
                             require(self.leaf_birth.is_none())?;
                             let mut permitted = false;
-                            for operation in &self.contract.executable.program.resources.operations {
+                            for operation in &self.contract.executable.program.resources.operations
+                            {
                                 self.work.spend()?;
                                 if Some(operation.function) == self.action_callee
-                                    && matches!(operation.kind, hir::resources::OperationKind::Acquire(resource) if resource.0 as u64 == d[0]) {
+                                    && matches!(operation.kind, hir::resources::OperationKind::Acquire(resource) if resource.0 as u64 == d[0])
+                                {
                                     permitted = true;
                                 }
                             }
@@ -1169,6 +1172,15 @@ impl Validator<'_, '_> {
             self.optional_value(false)?;
             self.end()?;
         }
+        for node in &mut self.scratch.nodes {
+            self.work.spend()?;
+            if node.key.0 == Kind::Invocation {
+                node.status = 0;
+                node.tag = 255;
+                node.statement = 0;
+            }
+            if node.key.0 == Kind::Sensor { node.statement = 0; }
+        }
         self.trusted_count = 0;
         while let Some(Record::TrustedEvent(event)) = self.peek() {
             self.take()?;
@@ -1183,28 +1195,44 @@ impl Validator<'_, '_> {
             self.trusted_count += 1;
             match event {
                 trusted::Event::Attempt(id, operation) => {
-                    let n = self.node(key(Kind::Invocation, id))?;
-                    require(n.a == operation.0 as u64)?;
-                    let at = self
-                        .scratch
-                        .find(n.key, self.work)?
-                        .ok_or(Incomplete::InvalidState)?;
-                    self.scratch.nodes[at].born = true;
+                    let at = self.scratch.find(key(Kind::Invocation, id), self.work)?.ok_or(Incomplete::InvalidState)?;
+                    let node = &mut self.scratch.nodes[at];
+                    require(node.a == operation.0 as u64 && node.status == 0)?;
+                    node.born = true;
+                    node.status = 1;
                 }
                 trusted::Event::Received(id, tag) => {
-                    require(tag <= 1)?;
-                    self.reference(key(Kind::Invocation, id))?;
+                    let at = self.scratch.find(key(Kind::Invocation, id), self.work)?.ok_or(Incomplete::InvalidState)?;
+                    let node = &mut self.scratch.nodes[at];
+                    require(tag <= 1 && node.status == 1)?;
+                    node.status = 2;
+                    node.tag = tag;
                 }
-                trusted::Event::Published(id, _) | trusted::Event::FinishProtected(id, _) => {
-                    self.reference(key(Kind::Invocation, id))?
+                trusted::Event::Published(id, tag) | trusted::Event::FinishProtected(id, tag) => {
+                    let at = self.scratch.find(key(Kind::Invocation, id), self.work)?.ok_or(Incomplete::InvalidState)?;
+                    let node = self.scratch.nodes[at];
+                    let completion = approved.invocations.get(node.b as usize).ok_or(Incomplete::InvalidState)?.completion.is_some();
+                    let protected = matches!(event, trusted::Event::FinishProtected(..));
+                    require(node.tag == u8::from(tag == hir::ResultTag::Error))?;
+                    require(if protected { completion && node.status == 2 } else if completion {node.status == 3} else {node.status == 2})?;
+                    self.scratch.nodes[at].status = if protected {3} else {4};
                 }
-                trusted::Event::FinishPrefix(id, _) => self.reference(key(Kind::Invocation, id))?,
+                trusted::Event::FinishPrefix(id, prefix) => {
+                    let at = self.scratch.find(key(Kind::Invocation, id), self.work)?.ok_or(Incomplete::InvalidState)?;
+                    let node = self.scratch.nodes[at];
+                    require(approved.invocations.get(node.b as usize).ok_or(Incomplete::InvalidState)?.completion.is_some() && node.status == 1 && node.statement == 0 && prefix == 1)?;
+                    self.scratch.nodes[at].statement = 1;
+                }
                 trusted::Event::ReleaseAttempt(id, operation) => {
                     require(operation == approved.catalog.resource.release)?;
-                    self.reference(key(Kind::Sensor, id))?;
+                    let at = self.scratch.find(key(Kind::Sensor, id), self.work)?.ok_or(Incomplete::InvalidState)?;
+                    require(self.scratch.nodes[at].statement == 0)?;
+                    self.scratch.nodes[at].statement = 1;
                 }
                 trusted::Event::ReleaseComplete(id) | trusted::Event::ReleaseFailure(id) => {
-                    self.reference(key(Kind::Sensor, id))?
+                    let at = self.scratch.find(key(Kind::Sensor, id), self.work)?.ok_or(Incomplete::InvalidState)?;
+                    require(self.scratch.nodes[at].statement == 1)?;
+                    self.scratch.nodes[at].statement = if matches!(event, trusted::Event::ReleaseComplete(_)) {2} else {3};
                 }
             }
         }
@@ -1793,6 +1821,8 @@ impl Validator<'_, '_> {
                         .invocations
                         .get(row.a as usize)
                         .ok_or(Incomplete::InvalidState)?;
+                    let invocation = self.node(row.parent.ok_or(Incomplete::InvalidState)?)?;
+                    require(invocation.status >= 2 && invocation.tag == row.status)?;
                     require(
                         row.b == cell.key.1
                             && row.born
@@ -1897,7 +1927,11 @@ impl Validator<'_, '_> {
                 if node.key.0 == Kind::Sensor {
                     require(owners == usize::from(node.status == 1))?;
                 } else if node.born {
-                    require(owners == usize::from(node.status != 2))?;
+                    if self.cleanup_leaf == Some(node.key.1) {
+                        require(node.status != 2 && owners <= 1)?;
+                    } else {
+                        require(owners == usize::from(node.status != 2))?;
+                    }
                 }
             }
         }
@@ -2116,6 +2150,7 @@ fn validate<'a>(
         action_callee: None,
         action_callsite: None,
         leaf_birth: None,
+        cleanup_leaf: None,
         publication: None,
         delivered_root: None,
         transit: None,
@@ -2168,6 +2203,18 @@ fn validate<'a>(
                         v.publication = Some(root);
                     }
                 }
+                Some(Record::CleanupLeaf(id, finished)) => {
+                    v.take()?;
+                    if finished {
+                        require(v.cleanup_leaf == Some(id))?;
+                        v.cleanup_leaf = None;
+                    } else {
+                        require(v.cleanup_leaf.is_none())?;
+                        let node = v.node(key(Kind::Leaf, id))?;
+                        require(node.born && node.status != 2)?;
+                        v.cleanup_leaf = Some(id);
+                    }
+                }
                 Some(Record::Transit(id, finished)) => {
                     v.take()?;
                     let root = id as u64;
@@ -2201,7 +2248,8 @@ fn validate<'a>(
                         && v.held == 0
                         && v.pending_states == 0
                         && v.publication.is_none()
-                        && v.transit.is_none(),
+                        && v.transit.is_none()
+                        && v.cleanup_leaf.is_none(),
                 )?;
                 for node in &v.scratch.nodes {
                     v.work.spend()?;
@@ -2559,6 +2607,9 @@ fn equal_record(a: Record, b: Record, s: &mut Scratch, w: &mut Work, stamp: usiz
         }
         (Record::TemporaryRetire(x), Record::TemporaryRetire(y)) => {
             s.pair(key(Kind::Temporary, x), key(Kind::Temporary, y), stamp, w)
+        }
+        (Record::CleanupLeaf(x, finished), Record::CleanupLeaf(y, other)) => {
+            Ok(finished == other && s.pair(key(Kind::Leaf, x), key(Kind::Leaf, y), stamp, w)?)
         }
         (Record::ResourceEvent(kind, x), Record::ResourceEvent(other, y)) => {
             if kind != other {
