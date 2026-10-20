@@ -86,6 +86,8 @@ pub(super) enum Record {
     OriginKind(OriginKind),
     Inventory(usize, usize, usize, usize, u8),
     Executing,
+    Publication(usize, bool),
+    Transit(usize, bool),
 }
 /// Fixed-shape relational rows. Positions are defined by the named row schema,
 /// not by a Rust struct layout, address or renderer representation.
@@ -182,9 +184,7 @@ impl Capture {
             || bytes.map_or(true, |n| n > limits.storage)
         {
             capture.incomplete = Some(Incomplete::Admission);
-        } else if capture.records.try_reserve_exact(limits.records).is_err() {
-            capture.incomplete = Some(Incomplete::Allocation);
-        } else if capture
+        } else if capture.records.try_reserve_exact(limits.records).is_err() || capture
             .expressions
             .try_reserve_exact(contract.expressions().len())
             .is_err()
@@ -536,6 +536,23 @@ impl Capture {
 }
 
 impl Machine<'_> {
+    pub(super) fn observe_transit(&self, id:results::OwnerId, finished:bool, destination:Option<Destination>) {
+        if let Some(c)=self.observation.borrow_mut().as_mut() {
+            c.push(Record::Transit(id.0,finished));
+            if !finished {
+                c.push(match destination {
+                    None=>Record::Operand,
+                    Some(Destination::Slot(at))=>Record::Destination(at.frame,at.place,None),
+                    Some(Destination::Field(at,record,field))=>Record::Destination(at.frame,at.place,Some((record,field))),
+                });
+            }
+        }
+    }
+    pub(super) fn observe_publication(&self, root: results::OwnerId, delivered: bool) {
+        if let Some(c)=self.observation.borrow_mut().as_mut() {
+            c.push(Record::Publication(root.0,delivered));
+        }
+    }
     pub(super) fn observe_action(&self, task: &Task<'_>) {
         if let Some(c) = self.observation.borrow_mut().as_mut() {
             c.push(Record::Executing);

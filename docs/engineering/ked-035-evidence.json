@@ -1018,7 +1018,9 @@
     "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
     "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
     "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
-    "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal"
+    "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
+    "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
+    "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary"
   ],
   "fixture_adaptations": [
     {
@@ -1050,5 +1052,13 @@
       39485849541
     ],
     "status": "all eight workflows successful; schedule consumption expanded in M4 candidate"
+  },
+  "m5_candidate_evidence": {
+    "commit": "6f2c8a2e915db0b6f9bb40802cc50a54c81ab2ce",
+    "tests": [
+      39494246109,
+      39494235801
+    ],
+    "result": "all 2045 exact predecessors plus 16 additions passed in debug/release; formatting then two Clippy corrections; not M5 checkpoint"
   }
 }
