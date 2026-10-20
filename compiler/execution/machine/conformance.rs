@@ -196,18 +196,16 @@ impl Capture {
                 .is_err()
         {
             capture.incomplete = Some(Incomplete::Allocation);
+        } else if contract.expressions().len() > limits.work {
+            capture.incomplete = Some(Incomplete::Work);
         } else {
-            if contract.expressions().len() > limits.work {
-                capture.incomplete = Some(Incomplete::Work);
-            } else {
-                capture.work = contract.expressions().len();
-                capture.expressions.extend(
-                    contract
-                        .expressions()
-                        .iter()
-                        .map(|(value, ordinal)| (*value as *const TypedExpr as usize, *ordinal)),
-                );
-            }
+            capture.work = contract.expressions().len();
+            capture.expressions.extend(
+                contract
+                    .expressions()
+                    .iter()
+                    .map(|(value, ordinal)| (*value as *const TypedExpr as usize, *ordinal)),
+            );
         }
         capture
     }

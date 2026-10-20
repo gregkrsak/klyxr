@@ -26,10 +26,13 @@ impl Default for ComparisonLimits {
     }
 }
 type Valid<T = ()> = Result<T, Incomplete>;
+#[cfg_attr(test, track_caller)]
 fn require(condition: bool) -> Valid {
     if condition {
         Ok(())
     } else {
+        #[cfg(test)]
+        eprintln!("invalid observation at {}", std::panic::Location::caller());
         Err(Incomplete::InvalidState)
     }
 }
@@ -290,6 +293,7 @@ struct Validator<'a, 'b> {
     action_plan: Option<usize>,
     action_callee: Option<FunctionId>,
     action_callsite: Option<Span>,
+    leaf_birth: Option<u64>,
     publication: Option<u64>,
     delivered_root: Option<u64>,
     transit: Option<u64>,
@@ -603,7 +607,27 @@ impl Validator<'_, '_> {
                             .ok_or(Incomplete::InvalidState)?;
                         require(leaf.record.0 as u64 == d[1])?;
                         info.ty = Some(ValueType::Record(leaf.record));
-                        info.handle = Some(key(Kind::Leaf, d[2]));
+                        let identity = key(Kind::Leaf, d[2]);
+                        if self.scratch.find(identity, self.work)?.is_none() {
+                            // The actual leaf can reach its value destination
+                            // before its acquisition audit row is committed.
+                            // Only the sealed private primitive licenses this
+                            // pending birth; the observer creates no resource.
+                            require(self.leaf_birth.is_none())?;
+                            let mut permitted = false;
+                            for operation in &self.contract.executable.program.resources.operations {
+                                self.work.spend()?;
+                                if Some(operation.function) == self.action_callee
+                                    && matches!(operation.kind, hir::resources::OperationKind::Acquire(resource) if resource.0 as u64 == d[0]) {
+                                    permitted = true;
+                                }
+                            }
+                            require(permitted)?;
+                            let at = self.declaration(identity, 0, 0, None, None, false)?;
+                            self.scratch.nodes[at].born = true;
+                            self.leaf_birth = Some(d[2]);
+                        }
+                        info.handle = Some(identity);
                     }
                     _ => return Err(Incomplete::InvalidState),
                 }
@@ -722,6 +746,7 @@ impl Validator<'_, '_> {
             } else {
                 None
             };
+            self.leaf_birth = None;
             self.action_callee = None;
             self.action_callsite = None;
         }
@@ -2090,6 +2115,7 @@ fn validate<'a>(
         action_plan: None,
         action_callee: None,
         action_callsite: None,
+        leaf_birth: None,
         publication: None,
         delivered_root: None,
         transit: None,
