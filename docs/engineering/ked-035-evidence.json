@@ -1,0 +1,1005 @@
+{
+  "stage": "M1",
+  "baseline_commit": "5f28977a42a7df1817e5cac46b3f6660a38435d3",
+  "baseline_tree": "0b330328f3f213a26b6fc4af9f45ca06a98876b8",
+  "m0_commit": "0443dfd32dec70e0c72f1a0a886b9eedc284fb9c",
+  "m0_runs": {
+    "push": {
+      "build": 39484059767,
+      "tests": 39484059447,
+      "verify": 39484059574,
+      "docs": 39484059753
+    },
+    "pull_request": {
+      "build": 39484065559,
+      "tests": 39484065442,
+      "verify": 39484065552,
+      "docs": 39484065607
+    }
+  },
+  "evidence_kind": "static inventory; no KED-035 executable claim",
+  "runtime_encoding": false,
+  "baseline_accounting_occurrences": [
+    {
+      "path": "compiler/execution/machine/cleanup/replacement.rs",
+      "line": 41,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup/replacement.rs",
+      "line": 109,
+      "text": "self.reserve(size_of::<Prepared>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup/replacement.rs",
+      "line": 245,
+      "text": "self.reserve(size_of::<Generation>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup/replacement.rs",
+      "line": 310,
+      "text": "self.reserve(0)?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 211,
+      "text": "let mut n = size_of::<Self>()"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 212,
+      "text": ".checked_add(self.events.capacity().checked_mul(size_of::<Event>())?)?"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 216,
+      "text": ".checked_mul(size_of::<ResourceFrame>())?,"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 219,
+      "text": ".checked_add(self.pending.capacity().checked_mul(size_of::<Pending>())?)?"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 220,
+      "text": ".checked_add(self.work.capacity().checked_mul(size_of::<Value>())?)?"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 224,
+      "text": ".checked_mul(size_of::<replacement::Prepared>())?,"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 233,
+      "text": ".checked_mul(size_of::<(hir::FieldId, Value)>())?,"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 243,
+      "text": "n = n.checked_add(f.scopes.capacity().checked_mul(size_of::<Activation>())?)?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 247,
+      "text": ".checked_mul(size_of::<(hir::LocalId, u64)>())?,"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 253,
+      "text": ".checked_mul(size_of::<Generation>())?,"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 276,
+      "text": ".map_or(size_of::<State>() + size_of::<Value>(), |s| {"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 277,
+      "text": "usize::from(s.work.len() == s.work.capacity()) * size_of::<Value>()"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 287,
+      "text": "self.reserve(size_of::<Value>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 302,
+      "text": "self.reserve(size_of::<State>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 321,
+      "text": "self.reserve(size_of::<Event>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 344,
+      "text": "self.reserve(size_of::<ResourceFrame>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 383,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 398,
+      "text": "self.reserve(size_of::<Activation>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 502,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 503,
+      "text": "self.reserve("
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 504,
+      "text": "(if grow { size_of::<Generation>() } else { 0 })"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 506,
+      "text": "size_of::<(hir::LocalId, u64)>()"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 556,
+      "text": "self.reserve(value.extra_storage())?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 561,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 595,
+      "text": "self.reserve("
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 597,
+      "text": ".checked_mul(size_of::<Event>())"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 626,
+      "text": "self.reserve(if grow { size_of::<Value>() } else { 0 })?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 645,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 665,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 693,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 737,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 770,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 791,
+      "text": "self.reserve(0)?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 826,
+      "text": "self.reserve(if grow { size_of::<Value>() } else { 0 })?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 834,
+      "text": "self.reserve(0)?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 856,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 860,
+      "text": "self.reserve(size_of::<Pending>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 900,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 973,
+      "text": "self.reserve(if grow { size_of::<Value>() } else { 0 })?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 981,
+      "text": "self.reserve(0)?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 992,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 1018,
+      "text": "self.reserve(if grow {"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 1019,
+      "text": "size_of::<(hir::FieldId, Value)>()"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 1073,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 1184,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 1199,
+      "text": "self.reserve("
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 1200,
+      "text": "(if value_grow { size_of::<Value>() } else { 0 })"
+    },
+    {
+      "path": "compiler/execution/machine/cleanup.rs",
+      "line": 1201,
+      "text": "+ (if event_grow { size_of::<Event>() } else { 0 }),"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 84,
+      "text": "let base = size_of::<Self>()"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 85,
+      "text": ".checked_add(self.cells.capacity().checked_mul(size_of::<Cell>())?)?"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 89,
+      "text": ".checked_mul(size_of::<(u64, OwnerId)>())?,"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 94,
+      "text": ".checked_mul(size_of::<InertRecord>())?,"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 107,
+      "text": ".map_or(size_of::<State>() + size_of::<Cell>(), |s| {"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 108,
+      "text": "usize::from(s.cells.len() == s.cells.capacity()) * size_of::<Cell>()"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 122,
+      "text": "self.reserve(size_of::<Cell>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 243,
+      "text": "self.reserve("
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 245,
+      "text": ".checked_mul(size_of::<ResultLayer>())"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 262,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 322,
+      "text": "self.reserve(size_of::<Value>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 334,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 361,
+      "text": "self.reserve(size_of::<InertRecord>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 395,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 482,
+      "text": "self.reserve(size_of::<State>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 516,
+      "text": "self.reserve(size_of::<Cell>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 623,
+      "text": "self.charge()?; // Complete constructor publication, before detachment."
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 680,
+      "text": "self.charge()?; // Validated tag dispatch; neither body has executed."
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 697,
+      "text": "self.reserve(size_of::<(u64, OwnerId)>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 762,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 763,
+      "text": "self.reserve("
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 764,
+      "text": "(if cell_grow { size_of::<Cell>() } else { 0 })"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 765,
+      "text": "+ (if value_grow { size_of::<Value>() } else { 0 }),"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 784,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 878,
+      "text": "self.charge()?; // Active payload transfer."
+    },
+    {
+      "path": "compiler/execution/machine/results.rs",
+      "line": 892,
+      "text": "self.charge()?; // Arm entry; a stop retains the initialized binding."
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 77,
+      "text": "let mut n = size_of::<Self>()"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 81,
+      "text": ".checked_mul(size_of::<Activation>())?,"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 83,
+      "text": ".checked_add(self.events.capacity().checked_mul(size_of::<Event>())?)?;"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 85,
+      "text": "n = n.checked_add(f.owners.capacity().checked_mul(size_of::<Owner>())?)?;"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 150,
+      "text": "usize::from(frame.owners.len() == frame.owners.capacity()) * size_of::<Owner>();"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 156,
+      "text": ".checked_mul(size_of::<Event>())"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 209,
+      "text": "self.reserve("
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 211,
+      "text": ".checked_mul(size_of::<Event>())"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 284,
+      "text": "self.reserve(size_of::<Event>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 308,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 338,
+      "text": "self.reserve("
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 339,
+      "text": "size_of::<State>()"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 340,
+      "text": ".checked_add(size_of::<Activation>())"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 351,
+      "text": "self.reserve(size_of::<Activation>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 447,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 514,
+      "text": "size_of::<Owner>()"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 520,
+      "text": "size_of::<Event>()"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 524,
+      "text": "self.reserve("
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 530,
+      "text": "self.reserve(size_of::<Owner>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 553,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 692,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 717,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 765,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 773,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 815,
+      "text": "self.reserve(0)?;"
+    },
+    {
+      "path": "compiler/execution/machine/temporaries.rs",
+      "line": 817,
+      "text": "self.reserve(0)?;"
+    },
+    {
+      "path": "compiler/execution/machine/trusted/completion.rs",
+      "line": 78,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/trusted/completion.rs",
+      "line": 311,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/trusted/completion.rs",
+      "line": 351,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/trusted/completion.rs",
+      "line": 422,
+      "text": "usize::from(production == state.productions.capacity()) * size_of::<Production>();"
+    },
+    {
+      "path": "compiler/execution/machine/trusted/completion.rs",
+      "line": 424,
+      "text": "usize::from(self.values.len() == self.values.capacity()) * size_of::<Value>();"
+    },
+    {
+      "path": "compiler/execution/machine/trusted/completion.rs",
+      "line": 427,
+      "text": ".checked_mul(size_of::<Task<'_>>())"
+    },
+    {
+      "path": "compiler/execution/machine/trusted/completion.rs",
+      "line": 440,
+      "text": ".checked_mul(size_of::<Event>())"
+    },
+    {
+      "path": "compiler/execution/machine/trusted/completion.rs",
+      "line": 458,
+      "text": "events * size_of::<Event>(),"
+    },
+    {
+      "path": "compiler/execution/machine/trusted/completion.rs",
+      "line": 472,
+      "text": "self.reserve(total)?;"
+    },
+    {
+      "path": "compiler/execution/machine/trusted/completion.rs",
+      "line": 505,
+      "text": "self.reserve(0)?;"
+    },
+    {
+      "path": "compiler/execution/machine/trusted/completion_bound_tests.rs",
+      "line": 98,
+      "text": "let per_site = size_of::<crate::trusted::approval::CompletionPlan>() * 3"
+    },
+    {
+      "path": "compiler/execution/machine/trusted/completion_bound_tests.rs",
+      "line": 99,
+      "text": "+ size_of::<crate::trusted::approval::Invocation>();"
+    },
+    {
+      "path": "compiler/execution/machine/trusted/tests/failures.rs",
+      "line": 202,
+      "text": ">= size_of::<State>() + ExecutionLimits::default().trace_depth * size_of::<CallTrace>()"
+    },
+    {
+      "path": "compiler/execution/machine/trusted/tests/failures.rs",
+      "line": 407,
+      "text": "e.program.functions().len() + size_of::<crate::execution::render::Output>() + output.len();"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 127,
+      "text": "let mut n = size_of::<Self>()"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 128,
+      "text": ".checked_add(self.entries.capacity().checked_mul(size_of::<Entry>())?)?"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 132,
+      "text": ".checked_mul(size_of::<Production>())?,"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 134,
+      "text": ".checked_add(self.events.capacity().checked_mul(size_of::<Event>())?)?;"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 136,
+      "text": "Status::Stopped(e) => e.trace.capacity().checked_mul(size_of::<CallTrace>())?,"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 138,
+      "text": "v.capacity().checked_mul(size_of::<ResultLayer>())?"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 142,
+      "text": ".checked_mul(size_of::<(hir::FieldId, RangeValue)>())?,"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 146,
+      "text": "trace.capacity().checked_mul(size_of::<CallTrace>())"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 194,
+      "text": ".checked_mul(size_of::<CallTrace>())"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 213,
+      "text": "machine.reserve(0)?;"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 284,
+      "text": "self.reserve(size_of::<Value>())?;"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 304,
+      "text": ") * size_of::<Entry>();"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 307,
+      "text": "* size_of::<Production>();"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 311,
+      "text": ".and_then(|n| n.checked_add(events.checked_mul(size_of::<Event>())?))"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 313,
+      "text": "self.reserve(bytes)?;"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 399,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 408,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 463,
+      "text": "if size_of::<Payload>() > approved.catalog.resource.payload_bytes {"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 840,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 848,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 886,
+      "text": "self.reserve("
+    },
+    {
+      "path": "compiler/execution/machine/trusted.rs",
+      "line": 888,
+      "text": ".checked_mul(size_of::<Event>())"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 67,
+      "text": ".checked_mul(size_of::<(hir::FieldId, Value)>())"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 74,
+      "text": ".checked_mul(size_of::<(hir::FieldId, RangeValue)>())"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 244,
+      "text": ".checked_mul(size_of::<Frame>())?"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 245,
+      "text": ".checked_add(self.tasks.capacity().checked_mul(size_of::<Task<'_>>())?)?"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 246,
+      "text": ".checked_add(self.values.capacity().checked_mul(size_of::<Value>())?)?;"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 248,
+      "text": "n = n.checked_add(f.slots.capacity().checked_mul(size_of::<(Place, Slot)>())?)?;"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 291,
+      "text": "self.reserve(size_of::<Task<'_>>())?;"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 351,
+      "text": "self.reserve("
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 355,
+      "text": ".checked_add(if grow { size_of::<Value>() } else { 0 })"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 399,
+      "text": "self.reserve(payload)?;"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 403,
+      "text": "self.reserve("
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 405,
+      "text": ".checked_add(if grow { size_of::<(Place, Slot)>() } else { 0 })"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 536,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 578,
+      "text": ".checked_mul(size_of::<(Place, Slot)>())"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 581,
+      "text": "size_of::<Frame>()"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 587,
+      "text": "self.reserve(bytes)?;"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 675,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 831,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 901,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 1067,
+      "text": "self.charge()?;"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 1218,
+      "text": "self.reserve("
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 1221,
+      "text": ".checked_mul(size_of::<(hir::FieldId, RangeValue)>())"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 1515,
+      "text": "let header = size_of::<Value>();"
+    },
+    {
+      "path": "compiler/execution/machine.rs",
+      "line": 1569,
+      "text": "let header = size_of::<(Place, Slot)>();"
+    }
+  ],
+  "requirements": {
+    "4": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "5": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "6": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "7": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "8": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "9": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "10": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "11": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "12": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "13": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "14": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "15": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "16": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "17": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "18": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    }
+  },
+  "constraints": {
+    "K35-P01": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "K35-P02": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "K35-P03": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "K35-P04": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "K35-P05": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "K35-P06": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "K35-P07": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "K35-P08": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "K35-P09": {
+      "status": "pending",
+      "code": [],
+      "tests": []
+    },
+    "K35-P10": {
+      "status": "deferred Stage N",
+      "code": [],
+      "tests": []
+    }
+  },
+  "milestones": {
+    "M0": {
+      "status": "passed"
+    },
+    "M1": {
+      "status": "inventory"
+    },
+    "M2": {
+      "status": "pending"
+    },
+    "M3": {
+      "status": "pending"
+    },
+    "M4": {
+      "status": "pending"
+    },
+    "M5": {
+      "status": "pending"
+    },
+    "M6": {
+      "status": "pending"
+    },
+    "M7": {
+      "status": "pending"
+    },
+    "M8": {
+      "status": "pending"
+    },
+    "M9": {
+      "status": "pending"
+    }
+  }
+}
