@@ -1,5 +1,5 @@
 {
-  "stage": "M7-in-progress",
+  "stage": "M9 candidate; exact-head Actions gate and dual verified publication pending",
   "baseline_commit": "5f28977a42a7df1817e5cac46b3f6660a38435d3",
   "baseline_tree": "0b330328f3f213a26b6fc4af9f45ca06a98876b8",
   "m0_commit": "0443dfd32dec70e0c72f1a0a886b9eedc284fb9c",
@@ -843,7 +843,8 @@
   ],
   "requirements": {
     "4": {
-      "status": "M2-M5 evidence present; M6-M9 integration and final acceptance pending",
+      "description": "Complete approved authority borrowed without re-lowering; ordinary closure, schemas and exact seal",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
       "code": [
         "compiler/execution/contract.rs",
         "compiler/execution/mod.rs"
@@ -859,7 +860,8 @@
       ]
     },
     "5": {
-      "status": "M2-M5 evidence present; M6-M9 integration and final acceptance pending",
+      "description": "Complete actual non-owning views and validated anchored correspondence",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
       "code": [
         "compiler/execution/machine/conformance.rs",
         "compiler/execution/machine/conformance/compare.rs"
@@ -887,20 +889,54 @@
       ]
     },
     "6": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "description": "Common controlled input and exact logical observations, independent of raw identities",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "code": [
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/machine/conformance/replay.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption",
+        "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery",
+        "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release",
+        "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties",
+        "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed",
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal",
+        "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames",
+        "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop",
+        "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host",
+        "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error",
+        "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical",
+        "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication",
+        "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity",
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects"
+      ]
     },
     "7": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "description": "Reached modeled Host distinct from physical Host and evidence/substrate loss",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "code": [
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption",
+        "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host",
+        "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal"
+      ]
     },
     "8": {
-      "status": "M2-M5 evidence present; M6-M9 integration and final acceptance pending",
+      "description": "Sealed logical schedule; preparation/runtime/observation/audit/presentation accounts remain separate",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
       "code": [
         "compiler/execution/contract.rs",
-        "compiler/execution/machine.rs"
+        "compiler/execution/machine.rs",
+        "compiler/execution/machine/conformance/authority.rs"
       ],
       "tests": [
         "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
@@ -913,19 +949,21 @@
         "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
         "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
         "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
-        "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution"
+        "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution",
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution"
       ]
     },
     "9": {
-      "status": "M2-M5 evidence present; M6-M9 integration and final acceptance pending",
+      "description": "Persistent custody, protected publication, irreversible prefixes and terminal idempotence",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
       "code": [
-        "compiler/execution/machine/conformance.rs"
+        "compiler/execution/machine/conformance.rs",
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/machine/conformance/replay.rs"
       ],
       "tests": [
-        "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
-        "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
-        "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
-        "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution",
         "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
         "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
         "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
@@ -940,41 +978,109 @@
         "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
         "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
         "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify",
+        "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption",
+        "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery",
+        "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release",
+        "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties",
+        "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed",
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal",
+        "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames",
+        "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop",
+        "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host",
+        "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error",
+        "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical",
+        "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication",
+        "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity",
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects"
       ]
     },
     "10": {
-      "status": "M2-M5 evidence present; M6-M9 integration and final acceptance pending",
+      "description": "Existing selected catalog and ordinary execution; replay cannot add operation, grant or resource",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
       "code": [
-        "compiler/execution/contract.rs"
+        "compiler/execution/contract.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/authority.rs",
+        "compiler/execution/machine/trusted.rs"
       ],
       "tests": [
-        "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
-        "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel",
-        "lib.rs::execution::contract::tests::logical_fuel_neighbors_and_extraction_storage_are_separate",
-        "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
-        "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
-        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
-        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result"
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution"
       ]
     },
     "11": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "description": "Logical shadow permits different identities and physical preallocation; no optimizer selected",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "code": [
+        "compiler/execution/contract.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets"
+      ]
     },
     "12": {
-      "status": "pending",
+      "description": "Native artifact production/installation and runtime/target identity",
+      "status": "deferred Stage N; no native evidence claimed",
       "code": [],
       "tests": []
     },
     "13": {
-      "status": "M2-M5 evidence present; M6-M9 integration and final acceptance pending",
+      "description": "Independent literal whole-trace/custody oracles and actual wrong-engine controls",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
       "code": [
-        "compiler/execution/machine/conformance/compare/oracle_tests.rs",
-        "scripts/verify-ked035-tests.py"
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/machine/conformance/compare/oracle_tests.rs"
       ],
       "tests": [
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
+        "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value"
+      ]
+    },
+    "14": {
+      "description": "Structured static authority distinct from runtime events and bounded text presentation",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "code": [
+        "compiler/execution/machine/conformance/authority.rs",
+        "compiler/execution/machine/conformance.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution"
+      ]
+    },
+    "15": {
+      "description": "Thirty numbered obligations mapped separately; native obligations deferred",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "code": [
+        "scripts/verify-ked035-tests.py",
+        "scripts/verify-ked035-contract.py"
+      ],
+      "tests": [
+        "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
+        "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel",
+        "lib.rs::execution::contract::tests::logical_fuel_neighbors_and_extraction_storage_are_separate",
+        "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
+        "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result",
+        "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
+        "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
+        "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
+        "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution",
         "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
         "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
         "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
@@ -989,24 +1095,39 @@
         "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
         "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
         "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify",
+        "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption",
+        "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery",
+        "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release",
+        "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties",
+        "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed",
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal",
+        "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames",
+        "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop",
+        "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host",
+        "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error",
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution",
+        "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical",
+        "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication",
+        "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity",
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects"
       ]
     },
-    "14": {
-      "status": "pending",
-      "code": [],
-      "tests": []
-    },
-    "15": {
-      "status": "pending",
-      "code": [],
-      "tests": []
-    },
     "16": {
-      "status": "M2-M5 evidence present; M6-M9 integration and final acceptance pending",
+      "description": "Real consumed Stage I mechanisms; no public engine/input/profile enlargement",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
       "code": [
-        "compiler/execution/mod.rs",
-        "compiler/execution/contract.rs"
+        "compiler/execution/contract.rs",
+        "compiler/execution/machine/conformance.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/authority.rs"
       ],
       "tests": [
         "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
@@ -1015,26 +1136,94 @@
         "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
         "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
         "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
-        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result"
+        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result",
+        "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
+        "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
+        "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
+        "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution",
+        "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
+        "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
+        "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
+        "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
+        "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify",
+        "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption",
+        "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery",
+        "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release",
+        "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties",
+        "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed",
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal",
+        "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames",
+        "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop",
+        "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host",
+        "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error",
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution",
+        "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical",
+        "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication",
+        "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity",
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects"
       ]
     },
     "17": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "description": "Independent malformed authority, states, correspondence, accounting, origins and replay",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "code": [
+        "compiler/execution/contract.rs",
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/authority.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects",
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution"
+      ]
     },
     "18": {
-      "status": "pending",
-      "code": [],
-      "tests": []
+      "description": "Non-goals and preserved public/proof boundaries",
+      "status": "preserved; no native, new proof, FFI, retry, unwind or performance claim",
+      "code": [
+        "compiler/execution/mod.rs",
+        "compiler/verify/mod.rs",
+        "scripts/verify-ked035-tests.py"
+      ],
+      "tests": [
+        "lib.rs::execution::tests::mixed_verified_ids_and_failing_proof_are_isolated",
+        "lib.rs::trusted::tests::trusted_calls_remain_excluded_from_verified_contracts_and_harness_authority"
+      ]
     }
   },
   "constraints": {
     "K35-P01": {
-      "status": "M2-M5 evidence present; remaining Stage I obligations pending",
+      "description": "Complete approved authority borrowed without re-lowering; ordinary closure, schemas and exact seal; Existing selected catalog and ordinary execution; replay cannot add operation, grant or resource",
+      "status": "implemented; acceptance pending",
       "code": [
         "compiler/execution/contract.rs",
-        "compiler/execution/mod.rs"
+        "compiler/execution/mod.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/authority.rs",
+        "compiler/execution/machine/trusted.rs"
       ],
       "tests": [
         "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
@@ -1043,14 +1232,20 @@
         "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
         "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
         "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
-        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result"
+        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result",
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution"
       ]
     },
     "K35-P02": {
-      "status": "M2-M5 evidence present; remaining Stage I obligations pending",
+      "description": "Sealed logical schedule; preparation/runtime/observation/audit/presentation accounts remain separate",
+      "status": "implemented; acceptance pending",
       "code": [
         "compiler/execution/contract.rs",
-        "compiler/execution/machine.rs"
+        "compiler/execution/machine.rs",
+        "compiler/execution/machine/conformance/authority.rs"
       ],
       "tests": [
         "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
@@ -1059,13 +1254,23 @@
         "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
         "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
         "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
-        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result"
+        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result",
+        "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
+        "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
+        "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
+        "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution",
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution"
       ]
     },
     "K35-P03": {
-      "status": "M2-M5 evidence present; remaining Stage I obligations pending",
+      "description": "Complete actual non-owning views and validated anchored correspondence; Persistent custody, protected publication, irreversible prefixes and terminal idempotence",
+      "status": "implemented; acceptance pending",
       "code": [
-        "compiler/execution/machine/conformance.rs"
+        "compiler/execution/machine/conformance.rs",
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/machine/conformance/replay.rs"
       ],
       "tests": [
         "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
@@ -1086,69 +1291,37 @@
         "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
         "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
         "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify",
+        "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption",
+        "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery",
+        "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release",
+        "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties",
+        "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed",
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal",
+        "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames",
+        "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop",
+        "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host",
+        "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error",
+        "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical",
+        "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication",
+        "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity",
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects"
       ]
     },
     "K35-P04": {
-      "status": "M2-M5 evidence present; remaining Stage I obligations pending",
+      "description": "Complete actual non-owning views and validated anchored correspondence; Independent malformed authority, states, correspondence, accounting, origins and replay",
+      "status": "implemented; acceptance pending",
       "code": [
-        "compiler/execution/machine/conformance/compare.rs"
-      ],
-      "tests": [
-        "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
-        "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
-        "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
-        "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
-        "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
-        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
-        "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
-      ]
-    },
-    "K35-P05": {
-      "status": "pending",
-      "code": [],
-      "tests": []
-    },
-    "K35-P06": {
-      "status": "pending",
-      "code": [],
-      "tests": []
-    },
-    "K35-P07": {
-      "status": "M2-M5 evidence present; remaining Stage I obligations pending",
-      "code": [
-        "compiler/execution/machine/conformance/compare/oracle_tests.rs"
-      ],
-      "tests": [
-        "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
-        "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
-        "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
-        "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
-        "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
-        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
-        "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
-      ]
-    },
-    "K35-P08": {
-      "status": "M2-M5 evidence present; remaining Stage I obligations pending",
-      "code": [
-        "compiler/execution/machine/conformance.rs"
+        "compiler/execution/machine/conformance.rs",
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/contract.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/authority.rs"
       ],
       "tests": [
         "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
@@ -1169,16 +1342,60 @@
         "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
         "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
         "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify",
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects",
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution"
       ]
     },
-    "K35-P09": {
-      "status": "M2-M5 evidence present; remaining Stage I obligations pending",
+    "K35-P05": {
+      "description": "Common controlled input and exact logical observations, independent of raw identities; Logical shadow permits different identities and physical preallocation; no optimizer selected",
+      "status": "implemented; acceptance pending",
       "code": [
-        "compiler/execution/contract.rs",
-        "compiler/execution/machine/conformance/compare.rs"
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/contract.rs"
       ],
       "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption",
+        "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery",
+        "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release",
+        "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties",
+        "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed",
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal",
+        "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames",
+        "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop",
+        "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host",
+        "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error",
+        "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical",
+        "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication",
+        "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity",
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets"
+      ]
+    },
+    "K35-P06": {
+      "description": "Reached modeled Host distinct from physical Host and evidence/substrate loss; Persistent custody, protected publication, irreversible prefixes and terminal idempotence",
+      "status": "implemented; acceptance pending",
+      "code": [
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/machine/conformance.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption",
+        "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host",
+        "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal",
         "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
         "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
         "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
@@ -1193,10 +1410,162 @@
         "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
         "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
         "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
-        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify",
+        "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery",
+        "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release",
+        "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties",
+        "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed",
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames",
+        "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop",
+        "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host",
+        "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error",
+        "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication",
+        "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity",
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects"
+      ]
+    },
+    "K35-P07": {
+      "description": "Independent literal whole-trace/custody oracles and actual wrong-engine controls; Thirty numbered obligations mapped separately; native obligations deferred",
+      "status": "implemented; acceptance pending",
+      "code": [
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/machine/conformance/compare/oracle_tests.rs",
+        "scripts/verify-ked035-tests.py",
+        "scripts/verify-ked035-contract.py"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
+        "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
+        "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
+        "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel",
+        "lib.rs::execution::contract::tests::logical_fuel_neighbors_and_extraction_storage_are_separate",
+        "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
+        "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result",
+        "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
+        "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
+        "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
+        "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution",
+        "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
+        "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
+        "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
+        "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
+        "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify",
+        "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption",
+        "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery",
+        "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release",
+        "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties",
+        "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed",
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal",
+        "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames",
+        "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop",
+        "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host",
+        "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error",
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution",
+        "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication",
+        "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity",
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects"
+      ]
+    },
+    "K35-P08": {
+      "description": "Existing selected catalog and ordinary execution; replay cannot add operation, grant or resource; Structured static authority distinct from runtime events and bounded text presentation; Real consumed Stage I mechanisms; no public engine/input/profile enlargement",
+      "status": "implemented; acceptance pending",
+      "code": [
+        "compiler/execution/contract.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/authority.rs",
+        "compiler/execution/machine/trusted.rs",
+        "compiler/execution/machine/conformance.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution",
+        "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
+        "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel",
+        "lib.rs::execution::contract::tests::logical_fuel_neighbors_and_extraction_storage_are_separate",
+        "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
+        "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result",
+        "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
+        "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
+        "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
+        "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution",
+        "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
+        "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
+        "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
+        "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
+        "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify",
+        "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption",
+        "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery",
+        "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release",
+        "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties",
+        "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed",
+        "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal",
+        "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames",
+        "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop",
+        "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host",
+        "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error",
+        "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical",
+        "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication",
+        "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity",
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects"
+      ]
+    },
+    "K35-P09": {
+      "description": "Logical shadow permits different identities and physical preallocation; no optimizer selected",
+      "status": "binding optimization preservation; finite interpreter/analytic evidence, native proof deferred",
+      "code": [
+        "compiler/execution/contract.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_tickets"
       ]
     },
     "K35-P10": {
+      "description": "Native artifact production/installation and runtime/target identity",
       "status": "deferred Stage N",
       "code": [],
       "tests": []
@@ -1207,7 +1576,7 @@
       "status": "passed"
     },
     "M1": {
-      "status": "inventory"
+      "status": "inventory published"
     },
     "M2": {
       "status": "implemented; full gates recorded, acceptance pending"
@@ -1225,13 +1594,13 @@
       "status": "implemented; full exact-head gate passed at 79c5166 before M7"
     },
     "M7": {
-      "status": "in progress: structured static authority, presentation separation and full interpreter-contract integration"
+      "status": "implemented; all eight exact-head workflow jobs and steps passed at 20d23dc"
     },
     "M8": {
-      "status": "pending"
+      "status": "implemented; complete matrix, canonical/generated docs and static verifiers; final M9 Actions gate pending"
     },
     "M9": {
-      "status": "pending"
+      "status": "exact-head gate and dual verified publication pending; acceptance excluded"
     }
   },
   "additions": [
@@ -1430,6 +1799,943 @@
     "per_profile": 2082,
     "predecessors": 2045,
     "additions": 37,
+    "all_jobs_steps_success": true
+  },
+  "semantic_obligations": {
+    "15.01": {
+      "description": "exact approval consumed",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/contract.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
+        "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel"
+      ]
+    },
+    "15.02": {
+      "description": "similar source or altered bound contract rejects",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/contract.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject"
+      ]
+    },
+    "15.03": {
+      "description": "straight-line nominal values",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication"
+      ]
+    },
+    "15.04": {
+      "description": "branches loops calls returns recursion/depth",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
+        "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity"
+      ]
+    },
+    "15.05": {
+      "description": "written argument and record initializer order",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::tests::arguments_evaluate_in_written_order_with_repeated_mutation",
+        "lib.rs::execution::tests::record_initializers_execute_written_order_and_render_declaration_order"
+      ]
+    },
+    "15.06": {
+      "description": "short circuit skips effects charges and replay",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence"
+      ]
+    },
+    "15.07": {
+      "description": "checked subtraction range and wide endpoints",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::tests::subtraction_preserves_both_wide_signed_extremes",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication"
+      ]
+    },
+    "15.08": {
+      "description": "Copy Move aliases transfers and moved sources",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value"
+      ]
+    },
+    "15.09": {
+      "description": "mutation prefix survives terminal trap",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication",
+        "lib.rs::execution::machine::cleanup::replacement::conformance_tests::rhs_prefix_mutation_survives_trap_without_displacement_or_publication"
+      ]
+    },
+    "15.10": {
+      "description": "temporary Result match propagation protected return",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::compare::identity_tests::nested_results_branch_match_propagation_and_loop_controls_have_complete_evidence",
+        "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery"
+      ]
+    },
+    "15.11": {
+      "description": "cleanup every structured exit",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/cleanup.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
+        "lib.rs::execution::machine::cleanup::replacement::conformance_tests::fallthrough_break_continue_and_bare_return_clean_only_final_generation"
+      ]
+    },
+    "15.12": {
+      "description": "excluded terminal stop does not clean or resume",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication"
+      ]
+    },
+    "15.13": {
+      "description": "replacement generation and evaluation ordering",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/machine/cleanup/replacement.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::compare::identity_tests::private_resource_protocol_cleanup_and_replacement_are_separate_positive_evidence",
+        "lib.rs::execution::machine::cleanup::replacement::conformance_tests::value_return_moves_new_generation_before_cleaning_remainder"
+      ]
+    },
+    "15.14": {
+      "description": "acquisition retains no-gap custody",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate"
+      ]
+    },
+    "15.15": {
+      "description": "read success/failure preserves resource owner",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/machine/trusted.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical",
+        "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release"
+      ]
+    },
+    "15.16": {
+      "description": "finish success/failure release before delivery",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release",
+        "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery"
+      ]
+    },
+    "15.17": {
+      "description": "finish release failure retains non-delivery and prefix",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error",
+        "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties"
+      ]
+    },
+    "15.18": {
+      "description": "logical fuel storage depth exact cuts and custody",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/contract.rs",
+        "compiler/execution/machine/conformance.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate",
+        "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity"
+      ]
+    },
+    "15.19": {
+      "description": "modeled Host at every admitted address family",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop",
+        "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery",
+        "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties"
+      ]
+    },
+    "15.20": {
+      "description": "terminal repeat never resumes or duplicates events",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
+        "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only"
+      ]
+    },
+    "15.21": {
+      "description": "exact binding grants effects cleanup rooted audit; replay not authority",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance/authority.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/contract.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution",
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry"
+      ]
+    },
+    "15.22": {
+      "description": "independent malformed contract observation identity accounting replay",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/contract.rs",
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/authority.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects",
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection",
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution"
+      ]
+    },
+    "15.23": {
+      "description": "native identity mismatch rejects before execution",
+      "status": "deferred Stage N",
+      "code": [],
+      "tests": []
+    },
+    "15.24": {
+      "description": "actual optimized and unoptimized native equivalence",
+      "status": "deferred Stage N",
+      "code": [],
+      "tests": []
+    },
+    "15.25": {
+      "description": "independently derived decisive expected observations",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance/compare/oracle_tests.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
+        "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::conserving_wrong_parameter_association_is_different_despite_the_same_value",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix"
+      ]
+    },
+    "15.26": {
+      "description": "addressed typed controlled replay with complete comparison",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption",
+        "lib.rs::execution::machine::conformance::replay_tests::addressed_completion_phases_preserve_manual_prefix_custody_and_non_delivery",
+        "lib.rs::execution::machine::conformance::replay_tests::strict_typed_replay_commits_partial_error_then_exact_fixed_release",
+        "lib.rs::execution::machine::conformance::replay_tests::release_attempt_and_completed_release_hosts_have_opposite_live_duties",
+        "lib.rs::execution::machine::conformance::replay_tests::earlier_fuel_leaves_future_replay_and_host_items_unconsumed",
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal",
+        "lib.rs::execution::machine::conformance::replay_tests::logical_ancestry_counts_loop_calls_and_skips_short_circuit_without_raw_frames",
+        "lib.rs::execution::machine::conformance::replay_tests::every_reached_positive_capacity_cut_of_the_finite_sample_preserves_a_matched_stop",
+        "lib.rs::execution::machine::conformance::replay_tests::analytic_preallocation_does_not_erase_logical_reservation_addresses_or_host",
+        "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error",
+        "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical",
+        "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication",
+        "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity",
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+        "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate",
+        "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects"
+      ]
+    },
+    "15.27": {
+      "description": "modeled physical and substrate-loss classification",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption",
+        "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host",
+        "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal"
+      ]
+    },
+    "15.28": {
+      "description": "exact neighbors in named preparation runtime evidence audit reporting domains",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/execution/contract.rs",
+        "compiler/execution/machine/conformance.rs",
+        "compiler/execution/machine/conformance/authority.rs",
+        "scripts/verify-ked034-budgets.py"
+      ],
+      "tests": [
+        "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
+        "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel",
+        "lib.rs::execution::contract::tests::logical_fuel_neighbors_and_extraction_storage_are_separate",
+        "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
+        "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result",
+        "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
+        "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
+        "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
+        "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution",
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution",
+        "lib.rs::execution::machine::conformance::compare::oracle_tests::independent_exact_observation_records_and_storage_neighbors_preserve_primary"
+      ]
+    },
+    "15.29": {
+      "description": "exact predecessor identity and budget reconciliation without migrations",
+      "status": "script reconciliation: all 2045 exact identities, authority doctest and 1800 affine cases; zero migrations",
+      "code": [
+        "scripts/verify-ked035-tests.py",
+        "scripts/verify-ked034-budgets.py"
+      ],
+      "tests": []
+    },
+    "15.30": {
+      "description": "verified/harness remain excluded; no new proof claim",
+      "status": "finite Stage I evidence; not universal or native equivalence proof",
+      "code": [
+        "compiler/verify/mod.rs",
+        "scripts/verify-ked035-tests.py"
+      ],
+      "tests": [
+        "lib.rs::execution::tests::mixed_verified_ids_and_failing_proof_are_isolated",
+        "lib.rs::trusted::tests::trusted_calls_remain_excluded_from_verified_contracts_and_harness_authority"
+      ]
+    }
+  },
+  "malformed_families": {
+    "authority_schema": {
+      "description": "opaque approval, schema, sites, closure, schedule",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "code": [
+        "compiler/execution/contract.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::contract::tests::compatibility_schedule_is_sealed_and_independent_mutation_rejects",
+        "lib.rs::execution::contract::tests::schema_is_consumed_before_execution_and_cannot_change_fuel",
+        "lib.rs::execution::contract::tests::logical_fuel_neighbors_and_extraction_storage_are_separate",
+        "lib.rs::execution::contract::tests::ordinary_empty_effect_closure_is_real_and_recursion_is_finite",
+        "lib.rs::execution::contract::tests::source_similarity_cannot_replace_opaque_approval",
+        "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
+        "lib.rs::execution::contract::tests::extraction_limits_never_change_the_ordinary_result"
+      ]
+    },
+    "state_and_custody": {
+      "description": "tags, nominal payload, holder, stale generation, realm, alias",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "code": [
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::compare::identity_tests::foreign_realm_stale_generation_and_bad_payload_reject_before_projection"
+      ]
+    },
+    "control_scope_completion_origin": {
+      "description": "continuation, arm/branch, static scope, completion phase, invocation and origin role",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "code": [
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects",
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive"
+      ]
+    },
+    "accounting_and_correspondence": {
+      "description": "coordinated equal-looking corruption, prospective costs and global association",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "code": [
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
+        "lib.rs::execution::machine::conformance::compare::identity_tests::coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify"
+      ]
+    },
+    "replay": {
+      "description": "duplicates, unsupported sites/phases, nominal response, bad prefix, consumption and association",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "code": [
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::replay_tests::malformed_and_unsupported_controlled_inputs_reject_before_entry",
+        "lib.rs::execution::machine::conformance::replay_tests::missing_reached_response_rejects_without_attempt_fallback_or_equal",
+        "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical"
+      ]
+    },
+    "audit": {
+      "description": "exact structured authority rows; grants and runtime skip do not define structure",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "code": [
+        "compiler/execution/machine/conformance/authority.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
+        "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
+        "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution"
+      ]
+    },
+    "incomplete": {
+      "description": "truncation, work/storage exhaustion, physical loss cannot establish Equal",
+      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "code": [
+        "compiler/execution/machine/conformance.rs",
+        "compiler/execution/machine/conformance/compare.rs"
+      ],
+      "tests": [
+        "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal",
+        "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host"
+      ]
+    },
+    "native": {
+      "description": "native digest/runtime/backend/target/layout/transport admission",
+      "status": "deferred Stage N",
+      "code": [],
+      "tests": []
+    }
+  },
+  "stage_n_deferred": [
+    "native engine and independently approved runtime installation",
+    "backend target ABI layout emitter object linker optimizer decisions",
+    "native artifact/contract/approval/target identity and pre-execution rejection",
+    "actual optimized and unoptimized native complete comparisons",
+    "physical allocation/runtime failure, substrate loss and installation evidence",
+    "serialization signing packaging and transport bounds if later authorized"
+  ],
+  "limitations": [
+    "Finite Stage I source/private protocol fixtures do not prove every program or substrate",
+    "Analytic relabeling/preallocation is representation evidence, never Stage N execution",
+    "Contract and static view use in-process immutable approved references; no portable transport promised",
+    "Sidecar exhaustion or physical Host produces Inconclusive and preserves primary execution",
+    "Logical receiving-growth shadow and occurrence/call ancestry must survive future eliminated physical work",
+    "No performance or native backend claim; Sarah review and Greg acceptance remain pending"
+  ],
+  "public_api": {
+    "contract": [
+      "Schema::V1",
+      "Schedule::quantities",
+      "Domain",
+      "Limits",
+      "Role",
+      "Site",
+      "Contract::extract",
+      "Contract::schema",
+      "Contract::schedule",
+      "Contract::entry",
+      "Contract::functions",
+      "Contract::sites",
+      "Contract::same_approval",
+      "Contract::validate"
+    ],
+    "conformance": [
+      "Limits",
+      "Incomplete",
+      "Session::new",
+      "Session::advance",
+      "Session::completeness",
+      "Session::record_count",
+      "Session::render_authority_summary",
+      "Comparison",
+      "ComparisonLimits",
+      "compare"
+    ],
+    "preserved": [
+      "run",
+      "CLI source grammar and engine selection",
+      "zero-parameter public roots",
+      "selected profile eligibility and grants",
+      "public audit text and exact budgets",
+      "verified and harness authority"
+    ],
+    "private": [
+      "observation record grammar",
+      "structured authority view",
+      "controlled replay Input/Controller",
+      "modeled Host schedule",
+      "test-only physical and wrong-engine controls"
+    ]
+  },
+  "boundedness": {
+    "extraction": "nodes/work/storage separately admitted, double-buffer canonical validation accounted; recursive approved closure visited finitely",
+    "capture": "pre-reserved flat non-owning records; finite work/lineage/storage; no resource ownership or cleanup on evidence disposal",
+    "comparison": "both views independently validate before projection; pre-reserved scratch and injective forward/inverse map; checked record/node/work/storage bounds; fixed scalar result",
+    "replay": "finite static sites, bounded input items and sorted canonical order; logical activations/history bounded by admitted fuel/depth; conservative work admission and pre-reserved counters; no mid-binding allocation",
+    "authority": "finite exact borrowed rows; separately admitted rows/work/storage and re-extraction buffer; bounded summary output domain",
+    "terminal": "cached primary outcome retained, no retry/unwind/cleanup/resume on excluded terminal stops"
+  },
+  "m7_gate": {
+    "commit": "20d23dcafb0bceaf72e25e037c820fe6d3191143",
+    "tree": "a4298060de93092c3de301325d197abdd0d3ef3e",
+    "runs": [
+      {
+        "run": 39515778412,
+        "name": "docs",
+        "event": "pull_request",
+        "jobs": [
+          {
+            "id": 118947458821,
+            "conclusion": "success",
+            "steps": [
+              [
+                "Set up job",
+                "success"
+              ],
+              [
+                "Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Run actions/setup-python@v5",
+                "success"
+              ],
+              [
+                "Validate README and local documentation assets",
+                "success"
+              ],
+              [
+                "Validate repository scaffold",
+                "success"
+              ],
+              [
+                "Check generated context byte-for-byte reproducibility",
+                "success"
+              ],
+              [
+                "Post Run actions/setup-python@v5",
+                "success"
+              ],
+              [
+                "Post Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Complete job",
+                "success"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "run": 39515778472,
+        "name": "verify",
+        "event": "pull_request",
+        "jobs": [
+          {
+            "id": 118947459012,
+            "conclusion": "success",
+            "steps": [
+              [
+                "Set up job",
+                "success"
+              ],
+              [
+                "Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Accept provable battery call",
+                "success"
+              ],
+              [
+                "Reject unprovable battery call with Klyxr diagnostic",
+                "success"
+              ],
+              [
+                "Exercise CLI proof scope and negative regressions",
+                "success"
+              ],
+              [
+                "Post Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Complete job",
+                "success"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "run": 39515778353,
+        "name": "build",
+        "event": "pull_request",
+        "jobs": [
+          {
+            "id": 118947458717,
+            "conclusion": "success",
+            "steps": [
+              [
+                "Set up job",
+                "success"
+              ],
+              [
+                "Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Show Rust toolchain",
+                "success"
+              ],
+              [
+                "Check compiler workspace",
+                "success"
+              ],
+              [
+                "Check Rust formatting",
+                "success"
+              ],
+              [
+                "Check Clippy without warnings",
+                "success"
+              ],
+              [
+                "Validate README assets",
+                "success"
+              ],
+              [
+                "Check Rustdoc without warnings",
+                "success"
+              ],
+              [
+                "Post Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Complete job",
+                "success"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "run": 39515778372,
+        "name": "tests",
+        "event": "pull_request",
+        "jobs": [
+          {
+            "id": 118947459030,
+            "conclusion": "success",
+            "steps": [
+              [
+                "Set up job",
+                "success"
+              ],
+              [
+                "Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Run compiler unit tests",
+                "success"
+              ],
+              [
+                "Verify arithmetic checks in optimized builds",
+                "success"
+              ],
+              [
+                "Verify compact and explicit examples remain present",
+                "success"
+              ],
+              [
+                "Post Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Complete job",
+                "success"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "run": 39515772816,
+        "name": "docs",
+        "event": "push",
+        "jobs": [
+          {
+            "id": 118947441777,
+            "conclusion": "success",
+            "steps": [
+              [
+                "Set up job",
+                "success"
+              ],
+              [
+                "Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Run actions/setup-python@v5",
+                "success"
+              ],
+              [
+                "Validate README and local documentation assets",
+                "success"
+              ],
+              [
+                "Validate repository scaffold",
+                "success"
+              ],
+              [
+                "Check generated context byte-for-byte reproducibility",
+                "success"
+              ],
+              [
+                "Post Run actions/setup-python@v5",
+                "success"
+              ],
+              [
+                "Post Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Complete job",
+                "success"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "run": 39515772833,
+        "name": "build",
+        "event": "push",
+        "jobs": [
+          {
+            "id": 118947441980,
+            "conclusion": "success",
+            "steps": [
+              [
+                "Set up job",
+                "success"
+              ],
+              [
+                "Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Show Rust toolchain",
+                "success"
+              ],
+              [
+                "Check compiler workspace",
+                "success"
+              ],
+              [
+                "Check Rust formatting",
+                "success"
+              ],
+              [
+                "Check Clippy without warnings",
+                "success"
+              ],
+              [
+                "Validate README assets",
+                "success"
+              ],
+              [
+                "Check Rustdoc without warnings",
+                "success"
+              ],
+              [
+                "Post Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Complete job",
+                "success"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "run": 39515772810,
+        "name": "verify",
+        "event": "push",
+        "jobs": [
+          {
+            "id": 118947441956,
+            "conclusion": "success",
+            "steps": [
+              [
+                "Set up job",
+                "success"
+              ],
+              [
+                "Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Accept provable battery call",
+                "success"
+              ],
+              [
+                "Reject unprovable battery call with Klyxr diagnostic",
+                "success"
+              ],
+              [
+                "Exercise CLI proof scope and negative regressions",
+                "success"
+              ],
+              [
+                "Post Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Complete job",
+                "success"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "run": 39515772768,
+        "name": "tests",
+        "event": "push",
+        "jobs": [
+          {
+            "id": 118947441608,
+            "conclusion": "success",
+            "steps": [
+              [
+                "Set up job",
+                "success"
+              ],
+              [
+                "Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Run compiler unit tests",
+                "success"
+              ],
+              [
+                "Verify arithmetic checks in optimized builds",
+                "success"
+              ],
+              [
+                "Verify compact and explicit examples remain present",
+                "success"
+              ],
+              [
+                "Post Run actions/checkout@v4",
+                "success"
+              ],
+              [
+                "Complete job",
+                "success"
+              ]
+            ]
+          }
+        ]
+      }
+    ],
+    "per_profile": 2093,
+    "predecessors": 2045,
+    "additions": 48,
     "all_jobs_steps_success": true
   }
 }

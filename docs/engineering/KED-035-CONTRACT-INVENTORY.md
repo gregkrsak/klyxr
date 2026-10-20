@@ -86,11 +86,12 @@ comparison possible. Terminal advance remains idempotent and non-resuming.
 
 ## Evidence status
 
-M1 is static inventory, not conformance. M2–M5 code and evidence are recorded
-in `KED-035-STAGE-I-LEDGER.md`; the distinct M5 checkpoint still requires its
-complete Actions gate. M6–M9 remain pending. Stage I must produce
-independent expected observations, full Equal/Different and genuine Inconclusive
-controls, malformed independent copies, all applicable finite fixture cuts,
-predecessor/budget reconciliation and verified publications. Differential prefixes
-from a generous execution alone are not independent oracles. Stage N's actual
-native installation/execution/optimized evidence is explicitly deferred.
+M1 is static inventory. M2–M8 consumed implementation and finite evidence are
+recorded in `KED-035-STAGE-I-LEDGER.md` and the complete JSON matrix. The distinct
+M5 checkpoint obtained all eight applicable successful Actions gates before M6
+source changes. M6 and M7 gates also passed. M9 requires fresh exact-final-head
+checks and identical verified report publications on PR #85 and Issue #84.
+Independent expected observations are separate from analytic relabeling and
+finite fixture enumeration. Stage N actual native production, installation,
+identity rejection and optimized/unoptimized execution evidence remains deferred.
+Sarah's review and Greg's acceptance remain pending.

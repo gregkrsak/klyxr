@@ -77,23 +77,199 @@ Result cleanup authority remains restricted to its separately sealed domain.
 | Private protocol | Sealed synthetic Leaf acquisition, replacement and loop cleanup | Explicit private primitive/protocol evidence; grants no production source resource API. |
 | Predecessors | Exact KED-034 1,981 predecessors plus 64 additions, including all inherited KED-033/032 identities, opaque-authority doctest and 1,800 affine cases | `verify-ked035-tests.py` reconciles identities rather than totals; no migrations or weakened assertions. |
 
-## Remaining authorized milestones
+## M6 — addressed replay and modeled abstract Host
 
-M6 addressed replay and modeled abstract Host cuts have not begun. M7 full
-integration, M8 complete clause/constraint matrix and canonical/generated docs,
-and M9 exact-head completion gate and verified dual publication remain pending.
-M5 must be preserved as a distinct checkpoint and obtain all eight applicable
-push/PR build/tests/verify/docs successes before M6 starts.
+`conformance/replay.rs` consumes a private bounded Input attached to the same
+approval, schema, entry and ordinary execution limits. Sites use approved
+function/origin or invocation identity, logical activation ancestry, site
+occurrence and phase. They do not use a raw frame, ticket, allocation attempt,
+source spelling, native address or backend instruction count. Positive logical
+receiving growth remains an address even if a later engine preallocates; zero
+growth is not a new capacity event. The analytic preallocation fixture tests this
+address law without claiming a native implementation.
 
-K35-P01–P08 remain acceptance obligations across the remaining milestones; M5
-coverage does not certify Stage I completion. K35-P09 binds the logical relation
-independently of physical representation. No optimizer or native engine is
-selected. K35-P10 remains mandatory deferred Stage N evidence: actual native
-production, identity binding, installation, runtime, optimized/unoptimized and
-physical-failure evidence cannot be supplied by these interpreter/protocol tests.
+Static applicability, duplicate entries, response types, closed error masks,
+prefix lengths and release birth associations validate before entry. Dynamic
+responses are consumed only after inherited fuel/storage/depth and custody gates
+reach the event. A missing reached response rejects without falling back to a
+fixture. Future unvisited items remain unconsumed. Open/read/finish and existing
+fixed release phases retain their original external protocol; instrumentation
+adds no source operation or authority edge. Receipt-to-holder publication remains
+atomic where the predecessor contract made it atomic.
 
-No backend, target, ABI, layout, emitter, object format, runtime ABI, linker,
-optimizer, serialization, signing or packaging design is selected. No issue
-closure, ready-for-review transition, approval, acceptance or merge is authorized.
-Greg retains the later decisions, Sarah performs independent review, and only a
-human may merge.
+Actual consumed controls and responses are independently checked against actual
+receipt, production, event prefix, activation and resource association. Finish
+partial failure retains its irreversible prefix; release failure retains the
+protected outgoing Result without delivery. Modeled Host is a common logical
+input only when its reached witness and primary stop agree. Surviving physical
+Host remains unmatched/Inconclusive. Capture failure, invalid evidence and lost
+substrate evidence cannot become Equal. No rollback, retry, implicit cleanup,
+resume or fabricated opposite variant occurs.
+
+M6 passed all eight exact-head workflow/job/step sets at
+`79c5166f0a8178d73f1a3085f9178f89939b7e46` (37 additions, 2,082 per profile).
+The preserved M5 checkpoint is
+`e31f6104d8222ee201bc392a3daf87bcb03734ab`, tree
+`34466f3032475e6b03931f59e61e712fab3b54e2`; its eight successful gates and
+verified PR checkpoint publication preceded all M6 source changes.
+
+## M7 — integrated authority, primary execution and presentation
+
+`conformance/authority.rs` retains typed immutable references to the complete
+approved type/MIR context, exact catalog, roots, structural call edges including
+empty effects and skipped alternatives, invocation plans, cleanup facts and
+temporary sites. Extraction and canonical revalidation have a separate bounded
+row/work/storage account. Ordinary no-profile evidence does not obtain catalog
+or execution authority. Possible structural effects and grants come from the
+approved structure, never the runtime event prefix.
+
+`Session` integrates ordinary Machine or the existing selected ExecutionSession.
+The legacy run/CLI/profile/zero-parameter-root/verified/harness boundaries remain
+unchanged. The only added public surface is bounded read-only contract and
+conformance tooling over an existing CheckedExecutable. Controlled input and
+modeled Host remain private. The summary renderer has a separate output allowance;
+text, allocation failure and verbosity cannot replace primary execution or decide
+semantic equality. The existing public audit renderer and its exact budgets are
+unchanged. The new summary is not a serialization or external authority format.
+
+M7's final source gate at `20d23dcafb0bceaf72e25e037c820fe6d3191143`
+passed all eight workflows and every applicable job/step, including warning-free
+Clippy, Rustdoc, formatting and both complete Cargo profiles. All 2,045 exact
+predecessors and 48 classified additions passed: 2,093 per profile.
+
+## M8 — complete finite evidence and documentation
+
+`ked-035-evidence.json` is the detailed machine-readable requirement-to-code/test
+matrix: §§4–18, all thirty §15 obligations, K35-P01–P10, malformed families,
+M0–M9, evidence classifications, boundedness, public interfaces and deferred Stage
+N evidence. `verify-ked035-contract.py` checks completeness and references.
+`verify-ked035-tests.py` independently reconciles actual complete Cargo identities
+in each profile, retaining the prior KED-034/033/032 maps, the opaque-authority
+compile-fail doctest and all 1,800 affine cross-check cases. Existing predecessor
+assertions and numeric boundaries are not weakened or migrated. Two forged
+Approval fixture constructors merely supply the new original schema/schedule
+fields; their malformed predicates remain unchanged.
+
+Independent decisive evidence includes the hand-derived whole bool trace and
+first-insufficient fuel trace, external event prefixes for every 1–72 fuel
+neighbor of the exact predecessor direct-open/finish source, terminal mutation
+and range-trap custody, actual two-resource association swaps, actual wrong read
+payload with the same final Error, and completion/release-phase responsibilities.
+The finite larger sample enumerates every distinct reached logical storage gate
+and checks first-insufficient precedence and custody; discovery selects budgets,
+not expected success snapshots. Recursive depth, short-circuit nonconsumption,
+loop activation and terminal repetition are exercised. Finite fixture enumeration
+is not proof of every program or every conceivable substrate failure.
+
+Malformed evidence is altered independently of its bound authority or oracle:
+schema, closure, site, nominal tag/payload, active holder, realm, alias, generation,
+continuation, branch target, scope, completion phase, production/invocation,
+accounting, origin and replay marker corruption all reject before projection.
+Equal-looking jointly corrupted copies cannot self-certify. Full view validation
+precedes mapping. A valid but wrong actual read or resource association can yield
+Different; incomplete or malformed views yield Inconclusive. Analytic raw-ID
+relabeling is explicitly separated from real interpreter identity variation and
+from independent expected observations.
+
+The five canonical AI documents record this staged candidate, preserve human
+acceptance authority and defer native work. The generated context bundle is
+regenerated using `scripts/build-ai-context.py` and checked byte-for-byte in CI.
+No accepted language-decision number or human acceptance is invented.
+
+## Binding implementation constraints
+
+| Finding | Implementation disposition |
+|---|---|
+| K35-P01 | Borrow and validate complete exact approved authority; no second lowering or ownership authority. |
+| K35-P02 | Sealed version-one common schedule and separate observation/audit/presentation domains; exact predecessor neighbors retained. |
+| K35-P03 | Bounded pre-reserved complete actual observation; failure preserves primary and prevents Equal. |
+| K35-P04 | Independent local validation before one anchored injective dynamic map; raw IDs are never cross-engine equality. |
+| K35-P05 | Logical site/activation/occurrence/phase and receiving-growth shadows; future engines must preserve eliminated logical work. |
+| K35-P06 | Reached-only consumption, inherited gate precedence, no-gap custody, protected non-delivery and terminal non-resumption. |
+| K35-P07 | Independent whole-trace and custody oracles plus actual Equal/Different/Inconclusive controls; no interpreter self-certification. |
+| K35-P08 | Ordinary and selected-profile integration without broader source/runtime authority; structured audit is separate from events/text. |
+| K35-P09 | Preserve the semantic relation independently of layout, frame IDs, preallocation or future optimization; no optimizer chosen. |
+| K35-P10 | Mandatory native identity/installation/actual optimized and unoptimized comparisons remain deferred Stage N evidence. |
+
+## Bounds, accounting and custody
+
+Contract extraction admits nodes/work/storage and accounts simultaneous canonical
+re-extraction buffers. Capture uses flat non-owning Copy records, finite lineage,
+record/storage/work maxima and pre-reserved storage. Comparison pre-reserves
+bounded nodes, links, slots, histories, event scratch and both map directions;
+validation and comparisons charge work and return a fixed scalar. Replay admits
+finite sites/items and conservative work for counters, ancestry and histories
+bounded by execution fuel/depth; it performs no allocation during binding.
+Authority rows and revalidation buffers have their own budget. Evidence disposal
+owns no resource and invokes no source cleanup plan. All size arithmetic uses
+checked admission or fails conservatively. Finite maxima and exact defaults are
+in the implementation; reference geometry is not a native ABI guarantee.
+
+The 48 sealed quantities preserve predecessor receiving capacity and prospective
+combined sums. Accounted Frame/Task/Value/Fault/State layouts were not expanded;
+Machine sidecars are outside those existing logical allocations. Whole-Result
+cleanup-plan identity does not grant authority to execute cleanup. Structural
+cleanup-effect unions remain static even though only one runtime payload is
+active. Primary local transit/publication markers observe custody without
+creating another owner or second cleanup authority.
+
+Exact KED-034 numeric neighbors remain unchanged: audit 6,193 output / 65,617
+storage / 65,584 work; diagnostic 126 and result 20; catalog diagnostics 9,792,
+protocol bytes/site 1,320, storage 1,695,808, work 102,656; combined receiving
+failure 3,848 (retained 3,672, largest 176, sum growth 680); physical growth probe
+mask 1,918; preparation diagnostics 44,608, identifier bytes 13, storage
+18,559,608, tokens 35, work 1,344,662,663; direct-open/finish runtime fuel 72 /
+storage 4,448; stopped-report audit storage 69,969 with 4,352 retained. These are
+reference Rust 1.80.0 x86_64 test-build evidence, not portable physical costs.
+
+## Public API and changed-file accounting
+
+Public metadata additions are `execution::contract::{Schema, Schedule, Domain,
+Limits, Role, Site, Contract}` and its read-only extraction/validation/accessors;
+`execution::conformance::{Limits, Incomplete, Session, Comparison,
+ComparisonLimits, compare}` including Session construction, advance, capture
+status/count and bounded authority-summary rendering. `Schema::V1` is sealed;
+public observations cannot construct Approval. `completeness()` reports capture
+completion, not a semantic validity certificate. There is no public replay input,
+resource constructor, new profile or engine-selection interface.
+
+Implementation files comprise contract.rs; execution/mod.rs; Machine and its
+cleanup, replacement, results, temporaries, trusted and completion modules;
+conformance.rs, authority.rs, compare.rs, replay.rs and their dedicated identity,
+oracle and replay tests; and the two forged-Approval fixture modules. Documentation
+comprises five canonical documents, their generated bundle, this ledger, the
+contract inventory and JSON evidence map. CI changes comprise docs.yml, tests.yml
+and the two new KED-035 verifiers. The final M9 report gives the exact head's full
+changed-file list and tree; no unrelated repository configuration is changed.
+
+## M9 — final gate and retained authority
+
+The final exact-head M9 gate must independently pass complete debug/release tests,
+both applicable events' build/tests/verify/docs, formatting, Clippy and Rustdoc
+with warnings denied, ledger/manifest verification, generated-context clean diff,
+exact predecessor identities and numeric neighbors, and clean worktree/index.
+The same final report is published and read back on PR #85 and Issue #84. Its
+head/tree and Actions URLs are external exact-head evidence and cannot be embedded
+in their own content-addressed commit. This ledger does not claim a future gate
+has passed; the verified M9 publications record that result.
+
+Some early implementation commit subjects used non-prescribed prefixes. This is
+a nonfunctional repository-process deviation; history and the required M5
+checkpoint are retained without rewriting. Subsequent subjects follow AGENTS.md.
+No local Rust installation/repair/compile/link/formatter/executable test occurred.
+
+Remaining limitations: finite fixtures are not universal equivalence proof;
+private Leaf/protocol fixtures are not production source permission; analytic
+relabeling/preallocation are not native tests; contract/static rows use exact
+in-process immutable references, not a portable transport; insufficient evidence
+is deliberately Inconclusive; no performance improvement is claimed. Native
+production, target/runtime installation, pre-execution artifact mismatch checks,
+actual optimized/unoptimized comparisons and physical/native/substrate evidence
+remain mandatory deferred Stage N obligations. No backend, target, ABI, layout,
+emitter, object format, runtime ABI, linker, optimizer, serialization, signing or
+packaging mechanism is selected.
+
+Sarah's independent review and Greg's acceptance decision remain pending. No
+acceptance, freeze change, ready-for-review transition, approval, issue closure,
+merge or later project step is authorized. The PR remains draft and unmerged;
+only a human may merge.

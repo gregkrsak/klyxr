@@ -16,6 +16,8 @@ jobs:
         run: python scripts/verify-readme.py
       - name: Validate repository scaffold
         run: python scripts/verify-repo-scaffold.py
+      - name: Verify KED-035 ledger and evidence map
+        run: python scripts/verify-ked035-contract.py
       - name: Check generated context byte-for-byte reproducibility
         run: |
           cp docs/ai/KLYXR_AI_CONTEXT_BUNDLE.md "$RUNNER_TEMP/klyxr-context-before.md"
