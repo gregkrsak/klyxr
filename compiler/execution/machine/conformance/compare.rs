@@ -87,6 +87,7 @@ struct Node {
 #[derive(Clone, Copy)]
 enum Link {
     Reference(Key),
+    Borrow(Key, Place, BorrowKind),
     Expected(Key, ValueType),
     Owner(Key, u8),
     Generation(u64, hir::LocalId, u64),
@@ -566,7 +567,7 @@ impl Validator<'_, '_> {
             }
             Record::Raw(_) | Record::NoValue => (),
             Record::Reference(kind, referent, frame, place) => {
-                self.reference(key(Kind::Frame, frame))?;
+                self.scratch.link(Link::Borrow(key(Kind::Frame, frame), place, kind))?;
                 let target = self.place(frame, place)?;
                 require(target == referent.value_type())?;
                 info.ty = Some(match kind {
@@ -1967,6 +1968,25 @@ impl Validator<'_, '_> {
             let link = self.scratch.links[index];
             let k = match link {
                 Link::Reference(k) | Link::Expected(k, _) | Link::Owner(k, _) => k,
+                Link::Borrow(frame, place, kind) => {
+                    let target = self.node(frame)?;
+                    require(target.declared == self.stamp && target.status == 0)?;
+                    let mut available = false;
+                    for slot in &self.scratch.slots {
+                        self.work.spend()?;
+                        if slot.frame == frame.1 && slot.place == place && slot.state == 1 { available = true; }
+                    }
+                    require(available)?;
+                    for prior in &self.scratch.links[..index] {
+                        self.work.spend()?;
+                        if let Link::Borrow(other, location, access) = prior {
+                            if *other == frame && *location == place {
+                                require(kind == BorrowKind::Shared && *access == BorrowKind::Shared)?;
+                            }
+                        }
+                    }
+                    continue;
+                }
                 Link::Generation(frame, local, id) => {
                     let generation = self.node(key(Kind::Generation, id))?;
                     require(generation.a == local.0 as u64)?;

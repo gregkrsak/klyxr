@@ -213,6 +213,7 @@ fn private_resource_protocol_cleanup_and_replacement_are_separate_positive_evide
 fn no_value_calls_and_short_circuit_paths_keep_exact_static_correspondence() {
     for source in [
         "fn helper(){let value=true;}fn demo(){helper();}",
+        "fn set(view:&mut bool){*view=false;}fn demo()->bool{let mut value=true;set(&mut value);return value;}",
         "fn never()->bool{while true{}return true;}fn demo()->bool{return true||never();}",
         "type N=range 0..5;record Pair{left:N,right:N}fn demo()->Pair{return Pair{right:2,left:1};}",
     ] {
@@ -310,4 +311,30 @@ fn schema_relabeling_preserves_one_global_map_for_cells_owners_generations_and_t
     }
     drop(observer);
     assert_eq!(compare(&a, &b, comparison()), Comparison::Equal);
+}
+
+#[test]
+fn coordinated_unbound_origins_and_stale_alias_targets_cannot_self_certify() {
+    for source in [
+        "fn demo()->bool{return true;}",
+        "fn read(view:&bool)->bool{return *view;}fn demo()->bool{let value=true;return read(&value);}",
+    ] {
+        let e=prepare_execution(source,AdmissionLimits::default()).unwrap();
+        let c=contract::Contract::extract(&e,e.entry("demo").unwrap(),contract::Limits::default()).unwrap();
+        let a=ordinary(&c,0);let b=ordinary(&c,0);
+        for session in [&a,&b] {
+            let mut observer=session.machine().observation.borrow_mut();
+            let records=&mut observer.as_mut().unwrap().records;
+            if source.contains("fn read") {
+                let record=records.iter_mut().find(|r|matches!(r,Record::Reference(..))).unwrap();
+                let Record::Reference(_,_,frame,_) = record else {unreachable!()};
+                *frame=7_000_000;
+            } else {
+                let record=records.iter_mut().find(|r|matches!(r,Record::Cut(..))).unwrap();
+                let Record::Cut(_,_,_,origin,_,_) = record else {unreachable!()};
+                origin.start=7_000_000;origin.end=7_000_001;
+            }
+        }
+        assert!(matches!(compare(&a,&b,comparison()),Comparison::Inconclusive(_)));
+    }
 }
