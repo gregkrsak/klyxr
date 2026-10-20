@@ -10,14 +10,27 @@ thread_local! {
     static CONFORMANCE_RESPONSE: std::cell::Cell<Option<(u64,hir::RangeTypeId,i64)>>=const {std::cell::Cell::new(None)};
 }
 #[cfg(test)]
-pub(in crate::execution::machine) fn conformance_physical_receipt_failure(machine:&mut Machine<'_>,invocation:u64) {
-    machine.trusted.as_mut().unwrap().fault=Some((Fault::AfterReceiptHost,invocation));
+pub(in crate::execution::machine) fn conformance_physical_receipt_failure(
+    machine: &mut Machine<'_>,
+    invocation: u64,
+) {
+    machine.trusted.as_mut().unwrap().fault = Some((Fault::AfterReceiptHost, invocation));
 }
 #[cfg(test)]
-pub(in crate::execution::machine) fn with_conformance_response<T>(invocation:u64,ty:hir::RangeTypeId,value:i64,run:impl FnOnce()->T)->T {
-    struct Restore(Option<(u64,hir::RangeTypeId,i64)>);
-    impl Drop for Restore {fn drop(&mut self){CONFORMANCE_RESPONSE.with(|slot|slot.set(self.0));}}
-    let _restore=Restore(CONFORMANCE_RESPONSE.with(|slot|slot.replace(Some((invocation,ty,value)))));
+pub(in crate::execution::machine) fn with_conformance_response<T>(
+    invocation: u64,
+    ty: hir::RangeTypeId,
+    value: i64,
+    run: impl FnOnce() -> T,
+) -> T {
+    struct Restore(Option<(u64, hir::RangeTypeId, i64)>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            CONFORMANCE_RESPONSE.with(|slot| slot.set(self.0));
+        }
+    }
+    let _restore =
+        Restore(CONFORMANCE_RESPONSE.with(|slot| slot.replace(Some((invocation, ty, value)))));
     run()
 }
 
@@ -854,10 +867,22 @@ impl<'a> Machine<'a> {
         let tag = state.receipt.as_ref().unwrap().tag;
         state.events.push(Event::Received(invocation, tag));
         #[cfg(test)]
-        if let Some((_,ty,value))=CONFORMANCE_RESPONSE.with(|slot|slot.get()).filter(|(at,_,_)|*at==invocation) {
-            CONFORMANCE_RESPONSE.with(|slot|slot.set(None));
-            if let Some(Payload::Range(actual))=self.trusted.as_mut().unwrap().receipt.as_mut().unwrap().payload.as_mut() {
-                *actual=RangeValue{ty,value};
+        if let Some((_, ty, value)) = CONFORMANCE_RESPONSE
+            .with(|slot| slot.get())
+            .filter(|(at, _, _)| *at == invocation)
+        {
+            CONFORMANCE_RESPONSE.with(|slot| slot.set(None));
+            if let Some(Payload::Range(actual)) = self
+                .trusted
+                .as_mut()
+                .unwrap()
+                .receipt
+                .as_mut()
+                .unwrap()
+                .payload
+                .as_mut()
+            {
+                *actual = RangeValue { ty, value };
             }
         }
         self.control_committed_response()?;

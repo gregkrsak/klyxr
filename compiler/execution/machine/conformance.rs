@@ -892,6 +892,8 @@ impl<'a> Session<'a> {
             Engine::Selected(session) => session.recorded(),
         }
     }
+    /// Capture completion and capture budgets only. Success does not establish
+    /// observation validity or conformance; compare validates both full views.
     pub fn completeness(&self) -> Result<(), Incomplete> {
         let c = self.capture();
         if let Some(reason) = c.incomplete {

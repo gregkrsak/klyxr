@@ -434,31 +434,73 @@ impl Validator<'_, '_> {
         eprintln!("unbound observation origin: {span:?}");
         Err(Incomplete::InvalidState)
     }
-    fn origin_pair(&mut self, origin:Origin)->Valid {
-        if origin.span==START {return require(origin.kind==OriginKind::FunctionBoundary);}
+    fn origin_pair(&mut self, origin: Origin) -> Valid {
+        if origin.span == START {
+            return require(origin.kind == OriginKind::FunctionBoundary);
+        }
         for function in self.contract.functions() {
             self.work.spend()?;
-            if origin.kind==OriginKind::FunctionBoundary && self.contract.executable.program.function(*function).span()==origin.span {return Ok(());}
-            for canonical in &self.contract.executable.origins[function.0] {
-                self.work.spend()?;if *canonical==origin {return Ok(());}
+            if origin.kind == OriginKind::FunctionBoundary
+                && self.contract.executable.program.function(*function).span() == origin.span
+            {
+                return Ok(());
             }
-            let definition=self.contract.executable.function(*function).map_err(|_|Incomplete::InvalidState)?;
-            for (_,block) in definition.blocks() {
-                for statement in block.statements() {
-                    self.work.spend()?;
-                    if origin.kind==OriginKind::Statement && (contract::statement_span(statement)==origin.span || matches!(statement,Statement::BindResult{pattern_origin,..} if *pattern_origin==origin.span)) {return Ok(());}
-                    if matches!(statement,Statement::ReplaceOwned{origin:canonical,..} if *canonical==origin) {return Ok(());}
+            for canonical in &self.contract.executable.origins[function.0] {
+                self.work.spend()?;
+                if *canonical == origin {
+                    return Ok(());
                 }
             }
-            if let Some(flow)=&definition.temporaries {
-                for region in &flow.regions {self.work.spend()?;if [region.origin,region.retirement,region.publication].contains(&origin) {return Ok(());}}
-                for site in &flow.sites {self.work.spend()?;if [site.origin,site.transfer,site.cleanup].contains(&origin) {return Ok(());}}
+            let definition = self
+                .contract
+                .executable
+                .function(*function)
+                .map_err(|_| Incomplete::InvalidState)?;
+            for (_, block) in definition.blocks() {
+                for statement in block.statements() {
+                    self.work.spend()?;
+                    if origin.kind == OriginKind::Statement
+                        && (contract::statement_span(statement) == origin.span
+                            || matches!(statement,Statement::BindResult{pattern_origin,..} if *pattern_origin==origin.span))
+                    {
+                        return Ok(());
+                    }
+                    if matches!(statement,Statement::ReplaceOwned{origin:canonical,..} if *canonical==origin)
+                    {
+                        return Ok(());
+                    }
+                }
             }
-            if let Some(flow)=&definition.cleanup {
+            if let Some(flow) = &definition.temporaries {
+                for region in &flow.regions {
+                    self.work.spend()?;
+                    if [region.origin, region.retirement, region.publication].contains(&origin) {
+                        return Ok(());
+                    }
+                }
+                for site in &flow.sites {
+                    self.work.spend()?;
+                    if [site.origin, site.transfer, site.cleanup].contains(&origin) {
+                        return Ok(());
+                    }
+                }
+            }
+            if let Some(flow) = &definition.cleanup {
                 for block in &flow.blocks {
                     self.work.spend()?;
-                    if block.enter.is_some_and(|(_,canonical)|canonical==origin) || block.exit_origin==Some(origin) {return Ok(());}
-                    for initialization in &block.initialize {self.work.spend()?;if initialization.origin==origin {return Ok(());}}
+                    if block
+                        .enter
+                        .is_some_and(|(_, canonical)| canonical == origin)
+                        || block.exit_origin == Some(origin)
+                    {
+                        return Ok(());
+                    }
+                    for initialization in &block.initialize {
+                        self.work.spend()?;
+                        if initialization.origin == origin {
+                            return Ok(());
+                        }
+                    }
                 }
             }
         }
@@ -2507,8 +2549,10 @@ impl Validator<'_, '_> {
         if let Some(s) = expression {
             self.span(s)?;
         }
-        let Record::OriginKind(kind)=self.take()? else {return Err(Incomplete::InvalidState);};
-        self.origin_pair(Origin{span:origin,kind})?;
+        let Record::OriginKind(kind) = self.take()? else {
+            return Err(Incomplete::InvalidState);
+        };
+        self.origin_pair(Origin { span: origin, kind })?;
         let Record::Inventory(stamp, slots, operands, tasks, mask) = self.take()? else {
             return Err(Incomplete::InvalidState);
         };
