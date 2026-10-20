@@ -1274,7 +1274,13 @@
     "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error",
     "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority",
     "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects",
-    "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution"
+    "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution",
+    "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical",
+    "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host",
+    "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix",
+    "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication",
+    "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity",
+    "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive"
   ],
   "fixture_adaptations": [
     {
@@ -1365,7 +1371,13 @@
     "lib.rs::execution::machine::conformance::replay_tests::controlled_release_failure_retains_partial_prefix_sensor_and_protected_error": "private_addressed_replay",
     "lib.rs::execution::machine::conformance::authority::tests::no_profile_structural_content_includes_empty_effect_calls_without_catalog_authority": "structured_authority",
     "lib.rs::execution::machine::conformance::authority::tests::selected_static_possible_protocols_survive_runtime_skip_and_exact_row_corruption_rejects": "structured_authority",
-    "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution": "structured_authority"
+    "lib.rs::execution::machine::conformance::authority::tests::structured_evidence_limits_and_bounded_presentation_never_replace_primary_execution": "structured_authority",
+    "lib.rs::execution::machine::conformance::replay_tests::valid_wrong_received_value_is_different_even_when_the_final_error_is_identical": "private_engine_control",
+    "lib.rs::execution::machine::conformance::replay_tests::surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host": "physical_host_classification",
+    "lib.rs::execution::machine::conformance::replay_tests::finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix": "independent_oracle",
+    "lib.rs::execution::machine::conformance::replay_tests::independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication": "independent_oracle",
+    "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity": "private_addressed_replay",
+    "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive": "private_malformed_observation"
   },
   "m5_checkpoint": {
     "commit": "e31f6104d8222ee201bc392a3daf87bcb03734ab",

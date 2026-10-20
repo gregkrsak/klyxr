@@ -657,3 +657,94 @@ fn controlled_release_failure_retains_partial_prefix_sensor_and_protected_error(
     );
     assert_eq!(compare_pair(&a, &b), Comparison::Equal);
 }
+
+#[test]
+fn valid_wrong_received_value_is_different_even_when_the_final_error_is_identical() {
+    let e=selected();let c=contract::Contract::extract(&e,e.entry("sample").unwrap(),contract::Limits::default()).unwrap();let catalog=&e.trusted.as_ref().unwrap().catalog;
+    let responses=[
+        Item{address:call(0,Phase::Response),response:Response::Open(catalog.sensor)},
+        Item{address:call(1,Phase::Response),response:Response::Value(catalog.reading,37,0)},
+        Item{address:call(2,Phase::Response),response:Response::Error(catalog.error,3,1)},
+        Item{address:release(&c,Phase::ReleaseAttempt),response:Response::Release(Birth{plan:0,activation:0,occurrence:1},true)},
+    ];
+    let a=run(&c,Some(&responses),&[],execution());
+    let b=trusted::with_conformance_response(1,catalog.reading,42,||run(&c,Some(&responses),&[],execution()));
+    assert_eq!(a.primary(),b.primary());
+    assert!(!b.machine().control.borrow().as_ref().unwrap().rejected());
+    let compared=compare_pair(&a,&b);assert!(matches!(compared,Comparison::Different{..}),"{compared:?}");
+}
+
+#[test]
+fn surviving_physical_receipt_failure_is_unmatched_not_a_common_modeled_host() {
+    let e=selected();let c=contract::Contract::extract(&e,e.entry("sample").unwrap(),contract::Limits::default()).unwrap();
+    let make=|| {
+        let input=Input{responses:None,failures:&[],limits:replay::Limits{work:1_000_000_000,..replay::Limits::default()}};
+        let mut session=Session::new_inner(&c,execution(),Limits{records:262_144,work:10_000_000,storage:67_108_864,lineage:128},Some(input)).unwrap();
+        trusted::conformance_physical_receipt_failure(session.machine_mut(),2);let _=session.advance();session
+    };
+    let mut a=make();let b=make();
+    assert_eq!(a.primary().unwrap().unwrap_err().kind,ErrorKind::Host("injected trusted receipt boundary"));
+    assert_eq!(live(&a),1);assert!(!events(&a).iter().any(|event|matches!(event,trusted::Event::ReleaseAttempt(..))));
+    assert_eq!(compare_pair(&a,&b),Comparison::Inconclusive(Incomplete::UnmatchedPhysicalFailure));
+    let count=a.record_count();assert!(a.advance().is_err());assert_eq!(a.record_count(),count);
+}
+#[test]
+fn finite_sample_all_fuel_neighbors_follow_an_independent_external_prefix() {
+    let e=selected();let c=contract::Contract::extract(&e,e.entry("sample").unwrap(),contract::Limits::default()).unwrap();let approved=e.trusted.as_ref().unwrap();
+    let expected=[
+        trusted::Event::Attempt(0,approved.invocations[0].operation),trusted::Event::Received(0,0),trusted::Event::Published(0,hir::ResultTag::Ok),
+        trusted::Event::Attempt(1,approved.invocations[1].operation),trusted::Event::Received(1,0),trusted::Event::Published(1,hir::ResultTag::Ok),
+        trusted::Event::Attempt(2,approved.invocations[2].operation),trusted::Event::Received(2,0),trusted::Event::FinishProtected(2,hir::ResultTag::Ok),
+        trusted::Event::ReleaseAttempt(0,approved.catalog.resource.release),trusted::Event::ReleaseComplete(0),trusted::Event::Published(2,hir::ResultTag::Ok),
+    ];
+    // 72 is the independently retained exact KED-034 sufficient fuel neighbor.
+    for fuel in 1..=72 {
+        let limit=ExecutionLimits{steps:fuel,..execution()};let a=run(&c,None,&[],limit);let b=run(&c,None,&[],limit);
+        assert_eq!(a.machine().steps,fuel);
+        assert_eq!(events(&a),&expected[..events(&a).len()]);
+        if fuel<72 {assert_eq!(a.primary().unwrap().unwrap_err().kind,ErrorKind::ConfiguredLimit("steps"));}
+        else {assert!(a.primary().unwrap().is_ok());assert_eq!(events(&a),&expected);}
+        assert_eq!(compare_pair(&a,&b),Comparison::Equal,"fuel {fuel}");
+    }
+}
+
+#[test]
+fn independent_trap_and_mutation_prefix_survive_terminal_stop_without_publication() {
+    let source="type N=range 0..2;fn two()->N{return 2;}fn demo()->N{let mut value=two();value=value-1;let failed=value-2;return value;}";
+    let e=prepare_execution(source,AdmissionLimits::default()).unwrap();let c=contract::Contract::extract(&e,e.entry("demo").unwrap(),contract::Limits::default()).unwrap();
+    let a=run(&c,None,&[],execution());let b=run(&c,None,&[],execution());
+    let ty=e.program.ranges()[0].id;
+    assert_eq!(a.primary().unwrap().unwrap_err().kind,ErrorKind::RangeTrap{ty,min:0,max:2,computed:-1});
+    let value=e.program.locals().iter().find(|local|local.name=="value").unwrap().id;
+    let failed=e.program.locals().iter().find(|local|local.name=="failed").unwrap().id;
+    let frame=a.machine().frames.last().unwrap();
+    assert!(frame.slots.iter().any(|(place,slot)|*place==Place::Local(value)&&matches!(slot,Slot::Available(Value::Public(RuntimeValue::Range(number))) if number.ty==ty && number.value==1)));
+    assert!(!frame.slots.iter().any(|(place,slot)|*place==Place::Local(failed)&&matches!(slot,Slot::Available(_))));
+    assert_eq!(compare_pair(&a,&b),Comparison::Equal);
+}
+#[test]
+fn recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity() {
+    let e=prepare_execution("fn again(flag:bool)->bool{return again(flag);}fn demo()->bool{return again(true);}",AdmissionLimits::default()).unwrap();let c=contract::Contract::extract(&e,e.entry("demo").unwrap(),contract::Limits::default()).unwrap();
+    assert_eq!(c.functions().len(),2);
+    let limits=ExecutionLimits{call_depth:3,..execution()};let a=run(&c,None,&[],limits);let b=run(&c,None,&[],limits);
+    assert_eq!(a.primary().unwrap().unwrap_err().kind,ErrorKind::ConfiguredLimit("call depth"));
+    assert_eq!(a.machine().frames.len(),3);
+    assert_eq!(a.machine().control.borrow().as_ref().unwrap().activation_count(),3);
+    assert_eq!(compare_pair(&a,&b),Comparison::Equal);
+}
+#[test]
+fn coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive() {
+    let e=prepare_execution("fn demo()->bool{return true;}",AdmissionLimits::default()).unwrap();let c=contract::Contract::extract(&e,e.entry("demo").unwrap(),contract::Limits::default()).unwrap();
+    for mutation in 0..3 {
+        let a=run(&c,None,&[],execution());let b=run(&c,None,&[],execution());
+        for session in [&a,&b] {
+            let mut capture=session.machine().observation.borrow_mut();let records=&mut capture.as_mut().unwrap().records;
+            match mutation {
+                0=>{let record=records.iter_mut().find(|record|matches!(record,Record::Accounting(_,Some(_)))).unwrap();let Record::Accounting(_,Some(bytes))=record else{unreachable!()};*bytes+=1;}
+                1=>{let record=records.iter_mut().find(|record|matches!(record,Record::OriginKind(_))).unwrap();*record=Record::OriginKind(OriginKind::Replacement);}
+                _=>{let record=records.iter_mut().find(|record|matches!(record,Record::Control(_,0))).unwrap();let Record::Control(_,status)=record else{unreachable!()};*status=2;}
+            }
+        }
+        assert!(matches!(compare_pair(&a,&b),Comparison::Inconclusive(_)),"mutation {mutation}");
+    }
+}
