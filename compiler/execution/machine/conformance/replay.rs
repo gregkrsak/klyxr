@@ -142,7 +142,9 @@ fn spend(work: &mut usize, amount: usize) -> Checked<()> {
     *work = work.checked_sub(amount).ok_or_else(invalid)?;
     Ok(())
 }
-fn site_key(site: Site) -> (u8, usize, usize, usize, usize, usize) {
+type SiteKey = (u8, usize, usize, usize, usize, usize);
+type AddressKey = (usize, SiteKey, u64, u8);
+fn site_key(site: Site) -> SiteKey {
     let (tag, function, span) = match site {
         Site::Invocation(plan) => return (2, plan, 0, 0, 0, 0),
         Site::Capacity(function, span) => (0, function, span),
@@ -158,7 +160,7 @@ fn site_key(site: Site) -> (u8, usize, usize, usize, usize, usize) {
         span.column,
     )
 }
-fn address_key(address: Address) -> (usize, (u8, usize, usize, usize, usize, usize), u64, u8) {
+fn address_key(address: Address) -> AddressKey {
     (
         address.activation,
         site_key(address.site),
