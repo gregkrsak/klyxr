@@ -180,6 +180,9 @@ pub(super) fn compatibility_schedule() -> contract::Schedule {
         results: results::compatibility_shapes(),
         temporaries: temporaries::compatibility_shapes(),
         trusted: trusted::compatibility_shapes(),
+        observation: conformance::compatibility_shapes(),
+        comparison: conformance::comparison_shapes(),
+        extraction: contract::compatibility_shapes(),
     }
 }
 impl<'a> Machine<'a> {
@@ -578,6 +581,7 @@ impl<'a> Machine<'a> {
     fn enter(&mut self, function: FunctionId, count: usize) -> Result<u64, ExecutionError> {
         // Stable precedence: entry fuel, call depth, storage, host allocation.
         self.charge()?;
+        self.observe(conformance::Cut::Depth);
         if self.frames.len() >= self.limits.call_depth {
             return Err(self.failure(ErrorKind::ConfiguredLimit("call depth")));
         }
@@ -943,6 +947,7 @@ impl<'a> Machine<'a> {
     ) -> Result<(), ExecutionError> {
         // Expression fuel precedes expression depth; no child starts on failure.
         self.charge()?;
+        self.observe(conformance::Cut::ExpressionDepth(depth));
         if depth > self.limits.expression_depth {
             return Err(self.failure(ErrorKind::ConfiguredLimit("expression depth")));
         }
@@ -1352,6 +1357,7 @@ impl<'a> Machine<'a> {
                 }),
             );
         }
+        self.observe_action(&task);
         let result = self.step_inner(task);
         if result.is_err() {
             self.terminal = true;

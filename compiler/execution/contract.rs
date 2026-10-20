@@ -8,6 +8,7 @@ use std::mem::size_of;
 /// The versions are one sealed unit: changing a schedule changes the contract.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Schema {
+    compiler: &'static str,
     semantic: u32,
     accounting: u32,
     cuts: u32,
@@ -17,6 +18,7 @@ pub struct Schema {
 }
 impl Schema {
     pub const V1: Self = Self {
+        compiler: env!("CARGO_PKG_VERSION"),
         semantic: 1,
         accounting: 1,
         cuts: 1,
@@ -47,6 +49,9 @@ pub struct Schedule {
     pub(super) results: [usize; 5],
     pub(super) temporaries: [usize; 4],
     pub(super) trusted: [usize; 8],
+    pub(super) observation: [usize; 2],
+    pub(super) comparison: [usize; 8],
+    pub(super) extraction: [usize; 4],
 }
 impl Schedule {
     pub(crate) fn reference() -> Self {
@@ -67,6 +72,9 @@ impl Schedule {
             .chain(&self.results)
             .chain(&self.temporaries)
             .chain(&self.trusted)
+            .chain(&self.observation)
+            .chain(&self.comparison)
+            .chain(&self.extraction)
             .copied()
     }
 }
@@ -131,6 +139,9 @@ pub struct Contract<'a> {
     expressions: Vec<(usize, usize)>,
     limits: Limits,
 }
+pub(super) fn compatibility_shapes() -> [usize; 4] {
+    [size_of::<Site>(), size_of::<FunctionId>(), size_of::<(usize, usize)>(), size_of::<Contract<'_>>()]
+}
 impl<'a> Contract<'a> {
     pub fn extract(
         executable: &'a CheckedExecutable,
@@ -148,11 +159,12 @@ impl<'a> Contract<'a> {
         {
             return Err(ResourceFailure::limit("contract extraction override", START).into());
         }
+        let units=executable.approval.schedule.extraction;
         let bytes = limits
             .nodes
-            .checked_mul(size_of::<Site>() + size_of::<FunctionId>() + size_of::<(usize, usize)>())
+            .checked_mul(units[..3].iter().sum())
             .and_then(|n| n.checked_mul(2))
-            .and_then(|n| n.checked_add(2 * size_of::<Self>()))
+            .and_then(|n| n.checked_add(2 * units[3]))
             .ok_or_else(|| ExecutionError::integrity("contract storage overflow"))?;
         if bytes > limits.storage {
             return Err(ResourceFailure::limit("contract extraction storage", START).into());
@@ -177,8 +189,12 @@ impl<'a> Contract<'a> {
             .sites
             .try_reserve_exact(limits.nodes)
             .map_err(|_| ExecutionError::new(ErrorKind::Host("contract site allocation"), START))?;
-        contract.expressions.try_reserve_exact(limits.nodes)
-            .map_err(|_| ExecutionError::new(ErrorKind::Host("contract operand index allocation"), START))?;
+        contract
+            .expressions
+            .try_reserve_exact(limits.nodes)
+            .map_err(|_| {
+                ExecutionError::new(ErrorKind::Host("contract operand index allocation"), START)
+            })?;
         contract.functions.push(entry);
         let mut work = limits.work;
         let mut cursor = 0;
@@ -252,7 +268,9 @@ impl<'a> Contract<'a> {
     pub fn sites(&self) -> &[Site] {
         &self.sites
     }
-    pub(crate) fn expressions(&self) -> &[(usize, usize)] { &self.expressions }
+    pub(crate) fn expressions(&self) -> &[(usize, usize)] {
+        &self.expressions
+    }
     /// Identity comparison does not equate independent source compilations.
     pub fn same_approval(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.executable.approval, &other.executable.approval)
@@ -334,7 +352,8 @@ impl<'a> Contract<'a> {
             value.span,
             work,
         )?;
-        self.expressions.push((value as *const TypedExpr as usize, self.sites.len() - 1));
+        self.expressions
+            .push((value as *const TypedExpr as usize, self.sites.len() - 1));
         // Executable shape validation already bounded expression depth.
         match &value.kind {
             ExprKind::Call {
@@ -394,7 +413,7 @@ mod tests {
         let e =
             prepare_execution("fn demo()->bool{return true;}", AdmissionLimits::default()).unwrap();
         let mut c = Contract::extract(&e, e.entry("demo").unwrap(), Limits::default()).unwrap();
-        assert_eq!(c.schedule().quantities().count(), 34);
+        assert_eq!(c.schedule().quantities().count(), 48);
         assert!(c.schedule().quantities().all(|n| n > 0));
         c.schedule.machine[2] += 1;
         assert!(matches!(
@@ -462,7 +481,9 @@ mod tests {
         let limits = Limits {
             nodes: 2,
             work: 100,
-            storage: 2 * (size_of::<Site>() + size_of::<FunctionId>() + size_of::<(usize, usize)>()) * 2
+            storage: 2
+                * (size_of::<Site>() + size_of::<FunctionId>() + size_of::<(usize, usize)>())
+                * 2
                 + 2 * size_of::<Contract<'_>>(),
         };
         Contract::extract(&e, entry, limits)

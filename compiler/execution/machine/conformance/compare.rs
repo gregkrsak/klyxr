@@ -1,0 +1,1159 @@
+//! Observation validation precedes correspondence. Neither stage executes,
+//! repairs or acquires authority over the retained interpreter state.
+use super::*;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Comparison {
+    Equal,
+    Different { record: usize },
+    Inconclusive(Incomplete),
+}
+#[derive(Clone, Copy, Debug)]
+pub struct ComparisonLimits {
+    pub records: usize,
+    pub nodes: usize,
+    pub work: usize,
+    pub storage: usize,
+}
+impl Default for ComparisonLimits {
+    fn default() -> Self {
+        Self { records: 262_144, nodes: 65_536, work: 20_000_000, storage: 67_108_864 }
+    }
+}
+type Valid<T = ()> = Result<T, Incomplete>;
+fn require(condition: bool) -> Valid {
+    if condition { Ok(()) } else { Err(Incomplete::InvalidState) }
+}
+struct Work(usize);
+impl Work {
+    fn spend(&mut self) -> Valid {
+        self.0 = self.0.checked_sub(1).ok_or(Incomplete::Work)?; Ok(())
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Kind { Frame, Result, Temporary, Owner, Scope, Generation, Pending, Replacement,
+    Staging, Realm, Sensor, Invocation, Production, Leaf }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Key(Kind, u64, u64);
+fn key(kind: Kind, id: u64) -> Key { Key(kind, id, 0) }
+#[derive(Clone, Copy)]
+struct Node {
+    key: Key, a: u64, b: u64, parent: Option<Key>, ty: Option<ValueType>,
+    stamp: usize, status: u8, born: bool,
+    edge: Option<Key>,
+    block: usize,
+    statement: usize,
+}
+#[derive(Clone, Copy)]
+enum Link {
+    Reference(Key),
+    Expected(Key, ValueType),
+    Owner(Key, u8),
+    Generation(u64, hir::LocalId, u64),
+    PayloadParent(Key, Key),
+}
+#[derive(Clone, Copy)]
+struct SlotRow { frame: u64, place: Place, state: u8 }
+#[derive(Clone, Copy)]
+struct Pair { left: Key, right: Key, seen: usize }
+
+/// One reservation covers validation scratch and both directions of the map.
+/// The final comparison result has a fixed scalar representation and no writer.
+struct Scratch {
+    nodes: Vec<Node>, links: Vec<Link>, slots: Vec<SlotRow>, pairs: Vec<Pair>,
+    trusted: Vec<trusted::Event>, leaves: Vec<(u8, u64)>, cap: usize,
+}
+pub(super) fn compatibility_shapes() -> [usize; 8] {
+    [size_of::<Node>(),size_of::<Link>(),size_of::<SlotRow>(),size_of::<Pair>(),
+        size_of::<trusted::Event>(),size_of::<(u8,u64)>(),size_of::<Scratch>(),size_of::<Comparison>()]
+}
+impl Scratch {
+    fn new(limits: ComparisonLimits, schedule:contract::Schedule) -> Valid<Self> {
+        let units:usize=schedule.comparison[..6].iter().sum();
+        let bytes = limits.nodes.checked_mul(units).and_then(|n| n.checked_add(schedule.comparison[6]))
+            .and_then(|n|n.checked_add(schedule.comparison[7]));
+        if limits.records == 0 || limits.records > 1_048_576 || limits.nodes == 0
+            || limits.nodes > 1_048_576 || limits.work == 0 || limits.work > 100_000_000
+            || limits.storage > 268_435_456 || bytes.map_or(true, |n| n > limits.storage) {
+            return Err(Incomplete::Admission);
+        }
+        let mut s = Self { nodes: Vec::new(), links: Vec::new(), slots: Vec::new(),
+            pairs: Vec::new(), trusted: Vec::new(), leaves: Vec::new(), cap: limits.nodes };
+        s.nodes.try_reserve_exact(limits.nodes).map_err(|_| Incomplete::Allocation)?;
+        s.links.try_reserve_exact(limits.nodes).map_err(|_| Incomplete::Allocation)?;
+        s.slots.try_reserve_exact(limits.nodes).map_err(|_| Incomplete::Allocation)?;
+        s.pairs.try_reserve_exact(limits.nodes).map_err(|_| Incomplete::Allocation)?;
+        s.trusted.try_reserve_exact(limits.nodes).map_err(|_| Incomplete::Allocation)?;
+        s.leaves.try_reserve_exact(limits.nodes).map_err(|_| Incomplete::Allocation)?;
+        Ok(s)
+    }
+    fn clear(&mut self) {
+        self.nodes.clear(); self.links.clear(); self.slots.clear();
+        self.trusted.clear(); self.leaves.clear();
+    }
+    fn find(&self, k: Key, work: &mut Work) -> Valid<Option<usize>> {
+        for (index, n) in self.nodes.iter().enumerate() {
+            work.spend()?; if n.key == k { return Ok(Some(index)); }
+        }
+        Ok(None)
+    }
+    fn node(&mut self, n: Node, declaration: bool, work: &mut Work) -> Valid<usize> {
+        require(n.key.1 != ABSENT)?;
+        if let Some(index) = self.find(n.key, work)? {
+            let old = self.nodes[index];
+            // Staging slots may retire and later be reused. Their active
+            // lifetimes, rather than their container numbers, are identities.
+            if n.key.0 == Kind::Staging && old.stamp.saturating_add(1) < n.stamp {
+                self.nodes[index] = n; return Ok(index);
+            }
+            require(old.a == n.a && old.b == n.b && old.parent == n.parent)?;
+            if let (Some(a), Some(b)) = (old.ty, n.ty) { require(a == b)?; }
+            if declaration { require(old.stamp != n.stamp)?; }
+            self.nodes[index].stamp = n.stamp;
+            self.nodes[index].ty = old.ty.or(n.ty);
+            Ok(index)
+        } else {
+            if self.nodes.len() == self.cap { return Err(Incomplete::Records); }
+            self.nodes.push(n); Ok(self.nodes.len() - 1)
+        }
+    }
+    fn link(&mut self, l: Link) -> Valid {
+        if self.links.len() == self.cap { return Err(Incomplete::Records); }
+        self.links.push(l); Ok(())
+    }
+    fn pair(&mut self, a: Key, b: Key, stamp: usize, work: &mut Work) -> Valid<bool> {
+        require(a.0 == b.0)?;
+        for pair in &mut self.pairs {
+            work.spend()?;
+            if a.0 == Kind::Staging && pair.seen.saturating_add(1) < stamp { continue; }
+            if pair.left == a || pair.right == b {
+                if pair.left != a || pair.right != b { return Ok(false); }
+                pair.seen = stamp; return Ok(true);
+            }
+        }
+        if self.pairs.len() == self.cap { return Err(Incomplete::Records); }
+        self.pairs.push(Pair { left: a, right: b, seen: stamp }); Ok(true)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ValueInfo { ty: Option<ValueType>, handle: Option<Key>, extra: usize }
+struct Validator<'a, 'b> {
+    contract: &'a contract::Contract<'a>, records: &'b [Record], at: usize,
+    scratch: &'b mut Scratch, work: &'b mut Work, stamp: usize,
+    realm: Option<u64>, last_fuel: u64, snapshots: usize,
+    trusted_count: usize, leaf_count: usize,
+    storage: usize, limits: ExecutionLimits, delivered: bool,
+    action_frame: Option<u64>,
+    action_plan: Option<usize>,
+}
+impl Validator<'_, '_> {
+    fn peek(&self) -> Option<Record> { self.records.get(self.at).copied() }
+    fn take(&mut self) -> Valid<Record> {
+        self.work.spend()?;
+        let r = self.peek().ok_or(Incomplete::InvalidState)?; self.at += 1; Ok(r)
+    }
+    fn end(&mut self) -> Valid { require(self.take()? == Record::End) }
+    fn meta(&mut self, part: Part) -> Valid<[u64; 8]> {
+        match self.take()? { Record::Meta(p, d) if p == part => Ok(d), _ => Err(Incomplete::InvalidState) }
+    }
+    fn is_meta(&self, part: Part) -> bool { matches!(self.peek(), Some(Record::Meta(p, _)) if p == part) }
+    fn shape(&self, d: &[u64;8], count: usize) -> Valid { require(d[count..].iter().all(|n| *n == ABSENT)) }
+    fn span(&self, s: Span) -> Valid {
+        require(s.line > 0 && s.column > 0 && s.start <= s.end)
+    }
+    fn origin(&mut self) -> Valid<Span> {
+        match self.take()? { Record::Origin(s) => { self.span(s)?; Ok(s) }, _ => Err(Incomplete::InvalidState) }
+    }
+    fn declaration(&mut self, k: Key, a: u64, b: u64, parent: Option<Key>, ty: Option<ValueType>, unique: bool) -> Valid<usize> {
+        if let Some(p) = parent { self.scratch.link(Link::Reference(p))?; }
+        self.scratch.node(Node { key:k, a,b,parent,ty,stamp:self.stamp,status:0,born:false,edge:None,block:0,statement:0 }, unique, self.work)
+    }
+    fn reference(&mut self, k: Key) -> Valid { self.scratch.link(Link::Reference(k)) }
+    fn owner(&mut self, k: Key, role: u8) -> Valid { self.scratch.link(Link::Owner(k, role)) }
+    fn node(&mut self, k: Key) -> Valid<Node> {
+        let index = self.scratch.find(k,self.work)?.ok_or(Incomplete::InvalidState)?;
+        Ok(self.scratch.nodes[index])
+    }
+    fn function(&mut self, frame: u64) -> Valid<FunctionId> {
+        Ok(FunctionId(self.node(key(Kind::Frame, frame))?.a as usize))
+    }
+    fn place(&mut self, frame: u64, place: Place) -> Valid<ValueType> {
+        let f = self.function(frame)?;
+        let p = &self.contract.executable.program;
+        match place {
+            Place::Local(id) => { let l = p.locals().get(id.0).ok_or(Incomplete::InvalidState)?;
+                require(l.function == f && l.id == id)?; Ok(l.ty) }
+            Place::Parameter(id) => { let parameter = p.parameters().get(id.0).ok_or(Incomplete::InvalidState)?;
+                require(parameter.function == f && parameter.id == id)?;
+                Ok(match parameter.ty { hir::ParameterType::Value(t) => t,
+                    hir::ParameterType::Range(t) => ValueType::Range(t),
+                    hir::ParameterType::MutableRecord(t) => ValueType::MutableRef(ReferentType::Record(t)) }) }
+        }
+    }
+    fn expected(&mut self, value: ValueInfo, ty: ValueType) -> Valid {
+        if let Some(actual) = value.ty { require(actual == ty) }
+        else if let Some(k) = value.handle { self.scratch.link(Link::Expected(k,ty)) }
+        else { Err(Incomplete::InvalidState) }
+    }
+    fn optional_value(&mut self, cleanup: bool) -> Valid {
+        match self.take()? {
+            Record::Absent => Ok(()),
+            Record::Payload => { self.held_value(cleanup)?; Ok(()) },
+            _ => Err(Incomplete::InvalidState),
+        }
+    }
+    fn add_storage(&mut self, bytes: usize) -> Valid {
+        self.storage=self.storage.checked_add(bytes).ok_or(Incomplete::InvalidState)?; Ok(())
+    }
+    fn capacity(&mut self, count: u64, unit: usize) -> Valid {
+        let bytes=usize::try_from(count).ok().and_then(|n|n.checked_mul(unit)).ok_or(Incomplete::InvalidState)?;
+        self.add_storage(bytes)
+    }
+    fn held_value(&mut self, cleanup: bool) -> Valid<ValueInfo> {
+        let value=self.value(0,cleanup)?; self.add_storage(value.extra)?; Ok(value)
+    }
+    fn value(&mut self, depth: usize, cleanup: bool) -> Valid<ValueInfo> {
+        require(depth < 256)?;
+        let mut info = ValueInfo { ty:None, handle:None, extra:0 };
+        match self.take()? {
+            Record::Bool(_) => info.ty = Some(ValueType::Bool),
+            Record::Range(id, value) => {
+                let range = self.contract.executable.program.ranges().get(id.0).ok_or(Incomplete::InvalidState)?;
+                require(range.id == id && range.min <= value && value <= range.max)?;
+                info.ty = Some(ValueType::Range(id));
+            }
+            Record::Raw(_) | Record::NoValue => (),
+            Record::Reference(kind, referent, frame, place) => {
+                self.reference(key(Kind::Frame,frame))?;
+                let target = self.place(frame,place)?;
+                require(target == referent.value_type())?;
+                info.ty = Some(match kind { BorrowKind::Shared => ValueType::SharedRef(referent),
+                    BorrowKind::Mutable => ValueType::MutableRef(referent) });
+            }
+            Record::Meta(Part::Record,d) => {
+                self.shape(&d,3)?; require(d[2]<=1)?;
+                let id = hir::RecordId(d[0] as usize);
+                let record = self.contract.executable.program.records().get(id.0).ok_or(Incomplete::InvalidState)?;
+                let unit=self.contract.schedule().machine[if d[2]==0 {5}else{4}];
+                info.extra=usize::try_from(d[1]).ok().and_then(|n|n.checked_mul(unit)).ok_or(Incomplete::InvalidState)?;
+                let mut count = 0; let mut previous = None;
+                while self.is_meta(Part::Field) {
+                    let field = self.meta(Part::Field)?; self.shape(&field,1)?;
+                    require(previous.map_or(true, |p| field[0] > p))?; previous=Some(field[0]);
+                    let row = self.contract.executable.program.fields().get(field[0] as usize).ok_or(Incomplete::InvalidState)?;
+                    require(row.record == id)?;
+                    let expected = row.ty;
+                    let value = self.value(depth+1,cleanup)?;
+                    if d[2]==0 { require(matches!(value.ty,Some(ValueType::Range(_))))?; }
+                    info.extra=info.extra.checked_add(value.extra).ok_or(Incomplete::InvalidState)?;
+                    self.expected(value,expected)?; count += 1;
+                }
+                require(count as u64 <= d[1])?;
+                if !cleanup { require(count == record.fields.len())?; }
+                self.end()?; info.ty = Some(ValueType::Record(id));
+            }
+            Record::Meta(Part::ResultChain,head) => {
+                self.shape(&head,1)?; require(self.delivered)?;
+                let d=self.meta(Part::ResultLayer)?; self.shape(&d,2)?;
+                let outer = hir::ResultTypeId(d[0] as usize); let mut layer=d;
+                let mut layers = 0;
+                loop {
+                    self.work.spend()?; layers += 1; require(layers <= 32)?;
+                    let definition = self.contract.executable.program.result_type(hir::ResultTypeId(layer[0] as usize)).ok_or(Incomplete::InvalidState)?;
+                    require(layer[1] <= 1)?;
+                    let ty = if layer[1] == 0 { definition.success } else { definition.failure };
+                    if let ValueType::Result(child) = ty {
+                        require(self.take()? == Record::Absent)?;
+                        layer = self.meta(Part::ResultLayer)?; self.shape(&layer,2)?;
+                        require(layer[0] == child.0 as u64)?;
+                    } else {
+                        let value = self.value(depth+1,false)?; self.expected(value,ty)?; break;
+                    }
+                }
+                require(layers as u64 <= head[0])?;
+                self.end()?; info.ty=Some(ValueType::Result(outer));
+            }
+            Record::Meta(part,d) => {
+                match part {
+                    Part::ResultHandle => { self.shape(&d,1)?; info.handle=Some(key(Kind::Result,d[0])); }
+                    Part::TemporaryHandle => { self.shape(&d,2)?; info.handle=Some(Key(Kind::Owner,d[0],d[1])); }
+                    Part::SensorHandle => { self.shape(&d,2)?;
+                        let catalog = self.contract.executable.trusted.as_ref().ok_or(Incomplete::InvalidState)?;
+                        require(d[0] == catalog.catalog.sensor.0 as u64)?;
+                        info.ty=Some(ValueType::Resource(catalog.catalog.sensor));
+                        info.handle=Some(key(Kind::Sensor,d[1])); }
+                    Part::Leaf => { self.shape(&d,3)?;
+                        let leaf = self.contract.executable.program.resources.leaves.get(d[0] as usize).ok_or(Incomplete::InvalidState)?;
+                        require(leaf.record.0 as u64 == d[1])?;
+                        info.ty=Some(ValueType::Record(leaf.record));
+                        info.handle=Some(key(Kind::Leaf,d[2])); }
+                    _ => return Err(Incomplete::InvalidState),
+                }
+                if let Some(k)=info.handle { self.reference(k)?; self.owner(k,u8::from(cleanup))?; }
+            }
+            _ => return Err(Incomplete::InvalidState),
+        }
+        Ok(info)
+    }
+    fn expression(&mut self, frame: u64) -> Valid {
+        let Record::Expression(index) = self.take()? else { return Err(Incomplete::InvalidState); };
+        let site = self.contract.sites().get(index).ok_or(Incomplete::InvalidState)?;
+        require(site.role == contract::Role::Expression && site.function == self.function(frame)?)
+    }
+    fn public_record(&mut self, id:hir::RecordId, fields:&[(hir::FieldId,RangeValue)],capacity:usize) -> Valid {
+        let d=self.meta(Part::Record)?;self.shape(&d,3)?;
+        require(d[0]==id.0 as u64 && d[1]==capacity as u64 && d[2]==0)?;
+        let definition=self.contract.executable.program.records().get(id.0).ok_or(Incomplete::InvalidState)?;
+        require(definition.fields.len()==fields.len())?;
+        for field in &definition.fields {
+            let mut actual=None;
+            for (candidate,value) in fields {self.work.spend()?;if candidate==field {
+                require(actual.is_none())?;actual=Some(value);
+            }}
+            let value=actual.ok_or(Incomplete::InvalidState)?;
+            let row=self.meta(Part::Field)?;self.shape(&row,1)?;require(row[0]==field.0 as u64)?;
+            require(self.take()?==Record::Range(value.ty,value.value))?;
+        }
+        self.end()
+    }
+    fn public_value(&mut self, value:&RuntimeValue)->Valid {
+        match value {
+            RuntimeValue::Bool(value)=>require(self.take()?==Record::Bool(*value)),
+            RuntimeValue::Range(value)=>require(self.take()?==Record::Range(value.ty,value.value)),
+            RuntimeValue::Record{record,fields}=>self.public_record(*record,fields,fields.capacity()),
+            RuntimeValue::Result(layers)=>{
+                let head=self.meta(Part::ResultChain)?;self.shape(&head,1)?;require(head[0]==layers.capacity() as u64)?;
+                for layer in layers {
+                    self.work.spend()?;
+                    let d=self.meta(Part::ResultLayer)?;self.shape(&d,2)?;
+                    require(d[0]==layer.ty.0 as u64 && d[1]==u64::from(layer.tag==hir::ResultTag::Error))?;
+                    match &layer.payload {
+                        None=>require(self.take()?==Record::Absent)?,
+                        Some(ResultPayload::Bool(value))=>require(self.take()?==Record::Bool(*value))?,
+                        Some(ResultPayload::Range(value))=>require(self.take()?==Record::Range(value.ty,value.value))?,
+                        Some(ResultPayload::Record{record,fields})=>self.public_record(*record,fields,fields.capacity())?,
+                    }
+                }
+                self.end()
+            }
+        }
+    }
+    fn fields(&mut self, frame: u64) -> Valid {
+        while self.is_meta(Part::Initializer) {
+            let d=self.meta(Part::Initializer)?; self.shape(&d,1)?;
+            require((d[0] as usize) < self.contract.executable.program.fields().len())?;
+            self.expression(frame)?;
+        }
+        self.end()
+    }
+    fn task(&mut self, executing:bool) -> Valid {
+        let Record::Continuation(frame)=self.take()? else { return Err(Incomplete::InvalidState); };
+        self.reference(key(Kind::Frame,frame))?;
+        require(self.node(key(Kind::Frame,frame))?.stamp==self.stamp)?;
+        let d=self.meta(Part::Task)?;
+        if executing {self.action_frame=Some(frame);self.action_plan=if d[0]==22 {Some(d[1] as usize)}else{None};}
+        let count=match d[0] { 0|6|7|11|14|15|23|24|25=>1, 1|4|8|9|12|20=>2,
+            3|10|13|17|18|19=>3, 2|5|16|21|22=>4, _=>return Err(Incomplete::InvalidState) };
+        self.shape(&d,count)?;
+        let function=self.function(frame)?;
+        let definition=self.contract.executable.function(function).map_err(|_|Incomplete::InvalidState)?;
+        match d[0] {
+            1|2|5|8=>require(d[1]>0 && d[1]<=ExecutionLimits::MAX.expression_depth as u64+1)?,
+            9=>require((d[1] as usize)<self.contract.executable.program.records().len())?,
+            10=>{
+                let callee=self.contract.executable.program.functions().get(d[1] as usize)
+                    .and_then(|f|f.as_ordinary()).ok_or(Incomplete::InvalidState)?;
+                require(callee.parameters.len() as u64==d[2])?;
+            }
+            13=>{
+                let control=self.node(key(Kind::Frame,frame))?;
+                let body=definition.blocks().find(|(id,_)|id.0==control.block).map(|(_,b)|b).ok_or(Incomplete::InvalidState)?;
+                let Terminator::Branch{then_target,else_target,..}=body.terminator() else {return Err(Incomplete::InvalidState);};
+                require(then_target.0 as u64==d[1] && else_target.0 as u64==d[2] && control.statement==body.statements().len())?;
+            }
+            21=>{
+                require((d[1] as usize)<self.contract.executable.program.result_types().len())?;
+                let control=self.node(key(Kind::Frame,frame))?;
+                let body=definition.blocks().find(|(id,_)|id.0==control.block).map(|(_,b)|b).ok_or(Incomplete::InvalidState)?;
+                let (result,yes,no)=match body.terminator() {
+                    Terminator::Match{result,ok_target,error_target,..}=>(*result,*ok_target,*error_target),
+                    Terminator::Propagate{operation,ok_target,error_target,..}=>(operation.inner,*ok_target,*error_target),
+                    _=>return Err(Incomplete::InvalidState),
+                };
+                require(result.0 as u64==d[1] && yes.0 as u64==d[2] && no.0 as u64==d[3])?;
+            }
+            22=>{
+                let approved=self.contract.executable.trusted.as_ref().ok_or(Incomplete::InvalidState)?;
+                let plan=approved.invocations.get(d[1] as usize).ok_or(Incomplete::InvalidState)?;
+                require(plan.function==function)?;
+            }
+            23..=25=>require(self.contract.executable.trusted.is_some())?,
+            _=>(),
+        }
+        match d[0] {
+            1|2|5|8 => {
+                if d[0]==5||d[0]==8 { require(matches!(self.take()?,Record::Binary(BinaryOp::And|BinaryOp::Or)))?; }
+                self.expression(frame)?;
+            }
+            7 => { require(matches!(self.take()?,Record::Binary(_)))?;
+                require(matches!(self.take()?,Record::ExprType(_)))?; }
+            9|16|18|19 => self.fields(frame)?,
+            11 => { let Record::Destination(at,place,field)=self.take()? else { return Err(Incomplete::InvalidState); };
+                self.place(at,place)?;
+                if let Some((record,id))=field {
+                    require(self.contract.executable.program.fields().get(id.0).is_some_and(|f|f.record==record))?;
+                }
+            }
+            _=>(),
+        }
+        for k in task_keys(d) { self.reference(k)?; }
+        self.end()
+    }
+    fn invocation(&mut self, id:u64, plan:usize, frame:Option<u64>) -> Valid<usize> {
+        let approved=self.contract.executable.trusted.as_ref().ok_or(Incomplete::InvalidState)?;
+        let p=approved.invocations.get(plan).ok_or(Incomplete::InvalidState)?;
+        let parent=if let Some(index)=self.scratch.find(key(Kind::Invocation,id),self.work)? {
+            self.scratch.nodes[index].parent
+        } else {
+            require(self.action_plan==Some(plan))?;
+            let f=frame.or(self.action_frame).ok_or(Incomplete::InvalidState)?;
+            require(self.function(f)?==p.function)?;Some(key(Kind::Frame,f))
+        };
+        self.declaration(key(Kind::Invocation,id),p.operation.0 as u64,plan as u64,parent,None,false)
+    }
+    fn trusted_state(&mut self) -> Valid {
+        let d=self.meta(Part::TrustedState)?;self.shape(&d,7)?;
+        require(d[0]!=0 && d[1]==self.contract.entry().0 as u64 && d[2]<=d[3])?;
+        if let Some(realm)=self.realm {require(realm==d[0])?;}else{self.realm=Some(d[0]);}
+        self.declaration(key(Kind::Realm,d[0]),0,0,None,None,false)?;
+        let units=self.contract.schedule();self.add_storage(units.trusted[0])?;
+        self.capacity(d[3],units.trusted[1])?;self.capacity(d[4],units.trusted[2])?;
+        self.capacity(d[5],units.trusted[3])?;
+        let retained=self.meta(Part::TrustedRetained)?;self.shape(&retained,4)?;
+        require(retained[0]<=2 && retained[1]<=3)?;
+        require(d[6] as usize==self.limits.trace_depth.checked_mul(units.machine[6]).ok_or(Incomplete::InvalidState)?)?;
+        let unit=match retained[1] {0=>{require(retained[2]==0)?;0},1=>units.machine[6],2=>units.machine[7],3=>units.machine[5],_=>unreachable!()};
+        let extra=(retained[2] as usize).checked_mul(unit).and_then(|n|
+            (retained[3] as usize).checked_mul(units.machine[6]).and_then(|d|n.checked_add(d))).ok_or(Incomplete::InvalidState)?;
+        self.add_storage((d[6] as usize).max(extra))?;
+        let approved=self.contract.executable.trusted.as_ref().ok_or(Incomplete::InvalidState)?;
+        let mut productions=0;
+        while self.is_meta(Part::Production) {
+            let p=self.meta(Part::Production)?;self.shape(&p,7)?;
+            require(p[1]==d[0] && p[5]<=1)?;
+            let plan=approved.invocations.get(p[3] as usize).ok_or(Incomplete::InvalidState)?;
+            self.invocation(p[4],p[3] as usize,None)?;
+            let index=self.declaration(key(Kind::Production,p[0]),p[3],p[2],
+                Some(key(Kind::Invocation,p[4])),Some(ValueType::Result(plan.result)),true)?;
+            self.scratch.nodes[index].born=true;self.scratch.nodes[index].status=p[5] as u8;
+            self.reference(key(Kind::Result,p[2]))?;
+            if let Some(Record::Range(ty,value))=self.peek() {
+                require(p[6]==ABSENT)?;
+                let expected=self.contract.executable.program.result_payload(plan.result,
+                    if p[5]==0 {hir::ResultTag::Ok}else{hir::ResultTag::Error}).ok_or(Incomplete::InvalidState)?;
+                let v=self.value(0,false)?;self.expected(v,expected)?;
+                if plan.completion.is_some() {
+                    require((p[5]==0 && ty==approved.catalog.finish_receipt && value==1)
+                        ||(p[5]==1 && ty==approved.catalog.error && value==3))?;
+                }
+            } else {require(self.take()?==Record::Absent && p[6]!=ABSENT)?;
+                self.reference(key(Kind::Sensor,p[6]))?;}
+            if self.is_meta(Part::Token) {
+                let t=self.meta(Part::Token)?;self.shape(&t,2)?;
+                require(t[0]==d[0] && t[1]==p[6])?;
+                let n=self.declaration(key(Kind::Sensor,t[1]),0,0,Some(key(Kind::Realm,t[0])),
+                    Some(ValueType::Resource(approved.catalog.sensor)),true)?;
+                self.scratch.nodes[n].status=1;self.scratch.nodes[n].born=true;
+            }
+            self.end()?;productions+=1;
+        }
+        require(productions<=d[4])?;
+        if self.is_meta(Part::Receipt) {
+            let r=self.meta(Part::Receipt)?;self.shape(&r,3)?;require(r[2]<=1)?;
+            let plan=approved.invocations.get(r[1] as usize).ok_or(Incomplete::InvalidState)?;
+            self.invocation(r[0],r[1] as usize,None)?;
+            let expected=self.contract.executable.program.result_payload(plan.result,
+                if r[2]==0 {hir::ResultTag::Ok}else{hir::ResultTag::Error}).ok_or(Incomplete::InvalidState)?;
+            if self.is_meta(Part::Token) {
+                let t=self.meta(Part::Token)?;self.shape(&t,2)?;
+                require(t[0]==d[0] && expected==ValueType::Resource(approved.catalog.sensor))?;
+                let n=self.declaration(key(Kind::Sensor,t[1]),0,0,Some(key(Kind::Realm,t[0])),Some(expected),true)?;
+                self.scratch.nodes[n].status=2;self.scratch.nodes[n].born=true;
+            } else {let v=self.value(0,false)?;self.expected(v,expected)?;}
+            self.end()?;
+        }
+        if self.is_meta(Part::Completion) {
+            let p=self.meta(Part::Completion)?;self.shape(&p,7)?;require(p[6]<=7)?;
+            let plan=approved.invocations.get(p[2] as usize).ok_or(Incomplete::InvalidState)?;
+            require(plan.completion.is_some())?;self.invocation(p[1],p[2] as usize,Some(p[0]))?;
+            self.reference(key(Kind::Frame,p[0]))?;
+            self.reference(Key(Kind::Owner,p[3],p[4]))?;self.reference(key(Kind::Sensor,p[5]))?;
+            if self.is_meta(Part::ResultTicket) {
+                let t=self.meta(Part::ResultTicket)?;self.shape(&t,3)?;require(t[1]==2 && p[6]<=2)?;
+                self.declaration(key(Kind::Result,t[0]),plan.result.0 as u64,plan.function.0 as u64,
+                    None,Some(ValueType::Result(plan.result)),false)?;
+                self.declaration(key(Kind::Production,t[2]),p[2],t[0],
+                    Some(key(Kind::Invocation,p[1])),Some(ValueType::Result(plan.result)),false)?;
+            } else {require(self.take()?==Record::Absent)?;}
+            let result=self.meta(Part::CompletionOutcome)?;self.shape(&result,1)?;
+            if result[0]!=ABSENT {require(p[6]>=3)?;self.owner(key(Kind::Result,result[0]),3)?;}
+            self.optional_value(false)?;self.end()?;
+        }
+        self.trusted_count=0;
+        while let Some(Record::TrustedEvent(event))=self.peek() {
+            self.take()?;
+            if self.trusted_count<self.scratch.trusted.len() {
+                require(self.scratch.trusted[self.trusted_count]==event)?;
+            } else {if self.scratch.trusted.len()==self.scratch.cap{return Err(Incomplete::Records);}
+                self.scratch.trusted.push(event);}
+            self.trusted_count+=1;
+            match event {
+                trusted::Event::Attempt(id,operation)=>{
+                    let n=self.node(key(Kind::Invocation,id))?;require(n.a==operation.0 as u64)?;
+                    let at=self.scratch.find(n.key,self.work)?.ok_or(Incomplete::InvalidState)?;
+                    self.scratch.nodes[at].born=true;
+                }
+                trusted::Event::Received(id,tag)=>{require(tag<=1)?;self.reference(key(Kind::Invocation,id))?;}
+                trusted::Event::Published(id,_)|trusted::Event::FinishProtected(id,_)=>self.reference(key(Kind::Invocation,id))?,
+                trusted::Event::FinishPrefix(id,_)=>self.reference(key(Kind::Invocation,id))?,
+                trusted::Event::ReleaseAttempt(id,operation)=>{
+                    require(operation==approved.catalog.resource.release)?;self.reference(key(Kind::Sensor,id))?;
+                }
+                trusted::Event::ReleaseComplete(id)|trusted::Event::ReleaseFailure(id)=>self.reference(key(Kind::Sensor,id))?,
+            }
+        }
+        require(self.trusted_count==self.scratch.trusted.len())?;
+        Ok(())
+    }
+    fn state(&mut self, which: u64) -> Valid {
+        let d=self.meta(Part::State)?; require(d[0]==which)?;
+        let units=self.contract.schedule();
+        match which {
+            0=>{
+                self.shape(&d,7)?; require(d[6]<=1)?;
+                self.add_storage(units.cleanup[0])?;
+                for (i,u) in [(1,units.cleanup[1]),(2,units.cleanup[2]),(3,units.cleanup[5]),
+                    (4,units.machine[2]),(5,units.cleanup[8])] { self.capacity(d[i],u)?; }
+                while self.is_meta(Part::ResourceFrame) {
+                    let f=self.meta(Part::ResourceFrame)?; self.shape(&f,4)?; require(f[1]<=1)?;
+                    self.reference(key(Kind::Frame,f[0]))?;
+                    self.capacity(f[2],units.cleanup[3])?; self.capacity(f[3],units.cleanup[6])?;
+                    let function=self.function(f[0])?;
+                    let flow=self.contract.executable.function(function).map_err(|_|Incomplete::InvalidState)?
+                        .cleanup.as_ref().ok_or(Incomplete::InvalidState)?;
+                    let mut count=0; let mut parent=None;
+                    while self.is_meta(Part::Scope) {
+                        let s=self.meta(Part::Scope)?; self.shape(&s,4)?; require(s[0]==f[0])?;
+                        let scope=flow.scopes.get(s[1] as usize).ok_or(Incomplete::InvalidState)?;
+                        require(scope.parent.map(|id|id.0 as u64)==parent)?; parent=Some(s[1]);
+                        self.capacity(s[3],units.cleanup[4])?;
+                        self.declaration(key(Kind::Scope,s[2]),s[1],0,Some(key(Kind::Frame,f[0])),None,true)?;
+                        let mut initialized=0;
+                        while self.is_meta(Part::Generation) {
+                            let g=self.meta(Part::Generation)?; self.shape(&g,4)?;
+                            require(g[0]==s[2] && g[3]<=1)?;
+                            let local=hir::LocalId(g[1] as usize);
+                            require(scope.owners.contains(&local))?;
+                            let index=self.declaration(key(Kind::Generation,g[2]),g[1],0,
+                                Some(key(Kind::Scope,s[2])),None,true)?;
+                            require(self.scratch.nodes[index].status<=g[3] as u8)?;
+                            self.scratch.nodes[index].status=g[3] as u8; initialized+=1;
+                        }
+                        require(initialized<=s[3])?; count+=1;
+                    }
+                    require(count<=f[2])?; count=0;
+                    while self.is_meta(Part::GenerationSlot) {
+                        let g=self.meta(Part::GenerationSlot)?; self.shape(&g,3)?; require(g[0]==f[0])?;
+                        self.scratch.link(Link::Generation(f[0],hir::LocalId(g[1] as usize),g[2]))?; count+=1;
+                    }
+                    require(count<=f[3])?;
+                }
+                for holder in 0..3 {
+                    let h=self.meta(Part::Holder)?; self.shape(&h,1)?; require(h[0]==holder)?;
+                    self.optional_value(holder!=0)?; self.end()?;
+                }
+                let mut index=0;
+                while self.is_meta(Part::Holder) {
+                    let h=self.meta(Part::Holder)?; self.shape(&h,2)?; require(h[0]==3 && h[1]==index)?;
+                    self.held_value(true)?; self.end()?; index+=1;
+                }
+                require(index<=d[4])?;
+                while self.is_meta(Part::PendingRecord) {
+                    let p=self.meta(Part::PendingRecord)?; self.shape(&p,8)?; require(p[3]<=1)?;
+                    require((p[2] as usize)<self.contract.executable.program.records().len())?;
+                    self.declaration(key(Kind::Pending,p[0]),p[2],0,Some(key(Kind::Frame,p[1])),None,true)?;
+                    if p[4]!=ABSENT { self.reference(key(Kind::Temporary,p[4]))?; }
+                    if p[6]!=ABSENT { self.reference(key(Kind::Temporary,p[6]))?; }
+                    self.capacity(p[7],units.cleanup[7])?; let mut count=0;
+                    while self.is_meta(Part::PendingField) {
+                        let field=self.meta(Part::PendingField)?; self.shape(&field,1)?;
+                        let row=self.contract.executable.program.fields().get(field[0] as usize).ok_or(Incomplete::InvalidState)?;
+                        require(row.record.0 as u64==p[2])?; let ty=row.ty;
+                        let value=self.held_value(false)?; self.expected(value,ty)?; count+=1;
+                    }
+                    require(count<=p[7])?; self.end()?;
+                }
+                while self.is_meta(Part::Replacement) {
+                    let r=self.meta(Part::Replacement)?; require(r[2]<=1)?;
+                    let place=if r[2]==0 {Place::Local(hir::LocalId(r[3] as usize))}
+                        else {Place::Parameter(hir::ParameterId(r[3] as usize))};
+                    require(self.place(r[1],place)?==ValueType::Record(hir::RecordId(r[4] as usize)))?;
+                    self.declaration(key(Kind::Replacement,r[0]),r[4],r[3],Some(key(Kind::Frame,r[1])),None,true)?;
+                    self.reference(key(Kind::Scope,r[6]))?;
+                    if r[7]!=ABSENT {self.reference(key(Kind::Generation,r[7]))?;}
+                    let phase=self.meta(Part::ReplacementState)?; self.shape(&phase,1)?; require(phase[0]<=4)?;
+                    self.optional_value(false)?; self.optional_value(true)?; self.end()?;
+                }
+                self.leaf_count=0;
+                while let Some(Record::ResourceEvent(kind,id))=self.peek() {
+                    self.take()?; require(kind<=4)?;
+                    let at=self.leaf_count;
+                    if at<self.scratch.leaves.len() {require(self.scratch.leaves[at]==(kind,id))?;}
+                    else {if self.scratch.leaves.len()==self.scratch.cap{return Err(Incomplete::Records);}
+                        self.scratch.leaves.push((kind,id));}
+                    self.leaf_count+=1;
+                    if kind==4 {self.reference(key(Kind::Frame,id))?;}
+                    else {
+                        let n=if kind==0 {self.declaration(key(Kind::Leaf,id),0,0,None,None,false)?}
+                            else {self.scratch.find(key(Kind::Leaf,id),self.work)?.ok_or(Incomplete::InvalidState)?};
+                        if kind==0 {self.scratch.nodes[n].born=true;self.scratch.nodes[n].status=0;}
+                        else if kind==2 {self.scratch.nodes[n].status=2;}
+                    }
+                }
+                require(self.leaf_count==self.scratch.leaves.len())?;
+            }
+            1=>{
+                self.shape(&d,4)?; self.add_storage(units.results[0])?;
+                self.capacity(d[1],units.results[1])?; self.capacity(d[2],units.results[2])?;
+                self.capacity(d[3],units.results[3])?; let mut count=0;
+                while self.is_meta(Part::ResultCell) {
+                    let cell=self.meta(Part::ResultCell)?;
+                    require(cell[2]<=2 && cell[5]<=1 && cell[7]<=5)?;
+                    let function=FunctionId(cell[1] as usize); let ty=hir::ResultTypeId(cell[4] as usize);
+                    let result=self.contract.executable.program.result_type(ty).ok_or(Incomplete::InvalidState)?;
+                    let expected=if cell[5]==0 {result.success}else{result.failure};
+                    let index=self.declaration(key(Kind::Result,cell[0]),cell[4],cell[1],None,Some(ValueType::Result(ty)),true)?;
+                    self.scratch.nodes[index].status=cell[7] as u8;
+                    self.scratch.nodes[index].born=true;
+                    self.scratch.nodes[index].edge=if cell[6]==ABSENT {None}else{Some(key(Kind::Result,cell[6]))};
+                    if cell[6]!=ABSENT {self.reference(key(Kind::Result,cell[6]))?;}
+                    let origin=self.origin()?;
+                    if cell[2]==0 {
+                        let flow=self.contract.executable.function(function).map_err(|_|Incomplete::InvalidState)?
+                            .temporaries.as_ref().ok_or(Incomplete::InvalidState)?;
+                        let site=flow.sites.get(cell[3] as usize).ok_or(Incomplete::InvalidState)?;
+                        require(site.ty==ExprType::Result(ty)&&site.origin.span==origin)?;
+                    } else if cell[2]==1 {
+                        let block=self.contract.executable.function(function).map_err(|_|Incomplete::InvalidState)?
+                            .blocks().find(|(id,_)|id.0 as u64==cell[3]).map(|(_,b)|b).ok_or(Incomplete::InvalidState)?;
+                        let Terminator::ForwardError{operation}=block.terminator() else {return Err(Incomplete::InvalidState);};
+                        require(operation.outer==ty && cell[5]==1 && operation.syntax.phrase==origin)?;
+                    } else {self.reference(key(Kind::Production,cell[3]))?;}
+                    if cell[7]==2 {
+                        let f=self.meta(Part::ResultMatchFrame)?; self.shape(&f,1)?;
+                        self.reference(key(Kind::Frame,f[0]))?; self.origin()?;
+                    }
+                    match self.take()? {
+                        Record::Absent=>require(matches!(cell[7],0|4|5))?,
+                        Record::Payload=>{require(matches!(cell[7],1|2|3))?;
+                            let value=self.held_value(false)?;
+                            if let Some(k)=value.handle {
+                                require(k.0!=Kind::Owner)?;
+                                if k.0==Kind::Result {self.scratch.link(Link::PayloadParent(k,key(Kind::Result,cell[0])))?;}
+                            }
+                            self.expected(value,expected)?;},
+                        _=>return Err(Incomplete::InvalidState),
+                    }
+                    self.end()?;count+=1;
+                }
+                require(count<=d[1])?;
+                while self.is_meta(Part::ResultMatch) {
+                    let r=self.meta(Part::ResultMatch)?;self.shape(&r,2)?;
+                    self.reference(key(Kind::Frame,r[0]))?;self.owner(key(Kind::Result,r[1]),2)?;
+                }
+                while self.is_meta(Part::InertRecord) {
+                    let r=self.meta(Part::InertRecord)?;
+                    self.declaration(key(Kind::Staging,r[0]),r[2],0,Some(key(Kind::Frame,r[1])),None,true)?;
+                    require((r[2] as usize)<self.contract.executable.program.records().len())?;
+                    if r[5]!=ABSENT {self.reference(key(Kind::Temporary,r[5]))?;}
+                    if r[7]!=ABSENT {self.reference(key(Kind::Temporary,r[7]))?;}
+                }
+            }
+            2=>{
+                self.shape(&d,3)?;self.add_storage(units.temporaries[0])?;
+                self.capacity(d[1],units.temporaries[1])?;self.capacity(d[2],units.temporaries[3])?;
+                while self.is_meta(Part::TemporaryActivation) {
+                    let t=self.meta(Part::TemporaryActivation)?;require(t[5]<=2)?;
+                    require(self.function(t[1])?.0 as u64==t[2])?;
+                    let flow=self.contract.executable.function(FunctionId(t[2] as usize)).map_err(|_|Incomplete::InvalidState)?
+                        .temporaries.as_ref().ok_or(Incomplete::InvalidState)?;
+                    require((t[3] as usize)<flow.regions.len())?;
+                    let index=self.declaration(key(Kind::Temporary,t[0]),t[2],t[3],
+                        if t[4]==ABSENT {None}else{Some(key(Kind::Temporary,t[4]))},None,true)?;
+                    self.scratch.nodes[index].status=t[5] as u8;
+                    self.capacity(t[7],units.temporaries[2])?;let mut count=0;
+                    while self.is_meta(Part::TemporaryOwner) {
+                        let o=self.meta(Part::TemporaryOwner)?;self.shape(&o,4)?;require(o[0]==t[0] && o[3]<=3)?;
+                        let site=flow.sites.get(o[2] as usize).ok_or(Incomplete::InvalidState)?;
+                        require(site.region.0 as u64==t[3])?;
+                        let ty=value_type(site.ty).ok_or(Incomplete::InvalidState)?;
+                        let n=self.declaration(Key(Kind::Owner,o[0],o[1]),o[2],0,
+                            Some(key(Kind::Temporary,t[0])),Some(ty),true)?;
+                        self.scratch.nodes[n].status=o[3] as u8;
+                        match self.take()? {
+                            Record::Absent=>require(o[3]!=0)?,
+                            Record::Payload=>{require(o[3]==0)?;let v=self.held_value(false)?;self.expected(v,ty)?;},
+                            _=>return Err(Incomplete::InvalidState),
+                        }
+                        self.end()?;count+=1;
+                    }
+                    require(count<=t[7] && t[6]<=count)?;self.optional_value(false)?;self.end()?;
+                }
+                loop {
+                    match self.peek() {
+                        Some(Record::TemporaryBegin(id,frame,region,parent))=>{
+                            self.take()?;let function=self.function(frame)?;
+                            self.declaration(key(Kind::Temporary,id),function.0 as u64,region.0 as u64,
+                                parent.map(|p|key(Kind::Temporary,p)),None,false)?;
+                        }
+                        Some(Record::TemporaryRegister(id,ordinal,site))=>{
+                            self.take()?;let activation=self.node(key(Kind::Temporary,id))?;
+                            let flow=self.contract.executable.function(FunctionId(activation.a as usize)).map_err(|_|Incomplete::InvalidState)?
+                                .temporaries.as_ref().ok_or(Incomplete::InvalidState)?;
+                            let s=flow.sites.get(site.0).ok_or(Incomplete::InvalidState)?;
+                            self.declaration(Key(Kind::Owner,id,ordinal as u64),site.0 as u64,0,
+                                Some(key(Kind::Temporary,id)),value_type(s.ty),false)?;
+                        }
+                        Some(Record::TemporaryTransfer(id,ordinal,_))|Some(Record::TemporaryCleanup(id,ordinal))=>{
+                            self.take()?;self.reference(Key(Kind::Owner,id,ordinal as u64))?;
+                        }
+                        Some(Record::TemporaryRetire(id))=>{
+                            self.take()?;let at=self.scratch.find(key(Kind::Temporary,id),self.work)?.ok_or(Incomplete::InvalidState)?;
+                            self.scratch.nodes[at].status=3;
+                        }
+                        _=>break,
+                    }
+                }
+            }
+            _=>return Err(Incomplete::InvalidState),
+        }
+        Ok(())
+    }
+    fn finish_graph(&mut self) -> Valid {
+        for index in 0..self.scratch.links.len() {
+            self.work.spend()?;
+            let link=self.scratch.links[index];
+            let k=match link {
+                Link::Reference(k)|Link::Expected(k,_)|Link::Owner(k,_)=>k,
+                Link::Generation(frame,local,id)=>{
+                    let generation=self.node(key(Kind::Generation,id))?;
+                    require(generation.a==local.0 as u64)?;
+                    let scope=self.node(generation.parent.ok_or(Incomplete::InvalidState)?)?;
+                    require(scope.parent==Some(key(Kind::Frame,frame)))?;
+                    for slot in &self.scratch.slots {
+                        self.work.spend()?;
+                        if slot.frame==frame && slot.place==Place::Local(local) && slot.state==1 {
+                            require(generation.status==0)?;
+                        }
+                    }
+                    continue;
+                }
+                Link::PayloadParent(child,parent)=>{
+                    let node=self.node(child)?;require(node.edge==Some(parent))?;continue;
+                }
+            };
+            let node=self.node(k)?;
+            match link {
+                Link::Expected(_,ty)=>require(node.ty==Some(ty))?,
+                Link::Owner(_,role)=>{
+                    for prior in &self.scratch.links[..index] {
+                        self.work.spend()?;
+                        if let Link::Owner(other,_)=prior {require(*other!=k)?;}
+                    }
+                    match k.0 {
+                        Kind::Result=>require(match role {0=>node.status==1,1=>matches!(node.status,1|4),
+                            2=>node.status==2,3=>node.status==3,_=>false})?,
+                        Kind::Owner=>{
+                            require(role==0 && node.status==0)?;
+                            let activation=self.node(node.parent.ok_or(Incomplete::InvalidState)?)?;
+                            require(activation.status<2)?;
+                        }
+                        Kind::Sensor=>require(node.status==1)?,
+                        Kind::Leaf=>require(node.status!=2)?,
+                        _=>return Err(Incomplete::InvalidState),
+                    }
+                }
+                _=>(),
+            }
+        }
+        for index in 0..self.scratch.nodes.len() {
+            self.work.spend()?;
+            let node=self.scratch.nodes[index];
+            if matches!(node.key.0,Kind::Sensor|Kind::Leaf) {
+                let mut owners=0;
+                for link in &self.scratch.links {
+                    self.work.spend()?;
+                    if let Link::Owner(k,_)=link {if *k==node.key {owners+=1;}}
+                }
+                if node.key.0==Kind::Sensor {require(owners==usize::from(node.status==1))?;}
+                else if node.born {require(owners==usize::from(node.status!=2))?;}
+            }
+        }
+        Ok(())
+    }
+    fn snapshot(&mut self) -> Valid<Cut> {
+        let Record::Cut(cut,fuel,depth,origin,expression,_) = self.take()? else {return Err(Incomplete::InvalidState);};
+        require(fuel>=self.last_fuel && fuel<=self.limits.steps && depth<=self.limits.call_depth)?;
+        self.last_fuel=fuel;self.span(origin)?;if let Some(s)=expression {self.span(s)?;}
+        require(matches!(self.take()?,Record::OriginKind(_)))?;
+        let Record::Inventory(stamp,slots,operands,tasks,mask)=self.take()? else {return Err(Incomplete::InvalidState);};
+        require(stamp==self.snapshots && mask<=15)?;self.stamp=stamp;self.snapshots+=1;
+        self.scratch.links.clear();self.scratch.slots.clear();self.storage=0;
+        for node in &mut self.scratch.nodes {
+            self.work.spend()?;if node.key.0==Kind::Sensor {node.status=0;}
+        }
+        let mut parent=None;let mut frame_count=0;let mut slot_count=0;
+        while let Some(Record::Frame(id,function,block,statement,actual_parent,call_site))=self.peek() {
+            self.take()?;require(parent==actual_parent)?;self.span(call_site)?;
+            let mut permitted=false;
+            for f in self.contract.functions() {self.work.spend()?;if *f==function {permitted=true;break;}}
+            require(permitted)?;
+            let definition=self.contract.executable.function(function).map_err(|_|Incomplete::InvalidState)?;
+            let mut found=false;
+            for (bid,body) in definition.blocks() {self.work.spend()?;if bid==block {
+                found=statement<=body.statements().len();break;}}
+            require(found)?;
+            let index=self.declaration(key(Kind::Frame,id),function.0 as u64,0,parent.map(|p|key(Kind::Frame,p)),None,true)?;
+            self.scratch.nodes[index].block=block.0;self.scratch.nodes[index].statement=statement;
+            parent=Some(id);frame_count+=1;
+            let Record::FrameStorage(capacity)=self.take()? else {return Err(Incomplete::InvalidState);};
+            self.capacity(capacity as u64,self.contract.schedule().machine[3])?;
+            let mut local_count=0;
+            while let Some(Record::Slot(place,state))=self.peek() {
+                self.take()?;require(state<=5)?;let ty=self.place(id,place)?;
+                for prior in &self.scratch.slots {self.work.spend()?;
+                    require(prior.frame!=id || prior.place!=place)?;}
+                if self.scratch.slots.len()==self.scratch.cap{return Err(Incomplete::Records);}
+                self.scratch.slots.push(SlotRow {frame:id,place,state});
+                if state==1 {let value=self.held_value(false)?;self.expected(value,ty)?;}
+                local_count+=1;slot_count+=1;
+            }
+            require(local_count<=capacity)?;self.end()?;
+        }
+        require(frame_count==depth && slot_count==slots)?;
+        for _ in 0..operands {require(self.take()?==Record::Operand)?;self.held_value(false)?;}
+        for _ in 0..tasks {self.task(false)?;}
+        for which in 0..3 {if mask&(1<<which)!=0 {self.state(which)?;}}
+        require((mask&8!=0)==self.contract.executable.trusted.is_some())?;
+        if mask&8!=0 {self.trusted_state()?;}
+        let Record::Accounting(limits,storage)=self.take()? else {return Err(Incomplete::InvalidState);};
+        require(limits==self.limits)?;
+        let b=self.meta(Part::Buffers)?;self.shape(&b,6)?;
+        self.capacity(b[0],self.contract.schedule().machine[0])?;
+        self.capacity(b[1],self.contract.schedule().machine[1])?;
+        self.capacity(b[2],self.contract.schedule().machine[2])?;
+        require(depth as u64<=b[0] && tasks as u64<=b[1] && operands as u64<=b[2])?;
+        if b[3]!=ABSENT {self.reference(key(Kind::Frame,b[3]))?;}
+        if b[4]!=ABSENT {self.reference(key(Kind::Temporary,b[4]))?;}
+        require(storage==Some(self.storage))?;
+        self.end()?;self.finish_graph()?;Ok(cut)
+    }
+}
+
+fn value_type(ty:ExprType)->Option<ValueType> {
+    Some(match ty {ExprType::Result(t)=>ValueType::Result(t),ExprType::Bool=>ValueType::Bool,
+        ExprType::Range(t)=>ValueType::Range(t),ExprType::Record(t)=>ValueType::Record(t),
+        ExprType::Resource(t)=>ValueType::Resource(t),ExprType::SharedRef(t)=>ValueType::SharedRef(t),
+        ExprType::MutableRef(t)=>ValueType::MutableRef(t),ExprType::IntegerLiteral=>return None})
+}
+
+fn validate<'a>(contract:&'a contract::Contract<'a>,capture:&Capture,scratch:&mut Scratch,work:&mut Work,
+    limits:ExecutionLimits,outcome:Option<Result<&ExecutionResult,&ExecutionError>>)->Valid {
+    scratch.clear();
+    let mut v=Validator {contract,records:&capture.records,at:0,scratch,work,stamp:0,realm:None,
+        last_fuel:0,snapshots:0,trusted_count:0,leaf_count:0,storage:0,limits,delivered:false,action_frame:None,action_plan:None};
+    let result=(|| {
+    require(v.snapshot()?==Cut::Start)?;
+    let mut last=Cut::Start;
+    loop {
+        match v.peek() {
+            Some(Record::Cut(..))=>last=v.snapshot()?,
+            Some(Record::Executing)=>{
+                v.take()?;
+                let Some(Record::Continuation(frame))=v.peek() else {return Err(Incomplete::InvalidState);};
+                v.action_frame=Some(frame);v.task(true)?;v.finish_graph()?;
+            }
+            _=>break,
+        }
+    }
+    require(last==Cut::Final && v.snapshots==capture.snapshots)?;
+    v.delivered=true;
+    match v.take()? {
+        Record::Delivered=>{
+            let actual=outcome.ok_or(Incomplete::Pending)?.map_err(|_|Incomplete::InvalidState)?;
+            let start=v.at;
+            let definition=contract.executable.program.function(contract.entry()).as_ordinary().ok_or(Incomplete::InvalidState)?;
+            match definition.return_type {
+                Some(ty)=>{let value=v.value(0,false)?;v.expected(value,ty)?;},
+                None=>require(v.take()?==Record::NoValue)?,
+            }
+            let end=v.at;v.at=start;
+            match actual {
+                ExecutionResult::NoValue=>require(v.take()?==Record::NoValue)?,
+                ExecutionResult::Value(value)=>v.public_value(value)?,
+            }
+            require(v.at==end)?;
+        }
+        Record::Stop(class,origin,expression)=>{
+            require((1..=4).contains(&class))?;v.span(origin)?;if let Some(s)=expression {v.span(s)?;}
+            let actual=outcome.ok_or(Incomplete::Pending)?.err().ok_or(Incomplete::InvalidState)?;
+            require(origin==actual.origin && expression==actual.expression)?;
+            let actual_class=match actual.kind {ErrorKind::RangeTrap{..}=>1,ErrorKind::ConfiguredLimit(_)=>2,
+                ErrorKind::Integrity(_)=>3,ErrorKind::Host(_)=>4,_=>0};
+            require(class==actual_class)?;
+            if class==4 {return Err(Incomplete::UnmatchedPhysicalFailure);}
+            if class==1 {
+                let Record::Trap(ty,min,max,computed)=v.take()? else {return Err(Incomplete::InvalidState);};
+                let r=contract.executable.program.ranges().get(ty.0).ok_or(Incomplete::InvalidState)?;
+                require(r.min==min && r.max==max && (computed<i128::from(min)||computed>i128::from(max)))?;
+                require(actual.kind==ErrorKind::RangeTrap{ty,min,max,computed})?;
+            } else if class==2 {
+                let Record::Limit(name)=v.take()? else {return Err(Incomplete::InvalidState);};
+                require(!name.is_empty() && name.len()<=128)?;
+                require(actual.kind==ErrorKind::ConfiguredLimit(name))?;
+            }
+        }
+        _=>return Err(Incomplete::InvalidState),
+    }
+    v.end()?;require(v.at==v.records.len())
+    })();
+    #[cfg(test)]
+    if let Err(reason)=result {eprintln!("K35 independent validation at record {}: {:?}",v.at,reason);}
+    result
+}
+
+fn task_keys(d:[u64;8])->impl Iterator<Item=Key> {
+    let mut keys=[None;2];
+    keys[0]=match d[0] {
+        2|5=>Some(key(Kind::Temporary,d[2])),3|4=>Some(key(Kind::Temporary,d[1])),
+        12=>Some(key(Kind::Replacement,d[1])),16|17=>Some(key(Kind::Pending,d[1])),
+        18|19=>Some(key(Kind::Staging,d[1])),20=>Some(key(Kind::Result,d[1])),
+        22=>Some(key(Kind::Temporary,d[3])),_=>None,
+    };
+    keys.into_iter().flatten()
+}
+
+// M5 validation and correspondence are kept separate from capture. No capture
+// success flag is accepted as a substitute for parsing and validating evidence.
+pub fn compare(a:&Session<'_>,b:&Session<'_>,limits:ComparisonLimits)->Comparison {
+    match compare_inner(a,b,limits) { Ok(result)=>result,Err(reason)=>Comparison::Inconclusive(reason) }
+}
+fn compare_inner(a:&Session<'_>,b:&Session<'_>,limits:ComparisonLimits)->Valid<Comparison> {
+    let mut scratch=Scratch::new(limits,a.contract.schedule())?; let mut work=Work(limits.work);
+    if !a.contract.same_approval(b.contract) || a.entry!=b.entry {return Err(Incomplete::Authority);}
+    let mut common_a=a.machine().limits;let mut common_b=b.machine().limits;
+    common_a.rendered_output=1;common_b.rendered_output=1;
+    if common_a!=common_b {return Err(Incomplete::Admission);}
+    let left=a.capture(); let right=b.capture();
+    for capture in [&*left,&*right] {
+        if let Some(reason)=capture.incomplete { return Err(reason); }
+        if !capture.finished { return Err(Incomplete::Pending); }
+        require(capture.sealed_count==Some(capture.records.len()))?;
+        if capture.records.len()>limits.records { return Err(Incomplete::Records); }
+    }
+    validate(a.contract,&left,&mut scratch,&mut work,a.machine().limits,a.primary())?;
+    validate(b.contract,&right,&mut scratch,&mut work,b.machine().limits,b.primary())?;
+    correspondence(&left.records,&right.records,&mut scratch,&mut work)
+}
+
+fn meta_kind(part:Part,d:[u64;8],index:usize)->Option<Kind> {
+    use Kind::*;
+    match (part,index) {
+        (Part::ResultHandle,0)|(Part::ResultCell,0)|(Part::ResultCell,6)
+        |(Part::ResultMatch,1)|(Part::CompletionOutcome,0)|(Part::ResultTicket,0)=>Some(Result),
+        (Part::ResultCell,3) if d[2]==2=>Some(Production),
+        (Part::ResultTicket,2) if d[1]==2=>Some(Production),
+        (Part::TemporaryHandle,0)|(Part::TemporaryActivation,0)|(Part::TemporaryActivation,4)
+        |(Part::TemporaryOwner,0)|(Part::PendingRecord,4)|(Part::PendingRecord,6)
+        |(Part::InertRecord,5)|(Part::InertRecord,7)|(Part::Buffers,4)|(Part::Completion,3)=>Some(Temporary),
+        (Part::SensorHandle,1)|(Part::Token,1)|(Part::Production,6)|(Part::Completion,5)=>Some(Sensor),
+        (Part::Leaf,2)=>Some(Leaf),
+        (Part::ResultMatch,0)|(Part::ResultMatchFrame,0)|(Part::TemporaryActivation,1)
+        |(Part::ResourceFrame,0)|(Part::Scope,0)|(Part::GenerationSlot,0)
+        |(Part::PendingRecord,1)|(Part::Replacement,1)|(Part::InertRecord,1)
+        |(Part::Buffers,3)|(Part::Completion,0)=>Some(Frame),
+        (Part::Scope,2)|(Part::Generation,0)|(Part::Replacement,6)=>Some(Scope),
+        (Part::Generation,2)|(Part::GenerationSlot,2)|(Part::Replacement,7)=>Some(Generation),
+        (Part::PendingRecord,0)=>Some(Pending),
+        (Part::Replacement,0)=>Some(Replacement),
+        (Part::InertRecord,0)=>Some(Staging),
+        (Part::TrustedState,0)|(Part::Token,0)|(Part::Production,1)=>Some(Realm),
+        (Part::Receipt,0)|(Part::Production,4)|(Part::Completion,1)=>Some(Invocation),
+        (Part::Production,0)=>Some(Production),
+        (Part::Production,2)=>Some(Result),
+        (Part::Task,1)=>match d[0] {3|4=>Some(Temporary),12=>Some(Replacement),16|17=>Some(Pending),
+            18|19=>Some(Staging),20=>Some(Result),_=>None},
+        (Part::Task,2) if matches!(d[0],2|5)=>Some(Temporary),
+        (Part::Task,3) if d[0]==22=>Some(Temporary),
+        _=>None,
+    }
+}
+fn pair_optional(s:&mut Scratch,w:&mut Work,kind:Kind,a:u64,b:u64,stamp:usize)->Valid<bool> {
+    if a==ABSENT||b==ABSENT {Ok(a==b)}else{s.pair(key(kind,a),key(kind,b),stamp,w)}
+}
+fn equal_record(a:Record,b:Record,s:&mut Scratch,w:&mut Work,stamp:usize)->Valid<bool> {
+    match (a,b) {
+        (Record::Frame(x,f,block,at,p,origin),Record::Frame(y,g,other,to,q,source))=>{
+            if f!=g||block!=other||at!=to||origin!=source{return Ok(false);}
+            Ok(s.pair(key(Kind::Frame,x),key(Kind::Frame,y),stamp,w)?
+                &&pair_optional(s,w,Kind::Frame,p.unwrap_or(ABSENT),q.unwrap_or(ABSENT),stamp)?)
+        }
+        (Record::Reference(k,t,x,p),Record::Reference(l,u,y,q))=>{
+            if k!=l||t!=u||p!=q{return Ok(false);}s.pair(key(Kind::Frame,x),key(Kind::Frame,y),stamp,w)
+        }
+        (Record::Continuation(x),Record::Continuation(y))=>{
+            s.pair(key(Kind::Frame,x),key(Kind::Frame,y),stamp,w)
+        }
+        (Record::Destination(x,p,f),Record::Destination(y,q,g))=>{
+            if p!=q||f!=g{return Ok(false);}s.pair(key(Kind::Frame,x),key(Kind::Frame,y),stamp,w)
+        }
+        (Record::TemporaryBegin(x,f,r,p),Record::TemporaryBegin(y,g,t,q))=>{
+            if r!=t{return Ok(false);}
+            Ok(s.pair(key(Kind::Temporary,x),key(Kind::Temporary,y),stamp,w)?
+                &&s.pair(key(Kind::Frame,f),key(Kind::Frame,g),stamp,w)?
+                &&pair_optional(s,w,Kind::Temporary,p.unwrap_or(ABSENT),q.unwrap_or(ABSENT),stamp)?)
+        }
+        (Record::TemporaryRegister(x,i,site),Record::TemporaryRegister(y,j,other))=>{
+            if site!=other{return Ok(false);}
+            Ok(s.pair(key(Kind::Temporary,x),key(Kind::Temporary,y),stamp,w)?
+                &&s.pair(Key(Kind::Owner,x,i as u64),Key(Kind::Owner,y,j as u64),stamp,w)?)
+        }
+        (Record::TemporaryTransfer(x,i,at),Record::TemporaryTransfer(y,j,to))=>{
+            if at!=to{return Ok(false);}
+            Ok(s.pair(key(Kind::Temporary,x),key(Kind::Temporary,y),stamp,w)?
+                &&s.pair(Key(Kind::Owner,x,i as u64),Key(Kind::Owner,y,j as u64),stamp,w)?)
+        }
+        (Record::TemporaryCleanup(x,i),Record::TemporaryCleanup(y,j))=>{
+            Ok(s.pair(key(Kind::Temporary,x),key(Kind::Temporary,y),stamp,w)?
+                &&s.pair(Key(Kind::Owner,x,i as u64),Key(Kind::Owner,y,j as u64),stamp,w)?)
+        }
+        (Record::TemporaryRetire(x),Record::TemporaryRetire(y))=>s.pair(key(Kind::Temporary,x),key(Kind::Temporary,y),stamp,w),
+        (Record::ResourceEvent(kind,x),Record::ResourceEvent(other,y))=>{
+            if kind!=other{return Ok(false);}let k=if kind==4{Kind::Frame}else{Kind::Leaf};
+            s.pair(key(k,x),key(k,y),stamp,w)
+        }
+        (Record::TrustedEvent(x),Record::TrustedEvent(y))=>{
+            use trusted::Event::*;
+            let (kind,a,b,static_equal)=match (x,y) {
+                (Attempt(a,op),Attempt(b,other))=>(Kind::Invocation,a,b,op==other),
+                (Received(a,tag),Received(b,other))=>(Kind::Invocation,a,b,tag==other),
+                (Published(a,tag),Published(b,other))|(FinishProtected(a,tag),FinishProtected(b,other))=>(Kind::Invocation,a,b,tag==other),
+                (FinishPrefix(a,prefix),FinishPrefix(b,other))=>(Kind::Invocation,a,b,prefix==other),
+                (ReleaseAttempt(a,op),ReleaseAttempt(b,other))=>(Kind::Sensor,a,b,op==other),
+                (ReleaseComplete(a),ReleaseComplete(b))|(ReleaseFailure(a),ReleaseFailure(b))=>(Kind::Sensor,a,b,true),
+                _=>return Ok(false),
+            };
+            if !static_equal{return Ok(false);}s.pair(key(kind,a),key(kind,b),stamp,w)
+        }
+        (Record::Meta(part,x),Record::Meta(other,y))=>{
+            if part!=other{return Ok(false);}
+            for index in 0..8 {
+                w.spend()?;
+                let owner=match (part,index) {
+                    (Part::TemporaryHandle|Part::TemporaryOwner,1)=>Some((x[0],x[1],y[0],y[1])),
+                    (Part::Completion,4)=>Some((x[3],x[4],y[3],y[4])),_=>None,
+                };
+                if let Some((a,i,b,j))=owner {
+                    if !s.pair(Key(Kind::Owner,a,i),Key(Kind::Owner,b,j),stamp,w)?{return Ok(false);}
+                } else if let Some(kind)=meta_kind(part,x,index) {
+                    if meta_kind(part,y,index)!=Some(kind)
+                        ||!pair_optional(s,w,kind,x[index],y[index],stamp)?{return Ok(false);}
+                } else if x[index]!=y[index] {return Ok(false);}
+            }
+            Ok(true)
+        }
+        (Record::Accounting(mut x,storage),Record::Accounting(mut y,other))=>{
+            // Presentation allowance is not a common logical execution counter.
+            x.rendered_output=1;y.rendered_output=1;Ok(x==y&&storage==other)
+        }
+        _=>Ok(a==b),
+    }
+}
+fn correspondence(a:&[Record],b:&[Record],scratch:&mut Scratch,work:&mut Work)->Valid<Comparison> {
+    scratch.pairs.clear();let mut stamp=0;
+    for (index,(x,y)) in a.iter().copied().zip(b.iter().copied()).enumerate() {
+        work.spend()?;
+        if let Record::Inventory(ordinal,..)=x {stamp=ordinal;}
+        if !equal_record(x,y,scratch,work,stamp)? {return Ok(Comparison::Different{record:index});}
+    }
+    if a.len()!=b.len(){Ok(Comparison::Different{record:a.len().min(b.len())})}else{Ok(Comparison::Equal)}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn run<'a>(contract:&'a contract::Contract<'a>)->Session<'a> {
+        let mut session=Session::new(contract,ExecutionLimits::default(),Limits {
+            records:262_144,work:10_000_000,storage:67_108_864,lineage:128,
+        }).unwrap();
+        session.advance().unwrap();session
+    }
+    #[test]
+    fn ordinary_complete_evidence_compares_equal() {
+        let e=prepare_execution("fn demo()->bool{return true;}",AdmissionLimits::default()).unwrap();
+        let c=contract::Contract::extract(&e,e.entry("demo").unwrap(),contract::Limits::default()).unwrap();
+        let a=run(&c);let b=run(&c);
+        assert_eq!(compare(&a,&b,ComparisonLimits::default()),Comparison::Equal);
+    }
+    #[test]
+    fn valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle() {
+        let e=prepare_execution("fn demo()->bool{return true;}",AdmissionLimits::default()).unwrap();
+        let c=contract::Contract::extract(&e,e.entry("demo").unwrap(),contract::Limits::default()).unwrap();
+        let a=run(&c);let mut b=run(&c);
+        // A locally well-typed engine defect, with its actual primary outcome
+        // changed too. It is not an observer/engine-state inconsistency.
+        let Engine::Ordinary{outcome,..}=&mut b.engine else {unreachable!()};
+        *outcome=Some(Ok(ExecutionResult::Value(RuntimeValue::Bool(false))));
+        let mut observer=b.machine().observation.borrow_mut();
+        let record=observer.as_mut().unwrap().records.iter_mut().rev()
+            .find(|r|matches!(r,Record::Bool(_))).unwrap();*record=Record::Bool(false);drop(observer);
+        assert_eq!(a.primary().unwrap().unwrap(),&ExecutionResult::Value(RuntimeValue::Bool(true)));
+        assert!(matches!(compare(&a,&b,ComparisonLimits::default()),Comparison::Different{..}));
+    }
+    #[test]
+    fn a_forged_projection_cannot_contradict_the_actual_primary_outcome() {
+        let e=prepare_execution("fn demo()->bool{return true;}",AdmissionLimits::default()).unwrap();
+        let c=contract::Contract::extract(&e,e.entry("demo").unwrap(),contract::Limits::default()).unwrap();
+        let a=run(&c);let b=run(&c);
+        let mut observer=b.machine().observation.borrow_mut();
+        *observer.as_mut().unwrap().records.iter_mut().rev().find(|r|matches!(r,Record::Bool(_))).unwrap()=Record::Bool(false);
+        drop(observer);
+        assert_eq!(compare(&a,&b,ComparisonLimits::default()),Comparison::Inconclusive(Incomplete::InvalidState));
+    }
+    #[test]
+    fn fresh_selected_realms_preserve_one_identity_correspondence() {
+        use crate::trusted::{Selection,Scenario,Grants};
+        let selection=Selection::sensor_demo(Scenario::Sample,Grants::ALL,&["sample"]).unwrap();
+        let e=prepare_execution_with_profile(include_str!("../../../../examples/sensor_finish.klx"),AdmissionLimits::default(),&selection).unwrap();
+        let c=contract::Contract::extract(&e,e.entry("sample").unwrap(),contract::Limits::default()).unwrap();
+        let a=run(&c);let b=run(&c);
+        let realm=|s:&Session<'_>|s.capture().records.iter().find_map(|r|
+            if let Record::Meta(Part::TrustedState,d)=r{Some(d[0])}else{None}).unwrap();
+        assert_ne!(realm(&a),realm(&b));
+        assert_eq!(compare(&a,&b,ComparisonLimits::default()),Comparison::Equal);
+    }
+    #[test]
+    fn two_truncated_views_and_a_comparison_budget_never_establish_equal() {
+        let e=prepare_execution("fn demo()->bool{return true;}",AdmissionLimits::default()).unwrap();
+        let c=contract::Contract::extract(&e,e.entry("demo").unwrap(),contract::Limits::default()).unwrap();
+        let mut a=Session::new(&c,ExecutionLimits::default(),Limits{records:1,..Limits::default()}).unwrap();
+        let mut b=Session::new(&c,ExecutionLimits::default(),Limits{records:1,..Limits::default()}).unwrap();
+        a.advance().unwrap();b.advance().unwrap();
+        assert!(matches!(compare(&a,&b,ComparisonLimits::default()),Comparison::Inconclusive(_)));
+        let a=run(&c);let b=run(&c);
+        assert_eq!(compare(&a,&b,ComparisonLimits{work:1,..ComparisonLimits::default()}),Comparison::Inconclusive(Incomplete::Work));
+        assert_eq!(a.primary().unwrap().unwrap(),&ExecutionResult::Value(RuntimeValue::Bool(true)));
+    }
+}
+

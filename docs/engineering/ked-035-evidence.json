@@ -1,5 +1,5 @@
 {
-  "stage": "M4-in-progress",
+  "stage": "M5-in-progress",
   "baseline_commit": "5f28977a42a7df1817e5cac46b3f6660a38435d3",
   "baseline_tree": "0b330328f3f213a26b6fc4af9f45ca06a98876b8",
   "m0_commit": "0443dfd32dec70e0c72f1a0a886b9eedc284fb9c",
@@ -987,7 +987,7 @@
       "status": "in progress: full state census and ordinary/selected capture candidates; independent validation/comparison pending"
     },
     "M5": {
-      "status": "pending"
+      "status": "in progress: comparator candidate, independent validation and discriminator controls; checkpoint not yet preserved or gated"
     },
     "M6": {
       "status": "pending"
@@ -1013,7 +1013,12 @@
     "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
     "lib.rs::execution::machine::conformance::tests::selected_observation_exhaustion_never_reclassifies_a_fuel_stop",
     "lib.rs::execution::machine::conformance::tests::ordinary_capture_is_admitted_separately_and_repeat_is_read_only",
-    "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution"
+    "lib.rs::execution::machine::conformance::tests::exhausted_observation_preserves_primary_execution",
+    "lib.rs::execution::machine::conformance::compare::tests::ordinary_complete_evidence_compares_equal",
+    "lib.rs::execution::machine::conformance::compare::tests::valid_wrong_delivered_bool_is_different_from_the_independent_true_oracle",
+    "lib.rs::execution::machine::conformance::compare::tests::a_forged_projection_cannot_contradict_the_actual_primary_outcome",
+    "lib.rs::execution::machine::conformance::compare::tests::fresh_selected_realms_preserve_one_identity_correspondence",
+    "lib.rs::execution::machine::conformance::compare::tests::two_truncated_views_and_a_comparison_budget_never_establish_equal"
   ],
   "fixture_adaptations": [
     {

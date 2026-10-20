@@ -69,7 +69,10 @@ impl TrustedTicket {
             AuthorityKind::Propagation(id) => (1, id.0),
             AuthorityKind::Trusted(id) => (2, id),
         };
-        c.row(conformance::Part::ResultTicket, &[self.owner.0 as u64, kind, site as u64]);
+        c.row(
+            conformance::Part::ResultTicket,
+            &[self.owner.0 as u64, kind, site as u64],
+        );
     }
 }
 
@@ -101,42 +104,81 @@ pub(super) fn compatibility_shapes() -> [usize; 5] {
 impl State {
     pub(super) fn observe(&self, c: &mut conformance::Capture) {
         use conformance::{Part, Record, ABSENT};
-        c.row(Part::State, &[1, self.cells.capacity() as u64,
-            self.matches.capacity() as u64, self.records.capacity() as u64]);
+        c.row(
+            Part::State,
+            &[
+                1,
+                self.cells.capacity() as u64,
+                self.matches.capacity() as u64,
+                self.records.capacity() as u64,
+            ],
+        );
         for (index, cell) in self.cells.iter().enumerate() {
-            if !c.spend() { return; }
+            if !c.spend() {
+                return;
+            }
             let (authority, site) = match cell.authority.kind() {
                 AuthorityKind::Constructor(id) => (0, id.0),
                 AuthorityKind::Propagation(id) => (1, id.0),
                 AuthorityKind::Trusted(id) => (2, id),
             };
             let phase = match cell.phase {
-                Phase::PayloadPending => 0, Phase::Active => 1,
-                Phase::MatchProtected { .. } => 2, Phase::CompletionProtected => 3,
-                Phase::Consumed => 4, Phase::Delivered => 5,
+                Phase::PayloadPending => 0,
+                Phase::Active => 1,
+                Phase::MatchProtected { .. } => 2,
+                Phase::CompletionProtected => 3,
+                Phase::Consumed => 4,
+                Phase::Delivered => 5,
             };
-            c.row(Part::ResultCell, &[index as u64, cell.function.0 as u64,
-                authority, site as u64, cell.ty.0 as u64, cell.tag as u64,
-                cell.parent.map_or(ABSENT, |id| id.0 as u64), phase]);
+            c.row(
+                Part::ResultCell,
+                &[
+                    index as u64,
+                    cell.function.0 as u64,
+                    authority,
+                    site as u64,
+                    cell.ty.0 as u64,
+                    cell.tag as u64,
+                    cell.parent.map_or(ABSENT, |id| id.0 as u64),
+                    phase,
+                ],
+            );
             c.push(Record::Origin(cell.origin));
             if let Phase::MatchProtected { frame, origin } = cell.phase {
-                c.row(Part::ResultMatchFrame, &[frame]); c.push(Record::Origin(origin));
+                c.row(Part::ResultMatchFrame, &[frame]);
+                c.push(Record::Origin(origin));
             }
-            if let Some(value) = &cell.payload { c.push(Record::Payload); c.value(value); }
-            else { c.push(Record::Absent); }
+            if let Some(value) = &cell.payload {
+                c.push(Record::Payload);
+                c.value(value);
+            } else {
+                c.push(Record::Absent);
+            }
             c.push(Record::End);
         }
         for (frame, id) in &self.matches {
-            if !c.spend() { return; }
+            if !c.spend() {
+                return;
+            }
             c.row(Part::ResultMatch, &[*frame, id.0 as u64]);
         }
-        for record in &self.records {
-            if !c.spend() { return; }
-            c.row(Part::InertRecord, &[record.frame, record.record.0 as u64,
-                record.start as u64, record.index as u64,
-                record.site.map_or(ABSENT, |s| s.0),
-                record.site.map_or(ABSENT, |s| s.1.0 as u64),
-                record.child.unwrap_or(ABSENT)]);
+        for (index, record) in self.records.iter().enumerate() {
+            if !c.spend() {
+                return;
+            }
+            c.row(
+                Part::InertRecord,
+                &[
+                    index as u64,
+                    record.frame,
+                    record.record.0 as u64,
+                    record.start as u64,
+                    record.index as u64,
+                    record.site.map_or(ABSENT, |s| s.0),
+                    record.site.map_or(ABSENT, |s| s.1 .0 as u64),
+                    record.child.unwrap_or(ABSENT),
+                ],
+            );
         }
     }
     pub(super) fn storage(&self) -> Option<usize> {
@@ -165,11 +207,14 @@ impl State {
 
 impl<'a> Machine<'a> {
     pub(super) fn completion_result_growth(&self) -> usize {
-        self.results
-            .as_ref()
-            .map_or(self.executable.approval.schedule.results[0] + self.executable.approval.schedule.results[1], |s| {
-                usize::from(s.cells.len() == s.cells.capacity()) * self.executable.approval.schedule.results[1]
-            })
+        self.results.as_ref().map_or(
+            self.executable.approval.schedule.results[0]
+                + self.executable.approval.schedule.results[1],
+            |s| {
+                usize::from(s.cells.len() == s.cells.capacity())
+                    * self.executable.approval.schedule.results[1]
+            },
+        )
     }
 
     pub(super) fn trusted_result_prepare(
@@ -824,8 +869,15 @@ impl<'a> Machine<'a> {
         // the protected input. No fallible operation follows active detachment.
         self.charge()?;
         self.reserve(
-            (if cell_grow { self.executable.approval.schedule.results[1] } else { 0 })
-                + (if value_grow { self.executable.approval.schedule.machine[2] } else { 0 }),
+            (if cell_grow {
+                self.executable.approval.schedule.results[1]
+            } else {
+                0
+            }) + (if value_grow {
+                self.executable.approval.schedule.machine[2]
+            } else {
+                0
+            }),
         )?;
         if cell_grow {
             #[cfg(test)]

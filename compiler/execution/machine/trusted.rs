@@ -134,29 +134,68 @@ pub(super) fn compatibility_shapes() -> [usize; 8] {
 impl State {
     pub(in crate::execution::machine) fn observe(&self, c: &mut conformance::Capture) {
         use conformance::{Part, Record, ABSENT};
-        c.row(Part::TrustedState, &[self.realm, self.entry.0 as u64,
-            self.entries.len() as u64, self.entries.capacity() as u64,
-            self.productions.capacity() as u64, self.events.capacity() as u64,
-            self.stop_storage as u64]);
+        c.row(
+            Part::TrustedState,
+            &[
+                self.realm,
+                self.entry.0 as u64,
+                self.entries.len() as u64,
+                self.entries.capacity() as u64,
+                self.productions.capacity() as u64,
+                self.events.capacity() as u64,
+                self.stop_storage as u64,
+            ],
+        );
+        let (status, kind, capacity) = match &self.status {
+            Status::Pending => (0, 0, 0),
+            Status::Stopped(error) => (2, 1, error.trace.capacity()),
+            Status::Complete(ExecutionResult::Value(RuntimeValue::Result(layers))) => (1, 2, layers.capacity()),
+            Status::Complete(ExecutionResult::Value(RuntimeValue::Record { fields, .. })) => (1, 3, fields.capacity()),
+            Status::Complete(_) => (1, 0, 0),
+        };
+        c.row(Part::TrustedRetained, &[status, kind, capacity as u64,
+            self.diagnostic.borrow().as_ref().map_or(0, Vec::capacity) as u64]);
         // Token-table positions are physical. Emit actual tokens in their
         // logical acquisition order; retain only the abstract table history
         // quantities needed by the compatibility schedule.
         let mut seen = 0;
-        for production in &self.productions {
-            if !c.spend() { return; }
-            c.row(Part::Production, &[production.realm, production.cell.0 as u64,
-                production.plan as u64, production.invocation,
-                match production.tag { hir::ResultTag::Ok => 0, hir::ResultTag::Error => 1 },
-                production.sensor.unwrap_or(ABSENT)]);
-            if let Some(value) = &production.range { c.push(Record::Range(value.ty, value.value)); }
-            else { c.push(Record::Absent); }
+        for (index, production) in self.productions.iter().enumerate() {
+            if !c.spend() {
+                return;
+            }
+            c.row(
+                Part::Production,
+                &[
+                    index as u64,
+                    production.realm,
+                    production.cell.0 as u64,
+                    production.plan as u64,
+                    production.invocation,
+                    match production.tag {
+                        hir::ResultTag::Ok => 0,
+                        hir::ResultTag::Error => 1,
+                    },
+                    production.sensor.unwrap_or(ABSENT),
+                ],
+            );
+            if let Some(value) = &production.range {
+                c.push(Record::Range(value.ty, value.value));
+            } else {
+                c.push(Record::Absent);
+            }
             if let Some(sensor) = production.sensor {
                 for entry in &self.entries {
-                    if !c.spend() { return; }
+                    if !c.spend() {
+                        return;
+                    }
                     if let Some(token) = &entry.token {
                         if token.identity == sensor {
-                            if token.realm != self.realm { c.fail(conformance::Incomplete::InvalidState); return; }
-                            c.row(Part::Token, &[token.realm, token.identity]); seen += 1;
+                            if token.realm != self.realm {
+                                c.fail(conformance::Incomplete::InvalidState);
+                                return;
+                            }
+                            c.row(Part::Token, &[token.realm, token.identity]);
+                            seen += 1;
                         }
                     }
                 }
@@ -165,25 +204,45 @@ impl State {
         }
         let mut live = 0;
         for (index, entry) in self.entries.iter().enumerate() {
-            if !c.spend() { return; }
+            if !c.spend() {
+                return;
+            }
             if let Some(token) = &entry.token {
                 live += 1;
-                if token.realm != self.realm { c.fail(conformance::Incomplete::InvalidState); return; }
+                if token.realm != self.realm {
+                    c.fail(conformance::Incomplete::InvalidState);
+                    return;
+                }
                 for other in &self.entries[..index] {
-                    if !c.spend() { return; }
-                    if other.token.as_ref().is_some_and(|v| v.identity == token.identity) {
-                        c.fail(conformance::Incomplete::InvalidState); return;
+                    if !c.spend() {
+                        return;
+                    }
+                    if other
+                        .token
+                        .as_ref()
+                        .is_some_and(|v| v.identity == token.identity)
+                    {
+                        c.fail(conformance::Incomplete::InvalidState);
+                        return;
                     }
                 }
             }
         }
-        if seen != live { c.fail(conformance::Incomplete::InvalidState); return; }
+        if seen != live {
+            c.fail(conformance::Incomplete::InvalidState);
+            return;
+        }
         if let Some(receipt) = &self.receipt {
-            c.row(Part::Receipt, &[receipt.invocation, receipt.plan as u64,
-                receipt.tag as u64]);
+            c.row(
+                Part::Receipt,
+                &[receipt.invocation, receipt.plan as u64, receipt.tag as u64],
+            );
             match &receipt.payload {
                 Some(Payload::Sensor(token)) => {
-                    if token.realm != self.realm { c.fail(conformance::Incomplete::InvalidState); return; }
+                    if token.realm != self.realm {
+                        c.fail(conformance::Incomplete::InvalidState);
+                        return;
+                    }
                     c.row(Part::Token, &[token.realm, token.identity]);
                 }
                 Some(Payload::Range(value)) => c.push(Record::Range(value.ty, value.value)),
@@ -191,9 +250,13 @@ impl State {
             }
             c.push(Record::End);
         }
-        if let Some(pending) = &self.completion { pending.observe(c); }
+        if let Some(pending) = &self.completion {
+            pending.observe(c);
+        }
         for event in &self.events {
-            if !c.spend() { return; }
+            if !c.spend() {
+                return;
+            }
             c.push(Record::TrustedEvent(*event));
         }
     }
@@ -254,6 +317,12 @@ pub struct ExecutionSession<'a> {
     pub(in crate::execution::machine) machine: Machine<'a>,
 }
 impl<'a> ExecutionSession<'a> {
+    pub(in crate::execution::machine) fn recorded(&self) -> Option<Result<&ExecutionResult, &ExecutionError>> {
+        match &self.machine.trusted.as_ref().unwrap().status {
+            Status::Pending => None, Status::Complete(value) => Some(Ok(value)),
+            Status::Stopped(error) => Some(Err(error)),
+        }
+    }
     /// Private milestone control: preserve the tested pre-enable boundary.
     #[cfg(test)]
     pub(crate) fn disable_completion(&mut self) {

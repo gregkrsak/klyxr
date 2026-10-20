@@ -18,19 +18,42 @@ pub(super) struct Pending {
 impl Pending {
     pub(in crate::execution::machine) fn observe(&self, c: &mut conformance::Capture) {
         use conformance::{Part, Record, ABSENT};
-        c.row(Part::Completion, &[self.frame, self.invocation, self.plan as u64,
-            self.input.activation, self.input.ordinal as u64, self.sensor,
-            match self.phase {
-                CompletionPhase::Reserved => 0, CompletionPhase::Consumed => 1,
-                CompletionPhase::Attempted => 2, CompletionPhase::OutcomeProtected => 3,
-                CompletionPhase::ReleasePending => 4, CompletionPhase::Releasing => 5,
-                CompletionPhase::Released => 6, CompletionPhase::Delivered => 7,
-            }]);
-        if let Some(ticket) = &self.ticket { ticket.observe(c); }
-        else { c.push(Record::Absent); }
-        c.row(Part::CompletionOutcome, &[self.protected.map_or(ABSENT, |id| id.0 as u64)]);
-        if let Some(value) = &self.value { c.push(Record::Payload); c.value(value); }
-        else { c.push(Record::Absent); }
+        c.row(
+            Part::Completion,
+            &[
+                self.frame,
+                self.invocation,
+                self.plan as u64,
+                self.input.activation,
+                self.input.ordinal as u64,
+                self.sensor,
+                match self.phase {
+                    CompletionPhase::Reserved => 0,
+                    CompletionPhase::Consumed => 1,
+                    CompletionPhase::Attempted => 2,
+                    CompletionPhase::OutcomeProtected => 3,
+                    CompletionPhase::ReleasePending => 4,
+                    CompletionPhase::Releasing => 5,
+                    CompletionPhase::Released => 6,
+                    CompletionPhase::Delivered => 7,
+                },
+            ],
+        );
+        if let Some(ticket) = &self.ticket {
+            ticket.observe(c);
+        } else {
+            c.push(Record::Absent);
+        }
+        c.row(
+            Part::CompletionOutcome,
+            &[self.protected.map_or(ABSENT, |id| id.0 as u64)],
+        );
+        if let Some(value) = &self.value {
+            c.push(Record::Payload);
+            c.value(value);
+        } else {
+            c.push(Record::Absent);
+        }
         c.push(Record::End);
     }
 }

@@ -203,57 +203,127 @@ struct Activation {
 impl State {
     pub(super) fn observe(&self, c: &mut conformance::Capture) {
         use conformance::{Part, Record, ABSENT};
-        c.row(Part::State, &[0, self.events.capacity() as u64,
-            self.frames.capacity() as u64, self.pending.capacity() as u64,
-            self.work.capacity() as u64, self.replacements.capacity() as u64,
-            u64::from(self.terminal)]);
+        c.row(
+            Part::State,
+            &[
+                0,
+                self.events.capacity() as u64,
+                self.frames.capacity() as u64,
+                self.pending.capacity() as u64,
+                self.work.capacity() as u64,
+                self.replacements.capacity() as u64,
+                u64::from(self.terminal),
+            ],
+        );
         for frame in &self.frames {
-            if !c.spend() { return; }
-            c.row(Part::ResourceFrame, &[frame.id, u64::from(frame.entered),
-                frame.scopes.capacity() as u64, frame.generations.capacity() as u64]);
+            if !c.spend() {
+                return;
+            }
+            c.row(
+                Part::ResourceFrame,
+                &[
+                    frame.id,
+                    u64::from(frame.entered),
+                    frame.scopes.capacity() as u64,
+                    frame.generations.capacity() as u64,
+                ],
+            );
             for scope in &frame.scopes {
-                if !c.spend() { return; }
-                c.row(Part::Scope, &[frame.id, scope.scope.0 as u64, scope.identity,
-                    scope.initialized.capacity() as u64]);
+                if !c.spend() {
+                    return;
+                }
+                c.row(
+                    Part::Scope,
+                    &[
+                        frame.id,
+                        scope.scope.0 as u64,
+                        scope.identity,
+                        scope.initialized.capacity() as u64,
+                    ],
+                );
                 for generation in &scope.initialized {
-                    if !c.spend() { return; }
-                    c.row(Part::Generation, &[scope.identity, generation.local.0 as u64,
-                        generation.identity, u64::from(generation.discharged)]);
+                    if !c.spend() {
+                        return;
+                    }
+                    c.row(
+                        Part::Generation,
+                        &[
+                            scope.identity,
+                            generation.local.0 as u64,
+                            generation.identity,
+                            u64::from(generation.discharged),
+                        ],
+                    );
                 }
             }
             for (local, generation) in &frame.generations {
-                if !c.spend() { return; }
-                c.row(Part::GenerationSlot, &[frame.id, local.0 as u64, *generation]);
+                if !c.spend() {
+                    return;
+                }
+                c.row(
+                    Part::GenerationSlot,
+                    &[frame.id, local.0 as u64, *generation],
+                );
             }
         }
-        for (holder, value) in [(0, &self.protected), (1, &self.detached), (2, &self.current)] {
+        for (holder, value) in [
+            (0, &self.protected),
+            (1, &self.detached),
+            (2, &self.current),
+        ] {
             c.row(Part::Holder, &[holder]);
-            if let Some(value) = value { c.push(Record::Payload); c.value(value); }
-            else { c.push(Record::Absent); }
+            if let Some(value) = value {
+                c.push(Record::Payload);
+                c.value(value);
+            } else {
+                c.push(Record::Absent);
+            }
             c.push(Record::End);
         }
         for (index, value) in self.work.iter().enumerate() {
-            if !c.spend() { return; }
-            c.row(Part::Holder, &[3, index as u64]); c.value(value); c.push(Record::End);
+            if !c.spend() {
+                return;
+            }
+            c.row(Part::Holder, &[3, index as u64]);
+            c.value(value);
+            c.push(Record::End);
         }
         for record in &self.pending {
-            if !c.spend() { return; }
-            c.row(Part::PendingRecord, &[record.id, record.frame, record.record.0 as u64,
-                u64::from(record.complete), record.temporary_site.map_or(ABSENT, |s| s.0),
-                record.temporary_site.map_or(ABSENT, |s| s.1.0 as u64),
-                record.child_activation.unwrap_or(ABSENT), record.initialized.capacity() as u64]);
+            if !c.spend() {
+                return;
+            }
+            c.row(
+                Part::PendingRecord,
+                &[
+                    record.id,
+                    record.frame,
+                    record.record.0 as u64,
+                    u64::from(record.complete),
+                    record.temporary_site.map_or(ABSENT, |s| s.0),
+                    record.temporary_site.map_or(ABSENT, |s| s.1 .0 as u64),
+                    record.child_activation.unwrap_or(ABSENT),
+                    record.initialized.capacity() as u64,
+                ],
+            );
             for (field, value) in &record.initialized {
-                if !c.spend() { return; }
-                c.row(Part::PendingField, &[field.0 as u64]); c.value(value);
+                if !c.spend() {
+                    return;
+                }
+                c.row(Part::PendingField, &[field.0 as u64]);
+                c.value(value);
             }
             c.push(Record::End);
         }
         for replacement in &self.replacements {
-            if !c.spend() { return; }
+            if !c.spend() {
+                return;
+            }
             replacement.observe(c);
         }
         for event in &self.events {
-            if !c.spend() { return; }
+            if !c.spend() {
+                return;
+            }
             c.push(match *event {
                 Event::Acquire(id) => Record::ResourceEvent(0, id),
                 Event::Attempt(id) => Record::ResourceEvent(1, id),
