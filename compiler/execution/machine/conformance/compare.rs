@@ -355,10 +355,23 @@ impl Validator<'_, '_> {
                 self.work.spend()?;
                 for statement in block.statements() {
                     self.work.spend()?;
-                    if matches!(statement, Statement::BindResult {pattern_origin, ..} if *pattern_origin == span) { return Ok(()); }
+                    if matches!(statement, Statement::BindResult {pattern_origin, ..} if *pattern_origin == span)
+                    {
+                        return Ok(());
+                    }
                 }
-                if let Terminator::Propagate {operation, ..} | Terminator::ForwardError {operation} = block.terminator() {
-                    if [operation.span, operation.syntax.phrase, operation.syntax.binding].contains(&span) { return Ok(()); }
+                if let Terminator::Propagate { operation, .. }
+                | Terminator::ForwardError { operation } = block.terminator()
+                {
+                    if [
+                        operation.span,
+                        operation.syntax.phrase,
+                        operation.syntax.binding,
+                    ]
+                    .contains(&span)
+                    {
+                        return Ok(());
+                    }
                 }
             }
             if let Some(flow) = &definition.temporaries {
