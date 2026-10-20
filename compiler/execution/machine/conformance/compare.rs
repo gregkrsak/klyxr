@@ -449,7 +449,9 @@ impl Validator<'_, '_> {
         Ok(value)
     }
     fn value(&mut self, depth: usize, cleanup: bool) -> Valid<ValueInfo> {
-        if depth >= self.lineage { return Err(Incomplete::Lineage); }
+        if depth >= self.lineage {
+            return Err(Incomplete::Lineage);
+        }
         let mut info = ValueInfo {
             ty: None,
             handle: None,
@@ -720,7 +722,8 @@ impl Validator<'_, '_> {
             } else {
                 None
             };
-            self.action_callee=None;self.action_callsite=None;
+            self.action_callee = None;
+            self.action_callsite = None;
         }
         let count = match d[0] {
             0 | 6 | 7 | 11 | 14 | 15 | 23 | 24 | 25 => 1,
@@ -751,17 +754,25 @@ impl Validator<'_, '_> {
                     .and_then(|f| f.as_ordinary())
                     .ok_or(Incomplete::InvalidState)?;
                 require(callee.parameters.len() as u64 == d[2])?;
-                let Record::CallSite(callsite)=self.take()? else {return Err(Incomplete::InvalidState);};
-                let mut found=false;
-                for (expression,site) in self.contract.expressions() {
+                let Record::CallSite(callsite) = self.take()? else {
+                    return Err(Incomplete::InvalidState);
+                };
+                let mut found = false;
+                for (expression, site) in self.contract.expressions() {
                     self.work.spend()?;
-                    if self.contract.sites()[*site].function==function && expression.span==callsite
-                        && matches!(&expression.kind,ExprKind::Call{function:target,..} if target.0 as u64==d[1]) {
-                        found=true;break;
+                    if self.contract.sites()[*site].function == function
+                        && expression.span == callsite
+                        && matches!(&expression.kind,ExprKind::Call{function:target,..} if target.0 as u64==d[1])
+                    {
+                        found = true;
+                        break;
                     }
                 }
                 require(found)?;
-                if executing {self.action_callee=Some(callee.id);self.action_callsite=Some(callsite);}
+                if executing {
+                    self.action_callee = Some(callee.id);
+                    self.action_callsite = Some(callsite);
+                }
             }
             13 => {
                 let control = self.node(key(Kind::Frame, frame))?;
@@ -986,7 +997,10 @@ impl Validator<'_, '_> {
                 let v = self.value(0, false)?;
                 self.expected(v, expected)?;
                 if p[5] == 1 {
-                    let operation = approved.catalog.operation(plan.operation).ok_or(Incomplete::InvalidState)?;
+                    let operation = approved
+                        .catalog
+                        .operation(plan.operation)
+                        .ok_or(Incomplete::InvalidState)?;
                     require(value < 8 && operation.errors & (1u8 << value) != 0)?;
                 }
                 if plan.completion.is_some() {
@@ -1065,8 +1079,13 @@ impl Validator<'_, '_> {
                 self.scratch.nodes[n].born = true;
             } else {
                 if r[2] == 1 {
-                    let Some(Record::Range(_, code)) = self.peek() else { return Err(Incomplete::InvalidState); };
-                    let operation = approved.catalog.operation(plan.operation).ok_or(Incomplete::InvalidState)?;
+                    let Some(Record::Range(_, code)) = self.peek() else {
+                        return Err(Incomplete::InvalidState);
+                    };
+                    let operation = approved
+                        .catalog
+                        .operation(plan.operation)
+                        .ok_or(Incomplete::InvalidState)?;
                     require(code < 8 && operation.errors & (1u8 << code) != 0)?;
                 }
                 let v = self.value(0, false)?;
@@ -1624,11 +1643,20 @@ impl Validator<'_, '_> {
                 }
                 let mut count = 0;
                 loop {
-                    if let Some(event @ (Record::TemporaryBegin(..) | Record::TemporaryRegister(..) | Record::TemporaryTransfer(..) | Record::TemporaryCleanup(..) | Record::TemporaryRetire(..))) = self.peek() {
+                    if let Some(
+                        event @ (Record::TemporaryBegin(..)
+                        | Record::TemporaryRegister(..)
+                        | Record::TemporaryTransfer(..)
+                        | Record::TemporaryCleanup(..)
+                        | Record::TemporaryRetire(..)),
+                    ) = self.peek()
+                    {
                         if count < self.scratch.temporaries.len() {
                             require(self.scratch.temporaries[count] == event)?;
                         } else {
-                            if self.scratch.temporaries.len() == self.scratch.cap { return Err(Incomplete::Records); }
+                            if self.scratch.temporaries.len() == self.scratch.cap {
+                                return Err(Incomplete::Records);
+                            }
                             self.scratch.temporaries.push(event);
                         }
                         count += 1;
@@ -1870,7 +1898,8 @@ impl Validator<'_, '_> {
             return Err(Incomplete::InvalidState);
         };
         require(stamp == self.snapshots && mask <= 15)?;
-        require(mask&self.mask==self.mask)?;self.mask=mask;
+        require(mask & self.mask == self.mask)?;
+        self.mask = mask;
         self.stamp = stamp;
         self.snapshots += 1;
         self.scratch.links.clear();
@@ -1916,13 +1945,23 @@ impl Validator<'_, '_> {
                 }
             }
             require(found)?;
-            if self.scratch.find(key(Kind::Frame,id),self.work)?.is_none() {
-                if let Some(parent)=parent {
-                    require(self.action_frame==Some(parent) && self.action_callee==Some(function)
-                        && self.action_callsite==Some(call_site))?;
-                }else{
-                    require(function==self.contract.entry()
-                        && call_site==self.contract.executable.program.function(function).span())?;
+            if self
+                .scratch
+                .find(key(Kind::Frame, id), self.work)?
+                .is_none()
+            {
+                if let Some(parent) = parent {
+                    require(
+                        self.action_frame == Some(parent)
+                            && self.action_callee == Some(function)
+                            && self.action_callsite == Some(call_site),
+                    )?;
+                } else {
+                    require(
+                        function == self.contract.entry()
+                            && call_site
+                                == self.contract.executable.program.function(function).span(),
+                    )?;
                 }
             }
             let index = self.declaration(

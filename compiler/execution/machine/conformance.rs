@@ -197,11 +197,16 @@ impl Capture {
         {
             capture.incomplete = Some(Incomplete::Allocation);
         } else {
-            if contract.expressions().len()>limits.work {capture.incomplete=Some(Incomplete::Work);}
-            else {
-                capture.work=contract.expressions().len();
-                capture.expressions.extend(contract.expressions().iter().map(|(value,ordinal)|
-                    (*value as *const TypedExpr as usize,*ordinal)));
+            if contract.expressions().len() > limits.work {
+                capture.incomplete = Some(Incomplete::Work);
+            } else {
+                capture.work = contract.expressions().len();
+                capture.expressions.extend(
+                    contract
+                        .expressions()
+                        .iter()
+                        .map(|(value, ordinal)| (*value as *const TypedExpr as usize, *ordinal)),
+                );
             }
         }
         capture
@@ -321,7 +326,9 @@ impl Capture {
             }
             Action::Invoke(f, count) => {
                 self.row(Part::Task, &[10, f.0 as u64, *count as u64]);
-                self.push(Record::CallSite(task.expression.unwrap_or(task.origin.span)));
+                self.push(Record::CallSite(
+                    task.expression.unwrap_or(task.origin.span),
+                ));
             }
             Action::Commit(destination) => {
                 self.row(Part::Task, &[11]);

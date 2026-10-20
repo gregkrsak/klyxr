@@ -290,9 +290,12 @@ impl<'a> Contract<'a> {
             || self.schedule != self.executable.approval.schedule
             || self.functions != expected.functions
             || self.sites != expected.sites
-            || self.expressions.len()!=expected.expressions.len()
-            || !self.expressions.iter().zip(&expected.expressions).all(|((a,i),(b,j))|
-                std::ptr::eq(*a,*b)&&i==j)
+            || self.expressions.len() != expected.expressions.len()
+            || !self
+                .expressions
+                .iter()
+                .zip(&expected.expressions)
+                .all(|((a, i), (b, j))| std::ptr::eq(*a, *b) && i == j)
         {
             return Err(ExecutionError::integrity(
                 "execution contract correspondence",
@@ -359,8 +362,7 @@ impl<'a> Contract<'a> {
             value.span,
             work,
         )?;
-        self.expressions
-            .push((value, self.sites.len() - 1));
+        self.expressions.push((value, self.sites.len() - 1));
         // Executable shape validation already bounded expression depth.
         match &value.kind {
             ExprKind::Call {
