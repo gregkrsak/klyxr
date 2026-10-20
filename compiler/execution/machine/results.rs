@@ -11,6 +11,7 @@ pub(super) enum Phase {
     PayloadPending,
     Active,
     MatchProtected { frame: u64, origin: Span },
+    CompletionProtected,
     Consumed,
     Delivered,
 }
@@ -100,6 +101,14 @@ impl State {
 }
 
 impl<'a> Machine<'a> {
+    pub(super) fn completion_result_growth(&self) -> usize {
+        self.results
+            .as_ref()
+            .map_or(size_of::<State>() + size_of::<Cell>(), |s| {
+                usize::from(s.cells.len() == s.cells.capacity()) * size_of::<Cell>()
+            })
+    }
+
     pub(super) fn trusted_result_prepare(
         &mut self,
         production: usize,
@@ -151,6 +160,45 @@ impl<'a> Machine<'a> {
         self.results
             .as_ref()
             .is_some_and(|s| s.cells.len() < s.cells.capacity())
+    }
+    pub(super) fn completion_result_protect(
+        &mut self,
+        ticket: TrustedTicket,
+        plan: &crate::trusted::approval::Invocation,
+        tag: ResultTag,
+        payload: Value,
+    ) -> OwnerId {
+        let owner = ticket.owner;
+        self.results.as_mut().unwrap().cells.push(Cell {
+            function: plan.function,
+            authority: ticket.authority,
+            ty: plan.result,
+            tag: if tag == ResultTag::Ok { 0 } else { 1 },
+            payload: Some(payload),
+            parent: None,
+            phase: Phase::CompletionProtected,
+            origin: plan.source,
+        });
+        owner
+    }
+
+    pub(super) fn completion_result_validate(
+        &self,
+        owner: OwnerId,
+    ) -> Result<ResultTag, ExecutionError> {
+        let cell = self.result_cell(owner)?;
+        if cell.phase != Phase::CompletionProtected
+            || cell.parent.is_some()
+            || cell.payload.is_none()
+        {
+            return Err(self.integrity("invalid protected completion result"));
+        }
+        Self::result_tag(cell.tag)
+    }
+
+    pub(super) fn completion_result_deliver(&mut self, owner: OwnerId) {
+        self.results.as_mut().unwrap().cells[owner.0].phase = Phase::Active;
+        self.values.push(Value::Result(owner));
     }
     pub(super) fn result_export(&mut self, root: OwnerId) -> Result<RuntimeValue, ExecutionError> {
         // Validate the entire bounded chain before allocation or detachment.

@@ -39,17 +39,24 @@ fn selected_ranges_precede_signatures_and_have_honest_catalog_origins() {
         Grants::ALL,
     );
     let c = p.trusted.as_ref().unwrap();
-    assert_eq!(p.ranges.len(), 2);
-    for (index, (name, min, max)) in [("Reading", 0, 4095), ("SensorError", 1, 3)]
-        .into_iter()
-        .enumerate()
+    assert_eq!(p.ranges.len(), 3);
+    for (index, (name, min, max)) in [
+        ("Reading", 0, 4095),
+        ("SensorError", 1, 3),
+        ("FinishReceipt", 1, 1),
+    ]
+    .into_iter()
+    .enumerate()
     {
         let r = &p.ranges[index];
         assert_eq!(
             (r.id, r.name.as_str(), r.min, r.max),
             (RangeTypeId(index), name, min, max)
         );
-        assert_eq!(r.origin, hir::DeclarationOrigin::Catalog(c.origin(index)));
+        assert_eq!(
+            r.origin,
+            hir::DeclarationOrigin::Catalog(c.origin(if index == 2 { 6 } else { index }))
+        );
     }
     c.validate(&p).unwrap();
 }

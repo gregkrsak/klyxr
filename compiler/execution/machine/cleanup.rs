@@ -188,6 +188,16 @@ struct Activation {
     initialized: Vec<Generation>,
 }
 impl State {
+    #[cfg(test)]
+    pub(super) fn visit_completion_custody(&self, mut visit: impl FnMut(&Value)) {
+        for value in [&self.protected, &self.current, &self.detached]
+            .into_iter()
+            .flatten()
+            .chain(self.work.iter())
+        {
+            visit(value);
+        }
+    }
     pub(super) fn work_is_full(&self) -> bool {
         self.work.len() == self.work.capacity()
     }
@@ -254,6 +264,39 @@ impl State {
     }
 }
 impl<'a> Machine<'a> {
+    pub(super) fn completion_cleanup_idle(&self) -> bool {
+        self.resources
+            .as_ref()
+            .is_some_and(|s| s.detached.is_none() && s.current.is_none() && s.work.is_empty())
+    }
+    pub(super) fn completion_cleanup_growth(&self) -> Result<usize, ExecutionError> {
+        let bytes = self
+            .resources
+            .as_ref()
+            .map_or(size_of::<State>() + size_of::<Value>(), |s| {
+                usize::from(s.work.len() == s.work.capacity()) * size_of::<Value>()
+            });
+        Ok(bytes)
+    }
+
+    pub(super) fn completion_cleanup_reserve(&mut self) -> Result<(), ExecutionError> {
+        self.enable_resources()?;
+        let growth = self.resources.as_ref().unwrap().work.len()
+            == self.resources.as_ref().unwrap().work.capacity();
+        if growth {
+            self.reserve(size_of::<Value>())?;
+            #[cfg(test)]
+            self.trusted_allocation(super::trusted::Allocation::CompletionCleanup, true)?;
+            self.resources
+                .as_mut()
+                .unwrap()
+                .work
+                .try_reserve_exact(1)
+                .map_err(|_| self.failure(ErrorKind::Host("completion fixed cleanup cursor")))?;
+        }
+        Ok(())
+    }
+
     pub(super) fn enable_resources(&mut self) -> Result<(), ExecutionError> {
         if self.resources.is_none() {
             self.reserve(size_of::<State>())?;

@@ -68,6 +68,79 @@ pub(crate) struct Invocation {
     pub destination: Destination,
     pub source: Span,
     pub catalog: CatalogOrigin,
+    pub completion: Option<CompletionPlan>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CompletionHolder(pub SiteId);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProtectedOutcome(pub SiteId);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CompletionEvent {
+    Attempt,
+    Success,
+    ReleaseAttempt,
+    ReleaseComplete,
+}
+impl CompletionEvent {
+    pub(crate) const PROTOCOL: [Self; 4] = [
+        Self::Attempt,
+        Self::Success,
+        Self::ReleaseAttempt,
+        Self::ReleaseComplete,
+    ];
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CompletionPhase {
+    Reserved,
+    Consumed,
+    Attempted,
+    OutcomeProtected,
+    ReleasePending,
+    Releasing,
+    Released,
+    Delivered,
+}
+
+impl CompletionPhase {
+    pub(crate) const PROTOCOL: [Self; 8] = [
+        Self::Reserved,
+        Self::Consumed,
+        Self::Attempted,
+        Self::OutcomeProtected,
+        Self::ReleasePending,
+        Self::Releasing,
+        Self::Released,
+        Self::Delivered,
+    ];
+}
+
+/// Distinct roles may share a source site but never a runtime payload owner.
+/// This is derived MIR correspondence, not another ownership analysis.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CompletionPlan {
+    pub events: [CompletionEvent; 4],
+    pub input: SiteId,
+    pub holder: CompletionHolder,
+    pub protected: ProtectedOutcome,
+    pub resource: ResourceTypeId,
+    pub parameter: Passing,
+    pub result: hir::ResultTypeId,
+    pub success: hir::RangeTypeId,
+    pub failure: hir::RangeTypeId,
+    pub errors: u8,
+    pub release: TrustedOperationId,
+    pub direct_effects: EffectSet,
+    pub release_effects: EffectSet,
+    pub destination: Destination,
+    pub transfer: mir::Origin,
+    pub protection: mir::Origin,
+    pub cleanup: mir::Origin,
+    pub delivery: mir::Origin,
+    pub phases: [CompletionPhase; 8],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,7 +160,7 @@ pub(crate) struct Approved {
     pub profile_identity: &'static str,
     pub assumptions: &'static str,
     pub catalog: Catalog,
-    pub ranges: [hir::RangeType; 2],
+    pub ranges: [hir::RangeType; 3],
     pub roots: Vec<FunctionId>,
     pub invocations: Vec<Invocation>,
     /// Every structural edge, including empty-effect ordinary calls and both
@@ -112,7 +185,11 @@ impl Approved {
             profile_identity: PROFILE,
             assumptions: ASSUMPTIONS,
             catalog: catalog.clone(),
-            ranges: [program.ranges[0].clone(), program.ranges[1].clone()],
+            ranges: [
+                program.ranges[0].clone(),
+                program.ranges[1].clone(),
+                program.ranges[2].clone(),
+            ],
             roots: Vec::new(),
             invocations: Vec::new(),
             edges: Vec::new(),
@@ -195,6 +272,25 @@ impl Approved {
             }
         }
         approved.shape(limits)?;
+        for function in mir.functions() {
+            for site in &function.cleanup_effect_sites {
+                if let crate::effects::custody::Holder::Invocation(operation) = site.holder {
+                    let matching = approved
+                        .invocations
+                        .iter()
+                        .filter(|invocation| {
+                            invocation.function == site.function
+                                && invocation.operation == operation
+                                && invocation.source == site.origin
+                                && invocation.completion.is_some()
+                        })
+                        .count();
+                    if matching != 1 {
+                        return Err(PlanError::Integrity("orphan completion cleanup witness"));
+                    }
+                }
+            }
+        }
         Ok(Some(approved))
     }
 
@@ -236,10 +332,42 @@ impl Approved {
             if invocation.ordinal != index
                 || invocation.operation != self.catalog.operations[0].id
                     && invocation.operation != self.catalog.operations[1].id
+                    && invocation.operation != self.catalog.operations[3].id
             {
                 return Err(PlanError::Integrity(
                     "trusted invocation identity or cleanup-only target",
                 ));
+            }
+            let operation = self
+                .catalog
+                .operation(invocation.operation)
+                .ok_or(PlanError::Integrity("missing invocation operation"))?;
+            if (operation.class == OperationClass::Completion) != invocation.completion.is_some() {
+                return Err(PlanError::Integrity("completion protocol membership"));
+            }
+            if let Some(plan) = &invocation.completion {
+                if invocation.arguments.as_slice() != [plan.input]
+                    || plan.holder != CompletionHolder(invocation.site)
+                    || plan.protected != ProtectedOutcome(invocation.site)
+                    || plan.resource != self.catalog.sensor
+                    || plan.parameter != Passing::Owned(self.catalog.sensor)
+                    || plan.result != invocation.result
+                    || plan.success != self.catalog.finish_receipt
+                    || plan.failure != self.catalog.error
+                    || plan.errors != operation.errors
+                    || plan.release != self.catalog.resource.release
+                    || plan.direct_effects != operation.effects
+                    || plan.release_effects != self.catalog.resource.effects
+                    || !self.catalog.granted(operation.id)
+                    || !self.catalog.granted(plan.release)
+                    || plan.destination != invocation.destination
+                    || plan.phases != CompletionPhase::PROTOCOL
+                    || plan.events != CompletionEvent::PROTOCOL
+                {
+                    return Err(PlanError::Integrity(
+                        "completion contract/holder/release protocol",
+                    ));
+                }
             }
         }
         Ok(())
@@ -344,6 +472,52 @@ impl Collector<'_> {
                 }
                 reserve(&mut self.approved.invocations, 1, Allocation::Invocation)?;
                 let ordinal = self.approved.invocations.len();
+                let completion = if op.class == OperationClass::Completion {
+                    let input = flow
+                        .sites
+                        .get(argument_sites[0].0)
+                        .ok_or(PlanError::Integrity("missing completion input site"))?;
+                    let mut witnesses = self.function.cleanup_effect_sites.iter().filter(|w| {
+                        w.function == self.function.function()
+                            && w.holder == crate::effects::custody::Holder::Invocation(*operation)
+                            && w.origin == e.span
+                    });
+                    let witness = witnesses.next().ok_or(PlanError::Integrity(
+                        "completion lacks successful-checker cleanup witness",
+                    ))?;
+                    if witnesses.next().is_some()
+                        || witness.kind != crate::effects::custody::Kind::CompletionRelease
+                        || witness.plan != hir::resources::CleanupType::Resource(catalog.sensor)
+                        || witness.effects != catalog.resource.effects
+                    {
+                        return Err(PlanError::Integrity(
+                            "completion cleanup witness correspondence",
+                        ));
+                    }
+                    Some(CompletionPlan {
+                        events: CompletionEvent::PROTOCOL,
+                        input: input.id,
+                        holder: CompletionHolder(site.id),
+                        protected: ProtectedOutcome(site.id),
+                        resource: catalog.sensor,
+                        parameter: Passing::Owned(catalog.sensor),
+                        result,
+                        success: catalog.finish_receipt,
+                        failure: catalog.error,
+                        errors: op.errors,
+                        release: catalog.resource.release,
+                        direct_effects: op.effects,
+                        release_effects: catalog.resource.effects,
+                        destination: site.destination,
+                        transfer: input.transfer,
+                        protection: site.origin,
+                        cleanup: site.cleanup,
+                        delivery: site.transfer,
+                        phases: CompletionPhase::PROTOCOL,
+                    })
+                } else {
+                    None
+                };
                 self.approved.invocations.push(Invocation {
                     ordinal,
                     function: self.function.function(),
@@ -357,6 +531,7 @@ impl Collector<'_> {
                     destination: site.destination,
                     source: e.span,
                     catalog: op.origin,
+                    completion,
                 });
                 for arg in arguments {
                     self.expression(arg, depth + 1)?;

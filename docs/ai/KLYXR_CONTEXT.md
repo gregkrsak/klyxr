@@ -835,7 +835,8 @@ holds actual binding payload before any fallible boundary; stopped sessions reta
 unfinished responsibilities, protected Results and completed prefix. Terminal
 Host/Limit/Integrity/trap/cleanup failure never becomes source Error or permits
 retry/resume/unwind. Teardown is not successful release. The fixed deterministic
-fixture is not hardware/FFI; fallible completion remains deferred to KED-034.
+fixture is not hardware/FFI. KED-034's frozen completion specification now has an
+implementation candidate, described below; acceptance remains pending.
 
 CLI `run` and `audit` require `--profile sensor-demo` and an explicit --function
 root; the static bounded audit follows sealed structural edges through empty-effect
@@ -844,3 +845,21 @@ release pairing without invocation. See docs/engineering/KED-033-TRUSTED-SENSOR.
 its ledger and identity manifest for contracts, budgets, commands and evidence.
 Implementation is not independent confirmation or acceptance; Sarah's exact-head
 review and Greg's acceptance remain separate, and only humans merge.
+
+### KED-034 frozen completion implementation candidate
+
+Draft PR #83 implements consuming `sensor_finish(Sensor)` with exact
+`Result<success:FinishReceipt,failure:SensorError>` and `{io}`. FinishReceipt is
+nominal `1..1`, Copy source-formable status data, never proof or authority.
+Only finish Error(3) is admitted. Both ordinary outcomes remain protected until
+the exact fixed release succeeds. Pending completion custody and protected Result
+are separate; terminal stops retain actual prefix and remaining duty with no
+retry/resume/rollback or caller delivery. The existing checker, temporary, Result,
+cleanup, effect and opaque approval systems remain the only authorities.
+
+For this task GitHub Actions is the sole authorized Rust execution environment.
+M0 used a fresh same-tree baseline gate; M5 is separately preserved before M6-M9.
+See `docs/engineering/KED-034-COMPLETION-CUSTODY.md` and the implementation ledger
+and manifest for source examples, exact boundaries, malformed controls, workflow
+evidence and limitations. This candidate changes no Accepted decision or proof
+claim and still requires Sarah's independent exact-head review and Greg's decision.

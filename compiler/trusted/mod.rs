@@ -35,6 +35,8 @@ pub enum Scenario {
     OpenIoFailure,
     NoSample,
     ReadIoFailure,
+    FinishIoFailure,
+    FinishPartialIoFailure,
 }
 
 /// Operation-specific grants. Merely declaring `effects io` changes none of them.
@@ -43,17 +45,20 @@ pub struct Grants {
     pub open: bool,
     pub read: bool,
     pub release: bool,
+    pub finish: bool,
 }
 impl Grants {
     pub const ALL: Self = Self {
         open: true,
         read: true,
         release: true,
+        finish: true,
     };
     pub const NONE: Self = Self {
         open: false,
         read: false,
         release: false,
+        finish: false,
     };
 }
 
@@ -130,12 +135,14 @@ impl Selection {
 pub enum OperationClass {
     Acquisition,
     Observation,
+    Completion,
     Release,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Binding {
     SensorOpenV1,
     SensorReadV1,
+    SensorFinishV1,
     SensorReleaseV1,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -172,6 +179,7 @@ pub(crate) struct Operation {
     pub parameter: Option<Passing>,
     pub success: Option<Payload>,
     pub failure: Option<RangeTypeId>,
+    pub errors: u8,
     pub result: Option<hir::ResultTypeId>,
     pub effects: EffectSet,
     pub class: OperationClass,
@@ -187,8 +195,9 @@ pub(crate) struct Catalog {
     pub sensor: ResourceTypeId,
     pub reading: RangeTypeId,
     pub error: RangeTypeId,
+    pub finish_receipt: RangeTypeId,
     pub resource: Resource,
-    pub operations: [Operation; 3],
+    pub operations: [Operation; 4],
 }
 
 impl Catalog {
@@ -198,7 +207,7 @@ impl Catalog {
     ) -> Result<Self, ResourceFailure> {
         // These terms cover every row, immutable selection copy, approval copies,
         // bounded root/name scans and diagnostics independently of source size.
-        context.reserve_catalog(
+        context.reserve_completion_catalog(
             selection.roots.len(),
             selection.roots.iter().map(String::len).sum(),
         )?;
@@ -219,14 +228,24 @@ impl Catalog {
             parameter,
             success,
             failure,
-            result: (index < 2).then_some(hir::ResultTypeId(index)),
+            result: match index {
+                0 | 1 => Some(hir::ResultTypeId(index)),
+                3 => Some(hir::ResultTypeId(2)),
+                _ => None,
+            },
+            errors: match index {
+                0 => 0b1010,
+                1 => 0b1100,
+                3 => 0b1000,
+                _ => 0,
+            },
             effects,
             class,
             binding,
             resource: sensor,
             origin: CatalogOrigin {
                 compilation,
-                row: index + 3,
+                row: if index == 3 { 7 } else { index + 3 },
             },
         };
         Ok(Self {
@@ -235,6 +254,7 @@ impl Catalog {
             sensor,
             reading,
             error,
+            finish_receipt: RangeTypeId(2),
             resource: Resource {
                 id: sensor,
                 name: "Sensor",
@@ -274,6 +294,15 @@ impl Catalog {
                     OperationClass::Release,
                     Binding::SensorReleaseV1,
                 ),
+                row(
+                    3,
+                    Some("sensor_finish"),
+                    Some(Passing::Owned(sensor)),
+                    Some(Payload::Range(RangeTypeId(2))),
+                    Some(error),
+                    OperationClass::Completion,
+                    Binding::SensorFinishV1,
+                ),
             ],
         })
     }
@@ -300,6 +329,7 @@ impl Catalog {
                 0 => self.selection.grants.open,
                 1 => self.selection.grants.read,
                 2 => self.selection.grants.release,
+                3 => self.selection.grants.finish,
                 _ => false,
             })
     }
@@ -310,12 +340,17 @@ impl Catalog {
             || self.sensor != ResourceTypeId(self.compilation * 4)
             || self.reading != RangeTypeId(0)
             || self.error != RangeTypeId(1)
+            || self.finish_receipt != RangeTypeId(2)
         {
             return Err("invalid trusted catalog identity");
         }
-        for (index, (name, min, max)) in [("Reading", 0, 4095), ("SensorError", 1, 3)]
-            .into_iter()
-            .enumerate()
+        for (index, (name, min, max)) in [
+            ("Reading", 0, 4095),
+            ("SensorError", 1, 3),
+            ("FinishReceipt", 1, 1),
+        ]
+        .into_iter()
+        .enumerate()
         {
             let Some(range) = program.ranges.get(index) else {
                 return Err("missing imported range");
@@ -324,7 +359,12 @@ impl Catalog {
                 || range.name != name
                 || range.min != min
                 || range.max != max
-                || range.origin != hir::DeclarationOrigin::Catalog(self.origin(index))
+                || range.origin
+                    != hir::DeclarationOrigin::Catalog(self.origin(if index == 2 {
+                        6
+                    } else {
+                        index
+                    }))
             {
                 return Err("altered imported range descriptor");
             }
@@ -369,6 +409,14 @@ impl Catalog {
                     OperationClass::Release,
                     Binding::SensorReleaseV1,
                 ),
+                3 => (
+                    Some("sensor_finish"),
+                    Some(Passing::Owned(self.sensor)),
+                    Some(Payload::Range(self.finish_receipt)),
+                    Some(self.error),
+                    OperationClass::Completion,
+                    Binding::SensorFinishV1,
+                ),
                 _ => return Err("extra trusted operation"),
             };
             if op.id != TrustedOperationId(self.compilation * 4 + index)
@@ -376,12 +424,24 @@ impl Catalog {
                 || op.parameter != parameter
                 || op.success != success
                 || op.failure != failure
-                || op.result != (index < 2).then_some(hir::ResultTypeId(index))
+                || op.result
+                    != match index {
+                        0 | 1 => Some(hir::ResultTypeId(index)),
+                        3 => Some(hir::ResultTypeId(2)),
+                        _ => None,
+                    }
+                || op.errors
+                    != match index {
+                        0 => 0b1010,
+                        1 => 0b1100,
+                        3 => 0b1000,
+                        _ => 0,
+                    }
                 || op.class != class
                 || op.binding != binding
                 || op.resource != self.sensor
                 || op.effects != effects
-                || op.origin != self.origin(index + 3)
+                || op.origin != self.origin(if index == 3 { 7 } else { index + 3 })
             {
                 return Err("altered trusted operation descriptor");
             }
@@ -403,7 +463,7 @@ impl Catalog {
         if program
             .ranges
             .iter()
-            .skip(2)
+            .skip(3)
             .any(|r| !matches!(r.origin, hir::DeclarationOrigin::Source(_)))
         {
             return Err("foreign catalog range origin");
@@ -414,3 +474,6 @@ impl Catalog {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod completion_tests;

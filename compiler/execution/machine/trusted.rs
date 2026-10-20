@@ -4,6 +4,7 @@
 use super::*;
 use crate::trusted::{approval::Invocation, Binding, OperationClass, Scenario};
 use std::sync::atomic::{AtomicU64, Ordering};
+mod completion;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
@@ -13,6 +14,8 @@ pub enum Event {
     ReleaseAttempt(u64, hir::TrustedOperationId),
     ReleaseComplete(u64),
     ReleaseFailure(u64),
+    FinishPrefix(u64, u8),
+    FinishProtected(u64, hir::ResultTag),
 }
 // Neither fixture tokens nor raw binding payloads are Copy or Clone.
 #[derive(Debug)]
@@ -37,6 +40,7 @@ struct Entry {
     token: Option<Sensor>,
 }
 pub(super) struct Production {
+    pub(super) realm: u64,
     pub(super) cell: results::OwnerId,
     pub(super) plan: usize,
     pub(super) invocation: u64,
@@ -47,6 +51,20 @@ pub(super) struct Production {
 #[cfg(test)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Fault {
+    CompletionTicket,
+    CompletionRealm,
+    CompletionIdentity,
+    CompletionFrame,
+    CompletionInputFrame,
+    CompletionErrorTwo,
+    ProtectedTag,
+    ProtectedPayload,
+    ProtectedRealm,
+    ProtectedIdentity,
+    ProtectedReceiver,
+    ProtectedContractOne,
+    ProtectedContractTwo,
+    DisabledCompletion,
     BeforeInvocationHost,
     AfterReceiptHost,
     BadTag,
@@ -74,7 +92,12 @@ pub(super) enum Allocation {
     TemporaryOwner,
     TemporaryEvent,
     ReleaseAudit,
+    CompletionTransfer,
+    CompletionCleanup,
+    CompletionDiagnostic,
 }
+#[cfg(test)]
+thread_local! { static ACTUAL_GROWTH: std::cell::Cell<u64> = const {std::cell::Cell::new(0)}; }
 enum Status {
     Pending,
     Complete(ExecutionResult),
@@ -91,10 +114,15 @@ pub(super) struct State {
     events: Vec<Event>,
     status: Status,
     stop_storage: usize,
+    completion: Option<completion::Pending>,
+    diagnostic: std::cell::RefCell<Option<Vec<CallTrace>>>,
     #[cfg(test)]
     fault: Option<(Fault, u64)>,
 }
 impl State {
+    pub(super) fn take_diagnostic(&self) -> Option<Vec<CallTrace>> {
+        self.diagnostic.borrow_mut().take()
+    }
     pub(super) fn storage(&self) -> Option<usize> {
         let mut n = size_of::<Self>()
             .checked_add(self.entries.capacity().checked_mul(size_of::<Entry>())?)?
@@ -114,7 +142,10 @@ impl State {
                 .checked_mul(size_of::<(hir::FieldId, RangeValue)>())?,
             _ => 0,
         };
-        n = n.checked_add(self.stop_storage.max(outcome))?;
+        let diagnostic = self.diagnostic.borrow().as_ref().map_or(Some(0), |trace| {
+            trace.capacity().checked_mul(size_of::<CallTrace>())
+        })?;
+        n = n.checked_add(self.stop_storage.max(outcome.checked_add(diagnostic)?))?;
         Some(n)
     }
     fn live(&self) -> usize {
@@ -133,6 +164,11 @@ pub struct ExecutionSession<'a> {
     machine: Machine<'a>,
 }
 impl<'a> ExecutionSession<'a> {
+    /// Private milestone control: preserve the tested pre-enable boundary.
+    #[cfg(test)]
+    pub(crate) fn disable_completion(&mut self) {
+        self.machine.trusted.as_mut().unwrap().fault = Some((Fault::DisabledCompletion, 1));
+    }
     pub fn new(
         executable: &'a CheckedExecutable,
         entry: FunctionId,
@@ -169,6 +205,8 @@ impl<'a> ExecutionSession<'a> {
             events: Vec::new(),
             status: Status::Pending,
             stop_storage,
+            completion: None,
+            diagnostic: std::cell::RefCell::new(None),
             #[cfg(test)]
             fault: None,
         });
@@ -228,6 +266,9 @@ impl<'a> Machine<'a> {
         site: Allocation,
         growth: bool,
     ) -> Result<(), ExecutionError> {
+        if growth {
+            ACTUAL_GROWTH.with(|mask| mask.set(mask.get() | (1u64 << site as u32)));
+        }
         if growth
             && self
                 .trusted
@@ -388,6 +429,32 @@ impl<'a> Machine<'a> {
             || op.source_name.is_none()
         {
             return Err(self.integrity("trusted invocation signature/origin/authority mismatch"));
+        }
+        if op.class == OperationClass::Completion {
+            #[cfg(test)]
+            ACTUAL_GROWTH.with(|mask| mask.set(0));
+            #[cfg(test)]
+            if self.trusted.as_ref().unwrap().fault
+                == Some((
+                    Fault::CompletionInputFrame,
+                    self.trusted.as_ref().unwrap().next_invocation,
+                ))
+            {
+                self.corrupt_completion_input_frame();
+            }
+            self.completion_prepare(index, activation, frame)?;
+            #[cfg(test)]
+            if self.trusted.as_ref().unwrap().fault
+                == Some((
+                    Fault::DisabledCompletion,
+                    self.trusted.as_ref().unwrap().next_invocation,
+                ))
+            {
+                return Err(
+                    self.integrity("completion invocation disabled before custody protocol")
+                );
+            }
+            return self.completion_consume(frame);
         }
         let open = op.class == OperationClass::Acquisition;
         if open && !approved.catalog.granted(approved.catalog.resource.release) {
@@ -615,6 +682,7 @@ impl<'a> Machine<'a> {
             ),
         };
         state.productions.push(Production {
+            realm: state.realm,
             cell: ticket.owner,
             plan: index,
             invocation,
@@ -696,10 +764,57 @@ impl<'a> Machine<'a> {
             || cell.origin != plan.source
             || Self::result_tag(cell.tag)? != row.tag
             || row.invocation >= state.next_invocation
+            || row.realm != state.realm
+            || u64::try_from(production).ok() != Some(row.invocation)
         {
             return Err(
                 self.integrity("trusted-produced Result operation/tag/type/origin correspondence")
             );
+        }
+        let operation = approved
+            .catalog
+            .operation(plan.operation)
+            .ok_or_else(|| self.integrity("missing trusted production operation"))?;
+        let contract = match (row.tag, row.range.as_ref(), row.sensor) {
+            (hir::ResultTag::Ok, None, Some(_)) => operation.class == OperationClass::Acquisition,
+            (tag, Some(value), None) => {
+                let expected = if tag == hir::ResultTag::Error {
+                    operation.failure
+                } else {
+                    match operation.success {
+                        Some(crate::trusted::Payload::Range(id)) => Some(id),
+                        _ => None,
+                    }
+                };
+                approved
+                    .ranges
+                    .iter()
+                    .find(|range| Some(range.id) == expected)
+                    .is_some_and(|range| {
+                        value.ty == range.id
+                            && value.value >= range.min
+                            && value.value <= range.max
+                            && (tag != hir::ResultTag::Error
+                                || u32::try_from(value.value).ok().is_some_and(|code| {
+                                    code < 8 && operation.errors & (1u8 << code) != 0
+                                }))
+                    })
+            }
+            _ => false,
+        };
+        if !contract {
+            return Err(
+                self.integrity("trusted production violates exact operation outcome contract")
+            );
+        }
+        if cell.phase == results::Phase::CompletionProtected
+            && !state.completion.as_ref().is_some_and(|pending| {
+                pending.protected == Some(id)
+                    && pending.plan == row.plan
+                    && pending.invocation == row.invocation
+            })
+        {
+            return Err(self.integrity("protected completion invocation association"));
         }
         if let Some(payload) = cell.payload.as_ref() {
             let valid = match payload {
@@ -801,5 +916,11 @@ impl<'a> Machine<'a> {
     }
 }
 
+#[cfg(test)]
+mod completion_bound_tests;
+#[cfg(test)]
+mod completion_composition_tests;
+#[cfg(test)]
+mod completion_runtime_tests;
 #[cfg(test)]
 mod tests;

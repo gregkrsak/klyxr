@@ -77,7 +77,7 @@ pub(super) fn render(
             break;
         }
     }
-    let mut used = [false; 3];
+    let mut used = [false; 4];
     for edge in &t.edges {
         work.charge(1)?;
         if reachable[edge.caller.0] != 0 {
@@ -102,6 +102,8 @@ pub(super) fn render(
         t.catalog.selection.sensor_limit()
     );
     let _=writeln!(out,"contracts: Reading=nominal range 0..4095; SensorError=nominal range 1..3; open Error={{1:no selected sensor,3:recoverable fixture I/O}}; read Error={{2:no sample,3:recoverable fixture I/O}}; read Error preserves owner");
+    let _=writeln!(out,"completion contract: sensor_finish consumes exact owned Sensor; FinishReceipt=nominal range 1..1, Copy status data, source-formable and not proof or authority; only Ok(FinishReceipt(1)) or Error(SensorError(3)); Host/Limit/Integrity never become Error; partial-prefix Error remains Error");
+    let _=writeln!(out,"completion protocol is static possible behavior, never an observed runtime trace: completion attempt/success or recoverable Error, protected outcome, fixed release attempt/complete/failure, then inner delivery only after release succeeds; any terminal stop retains prefix, protected outcome and remaining duty without retry/resume/rollback/compensation");
     let _=writeln!(out,"assumptions: fixed in-process demonstration binding, not a physical device; shared observation cannot mutate Klyxr-visible Sensor state; release has no source Result, flush, commit, durability or completion promise");
     for root in &t.roots {
         work.charge(1)?;
@@ -132,6 +134,10 @@ pub(super) fn render(
         work.charge(1)?;
         if reachable[call.function.0] != 0 {
             let _=writeln!(out,"trusted site: operation={:?}; function={}; block={:?}; statement={}; site={:?}; Result={:?}; destination={:?}; source={:?}; catalog={:?}",call.operation,call.function.0,call.block,call.statement,call.site,call.result,call.destination,call.source,call.catalog);
+            if let Some(plan) = &call.completion {
+                work.charge(20)?;
+                let _=writeln!(out,"possible finish protocol: function={}; input={:?}; completion-holder={:?}; protected-result={:?}; parameter={:?}; ordered-Result={:?}; errors={}; exact-fixed-release={:?}; direct-finish-effects={}; cleanup-derived-release-effects={}; phases={:?}; event-identities={:?}; transfer={:?}; protection={:?}; cleanup={:?}; delivery={:?}; destination={:?}",call.function.0,plan.input,plan.holder,plan.protected,plan.parameter,plan.result,plan.errors,plan.release,plan.direct_effects,plan.release_effects,plan.phases,plan.events,plan.transfer,plan.protection,plan.cleanup,plan.delivery,plan.destination);
+            }
         }
     }
     for f in e.mir.functions() {
@@ -142,6 +148,11 @@ pub(super) fn render(
         for site in &f.cleanup_effect_sites {
             work.charge(1)?;
             let _=writeln!(out,"possible cleanup: function={} holder={:?} plan={:?} kind={:?} effects={} source={:?}",site.function.0,site.holder,site.plan,site.kind,site.effects,site.origin);
+            if site.kind == crate::effects::custody::Kind::CompletionRelease {
+                let _=writeln!(out,"possible completion cleanup: both protected Ok and Error require exact fixed release before inner delivery; release failure is terminal non-delivery; cleanup-only authority is not source-callable");
+            } else if matches!(site.plan, hir::resources::CleanupType::Resource(_)) {
+                let _=writeln!(out,"possible release-only cleanup: no completion event and no automatically produced FinishReceipt; independently formed status data proves no completion");
+            }
         }
         if let Some(flow) = &f.temporaries {
             for site in &flow.sites {
@@ -156,5 +167,7 @@ pub(super) fn render(
     out.finish()
 }
 
+#[cfg(test)]
+mod completion_tests;
 #[cfg(test)]
 mod tests;

@@ -296,7 +296,7 @@ impl CheckedExecutable {
         }
         let c = Context::new(self.limits);
         if let Some(catalog) = &self.program.trusted {
-            c.reserve_catalog(
+            c.reserve_completion_catalog(
                 catalog.selection.roots().len(),
                 catalog.selection.roots().iter().map(String::len).sum(),
             )?;
@@ -317,7 +317,9 @@ impl CheckedExecutable {
             ));
         }
         if !self.approval.cleanup_sites.is_empty() {
-            let holders = self.program.locals.len() + self.program.parameters.len();
+            let holders = self.program.locals.len()
+                + self.program.parameters.len()
+                + usize::from(self.program.trusted.is_some());
             let nodes = c.resource_nodes.get() + self.program.functions.len() + holders;
             c.reserve_cleanup_effects(nodes, crate::effects::custody::holder_bound(&self.program))?;
             if self.approval.cleanup_sites.len() > nodes.saturating_mul(holders) {
@@ -778,6 +780,8 @@ fn checked_entry(
 }
 
 #[cfg(test)]
+mod completion_authority_tests;
+#[cfg(test)]
 mod result_admission_tests;
 #[cfg(test)]
 mod tests;
@@ -862,7 +866,7 @@ mod effect_authority_tests {
             .cleanup_effect_sites
             .push(crate::effects::custody::Site {
                 function: f.id,
-                holder: hir::Place::Local(local),
+                holder: crate::effects::custody::Holder::Place(hir::Place::Local(local)),
                 plan: hir::resources::CleanupType::Record(hir::RecordId(0)),
                 effects,
                 kind: crate::effects::custody::Kind::Return,
@@ -1043,7 +1047,10 @@ mod effect_authority_tests {
                 1 => sites.push(sites[0].clone()),
                 2 => sites.swap(0, 1),
                 3 => sites[0].function = FunctionId(0),
-                4 => sites[0].holder = hir::Place::Local(hir::LocalId(999)),
+                4 => {
+                    sites[0].holder =
+                        crate::effects::custody::Holder::Place(hir::Place::Local(hir::LocalId(999)))
+                }
                 5 => sites[0].plan = hir::resources::CleanupType::Record(hir::RecordId(1)),
                 6 => sites[0].effects = EffectSet::EMPTY,
                 7 => sites[0].origin.start += 1,

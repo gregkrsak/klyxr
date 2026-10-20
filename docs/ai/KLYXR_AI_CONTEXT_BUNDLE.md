@@ -848,7 +848,8 @@ holds actual binding payload before any fallible boundary; stopped sessions reta
 unfinished responsibilities, protected Results and completed prefix. Terminal
 Host/Limit/Integrity/trap/cleanup failure never becomes source Error or permits
 retry/resume/unwind. Teardown is not successful release. The fixed deterministic
-fixture is not hardware/FFI; fallible completion remains deferred to KED-034.
+fixture is not hardware/FFI. KED-034's frozen completion specification now has an
+implementation candidate, described below; acceptance remains pending.
 
 CLI `run` and `audit` require `--profile sensor-demo` and an explicit --function
 root; the static bounded audit follows sealed structural edges through empty-effect
@@ -857,6 +858,24 @@ release pairing without invocation. See docs/engineering/KED-033-TRUSTED-SENSOR.
 its ledger and identity manifest for contracts, budgets, commands and evidence.
 Implementation is not independent confirmation or acceptance; Sarah's exact-head
 review and Greg's acceptance remain separate, and only humans merge.
+
+### KED-034 frozen completion implementation candidate
+
+Draft PR #83 implements consuming `sensor_finish(Sensor)` with exact
+`Result<success:FinishReceipt,failure:SensorError>` and `{io}`. FinishReceipt is
+nominal `1..1`, Copy source-formable status data, never proof or authority.
+Only finish Error(3) is admitted. Both ordinary outcomes remain protected until
+the exact fixed release succeeds. Pending completion custody and protected Result
+are separate; terminal stops retain actual prefix and remaining duty with no
+retry/resume/rollback or caller delivery. The existing checker, temporary, Result,
+cleanup, effect and opaque approval systems remain the only authorities.
+
+For this task GitHub Actions is the sole authorized Rust execution environment.
+M0 used a fresh same-tree baseline gate; M5 is separately preserved before M6-M9.
+See `docs/engineering/KED-034-COMPLETION-CUSTODY.md` and the implementation ledger
+and manifest for source examples, exact boundaries, malformed controls, workflow
+evidence and limitations. This candidate changes no Accepted decision or proof
+claim and still requires Sarah's independent exact-head review and Greg's decision.
 
 <!-- END KLYXR_CONTEXT.md -->
 
@@ -3771,7 +3790,35 @@ rendering is read-only and failure cannot alter a recorded outcome. Existing bou
 reader/preparation and CLI diagnostics are reused by explicit profile run/audit.
 Private cfg(test) controls act only at genuine allocation/receipt/cleanup/reporting
 boundaries. No second ownership/effect checker, host registry, FFI, device proof or
-KED-034 fallible completion is introduced. Independent review/acceptance is pending.
+KED-034 fallible completion was introduced by that baseline. Independent
+review/acceptance remains separate. The later candidate is described below.
+
+## KED-034 completion implementation candidate
+
+The frozen Draft 2 candidate adds one owned completion row and singleton nominal
+FinishReceipt status range to the same closed catalog. Existing row origins remain
+stable. The successful ownership consume gate emits a distinct invocation holder
+in its existing cleanup-effect evidence; it is not a source Place or move permission.
+MIR-associated approval independently seals current input, completion holder,
+protected-result role, exact release, effects/grants, origins, destinations, phases
+and event identities. No checker is duplicated and runtime dispatch is ID-bound.
+
+One pre-dispatch envelope reserves provenance, Result and temporary capacities,
+events, fixed cleanup work and actual diagnostic backing storage together. The
+current owner may be a protected helper return and is never restored to a historical
+local. A pending protocol retains the logical ticket while the physical Sensor
+stays in the session token table. The inert ordinary outcome occupies a separate
+CompletionProtected Result cell. Fixed release uses the existing cleanup cursor;
+only its success enables the delivery continuation. Session realm, fresh invocation,
+frame and production identities are validated independently of payload shape.
+
+Terminal stops retain exact prefix, current responsibility and protected outcome;
+repeat advance cannot run any continuation. Source-formed receipt data is not
+execution evidence. Static rooted audit discloses possible finish and release-only
+sites and independent effect derivations without running a binding. Actions-only
+conformance, malformed controls and measured finite-fixture bounds are recorded
+in the KED-034 engineering guide, ledger and manifest. This is an implementation
+candidate awaiting independent review and acceptance, not a new proof guarantee.
 
 <!-- END ARCHITECTURE.md -->
 

@@ -1215,4 +1215,32 @@ rendering is read-only and failure cannot alter a recorded outcome. Existing bou
 reader/preparation and CLI diagnostics are reused by explicit profile run/audit.
 Private cfg(test) controls act only at genuine allocation/receipt/cleanup/reporting
 boundaries. No second ownership/effect checker, host registry, FFI, device proof or
-KED-034 fallible completion is introduced. Independent review/acceptance is pending.
+KED-034 fallible completion was introduced by that baseline. Independent
+review/acceptance remains separate. The later candidate is described below.
+
+## KED-034 completion implementation candidate
+
+The frozen Draft 2 candidate adds one owned completion row and singleton nominal
+FinishReceipt status range to the same closed catalog. Existing row origins remain
+stable. The successful ownership consume gate emits a distinct invocation holder
+in its existing cleanup-effect evidence; it is not a source Place or move permission.
+MIR-associated approval independently seals current input, completion holder,
+protected-result role, exact release, effects/grants, origins, destinations, phases
+and event identities. No checker is duplicated and runtime dispatch is ID-bound.
+
+One pre-dispatch envelope reserves provenance, Result and temporary capacities,
+events, fixed cleanup work and actual diagnostic backing storage together. The
+current owner may be a protected helper return and is never restored to a historical
+local. A pending protocol retains the logical ticket while the physical Sensor
+stays in the session token table. The inert ordinary outcome occupies a separate
+CompletionProtected Result cell. Fixed release uses the existing cleanup cursor;
+only its success enables the delivery continuation. Session realm, fresh invocation,
+frame and production identities are validated independently of payload shape.
+
+Terminal stops retain exact prefix, current responsibility and protected outcome;
+repeat advance cannot run any continuation. Source-formed receipt data is not
+execution evidence. Static rooted audit discloses possible finish and release-only
+sites and independent effect derivations without running a binding. Actions-only
+conformance, malformed controls and measured finite-fixture bounds are recorded
+in the KED-034 engineering guide, ledger and manifest. This is an implementation
+candidate awaiting independent review and acceptance, not a new proof guarantee.
