@@ -1,5 +1,5 @@
 {
-  "stage": "Stage I focused I03/I04 repair candidate; retained I01/I02 evidence, exact-head gate and confirmation pending",
+  "stage": "Accepted and human-merged KED-035 Stage I; I01-I04 resolved; Stage N separately deferred",
   "baseline_commit": "5f28977a42a7df1817e5cac46b3f6660a38435d3",
   "baseline_tree": "0b330328f3f213a26b6fc4af9f45ca06a98876b8",
   "m0_commit": "0443dfd32dec70e0c72f1a0a886b9eedc284fb9c",
@@ -17,7 +17,7 @@
       "docs": 39484065607
     }
   },
-  "evidence_kind": "M0 baseline gate; M1 static inventory; M2-M5 interpreter/contract candidates and independently derived finite oracle; M6-M9 pending",
+  "evidence_kind": "M0 baseline gate; M1 static inventory; M2-M9 implemented finite Stage I evidence; exact-head review, owner acceptance, human merge and post-merge gate recorded",
   "runtime_encoding": false,
   "baseline_accounting_occurrences": [
     {
@@ -844,7 +844,7 @@
   "requirements": {
     "4": {
       "description": "Complete approved authority borrowed without re-lowering; ordinary closure, schemas and exact seal",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/contract.rs",
         "compiler/execution/mod.rs"
@@ -872,7 +872,7 @@
     },
     "5": {
       "description": "Complete actual non-owning views and validated anchored correspondence",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine/conformance.rs",
         "compiler/execution/machine/conformance/compare.rs",
@@ -921,7 +921,7 @@
     },
     "6": {
       "description": "Common controlled input and exact logical observations, independent of raw identities",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine/conformance/compare.rs",
         "compiler/execution/machine/conformance/replay.rs",
@@ -970,7 +970,7 @@
     },
     "7": {
       "description": "Reached modeled Host distinct from physical Host and evidence/substrate loss",
-      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine/conformance/replay.rs",
         "compiler/execution/machine/conformance/compare.rs"
@@ -983,7 +983,7 @@
     },
     "8": {
       "description": "Sealed logical schedule; preparation/runtime/observation/audit/presentation accounts remain separate",
-      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/contract.rs",
         "compiler/execution/machine.rs",
@@ -1008,7 +1008,7 @@
     },
     "9": {
       "description": "Persistent custody, protected publication, irreversible prefixes and terminal idempotence",
-      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine/conformance.rs",
         "compiler/execution/machine/conformance/compare.rs",
@@ -1053,7 +1053,7 @@
     },
     "10": {
       "description": "Existing selected catalog and ordinary execution; replay cannot add operation, grant or resource",
-      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/contract.rs",
         "compiler/execution/machine/conformance/replay.rs",
@@ -1069,7 +1069,7 @@
     },
     "11": {
       "description": "Logical shadow permits different identities and physical preallocation; no optimizer selected",
-      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/contract.rs",
         "compiler/execution/machine/conformance/replay.rs",
@@ -1089,7 +1089,7 @@
     },
     "13": {
       "description": "Independent literal whole-trace/custody oracles and actual wrong-engine controls",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine/conformance/compare.rs",
         "compiler/execution/machine/conformance/compare/oracle_tests.rs",
@@ -1122,7 +1122,7 @@
     },
     "14": {
       "description": "Structured static authority distinct from runtime events and bounded text presentation",
-      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine/conformance/authority.rs",
         "compiler/execution/machine/conformance.rs"
@@ -1135,7 +1135,7 @@
     },
     "15": {
       "description": "Thirty numbered obligations mapped separately; native obligations deferred",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "scripts/verify-ked035-tests.py",
         "scripts/verify-ked035-contract.py"
@@ -1204,7 +1204,7 @@
     },
     "16": {
       "description": "Real consumed Stage I mechanisms; no public engine/input/profile enlargement",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/contract.rs",
         "compiler/execution/machine/conformance.rs",
@@ -1275,7 +1275,7 @@
     },
     "17": {
       "description": "Independent malformed authority, states, correspondence, accounting, origins and replay",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/contract.rs",
         "compiler/execution/machine/conformance/compare.rs",
@@ -1330,7 +1330,7 @@
   "constraints": {
     "K35-P01": {
       "description": "Complete approved authority borrowed without re-lowering; ordinary closure, schemas and exact seal; Existing selected catalog and ordinary execution; replay cannot add operation, grant or resource",
-      "status": "implemented; acceptance pending",
+      "status": "accepted Stage I implementation constraint",
       "code": [
         "compiler/execution/contract.rs",
         "compiler/execution/mod.rs",
@@ -1354,7 +1354,7 @@
     },
     "K35-P02": {
       "description": "Sealed logical schedule; preparation/runtime/observation/audit/presentation accounts remain separate",
-      "status": "implemented; acceptance pending",
+      "status": "accepted Stage I implementation constraint",
       "code": [
         "compiler/execution/contract.rs",
         "compiler/execution/machine.rs",
@@ -1379,7 +1379,7 @@
     },
     "K35-P03": {
       "description": "Complete actual non-owning views and validated anchored correspondence; Persistent custody, protected publication, irreversible prefixes and terminal idempotence",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I implementation constraint",
       "code": [
         "compiler/execution/machine/conformance.rs",
         "compiler/execution/machine/conformance/compare.rs",
@@ -1448,7 +1448,7 @@
     },
     "K35-P04": {
       "description": "Complete actual non-owning views and validated anchored correspondence; Independent malformed authority, states, correspondence, accounting, origins and replay",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I implementation constraint",
       "code": [
         "compiler/execution/machine/conformance.rs",
         "compiler/execution/machine/conformance/compare.rs",
@@ -1507,7 +1507,7 @@
     },
     "K35-P05": {
       "description": "Common controlled input and exact logical observations, independent of raw identities; Logical shadow permits different identities and physical preallocation; no optimizer selected",
-      "status": "implemented; acceptance pending",
+      "status": "accepted Stage I implementation constraint",
       "code": [
         "compiler/execution/machine/conformance/compare.rs",
         "compiler/execution/machine/conformance/replay.rs",
@@ -1539,7 +1539,7 @@
     },
     "K35-P06": {
       "description": "Reached modeled Host distinct from physical Host and evidence/substrate loss; Persistent custody, protected publication, irreversible prefixes and terminal idempotence",
-      "status": "implemented; acceptance pending",
+      "status": "accepted Stage I implementation constraint",
       "code": [
         "compiler/execution/machine/conformance/replay.rs",
         "compiler/execution/machine/conformance/compare.rs",
@@ -1584,7 +1584,7 @@
     },
     "K35-P07": {
       "description": "Independent literal whole-trace/custody oracles and actual wrong-engine controls; Thirty numbered obligations mapped separately; native obligations deferred",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I implementation constraint",
       "code": [
         "compiler/execution/machine/conformance/compare.rs",
         "compiler/execution/machine/conformance/compare/oracle_tests.rs",
@@ -1664,7 +1664,7 @@
     },
     "K35-P08": {
       "description": "Existing selected catalog and ordinary execution; replay cannot add operation, grant or resource; Structured static authority distinct from runtime events and bounded text presentation; Real consumed Stage I mechanisms; no public engine/input/profile enlargement",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I implementation constraint",
       "code": [
         "compiler/execution/contract.rs",
         "compiler/execution/machine/conformance/replay.rs",
@@ -1763,13 +1763,13 @@
       "status": "inventory published"
     },
     "M2": {
-      "status": "implemented; full gates recorded, acceptance pending"
+      "status": "accepted; complete Stage I contract extraction evidence"
     },
     "M3": {
-      "status": "implemented; exact predecessor boundary suites retained, acceptance pending"
+      "status": "accepted; exact predecessor accounting boundaries retained"
     },
     "M4": {
-      "status": "implemented and independently validated in M5 candidate; final Stage I acceptance pending"
+      "status": "accepted; bounded actual observation and primary-state conservation"
     },
     "M5": {
       "status": "preserved and gated; all eight exact-head workflows succeeded before any M6 source change"
@@ -1781,10 +1781,10 @@
       "status": "implemented; all eight exact-head workflow jobs and steps passed at 20d23dc"
     },
     "M8": {
-      "status": "implemented; complete matrix, canonical/generated docs and static verifiers; final M9 Actions gate pending"
+      "status": "accepted; complete matrix, canonical/generated docs and static verifiers"
     },
     "M9": {
-      "status": "exact-head gate and dual verified publication pending; acceptance excluded"
+      "status": "accepted; exact-head gates, independent confirmation, owner acceptance, human merge and post-merge gate complete"
     }
   },
   "additions": [
@@ -2037,7 +2037,7 @@
     },
     "15.02": {
       "description": "similar source or altered bound contract rejects",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/contract.rs"
       ],
@@ -2071,7 +2071,7 @@
     },
     "15.04": {
       "description": "branches loops calls returns recursion/depth",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine.rs",
         "compiler/execution/machine/conformance/replay.rs",
@@ -2130,7 +2130,7 @@
     },
     "15.08": {
       "description": "Copy Move aliases transfers and moved sources",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine.rs",
         "compiler/execution/machine/conformance/compare.rs",
@@ -2327,7 +2327,7 @@
     },
     "15.22": {
       "description": "independent malformed contract observation identity accounting replay",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/contract.rs",
         "compiler/execution/machine/conformance/compare.rs",
@@ -2379,7 +2379,7 @@
     },
     "15.25": {
       "description": "independently derived decisive expected observations",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine/conformance/compare/oracle_tests.rs",
         "compiler/execution/machine/conformance/compare.rs",
@@ -2455,7 +2455,7 @@
     },
     "15.28": {
       "description": "exact neighbors in named preparation runtime evidence audit reporting domains",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/contract.rs",
         "compiler/execution/machine/conformance.rs",
@@ -2493,7 +2493,7 @@
     },
     "15.29": {
       "description": "exact predecessor identity and budget reconciliation without migrations",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "scripts/verify-ked035-tests.py",
         "scripts/verify-ked034-budgets.py"
@@ -2514,7 +2514,7 @@
     },
     "15.30": {
       "description": "verified/harness remain excluded; no new proof claim",
-      "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/verify/mod.rs",
         "scripts/verify-ked035-tests.py"
@@ -2539,7 +2539,7 @@
   "malformed_families": {
     "authority_schema": {
       "description": "opaque approval, schema, sites, closure, schedule",
-      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/contract.rs"
       ],
@@ -2555,7 +2555,7 @@
     },
     "state_and_custody": {
       "description": "tags, nominal payload, holder, stale generation, realm, alias",
-      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine/conformance/compare.rs"
       ],
@@ -2565,7 +2565,7 @@
     },
     "control_scope_completion_origin": {
       "description": "continuation, arm/branch, static scope, completion phase, invocation and origin role",
-      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine/conformance/compare.rs"
       ],
@@ -2576,7 +2576,7 @@
     },
     "accounting_and_correspondence": {
       "description": "coordinated equal-looking corruption, prospective costs and global association",
-      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine/conformance/compare.rs"
       ],
@@ -2587,7 +2587,7 @@
     },
     "replay": {
       "description": "duplicates, unsupported sites/phases, nominal response, bad prefix, consumption and association",
-      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine/conformance/replay.rs",
         "compiler/execution/machine/conformance/compare.rs"
@@ -2600,7 +2600,7 @@
     },
     "audit": {
       "description": "exact structured authority rows; grants and runtime skip do not define structure",
-      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine/conformance/authority.rs"
       ],
@@ -2612,7 +2612,7 @@
     },
     "incomplete": {
       "description": "truncation, work/storage exhaustion, physical loss cannot establish Equal",
-      "status": "implemented; finite Stage I evidence; independent review and acceptance pending",
+      "status": "accepted Stage I evidence; finite and not universal or native equivalence proof",
       "code": [
         "compiler/execution/machine/conformance.rs",
         "compiler/execution/machine/conformance/compare.rs"
@@ -2630,7 +2630,7 @@
     },
     "reference_representation_vs_access": {
       "description": "stored immutable reference lineage and initialization occurrences; reached access/operand availability; no loan inference from dead stored bits",
-      "status": "focused repair candidate; independent confirmation pending",
+      "status": "accepted focused repair; I02-I04 independently confirmed resolved",
       "code": [
         "compiler/execution/machine/conformance/compare/references.rs"
       ],
@@ -2660,7 +2660,7 @@
     "Contract and static view use in-process immutable approved references; no portable transport promised",
     "Sidecar exhaustion or physical Host produces Inconclusive and preserves primary execution",
     "Logical receiving-growth shadow and occurrence/call ancestry must survive future eliminated physical work",
-    "No performance or native backend claim; Sarah review and Greg acceptance remain pending"
+    "No performance or native backend claim; accepted Stage I supplies no Stage N evidence"
   ],
   "public_api": {
     "contract": [
@@ -3097,7 +3097,7 @@
     "review": "https://github.com/gregkrsak/klyxr/issues/84#issuecomment-6305818246",
     "baseline_commit": "4922296a04b479915ad58001275e491af1287d58",
     "baseline_tree": "08712b0f327e65f91ef39db4a19bad9311debd0e",
-    "status": "I01 independently confirmed; I02 positives retained; focused I03/I04 candidate, exact-head Actions and independent confirmation pending",
+    "status": "K35-I01 through K35-I04 independently confirmed resolved; accepted and human-merged",
     "tests": [
       "lib.rs::execution::machine::conformance::compare::repair_tests::i01_verified_prefix_resolves_ordinary_boundary_and_nonboundary_origins",
       "lib.rs::execution::machine::conformance::compare::repair_tests::i01_verified_between_caller_callee_and_failing_harness_stay_isolated",
@@ -3124,7 +3124,7 @@
     "reviewed_controls_sha256": "513b6decc1a21aafd30c0b54faa8cac1f58ec105aa7ebe078d8c7e90c5e41a6c",
     "predecessor_migrations": {},
     "public_api_changes": [],
-    "constraints": "K35-P01\u2013P10 retained; no semantics, public authority, ownership/lifetime engine or Stage N change",
+    "constraints": "K35-P01–P10 retained; no semantics, public authority, ownership/lifetime engine or Stage N change",
     "bounds": "canonical origin and initializer/call-lineage scans charge comparison work; lineage is capped; reference initialization/Move history is pre-reserved at comparison node cap and charged through comparison geometry, never runtime storage; queue-prefix persistence and operand-production scans charge comparison work; canonical operands are borrowed, queue history uses record ranges and fixed scalar state without allocation or recursive traversal; frame and field cursors reuse existing comparison node metadata, with canonical successor and completed-operand checks before the next action; no primary or evidence geometry change",
     "findings": {
       "K35-I01": {
@@ -3143,7 +3143,7 @@
         ]
       },
       "K35-I02": {
-        "status": "original positives pass; closure pending I03/I04 repair confirmation",
+        "status": "resolved by Sarah final focused confirmation 6315882077",
         "code": [
           "compiler/execution/machine/conformance/compare.rs",
           "compiler/execution/machine/conformance/compare/references.rs"
@@ -3168,7 +3168,7 @@
         ]
       },
       "K35-I03": {
-        "status": "candidate; exact-head Actions and focused confirmation pending",
+        "status": "resolved by Sarah final focused confirmation 6315882077",
         "code": [
           "compiler/execution/machine/conformance/compare.rs",
           "compiler/execution/machine/conformance/compare/transitions.rs"
@@ -3190,7 +3190,7 @@
         ]
       },
       "K35-I04": {
-        "status": "candidate; replacement evidence must reject at named semantic boundary with guard-removal discriminator",
+        "status": "resolved by Sarah final focused confirmation 6315882077",
         "code": [
           "compiler/execution/machine/conformance/compare/repair_tests.rs",
           "compiler/execution/machine/conformance/compare/references.rs"
@@ -3239,5 +3239,41 @@
     },
     "evidence_correction": "Prior I02 duplicate/stale artifact assertions at 23dd37c stopped at sealed-count rejection. Their original reported downstream discrimination was unsupported. Replacement private fixtures preserve length or explicitly maintain only their private envelope and require a named guard plus isolated guard-removal Equal.",
     "discriminator_limits": "Operand (two substitutions), Queue, Duplicate, Resurrection and Access fixtures require Equal with only their named private guard disabled. The extra cursor subcontrol instead demonstrates Control then Operand; shape control remains InvalidState after Seal bypass. Those latter controls do not claim Equal counterfactuals."
+  },
+  "closeout": {
+    "status": "accepted and human-merged; documentation normalized; Stage N remains separately unauthorized",
+    "accepted_head": "837fc99e2bbb241077d4b65b32a4103b6bf99362",
+    "accepted_tree": "a76e2ab68c8d2db094f1005906bdc24b6a9b8795",
+    "final_review": "https://github.com/gregkrsak/klyxr/pull/85#issuecomment-6315882077",
+    "repair_report_pr": "https://github.com/gregkrsak/klyxr/pull/85#issuecomment-6314789174",
+    "repair_report_issue": "https://github.com/gregkrsak/klyxr/issues/84#issuecomment-6314791196",
+    "per_profile": 2112,
+    "predecessor_migrations": 0,
+    "merge_commit": "c2910493ad5e04fb80f5cfa0ae8d3ee80be5d717",
+    "merge_tree": "a76e2ab68c8d2db094f1005906bdc24b6a9b8795",
+    "merged_at": "2026-10-21T12:32:34Z",
+    "merge_signature_verified": true,
+    "exact_head_runs": {
+      "push": {
+        "build": 39590998868,
+        "tests": 39590998853,
+        "verify": 39590998901,
+        "docs": 39590998874
+      },
+      "pull_request": {
+        "build": 39591008109,
+        "tests": 39591008122,
+        "verify": 39591007962,
+        "docs": 39591008089
+      }
+    },
+    "post_merge_runs": {
+      "build": 39600440449,
+      "tests": 39600440157,
+      "verify": 39600440116,
+      "docs": 39600440427
+    },
+    "all_recorded_runs_success": true,
+    "stage_n_authorized": false
   }
 }

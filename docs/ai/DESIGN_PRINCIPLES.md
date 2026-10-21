@@ -100,6 +100,7 @@ retained primary execution. A canonical cleanup plan supplies no new authority t
 execute cleanup. Versioned logical charges and semantic cuts remain visible even
 when a later implementation removes their physical work.
 
-Its Stage I candidate selects no native design, makes no performance or new proof
-claim, and supplies no Stage N execution evidence. Independent review, acceptance,
-later backend authorization and human-only merge remain separate decisions.
+The accepted Stage I implementation selects no native design, makes no performance
+or new proof claim, and supplies no Stage N execution evidence. Independent review,
+owner acceptance and human merge are complete for Stage I. Any backend selection,
+Stage N authorization and later human merge remain separate decisions.

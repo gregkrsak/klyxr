@@ -692,13 +692,16 @@ open or excluded. Automatic release promises no flush/commit/durability/completi
 explicit fallible completion and ownership after its failure remain deferred to
 KED-034. No such follow-on work is authorized by KED-033 implementation.
 
-### KED-035 staged engine-equivalence boundary
+### KED-035 accepted Stage I engine-equivalence boundary
 
 Frozen Issue #84 Draft 2 fixes the approved-MIR semantic relation independently of
-any backend. The Stage I candidate extracts/validates the interpreter contract,
-separates logical and evidence accounts, captures/validates bounded observations,
-compares anchored identities, and implements private addressed replay/modeled Host.
-Review and acceptance are pending; this records no new language or proof claim.
+any backend. The accepted Stage I implementation extracts and validates the
+interpreter contract, separates logical and evidence accounts, captures and
+validates bounded observations, compares anchored identities, and supplies private
+addressed replay and modeled Host evidence. Sarah resolved K35-I01 through K35-I04;
+Greg accepted the implementation; human-merged PR #85 is
+`c2910493ad5e04fb80f5cfa0ae8d3ee80be5d717`, tree
+`a76e2ab68c8d2db094f1005906bdc24b6a9b8795`.
 
 Native backend, target, ABI/data layout, emitter, optimizer, object/runtime/linker,
 portable artifact binding, transport, serialization, signing and packaging remain

@@ -877,13 +877,14 @@ and manifest for source examples, exact boundaries, malformed controls, workflow
 evidence and limitations. This candidate changes no Accepted decision or proof
 claim and still requires Sarah's independent exact-head review and Greg's decision.
 
-## Frozen KED-035 Stage I implementation candidate
+## Accepted KED-035 Stage I implementation
 
-Issue #84 Draft 2 is frozen under record 6295819136. Greg's directive
-6296001700 authorizes only Stage I on baseline
-5f28977a42a7df1817e5cac46b3f6660a38435d3 (tree
-0b330328f3f213a26b6fc4af9f45ca06a98876b8). Draft PR #85 contains an implementation
-candidate; Sarah's independent review and Greg's acceptance remain pending.
+Frozen Issue #84 Draft 2 defines approved-MIR execution-engine equivalence.
+Greg accepted the independently reviewed Stage I implementation, and human-merged
+PR #85 as commit `c2910493ad5e04fb80f5cfa0ae8d3ee80be5d717`, tree
+`a76e2ab68c8d2db094f1005906bdc24b6a9b8795`. The accepted implementation head
+was `837fc99e2bbb241077d4b65b32a4103b6bf99362`. All four post-merge
+build/tests/verify/docs workflows passed.
 
 The engine contract is an immutable bounded view of the same opaque approved
 HIR/MIR/origin/outcome/effect/cleanup/domain/trusted composite. Versioned semantic,
@@ -903,31 +904,22 @@ Structured rooted authority and bounded human presentation have separate evidenc
 accounts. Existing public preparation, run, session, audit, diagnostics and reporting
 boundaries remain governed by their predecessors. Version-one capacity/scan charges
 are logical compatibility facts, not a native ABI or a mandate for physical frames,
-allocations or dead stores. Stage I tests include independent expected observations,
-finite cuts, malformed controls and exact predecessor reconciliation through Actions.
+allocations or dead stores.
+
+Sarah's reviews identified K35-I01 through K35-I04. The accepted repairs resolve
+canonical ordinary origin rows, separate stored reference identity from live access,
+bind queued/reached work to approved producer/operand/continuation relationships,
+and make malformed-observation controls reach their named protections. Sarah's
+final focused confirmation resolves I01–I04, assigns no I05, and reports the exact
+accepted head ready for owner acceptance. The complete debug and release profiles
+each execute 2,112 identities with zero predecessor migrations.
 
 No native backend, target, ABI, layout, emitter, linker, optimizer, runtime ABI,
 transport, serialization, signing or packaging is selected. Native installation,
-actual optimized/unoptimized comparisons and native physical-failure evidence are
-mandatory deferred Stage N work requiring separate authority. See
+actual optimized/unoptimized comparisons and native physical-failure evidence
+remain mandatory deferred Stage N work requiring a separately authorized KED.
+Stage I acceptance and merge do not authorize Stage N. See
 `docs/engineering/KED-035-STAGE-I-LEDGER.md` and its evidence manifest.
-
-Sarah's independent review of the Stage I candidate found K35-I01 (mixed-kind
-canonical origin lookup) and K35-I02 (stored reference bits confused with active
-loans). The focused repair candidate validates canonical ordinary origin rows and
-preserves stored reference identity separately from reached access and Move
-history. The existing ownership checker remains the sole lifetime authority.
-Fresh Actions evidence and Sarah's focused confirmation govern the repair;
-Greg's acceptance remains pending. No Stage N or public authority is added.
-
-Sarah's focused confirmation 6306899488 resolves I01 and confirms I02's original
-positive witnesses. It finds I03/I04 blockers in independent transition binding
-and negative-test discrimination. The focused candidate derives queued operands
-from canonical approved producers and checks unchanged queued consumption. Private
-controls now identify their effective semantic rejection and isolate each guard;
-prior sealed-count-only assertions are explicitly corrected. The ownership checker,
-primary interpreter, public boundaries and Stage N exclusions remain unchanged.
-Exact-head Actions, Sarah's focused confirmation and Greg's acceptance are pending.
 
 <!-- END KLYXR_CONTEXT.md -->
 
@@ -1037,9 +1029,10 @@ retained primary execution. A canonical cleanup plan supplies no new authority t
 execute cleanup. Versioned logical charges and semantic cuts remain visible even
 when a later implementation removes their physical work.
 
-Its Stage I candidate selects no native design, makes no performance or new proof
-claim, and supplies no Stage N execution evidence. Independent review, acceptance,
-later backend authorization and human-only merge remain separate decisions.
+The accepted Stage I implementation selects no native design, makes no performance
+or new proof claim, and supplies no Stage N execution evidence. Independent review,
+owner acceptance and human merge are complete for Stage I. Any backend selection,
+Stage N authorization and later human merge remain separate decisions.
 
 <!-- END DESIGN_PRINCIPLES.md -->
 
@@ -2632,11 +2625,14 @@ Release promises no flush/commit/durability/completion; fallible completion is
 explicitly deferred to KED-034. Historical public-resource exclusions above are
 narrowed only for this exact frozen family. See its implementation guide and ledger.
 
-## Frozen KED-035 — Approved-MIR execution equivalence, Stage I candidate
+## Accepted KED-035 — Approved-MIR execution equivalence, Stage I
 
-**Status:** Frozen Issue #84 Draft 2; Stage I separately authorized by directive
-6296001700. Draft PR #85 supplies implementation evidence, pending Sarah's
-independent review and Greg's acceptance. No new Accepted KD number is assigned.
+**Status:** Accepted Stage I. Greg accepted Sarah's final resolution of K35-I01
+through K35-I04 and human-merged PR #85 as
+`c2910493ad5e04fb80f5cfa0ae8d3ee80be5d717`, tree
+`a76e2ab68c8d2db094f1005906bdc24b6a9b8795`. No new Accepted KD number
+is assigned because this establishes an execution-engine contract and tooling
+boundary without changing source-language semantics.
 
 Execution consumes the exact opaque approved composite and bound versioned
 semantic/accounting/cut/replay identities. Neither source similarity, matching
@@ -2673,6 +2669,15 @@ chosen. Actual native production, installation, runtime binding, optimized and
 unoptimized equality and physical-failure evidence remain mandatory Stage N
 obligations under a later authorization. Stage I evidence is finite interpreter,
 independent-oracle, protocol and malformed-boundary evidence, not universal proof.
+
+
+The accepted Stage I evidence reconciles 2,045 predecessors, 48 original K35
+controls, 11 first-repair identities and 8 final I03/I04 controls: 2,112 passing
+identities in each complete debug and release profile, with zero predecessor
+migrations. All exact-head and post-merge Actions gates passed. Sarah's final
+focused confirmation resolves I01–I04 and assigns no I05. These finite results
+support the accepted Stage I boundary; they remain neither universal conformance
+proof nor native execution evidence. Stage N remains separately unauthorized.
 
 <!-- END LANGUAGE_DECISIONS.md -->
 
@@ -3927,10 +3932,14 @@ conformance, malformed controls and measured finite-fixture bounds are recorded
 in the KED-034 engineering guide, ledger and manifest. This is an implementation
 candidate awaiting independent review and acceptance, not a new proof guarantee.
 
-## KED-035 Stage I implementation candidate
+## Accepted KED-035 Stage I implementation
 
-Frozen Issue #84 Draft 2 and directive 6296001700 bind this candidate on baseline
-5f28977a42a7df1817e5cac46b3f6660a38435d3. Acceptance remains pending.
+Frozen Issue #84 Draft 2 and directive 6296001700 govern the implementation
+developed from baseline 5f28977a42a7df1817e5cac46b3f6660a38435d3.
+Greg accepted the independently reviewed Stage I head
+837fc99e2bbb241077d4b65b32a4103b6bf99362, and human-merged PR #85 as
+c2910493ad5e04fb80f5cfa0ae8d3ee80be5d717 with tree
+a76e2ab68c8d2db094f1005906bdc24b6a9b8795.
 `execution::contract::Contract` borrows the same checked executable, consumes its
 canonical/opaque gates, indexes exact MIR operands/sites and builds bounded
 structural ordinary closure. `Approval` seals semantic/accounting/cut/observation/
@@ -3979,34 +3988,32 @@ opaque-authority doctest and affine cases are reconciled in debug/release Action
 No local Rust execution is used. No native implementation, physical optimized
 execution or portable artifact identity is claimed; K35-P10 remains Stage N.
 
-### KED-035 focused observation-validation repair candidate
+### Accepted KED-035 observation-validation repairs
 
-Sarah's independent Stage I review (Issue #84 comment 6305818246) identified I01
-and I02. The focused repair resolves source-global FunctionIds through the actual
-ordinary MIR/origin row; verified/harness declarations grant no ordinary authority.
+Sarah's first Stage I review identified K35-I01 and K35-I02. The first repair
+resolves source-global FunctionIds through the actual ordinary MIR/origin row.
 Stored reference bits retain exact canonical initializer, alias/transfer and
-caller-argument identity after last use. They do not imply a currently active
-loan or require the owner to remain available after a lawful Move. Reached
-reference accesses and held reference operands still require available referents.
-Bounded reference-value initialization/Move history distinguishes repeated
-executions of one borrow site and rejects resurrected or duplicate exclusive
-transfer representations. This is comparison metadata, not a lifetime engine;
-the existing ownership checker remains the only loan authority. Comparison work,
-lineage and pre-reserved history bounds are separate from primary execution.
-Focused independent confirmation and Greg's acceptance remain pending. No frozen
-semantics, public API, predecessor restriction or Stage N decision changes.
+caller-argument identity after last use without implying a current loan or forcing
+an owner to remain available after lawful Move. Reached access and held operands
+still require available referents. Bounded initialization/Move history distinguishes
+repeated borrow-site executions and rejects duplicate or resurrected exclusive
+representations. This metadata is not a lifetime engine; the existing ownership
+checker remains the only loan authority.
 
-Sarah's focused confirmation 6306899488 resolves I01 and retains the I02 positive
-witnesses, but identifies I03 (coordinated queued/reached substitution) and I04
-(masked private negative controls). The new candidate binds queued operands to
-approved producer transitions and preserves their queue until reached consumption.
-Canonical parent/operand/continuation relationships supply authority independently
-of two observation fragments agreeing. Frame/field cursors and selected continuation edges remain bound to approved
-control history. This validation reruns no source expressions or lifetime rules. Private tests distinguish sealing, queue mismatch,
-unauthorized matching operands, duplicate production, resurrection and reached
-referent availability, with targeted guard-removal discriminators. The prior
-length-changing tests' downstream claims were unsupported and are corrected in
-the ledger. Fresh exact-head Actions and independent confirmation remain required.
+Sarah's next confirmation resolved I01 and retained the I02 lawful positives while
+identifying I03 and I04. The final accepted repair binds queued operands to approved
+producer transitions and preserves each validated queue until reached consumption.
+Canonical cursor, parent, operand-order and continuation relationships supply
+authority independently of two observation fragments agreeing. Private controls
+separately discriminate Seal, Control, Operand, Queue, Duplicate, Resurrection
+and Access; the prior seal-masked evidence claims are explicitly withdrawn.
+
+Sarah's final focused confirmation resolves K35-I01 through K35-I04, assigns no
+K35-I05, and finds the exact head ready for owner acceptance. Complete debug and
+release profiles each pass 2,112 identities with zero predecessor migrations.
+The repair changes no frozen semantics, public API, source ownership/lifetime rule,
+primary interpreter behavior or Stage N boundary. Post-merge build, tests, verify
+and docs workflows all pass on c2910493ad5e04fb80f5cfa0ae8d3ee80be5d717.
 
 <!-- END ARCHITECTURE.md -->
 
@@ -4708,13 +4715,16 @@ open or excluded. Automatic release promises no flush/commit/durability/completi
 explicit fallible completion and ownership after its failure remain deferred to
 KED-034. No such follow-on work is authorized by KED-033 implementation.
 
-### KED-035 staged engine-equivalence boundary
+### KED-035 accepted Stage I engine-equivalence boundary
 
 Frozen Issue #84 Draft 2 fixes the approved-MIR semantic relation independently of
-any backend. The Stage I candidate extracts/validates the interpreter contract,
-separates logical and evidence accounts, captures/validates bounded observations,
-compares anchored identities, and implements private addressed replay/modeled Host.
-Review and acceptance are pending; this records no new language or proof claim.
+any backend. The accepted Stage I implementation extracts and validates the
+interpreter contract, separates logical and evidence accounts, captures and
+validates bounded observations, compares anchored identities, and supplies private
+addressed replay and modeled Host evidence. Sarah resolved K35-I01 through K35-I04;
+Greg accepted the implementation; human-merged PR #85 is
+`c2910493ad5e04fb80f5cfa0ae8d3ee80be5d717`, tree
+`a76e2ab68c8d2db094f1005906bdc24b6a9b8795`.
 
 Native backend, target, ABI/data layout, emitter, optimizer, object/runtime/linker,
 portable artifact binding, transport, serialization, signing and packaging remain
