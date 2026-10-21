@@ -138,7 +138,7 @@ Now consider:
 ```text
 let mutable battery = Battery { charge: 80 };
 
-consume(&mut battery, 90);
+consume(&mutable battery, 90);
 ```
 
 Nothing here is memory-unsafe.
@@ -152,7 +152,7 @@ error: precondition cannot be established
 
   --> src/battery.klx:14:1
 
-14 | consume(&mut battery, 90);
+14 | consume(&mutable battery, 90);
    | ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 required:
