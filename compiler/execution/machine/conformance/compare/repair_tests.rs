@@ -119,20 +119,49 @@ fn i01_verified_between_caller_callee_and_failing_harness_stay_isolated() {
 }
 #[test]
 fn i01_foreign_function_and_origin_metadata_reject_without_indexing_panics() {
-    let source=format!("{TYPES}{VERIFIED}fn demo()->bool{{return true;}}");
-    let e=prepare_execution(&source,AdmissionLimits::default()).unwrap();let c=contract(&e);
-    let a=session(&c,1024);
+    let source = format!("{TYPES}{VERIFIED}fn demo()->bool{{return true;}}");
+    let e = prepare_execution(&source, AdmissionLimits::default()).unwrap();
+    let c = contract(&e);
+    let a = session(&c, 1024);
     for mutation in 0..3 {
-        let b=session(&c,1024);let mut capture=b.machine().observation.borrow_mut();let records=&mut capture.as_mut().unwrap().records;
-        if mutation<2 {
-            let function=records.iter_mut().find_map(|r|if let Record::Frame(_,function,..)=r{Some(function)}else{None}).unwrap();
-            *function=FunctionId(if mutation==0 {0}else{usize::MAX});
+        let b = session(&c, 1024);
+        let mut capture = b.machine().observation.borrow_mut();
+        let records = &mut capture.as_mut().unwrap().records;
+        if mutation < 2 {
+            let function = records
+                .iter_mut()
+                .find_map(|r| {
+                    if let Record::Frame(_, function, ..) = r {
+                        Some(function)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap();
+            *function = FunctionId(if mutation == 0 { 0 } else { usize::MAX });
         } else {
-            let span=e.program.function(FunctionId(0)).span();
-            let origin=records.iter_mut().find_map(|r|if let Record::Cut(_,_,_,origin,_,_)=r{if *origin!=START {Some(origin)}else{None}}else{None}).unwrap();*origin=span;
+            let span = e.program.function(FunctionId(0)).span();
+            let origin = records
+                .iter_mut()
+                .find_map(|r| {
+                    if let Record::Cut(_, _, _, origin, _, _) = r {
+                        if *origin != START {
+                            Some(origin)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .unwrap();
+            *origin = span;
         }
         drop(capture);
-        assert_eq!(compare(&a,&b,comparison()),Comparison::Inconclusive(Incomplete::InvalidState));
+        assert_eq!(
+            compare(&a, &b, comparison()),
+            Comparison::Inconclusive(Incomplete::InvalidState)
+        );
     }
 }
 const SHARED_THEN_EXCLUSIVE: &str = "fn demo()->bool{let mutable value=true;let shared=&value;let seen=*shared;let exclusive=&mut value;*exclusive=false;return value;}";
@@ -140,26 +169,66 @@ const SHARED_THEN_MOVE: &str = "type N=range 0..1;record R{x:N}fn demo()->R{let 
 
 #[test]
 fn i02_final_shared_use_allows_exclusive_access_with_old_bits_retained() {
-    equal_bool(SHARED_THEN_EXCLUSIVE,false);
-    let e=prepare_execution(SHARED_THEN_EXCLUSIVE,AdmissionLimits::default()).unwrap();let c=contract(&e);let a=session(&c,1024);
-    let records=&a.capture().records;
-    let cuts:Vec<_>=records.iter().enumerate().filter_map(|(i,r)|matches!(r,Record::Cut(..)).then_some(i)).collect();
-    assert!(cuts.windows(2).any(|cut|{let rows=&records[cut[0]..cut[1]];rows.iter().any(|r|matches!(r,Record::Reference(BorrowKind::Shared,..)))&&rows.iter().any(|r|matches!(r,Record::Reference(BorrowKind::Mutable,..)))}));
+    equal_bool(SHARED_THEN_EXCLUSIVE, false);
+    let e = prepare_execution(SHARED_THEN_EXCLUSIVE, AdmissionLimits::default()).unwrap();
+    let c = contract(&e);
+    let a = session(&c, 1024);
+    let records = &a.capture().records;
+    let cuts: Vec<_> = records
+        .iter()
+        .enumerate()
+        .filter_map(|(i, r)| matches!(r, Record::Cut(..)).then_some(i))
+        .collect();
+    assert!(cuts.windows(2).any(|cut| {
+        let rows = &records[cut[0]..cut[1]];
+        rows.iter()
+            .any(|r| matches!(r, Record::Reference(BorrowKind::Shared, ..)))
+            && rows
+                .iter()
+                .any(|r| matches!(r, Record::Reference(BorrowKind::Mutable, ..)))
+    }));
 }
 #[test]
 fn i02_record_move_after_final_field_read_preserves_stored_reference_identity() {
-    let e=prepare_execution(SHARED_THEN_MOVE,AdmissionLimits::default()).unwrap();let c=contract(&e);let a=session(&c,1024);let b=session(&c,1024);
-    let ExecutionResult::Value(RuntimeValue::Record{record,fields})=a.primary().unwrap().unwrap() else{panic!("record result")};
-    assert_eq!(*record,e.program.records()[0].id);assert_eq!(fields.len(),1);assert_eq!(fields[0].1.value,1);
-    assert_eq!(a.primary(),b.primary());assert_eq!(compare(&a,&b,comparison()),Comparison::Equal);
-    let item=e.program.locals().iter().find(|local|local.name=="item").unwrap().id;
-    let records=&a.capture().records;let cuts:Vec<_>=records.iter().enumerate().filter_map(|(i,r)|matches!(r,Record::Cut(..)).then_some(i)).collect();
-    assert!(cuts.windows(2).any(|cut|{let rows=&records[cut[0]..cut[1]];rows.contains(&Record::Slot(Place::Local(item),2))&&rows.iter().any(|r|matches!(r,Record::Reference(BorrowKind::Shared,..)))}));
+    let e = prepare_execution(SHARED_THEN_MOVE, AdmissionLimits::default()).unwrap();
+    let c = contract(&e);
+    let a = session(&c, 1024);
+    let b = session(&c, 1024);
+    let ExecutionResult::Value(RuntimeValue::Record { record, fields }) =
+        a.primary().unwrap().unwrap()
+    else {
+        panic!("record result")
+    };
+    assert_eq!(*record, e.program.records()[0].id);
+    assert_eq!(fields.len(), 1);
+    assert_eq!(fields[0].1.value, 1);
+    assert_eq!(a.primary(), b.primary());
+    assert_eq!(compare(&a, &b, comparison()), Comparison::Equal);
+    let item = e
+        .program
+        .locals()
+        .iter()
+        .find(|local| local.name == "item")
+        .unwrap()
+        .id;
+    let records = &a.capture().records;
+    let cuts: Vec<_> = records
+        .iter()
+        .enumerate()
+        .filter_map(|(i, r)| matches!(r, Record::Cut(..)).then_some(i))
+        .collect();
+    assert!(cuts.windows(2).any(|cut| {
+        let rows = &records[cut[0]..cut[1]];
+        rows.contains(&Record::Slot(Place::Local(item), 2))
+            && rows
+                .iter()
+                .any(|r| matches!(r, Record::Reference(BorrowKind::Shared, ..)))
+    }));
 }
 #[test]
 fn i02_repeated_scopes_expire_shared_handles_before_exclusive_access_and_move() {
-    equal_bool("type N=range 0..3;fn seed()->N{return 3;}fn demo()->bool{let mutable value=true;let mutable count=seed();while count>0{let shared=&value;let seen=*shared;let exclusive=&mut value;*exclusive=false;count=count-1;}return value;}",false);
-    equal_bool("type N=range 0..2;record R{x:N}fn seed()->N{return 2;}fn consume(item:R){}fn demo()->bool{let mutable count=seed();while count>0{let item=R{x:1};let view=&item;let seen=view.x;consume(item);count=count-1;}return true;}",true);
+    equal_bool("type N=range 0..3;fn seed()->N{return 3;}fn demo()->bool{let mutable value=true;let mutable count=seed();while !(count==0){let shared=&value;let seen=*shared;let exclusive=&mut value;*exclusive=false;count=count-1;}return value;}",false);
+    equal_bool("type N=range 0..2;record R{x:N}fn seed()->N{return 2;}fn consume(item:R){}fn demo()->bool{let mutable count=seed();while !(count==0){let item=R{x:1};let view=&item;let seen=view.x;consume(item);count=count-1;}return true;}",true);
 }
 #[test]
 fn i02_repeated_activations_and_exclusive_transfers_keep_distinct_provenance() {
@@ -315,4 +384,28 @@ fn i02_expired_reference_use_is_not_granted_authority_by_stored_bits() {
         compare(&a, &b, comparison()),
         Comparison::Inconclusive(Incomplete::InvalidState)
     );
+}
+
+#[test]
+fn repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality() {
+    let source = "fn demo()->bool{let item=true;let first=&item;let second=first;return *second;}";
+    let e = prepare_execution(source, AdmissionLimits::default()).unwrap();
+    let c = contract(&e);
+    let a = session(&c, 1024);
+    let b = session(&c, 1024);
+    assert_eq!(compare(&a, &b, comparison()), Comparison::Equal);
+    assert_eq!(
+        compare(&a, &b, ComparisonLimits { work: 1, ..comparison() }),
+        Comparison::Inconclusive(Incomplete::Work)
+    );
+    let mut narrow = Session::new(
+        &c,
+        ExecutionLimits { steps: 1024, ..ExecutionLimits::default() },
+        Limits { lineage: 1, ..observation() },
+    ).unwrap();
+    narrow.advance().unwrap();
+    assert_eq!(narrow.completeness(), Ok(()));
+    assert_eq!(compare(&narrow, &narrow, comparison()), Comparison::Inconclusive(Incomplete::Lineage));
+    assert_eq!(narrow.primary(), a.primary());
+    assert_eq!(a.primary().unwrap(), Ok(&ExecutionResult::Value(RuntimeValue::Bool(true))));
 }

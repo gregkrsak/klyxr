@@ -1661,7 +1661,8 @@
     "lib.rs::execution::machine::conformance::compare::repair_tests::i02_repeated_activations_and_exclusive_transfers_keep_distinct_provenance",
     "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
     "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
-    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits"
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
   ],
   "fixture_adaptations": [
     {
@@ -1770,7 +1771,8 @@
     "lib.rs::execution::machine::conformance::compare::repair_tests::i02_repeated_activations_and_exclusive_transfers_keep_distinct_provenance": "ordinary_source",
     "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid": "private_malformed_observation",
     "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree": "private_malformed_observation",
-    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits": "private_malformed_observation"
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality": "logical_or_observation_boundary"
   },
   "m5_checkpoint": {
     "commit": "e31f6104d8222ee201bc392a3daf87bcb03734ab",
@@ -2773,7 +2775,8 @@
       "lib.rs::execution::machine::conformance::compare::repair_tests::i02_repeated_activations_and_exclusive_transfers_keep_distinct_provenance",
       "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
       "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
-      "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits"
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
     ]
   }
 }
