@@ -1651,7 +1651,17 @@
     "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity",
     "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive",
     "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate",
-    "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects"
+    "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i01_verified_prefix_resolves_ordinary_boundary_and_nonboundary_origins",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i01_verified_between_caller_callee_and_failing_harness_stay_isolated",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i01_foreign_function_and_origin_metadata_reject_without_indexing_panics",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_final_shared_use_allows_exclusive_access_with_old_bits_retained",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_record_move_after_final_field_read_preserves_stored_reference_identity",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_repeated_scopes_expire_shared_handles_before_exclusive_access_and_move",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_repeated_activations_and_exclusive_transfers_keep_distinct_provenance",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits"
   ],
   "fixture_adaptations": [
     {
@@ -1750,7 +1760,17 @@
     "lib.rs::execution::machine::conformance::replay_tests::recursive_call_closure_has_exact_logical_depth_without_physical_frame_identity": "private_addressed_replay",
     "lib.rs::execution::machine::conformance::replay_tests::coordinated_accounting_origin_kind_and_replay_marker_corruption_is_inconclusive": "private_malformed_observation",
     "lib.rs::execution::machine::conformance::replay_tests::finite_sample_storage_neighbors_stop_at_the_first_insufficient_gate": "logical_or_observation_boundary",
-    "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects": "private_malformed_observation"
+    "lib.rs::execution::machine::conformance::replay_tests::independent_continuation_scope_completion_and_provenance_corruption_rejects": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i01_verified_prefix_resolves_ordinary_boundary_and_nonboundary_origins": "ordinary_source",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i01_verified_between_caller_callee_and_failing_harness_stay_isolated": "ordinary_source",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i01_foreign_function_and_origin_metadata_reject_without_indexing_panics": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_final_shared_use_allows_exclusive_access_with_old_bits_retained": "ordinary_source",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_record_move_after_final_field_read_preserves_stored_reference_identity": "ordinary_source",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_repeated_scopes_expire_shared_handles_before_exclusive_access_and_move": "ordinary_source",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_repeated_activations_and_exclusive_transfers_keep_distinct_provenance": "ordinary_source",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits": "private_malformed_observation"
   },
   "m5_checkpoint": {
     "commit": "e31f6104d8222ee201bc392a3daf87bcb03734ab",
@@ -2737,5 +2757,23 @@
     "predecessors": 2045,
     "additions": 48,
     "all_jobs_steps_success": true
+  },
+  "repair": {
+    "review": "https://github.com/gregkrsak/klyxr/issues/84#issuecomment-6305818246",
+    "baseline_commit": "4922296a04b479915ad58001275e491af1287d58",
+    "baseline_tree": "08712b0f327e65f91ef39db4a19bad9311debd0e",
+    "status": "focused I01/I02 candidate; Actions and independent confirmation pending",
+    "tests": [
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i01_verified_prefix_resolves_ordinary_boundary_and_nonboundary_origins",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i01_verified_between_caller_callee_and_failing_harness_stay_isolated",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i01_foreign_function_and_origin_metadata_reject_without_indexing_panics",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i02_final_shared_use_allows_exclusive_access_with_old_bits_retained",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i02_record_move_after_final_field_read_preserves_stored_reference_identity",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i02_repeated_scopes_expire_shared_handles_before_exclusive_access_and_move",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i02_repeated_activations_and_exclusive_transfers_keep_distinct_provenance",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits"
+    ]
   }
 }

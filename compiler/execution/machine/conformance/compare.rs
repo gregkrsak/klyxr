@@ -1,6 +1,7 @@
 //! Observation validation precedes correspondence. Neither stage executes,
 //! repairs or acquires authority over the retained interpreter state.
 use super::*;
+mod references;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Comparison {
@@ -101,6 +102,8 @@ struct SlotRow {
     frame: u64,
     place: Place,
     state: u8,
+    reference: Option<references::ReferenceValue>,
+    reference_root: Option<(u64, usize)>,
 }
 #[derive(Clone, Copy)]
 struct Pair {
@@ -280,6 +283,7 @@ struct ValueInfo {
     ty: Option<ValueType>,
     handle: Option<Key>,
     extra: usize,
+    reference: Option<references::ReferenceValue>,
 }
 struct Validator<'a, 'b> {
     contract: &'a contract::Contract<'a>,
@@ -445,10 +449,19 @@ impl Validator<'_, '_> {
             {
                 return Ok(());
             }
-            for canonical in &self.contract.executable.origins[function.0] {
+            // FunctionId is source-global; origin rows follow ordinary MIR order.
+            // Resolve that canonical relationship, including verified-ID gaps.
+            for (position, ordinary) in self.contract.executable.mir.functions().iter().enumerate() {
                 self.work.spend()?;
-                if *canonical == origin {
-                    return Ok(());
+                if ordinary.function() == *function {
+                    let row = self.contract.executable.origins.get(position).ok_or(Incomplete::InvalidState)?;
+                    for canonical in row {
+                        self.work.spend()?;
+                        if *canonical == origin {
+                            return Ok(());
+                        }
+                    }
+                    break;
                 }
             }
             let definition = self
@@ -624,6 +637,15 @@ impl Validator<'_, '_> {
     fn held_value(&mut self, cleanup: bool) -> Valid<ValueInfo> {
         self.held = self.held.checked_add(1).ok_or(Incomplete::InvalidState)?;
         let value = self.value(0, cleanup)?;
+        if let Some(reference) = value.reference {
+            self.scratch.link(Link::Borrow(key(Kind::Frame, reference.frame), reference.place, reference.kind))?;
+        }
+        self.add_storage(value.extra)?;
+        Ok(value)
+    }
+    fn stored_value(&mut self) -> Valid<ValueInfo> {
+        self.held = self.held.checked_add(1).ok_or(Incomplete::InvalidState)?;
+        let value = self.value(0, false)?;
         self.add_storage(value.extra)?;
         Ok(value)
     }
@@ -635,6 +657,7 @@ impl Validator<'_, '_> {
             ty: None,
             handle: None,
             extra: 0,
+            reference: None,
         };
         match self.take()? {
             Record::Bool(_) => info.ty = Some(ValueType::Bool),
@@ -651,8 +674,7 @@ impl Validator<'_, '_> {
             }
             Record::Raw(_) | Record::NoValue => (),
             Record::Reference(kind, referent, frame, place) => {
-                self.scratch
-                    .link(Link::Borrow(key(Kind::Frame, frame), place, kind))?;
+                info.reference = Some(references::ReferenceValue { kind, referent, frame, place });
                 let target = self.place(frame, place)?;
                 require(target == referent.value_type())?;
                 info.ty = Some(match kind {
@@ -818,7 +840,7 @@ impl Validator<'_, '_> {
         }
         Ok(info)
     }
-    fn expression(&mut self, frame: u64) -> Valid {
+    fn expression(&mut self, frame: u64) -> Valid<usize> {
         let Record::Expression(index) = self.take()? else {
             return Err(Incomplete::InvalidState);
         };
@@ -827,7 +849,8 @@ impl Validator<'_, '_> {
             .sites()
             .get(index)
             .ok_or(Incomplete::InvalidState)?;
-        require(site.role == contract::Role::Expression && site.function == self.function(frame)?)
+        require(site.role == contract::Role::Expression && site.function == self.function(frame)?)?;
+        Ok(index)
     }
     fn public_record(
         &mut self,
@@ -1058,7 +1081,10 @@ impl Validator<'_, '_> {
                         Record::Binary(BinaryOp::And | BinaryOp::Or)
                     ))?;
                 }
-                self.expression(frame)?;
+                let index = self.expression(frame)?;
+                if executing && d[0] == 1 {
+                    self.reference_expression_use(frame, index)?;
+                }
             }
             7 => {
                 require(matches!(self.take()?, Record::Binary(_)))?;
@@ -1082,6 +1108,9 @@ impl Validator<'_, '_> {
                 }
             }
             _ => (),
+        }
+        if executing && d[0] == 0 {
+            self.reference_write_use(frame)?;
         }
         for k in task_keys(d) {
             self.reference(k)?;
@@ -2332,6 +2361,7 @@ impl Validator<'_, '_> {
         Ok(())
     }
     fn finish_graph(&mut self) -> Valid {
+        self.stored_references()?;
         if let Some(root) = self.transit {
             let node = self.node(key(Kind::Result, root))?;
             require(node.status == 1 && node.edge.is_none())?;
@@ -2659,9 +2689,18 @@ impl Validator<'_, '_> {
                     frame: id,
                     place,
                     state,
+                    reference: None,
+                    reference_root: None,
                 });
                 if state == 1 {
-                    let value = self.held_value(false)?;
+                    let value = self.stored_value()?;
+                    if let Some(reference) = value.reference {
+                        let (expected, root) = self.reference_origin(id, place)?;
+                        require(reference == expected)?;
+                        let slot = self.scratch.slots.last_mut().ok_or(Incomplete::InvalidState)?;
+                        slot.reference = Some(reference);
+                        slot.reference_root = Some(root);
+                    }
                     self.expected(value, ty)?;
                 }
                 local_count += 1;
@@ -3681,3 +3720,6 @@ mod oracle_tests;
 
 #[cfg(test)]
 mod identity_tests;
+
+#[cfg(test)]
+mod repair_tests;
