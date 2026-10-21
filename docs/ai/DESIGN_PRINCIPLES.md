@@ -76,6 +76,29 @@ to record that decision and hand the ready pull request back to the human. It do
 not authorize the AI to perform the merge. This boundary applies equally to code,
 documentation, and governance changes.
 
+## DP-016 — Documentation is a human-facing contract
+
+Code is an exact machine artifact, not a complete human explanation merely
+because its author finds it readable. Documentation is part of the program's
+human-facing contract. Code and documentation are reviewed together, and
+disagreement between them is a defect.
+
+Public documentation should explain purpose, domain meaning, effects, authority,
+failure behavior, lifecycle obligations, important policy, assumptions, bounds,
+and non-guarantees in clear human language. A machine-readable type, contract,
+or effect does not make that explanation unnecessary; prose does not replace the
+machine-readable rule.
+
+Klyxr should eventually preserve structured documentation comments, generate
+reference material, compile documentation examples, and validate mechanically
+checkable claims against canonical compiler facts. Documentation metadata may
+never grant authority, change semantics, create proof evidence by assertion, or
+override canonical artifacts. Exact documentation-comment syntax and tooling
+require a focused future decision.
+
+Klyxr-owned public examples prefer implemented explicit aliases under KD-014.
+See [the documentation policy](../DOCUMENTATION_POLICY.md).
+
 KD-041 applies the existing trust-boundary principles to bounded ordinary
 execution: an opaque successful-ownership artifact grants authority, MIR controls
 runtime flow, and explicit limits begin before source ingestion. A runtime trap
