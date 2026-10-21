@@ -11,7 +11,73 @@ pub(super) struct ReferenceValue {
     pub place: Place,
 }
 
+// History of actual reference-value initialization/Move, not a live-loan map.
+// The birth snapshot distinguishes repeated execution of the same MIR borrow.
+#[derive(Clone, Copy)]
+pub(super) struct History {
+    frame: u64,
+    place: Place,
+    state: u8,
+    value: Option<ReferenceValue>,
+    root: Option<(u64, usize, usize)>,
+}
+
 impl<'a> Validator<'a, '_> {
+    fn history_index(&mut self, frame: u64, place: Place) -> Valid<Option<usize>> {
+        for index in 0..self.scratch.references.len() {
+            self.work.spend()?;
+            let history = self.scratch.references[index];
+            if history.frame == frame && history.place == place { return Ok(Some(index)); }
+        }
+        Ok(None)
+    }
+    pub(super) fn reference_binding(&mut self, frame: u64, place: Place, value: ReferenceValue, canonical: (u64, usize)) -> Valid<(u64, usize, usize)> {
+        if let Some(index) = self.history_index(frame, place)? {
+            let prior = self.scratch.references[index];
+            if prior.state == 1 {
+                require(prior.value == Some(value))?;
+                let root = prior.root.ok_or(Incomplete::InvalidState)?;
+                require((root.0, root.1) == canonical)?;
+                return Ok(root);
+            }
+            // A transferred handle cannot resurrect. Reinitialization must have
+            // reached its observed Uninitialized state before a new binding.
+            require(prior.state == 0)?;
+        }
+        let (at, expression) = self.reference_initializer(frame, place)?;
+        let source = match expression.kind {
+            ExprKind::Local(local) => Some(Place::Local(local)),
+            ExprKind::Parameter(parameter) => Some(Place::Parameter(parameter)),
+            ExprKind::Borrow { .. } => None,
+            _ => return Err(Incomplete::InvalidState),
+        };
+        if let Some(source) = source {
+            let index = self.history_index(at, source)?.ok_or(Incomplete::InvalidState)?;
+            let history = self.scratch.references[index];
+            require(history.value == Some(value))?;
+            let root = history.root.ok_or(Incomplete::InvalidState)?;
+            require((root.0, root.1) == canonical)?;
+            Ok(root)
+        } else {
+            Ok((canonical.0, canonical.1, self.stamp))
+        }
+    }
+    pub(super) fn reference_history(&mut self, frame: u64, place: Place, state: u8) -> Valid {
+        let slot = *self.scratch.slots.last().ok_or(Incomplete::InvalidState)?;
+        if let Some(index) = self.history_index(frame, place)? {
+            let history = &mut self.scratch.references[index];
+            history.state = state;
+            if state == 0 || state == 1 {
+                history.value = slot.reference;
+                history.root = slot.reference_root;
+            }
+        } else {
+            if self.scratch.references.len() == self.scratch.cap { return Err(Incomplete::Records); }
+            self.scratch.references.push(History { frame, place, state, value: slot.reference, root: slot.reference_root });
+        }
+        Ok(())
+    }
+
     fn reference_initializer(&mut self, frame: u64, place: Place) -> Valid<(u64, &'a TypedExpr)> {
         let function = self.function(frame)?;
         self.place(frame, place)?;

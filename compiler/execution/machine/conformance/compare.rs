@@ -103,7 +103,7 @@ struct SlotRow {
     place: Place,
     state: u8,
     reference: Option<references::ReferenceValue>,
-    reference_root: Option<(u64, usize)>,
+    reference_root: Option<(u64, usize, usize)>,
 }
 #[derive(Clone, Copy)]
 struct Pair {
@@ -118,6 +118,7 @@ struct Scratch {
     nodes: Vec<Node>,
     links: Vec<Link>,
     slots: Vec<SlotRow>,
+    references: Vec<references::History>,
     pairs: Vec<Pair>,
     trusted: Vec<trusted::Event>,
     leaves: Vec<(u8, u64)>,
@@ -129,7 +130,7 @@ pub(super) fn compatibility_shapes() -> [usize; 8] {
     [
         size_of::<Node>(),
         size_of::<Link>(),
-        size_of::<SlotRow>(),
+        size_of::<SlotRow>() + size_of::<references::History>(),
         size_of::<Pair>(),
         size_of::<trusted::Event>(),
         size_of::<(u8, u64)>(),
@@ -161,6 +162,7 @@ impl Scratch {
             nodes: Vec::new(),
             links: Vec::new(),
             slots: Vec::new(),
+            references: Vec::new(),
             pairs: Vec::new(),
             trusted: Vec::new(),
             leaves: Vec::new(),
@@ -175,6 +177,9 @@ impl Scratch {
             .try_reserve_exact(limits.nodes)
             .map_err(|_| Incomplete::Allocation)?;
         s.slots
+            .try_reserve_exact(limits.nodes)
+            .map_err(|_| Incomplete::Allocation)?;
+        s.references
             .try_reserve_exact(limits.nodes)
             .map_err(|_| Incomplete::Allocation)?;
         s.pairs
@@ -198,6 +203,7 @@ impl Scratch {
         self.nodes.clear();
         self.links.clear();
         self.slots.clear();
+        self.references.clear();
         self.trusted.clear();
         self.leaves.clear();
         self.temporaries.clear();
@@ -2712,6 +2718,7 @@ impl Validator<'_, '_> {
                     if let Some(reference) = value.reference {
                         let (expected, root) = self.reference_origin(id, place)?;
                         require(reference == expected)?;
+                        let root = self.reference_binding(id, place, reference, root)?;
                         let slot = self
                             .scratch
                             .slots
@@ -2721,6 +2728,9 @@ impl Validator<'_, '_> {
                         slot.reference_root = Some(root);
                     }
                     self.expected(value, ty)?;
+                }
+                if matches!(ty, ValueType::SharedRef(_) | ValueType::MutableRef(_)) {
+                    self.reference_history(id, place, state)?;
                 }
                 local_count += 1;
                 slot_count += 1;

@@ -227,6 +227,7 @@ fn i02_record_move_after_final_field_read_preserves_stored_reference_identity() 
 }
 #[test]
 fn i02_repeated_scopes_expire_shared_handles_before_exclusive_access_and_move() {
+    equal_bool("type N=range 0..2;fn seed()->N{return 2;}fn demo()->bool{let mutable item=true;let mutable count=seed();while !(count==0){let first=&mut item;let second=first;*second=false;count=count-1;}return item;}", false);
     equal_bool("type N=range 0..3;fn seed()->N{return 3;}fn demo()->bool{let mutable value=true;let mutable count=seed();while !(count==0){let shared=&value;let seen=*shared;let exclusive=&mut value;*exclusive=false;count=count-1;}return value;}",false);
     equal_bool("type N=range 0..2;record R{x:N}fn seed()->N{return 2;}fn consume(item:R){}fn demo()->bool{let mutable count=seed();while !(count==0){let item=R{x:1};let view=&item;let seen=view.x;consume(item);count=count-1;}return true;}",true);
 }
@@ -395,17 +396,37 @@ fn repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equ
     let b = session(&c, 1024);
     assert_eq!(compare(&a, &b, comparison()), Comparison::Equal);
     assert_eq!(
-        compare(&a, &b, ComparisonLimits { work: 1, ..comparison() }),
+        compare(
+            &a,
+            &b,
+            ComparisonLimits {
+                work: 1,
+                ..comparison()
+            }
+        ),
         Comparison::Inconclusive(Incomplete::Work)
     );
     let mut narrow = Session::new(
         &c,
-        ExecutionLimits { steps: 1024, ..ExecutionLimits::default() },
-        Limits { lineage: 1, ..observation() },
-    ).unwrap();
+        ExecutionLimits {
+            steps: 1024,
+            ..ExecutionLimits::default()
+        },
+        Limits {
+            lineage: 1,
+            ..observation()
+        },
+    )
+    .unwrap();
     narrow.advance().unwrap();
     assert_eq!(narrow.completeness(), Ok(()));
-    assert_eq!(compare(&narrow, &narrow, comparison()), Comparison::Inconclusive(Incomplete::Lineage));
+    assert_eq!(
+        compare(&narrow, &narrow, comparison()),
+        Comparison::Inconclusive(Incomplete::Lineage)
+    );
     assert_eq!(narrow.primary(), a.primary());
-    assert_eq!(a.primary().unwrap(), Ok(&ExecutionResult::Value(RuntimeValue::Bool(true))));
+    assert_eq!(
+        a.primary().unwrap(),
+        Ok(&ExecutionResult::Value(RuntimeValue::Bool(true)))
+    );
 }
