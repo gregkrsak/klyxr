@@ -519,14 +519,25 @@ fn i03_same_parent_operand_substitution_cannot_redefine_canonical_order() {
         assert!(changed > 0);
     }
     REJECTED_PROTECTION.with(|slot| slot.set(None));
-    assert_eq!(compare(&a, &b, comparison()), Comparison::Inconclusive(Incomplete::InvalidState));
-    assert_eq!(REJECTED_PROTECTION.with(|slot| slot.get()), Some(Protection::Control));
+    assert_eq!(
+        compare(&a, &b, comparison()),
+        Comparison::Inconclusive(Incomplete::InvalidState)
+    );
+    assert_eq!(
+        REJECTED_PROTECTION.with(|slot| slot.get()),
+        Some(Protection::Control)
+    );
     // A bad control cursor is rejected independently before its downstream
     // operand/continuation mismatch. Removing Control reaches that second gate.
     REJECTED_PROTECTION.with(|slot| slot.set(None));
-    assert_eq!(disabled(Protection::Control, || compare(&a, &b, comparison())), Comparison::Inconclusive(Incomplete::InvalidState));
-    assert_eq!(REJECTED_PROTECTION.with(|slot| slot.get()), Some(Protection::Operand));
-
+    assert_eq!(
+        disabled(Protection::Control, || compare(&a, &b, comparison())),
+        Comparison::Inconclusive(Incomplete::InvalidState)
+    );
+    assert_eq!(
+        REJECTED_PROTECTION.with(|slot| slot.get()),
+        Some(Protection::Operand)
+    );
 }
 #[test]
 fn i03_nested_operands_calls_and_short_circuit_remain_authorized() {

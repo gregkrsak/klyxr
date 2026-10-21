@@ -80,12 +80,23 @@ impl Producer<'_> {
 }
 
 impl<'a> Validator<'a, '_> {
-    pub(super) fn control_cursor(&mut self, index: usize, block: BasicBlockId, statement: usize, entry: BasicBlockId) -> Valid {
+    pub(super) fn control_cursor(
+        &mut self,
+        index: usize,
+        block: BasicBlockId,
+        statement: usize,
+        entry: BasicBlockId,
+    ) -> Valid {
         let node = self.scratch.nodes[index];
         let actual = (block.0, statement);
         let allowed = if let Some(previous) = node.payload {
-            previous == actual || self.producer.is_some_and(|p| p.frame == node.key.1 && p.advance == Some(actual))
-        } else { actual == (entry.0, 0) };
+            previous == actual
+                || self
+                    .producer
+                    .is_some_and(|p| p.frame == node.key.1 && p.advance == Some(actual))
+        } else {
+            actual == (entry.0, 0)
+        };
         protection(Protection::Control, allowed)?;
         // For Frame rows payload is a canonical cursor, not a value holder.
         self.scratch.nodes[index].payload = Some(actual);
@@ -94,8 +105,13 @@ impl<'a> Validator<'a, '_> {
     pub(super) fn staging_cursor(&mut self, index: usize, cursor: usize) -> Valid {
         let node = self.scratch.nodes[index];
         let allowed = if let Some((previous, _)) = node.payload {
-            previous == cursor || self.producer.is_some_and(|p| p.staging_advance == Some((node.key.1, cursor)))
-        } else { cursor == 0 };
+            previous == cursor
+                || self
+                    .producer
+                    .is_some_and(|p| p.staging_advance == Some((node.key.1, cursor)))
+        } else {
+            cursor == 0
+        };
         protection(Protection::Control, allowed)?;
         self.scratch.nodes[index].payload = Some((cursor, 0));
         self.scratch.nodes[index].statement = cursor;
@@ -105,7 +121,10 @@ impl<'a> Validator<'a, '_> {
         if let Some(p) = self.producer {
             protection(Protection::Operand, p.operands.get(p.next).is_none())?;
             if let Some(expected) = p.advance {
-                protection(Protection::Control, self.node(key(Kind::Frame, p.frame))?.payload == Some(expected))?;
+                protection(
+                    Protection::Control,
+                    self.node(key(Kind::Frame, p.frame))?.payload == Some(expected),
+                )?;
             }
             protection(Protection::Control, !p.drive_here || p.drive_queued)?;
         }
@@ -242,7 +261,10 @@ impl<'a> Validator<'a, '_> {
                 } else {
                     require(control.statement == body.statements().len())?;
                     match body.terminator() {
-                        Terminator::Goto { target } => { p.advance = Some((target.0, 0)); p.drive_here = true; }
+                        Terminator::Goto { target } => {
+                            p.advance = Some((target.0, 0));
+                            p.drive_here = true;
+                        }
                         Terminator::Return { value } => {
                             p.operands = Operands::One(value);
                             p.anchor = Anchor::Kind(14);
@@ -319,7 +341,9 @@ impl<'a> Validator<'a, '_> {
             }
             5 | 8 => {
                 let right = self.task_expression(start, end)?;
-                let Record::Binary(op) = self.records[start + 2] else { return Err(Incomplete::InvalidState); };
+                let Record::Binary(op) = self.records[start + 2] else {
+                    return Err(Incomplete::InvalidState);
+                };
                 let left = self.top_bool.ok_or(Incomplete::InvalidState)?;
                 if !((op == BinaryOp::And && !left) || (op == BinaryOp::Or && left)) {
                     p.operands = Operands::One(right);
@@ -327,21 +351,33 @@ impl<'a> Validator<'a, '_> {
                 p.depth = d[1];
             }
             13 => {
-                let selected = if self.top_bool.ok_or(Incomplete::InvalidState)? { d[1] } else { d[2] };
+                let selected = if self.top_bool.ok_or(Incomplete::InvalidState)? {
+                    d[1]
+                } else {
+                    d[2]
+                };
                 p.advance = Some((selected as usize, 0));
                 p.drive_here = true;
             }
             21 => {
                 let result = self.top_result.ok_or(Incomplete::InvalidState)?;
-                let selected = if self.node(key(Kind::Result, result))?.tag == 0 { d[2] } else { d[3] };
+                let selected = if self.node(key(Kind::Result, result))?.tag == 0 {
+                    d[2]
+                } else {
+                    d[3]
+                };
                 p.advance = Some((selected as usize, 0));
                 p.drive_here = true;
             }
-            10 => { p.drive_callee = Some(FunctionId(d[1] as usize)); }
+            10 => {
+                p.drive_callee = Some(FunctionId(d[1] as usize));
+            }
             16 | 18 | 19 => {
                 let fields = self.canonical_fields(start, end)?;
                 p.fields = Some(fields);
-                if d[0] == 16 { p.field_task = Some((16, d[1], d[2] as usize + 1, d[3])); }
+                if d[0] == 16 {
+                    p.field_task = Some((16, d[1], d[2] as usize + 1, d[3]));
+                }
                 if d[0] == 19 {
                     let index = self.node(key(Kind::Staging, d[1]))?.statement;
                     p.field_task = Some((18, d[1], 0, d[2]));
@@ -386,8 +422,10 @@ impl<'a> Validator<'a, '_> {
         };
         if d[0] == 0 {
             let node = self.node(key(Kind::Frame, frame))?;
-            let authorized = !p.drive_queued && ((p.drive_here && frame == p.frame)
-                || p.drive_callee == Some(FunctionId(node.a as usize)) && node.parent == Some(key(Kind::Frame, p.frame)));
+            let authorized = !p.drive_queued
+                && ((p.drive_here && frame == p.frame)
+                    || p.drive_callee == Some(FunctionId(node.a as usize))
+                        && node.parent == Some(key(Kind::Frame, p.frame)));
             protection(Protection::Control, authorized)?;
             p.drive_queued = true;
         }
@@ -448,14 +486,30 @@ impl<'a> Validator<'a, '_> {
             protection(Protection::Operand, frame == p.frame && !p.ready)?;
             p.ready = true;
             if matches!(p.anchor, Anchor::Record(_)) && matches!(d[0], 16 | 18) {
-                protection(Protection::Operand, if d[0] == 16 { d[2] == 0 && d[3].checked_add(1) == Some(p.depth) } else { d[2].checked_add(1) == Some(p.depth) })?;
+                protection(
+                    Protection::Operand,
+                    if d[0] == 16 {
+                        d[2] == 0 && d[3].checked_add(1) == Some(p.depth)
+                    } else {
+                        d[2].checked_add(1) == Some(p.depth)
+                    },
+                )?;
                 p.operands = Operands::None;
             }
         }
         if matches!(d[0], 16 | 18) && !matches!(p.anchor, Anchor::Record(_)) {
             let (kind, id, index, depth) = p.field_task.ok_or(Incomplete::InvalidState)?;
-            protection(Protection::Operand, d[0] == kind && d[1] == id && frame == p.frame
-                && if kind == 16 { d[2] == index as u64 && d[3] == depth } else { d[2] == depth })?;
+            protection(
+                Protection::Operand,
+                d[0] == kind
+                    && d[1] == id
+                    && frame == p.frame
+                    && if kind == 16 {
+                        d[2] == index as u64 && d[3] == depth
+                    } else {
+                        d[2] == depth
+                    },
+            )?;
             p.field_task = None;
         }
         if matches!(d[0], 1 | 2 | 5 | 8) {

@@ -26,8 +26,8 @@ fn protection(boundary: Protection, condition: bool) -> Valid {
     if DISABLED_PROTECTIONS.with(|mask| mask.get() & boundary as u8 != 0) {
         return Ok(());
     }
+    #[cfg(test)]
     if !condition {
-        #[cfg(test)]
         REJECTED_PROTECTION.with(|slot| slot.set(Some(boundary)));
     }
     let _ = boundary;
@@ -2781,8 +2781,15 @@ impl Validator<'_, '_> {
         self.top_result = None;
         for _ in 0..operands {
             require(self.take()? == Record::Operand)?;
-            self.top_bool = match self.peek() { Some(Record::Bool(value)) => Some(value), _ => None };
-            self.top_result = self.held_value(false)?.handle.filter(|k| k.0 == Kind::Result).map(|k| k.1);
+            self.top_bool = match self.peek() {
+                Some(Record::Bool(value)) => Some(value),
+                _ => None,
+            };
+            self.top_result = self
+                .held_value(false)?
+                .handle
+                .filter(|k| k.0 == Kind::Result)
+                .map(|k| k.1);
         }
         let queue_start = self.at;
         let (mut previous, previous_end) = self.queue.unwrap_or((0, 0));
