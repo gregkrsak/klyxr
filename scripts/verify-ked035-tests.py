@@ -56,6 +56,16 @@ assert all(actual.get(k) == v for k, v in expected.items()), "missing or changed
 additions = manifest["additions"]
 k35 = json.loads((root / "docs/engineering/ked-035-evidence.json").read_text())
 new = k35["additions"]
+sentinel = json.loads((root / "docs/engineering/sentinel-0-evidence.json").read_text())
+application = sentinel["additions"]
+assert sentinel["predecessor_count"] == 2112 and sentinel["migrations"] == {}
+assert len(application) == len(set(application))
+assert set(sentinel["classifications"]) == set(application)
+assert set(sentinel["classifications"].values()) <= {
+    "selected_application_and_fixture", "private_addressed_combined_failure",
+    "private_receipt_threshold_boundary", "public_cli",
+}
+assert not set(application) & (set(expected) | set(additions) | set(new))
 assert len(new) == len(set(new))
 assert set(k35["classifications"]) == set(new), "unclassified KED-035 evidence"
 assert set(k35["classifications"].values()) <= {
@@ -65,9 +75,9 @@ assert set(k35["classifications"].values()) <= {
 }, "unknown KED-035 evidence class"
 assert not set(new) & (set(expected) | set(additions))
 assert len(additions) == len(set(additions))
-assert set(actual) - set(expected) == set(additions) | set(new), "missing or unclassified KED-034 identity"
+assert set(actual) - set(expected) == set(additions) | set(new) | set(application), "missing or unclassified complete-profile identity"
 assert manifest["expected_per_profile"] == 1981 + len(additions)
-assert len(actual) == sum(summaries) == manifest["expected_per_profile"] + len(new)
+assert len(actual) == sum(summaries) == manifest["expected_per_profile"] + len(new) + len(application)
 assert set(manifest["classifications"]) == set(additions)
 assert set(manifest["classifications"].values()) <= {"ordinary_source", "private_canonical_catalog", "private_catalog_envelope", "trusted_boundary", "private_malformed_authority"}
 k33 = json.loads((root / "docs/engineering/ked-033-evidence.json").read_text())
@@ -117,4 +127,7 @@ print("KED-033 retained: 1,875 predecessors + 106 additions = 1,981")
 print("identity migrations: 0; failed/ignored/filtered: 0/0/0")
 print("compile-fail authority doctest: passed; affine cross-check: 1,800 cases passed")
 
-print(f"KED-035 {k35['stage']} reconciliation: 2045 exact predecessors + {len(new)} additions = {len(actual)} passed")
+print(f"KED-035 {k35['stage']} reconciliation: 2045 exact predecessors + {len(new)} additions = {2045 + len(new)} retained")
+
+assert len(actual) == sentinel["expected_per_profile"]
+print(f"Sentinel 0 reconciliation: 2112 exact predecessors + {len(application)} classified additions = {len(actual)} passed; migrations: 0")

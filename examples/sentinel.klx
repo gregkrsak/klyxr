@@ -1,0 +1,132 @@
+// Sentinel 0 classifies two accepted readings from the sealed sensor-demo host.
+// It has no application filesystem, clock, network, configuration, or formatting
+// API. The host selects the fixture and renders the typed value, not the policy.
+// monitor requires the selected open/read/finish/release grants and effects io.
+// This is ordinary interpreted code, not a verified contract or a device claim.
+
+// Attempts are not report counters: failed open accepts no reading and creates
+// no Sensor; each successful open leads to one read attempt in this application.
+// Every continuing loop header has observations == completed, each at most two.
+// A failed read may still complete a Sensor: a returned Failure can therefore
+// have completed > observations. Warning and critical counts are disjoint.
+type Count = range 0..2;
+// Disposition summarizes accepted readings: 0 normal, 1 warning, 2 critical.
+// An outer Failure always means incomplete work, even when this summary is 0.
+type Disposition = range 0..2;
+// Failure phases: 1 acquisition, 2 read, 3 completion.
+type Stage = range 1..3;
+// 0 means no preceding read error; read errors use 2 no sample or 3 fixture I/O.
+// Value 1 is unused by this application because reads cannot return error 1.
+type ReadStatus = range 0..3;
+// Status of the failing cycle: 0 not attempted, 1 succeeded, 2 failed.
+type CompletionStatus = range 0..2;
+
+// Ok(Report) means two observations were accepted and both Sensors completed.
+// An accepted observation is a successful read, counted before finish; warning
+// and critical reports are successful application runs, not tool errors.
+record Report {
+    observations: Count,  // Accepted reads, not open/read attempt count.
+    warnings: Count,      // Readings from 50 through 79 inclusive.
+    critical: Count,      // Readings from 80 through 4095 inclusive.
+    peak: Reading,        // Greatest accepted reading; initial 0 alone is no data claim.
+    disposition: Disposition, // Greatest severity, never just the last reading.
+    completed: Count      // Actual successful finish Results, not release-only exits.
+}
+
+// Failure retains committed aggregates; it does not roll back accepted readings.
+// The original nominal SensorError remains problem. If read and finish both
+// fail, completion wins phase/problem and read_status retains the earlier error.
+// Tool Limit/Host/Integrity/trap/release/reporting failures are not this record.
+record Failure {
+    phase: Stage,         // Operation whose ordinary failure ends the application.
+    problem: SensorError, // Original error payload from that operation.
+    read_status: ReadStatus, // Earlier read error, also retained if finish fails.
+    completion: CompletionStatus, // Finish status for this final cycle.
+    observations: Count,  // Accepted reads, including one preceding failed finish.
+    warnings: Count,      // Committed warning count.
+    critical: Count,      // Committed critical count.
+    peak: Reading,        // Maximum of accepted readings; inspect observations too.
+    disposition: Disposition, // Summary of those readings, not application success.
+    completed: Count      // Successful completions, including after a failed read.
+}
+
+// Only validated sensor_read errors reach this helper: precisely 2 or 3.
+// This is not a general SensorError conversion or classifier for error 1.
+function read_code(problem: SensorError) -> ReadStatus {
+    if problem == 2 { return 2; }
+    return 3;
+}
+
+// Copy fields through a shared non-escaping view; the summary owner stays put.
+function failed(summary: &Report, phase: Stage, problem: SensorError,
+                read_status: ReadStatus, completion: CompletionStatus) -> Failure {
+    return Failure {
+        phase: phase, problem: problem, read_status: read_status,
+        completion: completion, observations: summary.observations,
+        warnings: summary.warnings, critical: summary.critical,
+        peak: summary.peak, disposition: summary.disposition,
+        completed: summary.completed
+    };
+}
+
+// Acquire an iteration-local owner, read it without consumption, then finish it.
+// Finish consumes that owner and protects either outcome until fixed release
+// succeeds. Only delivered Ok increments completed; source-formed receipt values
+// or aggregates alone prove no lifecycle. Static audit describes possible paths,
+// whereas integration tests inspect actual identities and operation events.
+function monitor() -> Result<success: Report, failure: Failure> effects io {
+    let mutable summary = Report {
+        observations: 0, warnings: 0, critical: 0, peak: 0,
+        disposition: 0, completed: 0
+    };
+    while summary.observations <= 1 {
+        match sensor_open() {
+            Error(problem) => {
+                return Error(failed(&summary, 1, problem, 0, 0));
+            }
+            Ok(sensor) => {
+                match sensor_read(&sensor) {
+                    Ok(reading) => {
+                        // Subtraction of raw -1 increments with immediate range checks.
+                        summary.observations = summary.observations - -1;
+                        if summary.peak <= reading { summary.peak = reading; }
+                        if 80 <= reading {
+                            summary.critical = summary.critical - -1;
+                            summary.disposition = 2;
+                        } else {
+                            if 50 <= reading {
+                                summary.warnings = summary.warnings - -1;
+                                if summary.disposition == 0 { summary.disposition = 1; }
+                            }
+                        }
+                    }
+                    Error(read_problem) => {
+                        // A failed read leaves Sensor owned here. Explicitly finish
+                        // before reporting it. Both arms return, so the common finish
+                        // below is reachable only after a successful read.
+                        match sensor_finish(sensor) {
+                            Ok(receipt) => {
+                                summary.completed = summary.completed - -1;
+                                return Error(failed(&summary, 2, read_problem,
+                                                    read_code(read_problem), 1));
+                            }
+                            Error(finish_problem) => {
+                                return Error(failed(&summary, 3, finish_problem,
+                                                    read_code(read_problem), 2));
+                            }
+                        }
+                    }
+                }
+                match sensor_finish(sensor) {
+                    Ok(receipt) => { summary.completed = summary.completed - -1; }
+                    Error(problem) => {
+                        return Error(failed(&summary, 3, problem, 0, 2));
+                    }
+                }
+            }
+        }
+    }
+    // A terminal tool stop may retain a Sensor or protected Result instead of
+    // reaching this return. No retry, unwind, rollback, or late delivery occurs.
+    return Ok(summary);
+}

@@ -483,6 +483,13 @@ Current design areas include:
 
 ---
 
+### Sensor-monitoring reference application
+
+[Sentinel 0](docs/SENTINEL.md) uses the interpreter to classify two deterministic
+Sensor readings and return a typed report, with explicit completion and bounded
+failure handling. Its guide gives the complete invocation, fixture selections,
+application-success convention and audit limitations.
+
 ## Prototype repository layout
 
 ```text
