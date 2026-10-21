@@ -13,6 +13,28 @@ Branch: `sentinel-0-reference-application`; target `prod`; PR remains draft.
 No local Rust was installed, repaired, formatted, compiled, linked or executed.
 GitHub Actions is the sole executable evidence environment.
 
+## Publication provenance
+
+The local preparation checkpoint remains preserved and clean at commit
+`72497d9bf0ee68ee9e8172933ad4d5575967e771`, tree
+`dd338cfcfb4014134eff012f55317d952cc433ae`. Git HTTPS credentials and SSH transport
+were unavailable. Greg explicitly authorized replacement commit identities through
+the authenticated ChatGPT GitHub connector. The single initial published commit
+`572cff0b4113a7a00c4f246ae023d04d1a8925fc` has that exact same tree, verified by
+GitHub readback; no initial byte, path, mode or documentation substitution occurred.
+It is a direct child of the stated baseline. [PR #91](https://github.com/gregkrsak/klyxr/pull/91)
+is draft; subsequent repairs are normal descendants, without history rewriting.
+
+The first Actions gate compiled but rejected Rust formatting and the private
+combined-failure control's admission envelope. Its default million-step execution
+ceiling exceeded the existing replay controller's conservative work bound. Commit
+`68e8607c45a341a69b9f777788d7e6e15d0ba462`, tree
+`f993392f7299525064d201bd50906202b0e9e3b5`, applies the Actions-produced rustfmt diff
+and uses 512 steps, eight call frames and at most 1,000,000,000 replay-admission
+work for that private test. The original production controller, public execution
+defaults, schedules and admission rejection remain unchanged. This is test setup,
+not a new language rule or relaxation of controlled-input validation.
+
 ## Mechanism and classified evidence
 
 The source is the reviewed flat-report algorithm with explicit public aliases and
@@ -32,9 +54,15 @@ No third public scenario is added. Threshold receipt controls are private tests.
 
 ## Gate status
 
-Authoritative compilation, formatting, complete debug/release profiles, workflow
-jobs/steps and exact-head reporting are pending. No passing test is claimed before
-its Actions run. Final evidence and limitations will be recorded here and in the
-identical verified PR/Issue implementation report. Stage N and KED-036 remain out
-of scope; the application adds no language rule, dependency, general mock, source
-filesystem or persisted authority.
+The complete exact-head workflow run/job identities, debug/release reconciliation,
+scenario results and limitations belong to the identical readback-verified
+implementation reports on PR #91 and Issue #89. A prior green commit or this
+ledger alone is not evidence that a later head passed. The manifest requires
+2,112 unchanged predecessors plus 14 separately classified Sentinel identities
+in each complete profile, with no ignored, filtered or failed tests. Compilation,
+rustfmt, Clippy, Rustdoc, proof regressions, docs and generated-context checks must
+all pass for push and pull_request at the reported final head.
+
+Sarah's independent review and Greg's acceptance remain pending after those gates.
+Stage N and KED-036 remain out of scope; the application adds no language rule,
+dependency, general mock, source filesystem or persisted authority.

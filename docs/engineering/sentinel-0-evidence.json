@@ -52,5 +52,19 @@
     "frontend_work": 10000000000000000,
     "working_storage": 1073741824,
     "diagnostic_storage": 4194304
+  },
+  "publication_provenance": {
+    "local_preparation_commit": "72497d9bf0ee68ee9e8172933ad4d5575967e771",
+    "local_preparation_tree": "dd338cfcfb4014134eff012f55317d952cc433ae",
+    "initial_published_commit": "572cff0b4113a7a00c4f246ae023d04d1a8925fc",
+    "initial_published_tree": "dd338cfcfb4014134eff012f55317d952cc433ae",
+    "relationship": "exact bytes, paths and modes; Greg authorized replacement commit identity; subsequent CI repairs are descendants",
+    "draft_pr": 91
+  },
+  "private_combined_failure_allowances": {
+    "execution_steps": 512,
+    "call_depth": 8,
+    "replay_work": 1000000000,
+    "meaning": "bounded private conformance setup, no production limit or accounting change"
   }
 }
