@@ -864,13 +864,14 @@ and manifest for source examples, exact boundaries, malformed controls, workflow
 evidence and limitations. This candidate changes no Accepted decision or proof
 claim and still requires Sarah's independent exact-head review and Greg's decision.
 
-## Frozen KED-035 Stage I implementation candidate
+## Accepted KED-035 Stage I implementation
 
-Issue #84 Draft 2 is frozen under record 6295819136. Greg's directive
-6296001700 authorizes only Stage I on baseline
-5f28977a42a7df1817e5cac46b3f6660a38435d3 (tree
-0b330328f3f213a26b6fc4af9f45ca06a98876b8). Draft PR #85 contains an implementation
-candidate; Sarah's independent review and Greg's acceptance remain pending.
+Frozen Issue #84 Draft 2 defines approved-MIR execution-engine equivalence.
+Greg accepted the independently reviewed Stage I implementation, and human-merged
+PR #85 as commit `c2910493ad5e04fb80f5cfa0ae8d3ee80be5d717`, tree
+`a76e2ab68c8d2db094f1005906bdc24b6a9b8795`. The accepted implementation head
+was `837fc99e2bbb241077d4b65b32a4103b6bf99362`. All four post-merge
+build/tests/verify/docs workflows passed.
 
 The engine contract is an immutable bounded view of the same opaque approved
 HIR/MIR/origin/outcome/effect/cleanup/domain/trusted composite. Versioned semantic,
@@ -890,28 +891,19 @@ Structured rooted authority and bounded human presentation have separate evidenc
 accounts. Existing public preparation, run, session, audit, diagnostics and reporting
 boundaries remain governed by their predecessors. Version-one capacity/scan charges
 are logical compatibility facts, not a native ABI or a mandate for physical frames,
-allocations or dead stores. Stage I tests include independent expected observations,
-finite cuts, malformed controls and exact predecessor reconciliation through Actions.
+allocations or dead stores.
+
+Sarah's reviews identified K35-I01 through K35-I04. The accepted repairs resolve
+canonical ordinary origin rows, separate stored reference identity from live access,
+bind queued/reached work to approved producer/operand/continuation relationships,
+and make malformed-observation controls reach their named protections. Sarah's
+final focused confirmation resolves I01–I04, assigns no I05, and reports the exact
+accepted head ready for owner acceptance. The complete debug and release profiles
+each execute 2,112 identities with zero predecessor migrations.
 
 No native backend, target, ABI, layout, emitter, linker, optimizer, runtime ABI,
 transport, serialization, signing or packaging is selected. Native installation,
-actual optimized/unoptimized comparisons and native physical-failure evidence are
-mandatory deferred Stage N work requiring separate authority. See
+actual optimized/unoptimized comparisons and native physical-failure evidence
+remain mandatory deferred Stage N work requiring a separately authorized KED.
+Stage I acceptance and merge do not authorize Stage N. See
 `docs/engineering/KED-035-STAGE-I-LEDGER.md` and its evidence manifest.
-
-Sarah's independent review of the Stage I candidate found K35-I01 (mixed-kind
-canonical origin lookup) and K35-I02 (stored reference bits confused with active
-loans). The focused repair candidate validates canonical ordinary origin rows and
-preserves stored reference identity separately from reached access and Move
-history. The existing ownership checker remains the sole lifetime authority.
-Fresh Actions evidence and Sarah's focused confirmation govern the repair;
-Greg's acceptance remains pending. No Stage N or public authority is added.
-
-Sarah's focused confirmation 6306899488 resolves I01 and confirms I02's original
-positive witnesses. It finds I03/I04 blockers in independent transition binding
-and negative-test discrimination. The focused candidate derives queued operands
-from canonical approved producers and checks unchanged queued consumption. Private
-controls now identify their effective semantic rejection and isolate each guard;
-prior sealed-count-only assertions are explicitly corrected. The ownership checker,
-primary interpreter, public boundaries and Stage N exclusions remain unchanged.
-Exact-head Actions, Sarah's focused confirmation and Greg's acceptance are pending.

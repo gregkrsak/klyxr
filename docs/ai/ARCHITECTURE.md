@@ -1245,10 +1245,14 @@ conformance, malformed controls and measured finite-fixture bounds are recorded
 in the KED-034 engineering guide, ledger and manifest. This is an implementation
 candidate awaiting independent review and acceptance, not a new proof guarantee.
 
-## KED-035 Stage I implementation candidate
+## Accepted KED-035 Stage I implementation
 
-Frozen Issue #84 Draft 2 and directive 6296001700 bind this candidate on baseline
-5f28977a42a7df1817e5cac46b3f6660a38435d3. Acceptance remains pending.
+Frozen Issue #84 Draft 2 and directive 6296001700 govern the implementation
+developed from baseline 5f28977a42a7df1817e5cac46b3f6660a38435d3.
+Greg accepted the independently reviewed Stage I head
+837fc99e2bbb241077d4b65b32a4103b6bf99362, and human-merged PR #85 as
+c2910493ad5e04fb80f5cfa0ae8d3ee80be5d717 with tree
+a76e2ab68c8d2db094f1005906bdc24b6a9b8795.
 `execution::contract::Contract` borrows the same checked executable, consumes its
 canonical/opaque gates, indexes exact MIR operands/sites and builds bounded
 structural ordinary closure. `Approval` seals semantic/accounting/cut/observation/
@@ -1297,31 +1301,29 @@ opaque-authority doctest and affine cases are reconciled in debug/release Action
 No local Rust execution is used. No native implementation, physical optimized
 execution or portable artifact identity is claimed; K35-P10 remains Stage N.
 
-### KED-035 focused observation-validation repair candidate
+### Accepted KED-035 observation-validation repairs
 
-Sarah's independent Stage I review (Issue #84 comment 6305818246) identified I01
-and I02. The focused repair resolves source-global FunctionIds through the actual
-ordinary MIR/origin row; verified/harness declarations grant no ordinary authority.
+Sarah's first Stage I review identified K35-I01 and K35-I02. The first repair
+resolves source-global FunctionIds through the actual ordinary MIR/origin row.
 Stored reference bits retain exact canonical initializer, alias/transfer and
-caller-argument identity after last use. They do not imply a currently active
-loan or require the owner to remain available after a lawful Move. Reached
-reference accesses and held reference operands still require available referents.
-Bounded reference-value initialization/Move history distinguishes repeated
-executions of one borrow site and rejects resurrected or duplicate exclusive
-transfer representations. This is comparison metadata, not a lifetime engine;
-the existing ownership checker remains the only loan authority. Comparison work,
-lineage and pre-reserved history bounds are separate from primary execution.
-Focused independent confirmation and Greg's acceptance remain pending. No frozen
-semantics, public API, predecessor restriction or Stage N decision changes.
+caller-argument identity after last use without implying a current loan or forcing
+an owner to remain available after lawful Move. Reached access and held operands
+still require available referents. Bounded initialization/Move history distinguishes
+repeated borrow-site executions and rejects duplicate or resurrected exclusive
+representations. This metadata is not a lifetime engine; the existing ownership
+checker remains the only loan authority.
 
-Sarah's focused confirmation 6306899488 resolves I01 and retains the I02 positive
-witnesses, but identifies I03 (coordinated queued/reached substitution) and I04
-(masked private negative controls). The new candidate binds queued operands to
-approved producer transitions and preserves their queue until reached consumption.
-Canonical parent/operand/continuation relationships supply authority independently
-of two observation fragments agreeing. Frame/field cursors and selected continuation edges remain bound to approved
-control history. This validation reruns no source expressions or lifetime rules. Private tests distinguish sealing, queue mismatch,
-unauthorized matching operands, duplicate production, resurrection and reached
-referent availability, with targeted guard-removal discriminators. The prior
-length-changing tests' downstream claims were unsupported and are corrected in
-the ledger. Fresh exact-head Actions and independent confirmation remain required.
+Sarah's next confirmation resolved I01 and retained the I02 lawful positives while
+identifying I03 and I04. The final accepted repair binds queued operands to approved
+producer transitions and preserves each validated queue until reached consumption.
+Canonical cursor, parent, operand-order and continuation relationships supply
+authority independently of two observation fragments agreeing. Private controls
+separately discriminate Seal, Control, Operand, Queue, Duplicate, Resurrection
+and Access; the prior seal-masked evidence claims are explicitly withdrawn.
+
+Sarah's final focused confirmation resolves K35-I01 through K35-I04, assigns no
+K35-I05, and finds the exact head ready for owner acceptance. Complete debug and
+release profiles each pass 2,112 identities with zero predecessor migrations.
+The repair changes no frozen semantics, public API, source ownership/lifetime rule,
+primary interpreter behavior or Stage N boundary. Post-merge build, tests, verify
+and docs workflows all pass on c2910493ad5e04fb80f5cfa0ae8d3ee80be5d717.

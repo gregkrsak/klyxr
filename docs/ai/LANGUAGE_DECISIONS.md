@@ -1583,11 +1583,14 @@ Release promises no flush/commit/durability/completion; fallible completion is
 explicitly deferred to KED-034. Historical public-resource exclusions above are
 narrowed only for this exact frozen family. See its implementation guide and ledger.
 
-## Frozen KED-035 — Approved-MIR execution equivalence, Stage I candidate
+## Accepted KED-035 — Approved-MIR execution equivalence, Stage I
 
-**Status:** Frozen Issue #84 Draft 2; Stage I separately authorized by directive
-6296001700. Draft PR #85 supplies implementation evidence, pending Sarah's
-independent review and Greg's acceptance. No new Accepted KD number is assigned.
+**Status:** Accepted Stage I. Greg accepted Sarah's final resolution of K35-I01
+through K35-I04 and human-merged PR #85 as
+`c2910493ad5e04fb80f5cfa0ae8d3ee80be5d717`, tree
+`a76e2ab68c8d2db094f1005906bdc24b6a9b8795`. No new Accepted KD number
+is assigned because this establishes an execution-engine contract and tooling
+boundary without changing source-language semantics.
 
 Execution consumes the exact opaque approved composite and bound versioned
 semantic/accounting/cut/replay identities. Neither source similarity, matching
@@ -1624,3 +1627,12 @@ chosen. Actual native production, installation, runtime binding, optimized and
 unoptimized equality and physical-failure evidence remain mandatory Stage N
 obligations under a later authorization. Stage I evidence is finite interpreter,
 independent-oracle, protocol and malformed-boundary evidence, not universal proof.
+
+
+The accepted Stage I evidence reconciles 2,045 predecessors, 48 original K35
+controls, 11 first-repair identities and 8 final I03/I04 controls: 2,112 passing
+identities in each complete debug and release profile, with zero predecessor
+migrations. All exact-head and post-merge Actions gates passed. Sarah's final
+focused confirmation resolves I01–I04 and assigns no I05. These finite results
+support the accepted Stage I boundary; they remain neither universal conformance
+proof nor native execution evidence. Stage N remains separately unauthorized.

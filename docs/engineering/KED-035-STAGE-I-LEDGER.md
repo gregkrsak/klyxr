@@ -1,23 +1,26 @@
 # KED-035 Stage I engineering ledger
 
 Authority: Issue #84 comment 6296001700; frozen Draft 2 and its freeze record
-6295819136; accepted K35-P01–P10 review 6295569435. The implementation branch is
-`ked-035-approved-mir-execution-equivalence`; draft PR #85 targets `prod`.
+6295819136; accepted K35-P01–P10 review 6295569435. The implementation branch was
+`ked-035-approved-mir-execution-equivalence`; PR #85 was independently reviewed,
+accepted by Greg and human-merged into `prod`.
 Baseline commit `5f28977a42a7df1817e5cac46b3f6660a38435d3`, tree
 `0b330328f3f213a26b6fc4af9f45ca06a98876b8`.
 
-This is an implementation ledger, not acceptance or permission for Stage N.
-GitHub Actions is the only Rust compilation/execution environment used. No local
-Rust installation, repair, compiler, formatter, linker, or executable test is run.
+This ledger records the accepted Stage I implementation and its closeout. It
+grants no permission for Stage N. GitHub Actions was the only Rust compilation
+and execution environment used; no local Rust installation, repair, compiler,
+formatter, linker or executable test was run.
 
-## Focused I03 / I04 repair candidate
+## Focused I03 / I04 repair and confirmation
 
 Sarah's focused confirmation (Issue #84 comment 6306899488) resolves K35-I01
 and confirms the original I02 lawful last-use witnesses. It also identifies two
 Major blockers at head `23dd37ca32c0ec6c9df34fc3cbc44b0a7371060a`, tree
 `6536a0a21ba266ef4a29880f0bfeac02bb08ee1b`. Greg authorizes only I03/I04 repair.
-All implementation history and M5 remain normal ancestors. This candidate is not
-independent confirmation, acceptance, or authority for another project step.
+All implementation history and M5 remain normal ancestors. The repaired head was
+later independently confirmed, accepted and merged; none of those events grants
+authority for another project step.
 
 I03: `compare/transitions.rs` binds newly queued expressions to canonical operands
 of the approved statement/terminator or already authorized parent evaluation.
@@ -247,10 +250,10 @@ Different; incomplete or malformed views yield Inconclusive. Analytic raw-ID
 relabeling is explicitly separated from real interpreter identity variation and
 from independent expected observations.
 
-The five canonical AI documents record this staged candidate, preserve human
-acceptance authority and defer native work. The generated context bundle is
-regenerated using `scripts/build-ai-context.py` and checked byte-for-byte in CI.
-No accepted language-decision number or human acceptance is invented.
+The five canonical AI documents now record accepted and merged Stage I while
+preserving separate Stage N authority. The generated context bundle is regenerated
+using `scripts/build-ai-context.py` and checked byte-for-byte in CI. No source
+language decision number or native implementation claim is invented.
 
 ## Binding implementation constraints
 
@@ -327,34 +330,52 @@ contract inventory and JSON evidence map. CI changes comprise docs.yml, tests.ym
 and the two new KED-035 verifiers. The final M9 report gives the exact head's full
 changed-file list and tree; no unrelated repository configuration is changed.
 
-## M9 — final gate and retained authority
+## M9 — final gate, acceptance and merge closeout
 
-The final exact-head M9 gate must independently pass complete debug/release tests,
-both applicable events' build/tests/verify/docs, formatting, Clippy and Rustdoc
-with warnings denied, ledger/manifest verification, generated-context clean diff,
-exact predecessor identities and numeric neighbors, and clean worktree/index.
-The same final report is published and read back on PR #85 and Issue #84. Its
-head/tree and Actions URLs are external exact-head evidence and cannot be embedded
-in their own content-addressed commit. This ledger does not claim a future gate
-has passed; the verified M9 publications record that result.
+The final implementation head is
+`837fc99e2bbb241077d4b65b32a4103b6bf99362`, tree
+`a76e2ab68c8d2db094f1005906bdc24b6a9b8795`. Its complete debug and release
+profiles each pass 2,112 identities: 2,045 predecessors, 48 original reviewed
+KED-035 controls, 11 retained first-repair identities and 8 I03/I04 identities,
+with zero predecessor migrations.
+
+All eight exact-head workflows passed:
+
+| Event | Build | Tests | Verify | Docs |
+|---|---:|---:|---:|---:|
+| push | 39590998868 | 39590998853 | 39590998901 | 39590998874 |
+| pull request | 39591008109 | 39591008122 | 39591007962 | 39591008089 |
+
+Arnold's identical complete reports are PR comment 6314789174 and Issue comment
+6314791196. Sarah's final focused confirmation is PR comment 6315882077. It resolves
+K35-I01 through K35-I04, assigns no K35-I05, and reports READY FOR OWNER ACCEPTANCE.
+Greg accepted the implementation and authorized human merge.
+
+Human-merged PR #85 is
+`c2910493ad5e04fb80f5cfa0ae8d3ee80be5d717`, tree
+`a76e2ab68c8d2db094f1005906bdc24b6a9b8795`, with the frozen baseline and exact
+reviewed head as parents. GitHub verifies the merge signature. All four post-merge
+push workflows passed: build 39600440449, tests 39600440157, verify 39600440116
+and docs 39600440427.
 
 Some early implementation commit subjects used non-prescribed prefixes. This is
 a nonfunctional repository-process deviation; history and the required M5
-checkpoint are retained without rewriting. Subsequent subjects follow AGENTS.md.
-No local Rust installation/repair/compile/link/formatter/executable test occurred.
+checkpoint remain intact. No local Rust installation, repair, compilation, linking,
+formatting or executable testing occurred.
 
-Remaining limitations: finite fixtures are not universal equivalence proof;
-private Leaf/protocol fixtures are not production source permission; analytic
-relabeling/preallocation are not native tests; contract/static rows use exact
-in-process immutable references, not a portable transport; insufficient evidence
-is deliberately Inconclusive; no performance improvement is claimed. Native
-production, target/runtime installation, pre-execution artifact mismatch checks,
-actual optimized/unoptimized comparisons and physical/native/substrate evidence
-remain mandatory deferred Stage N obligations. No backend, target, ABI, layout,
-emitter, object format, runtime ABI, linker, optimizer, serialization, signing or
-packaging mechanism is selected.
+Remaining limitations are unchanged: finite fixtures are not universal equivalence
+proof; private Leaf/protocol fixtures are not production source permission;
+analytic relabeling/preallocation are not native tests; contract/static rows use
+exact in-process immutable references, not portable transport; insufficient evidence
+is deliberately Inconclusive; and no performance improvement is claimed.
 
-Sarah's independent review and Greg's acceptance decision remain pending. No
-acceptance, freeze change, ready-for-review transition, approval, issue closure,
-merge or later project step is authorized. The PR remains draft and unmerged;
-only a human may merge.
+Native production, target/runtime installation, pre-execution artifact mismatch
+checks, actual optimized/unoptimized comparisons and physical/native/substrate
+evidence remain mandatory deferred Stage N obligations. No backend, target, ABI,
+layout, emitter, object format, runtime ABI, linker, optimizer, serialization,
+signing or packaging mechanism is selected. Stage N requires a separately reviewed
+and explicitly authorized KED.
+
+This documentation-only closeout changes no frozen semantics, implementation,
+test identity, workflow or public API. Merging its PR may close Issue #84 as
+completed; it does not authorize Stage N or any later project step.
