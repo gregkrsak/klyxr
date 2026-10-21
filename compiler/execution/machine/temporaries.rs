@@ -55,6 +55,14 @@ pub(super) struct State {
     frames: Vec<Activation>,
     pub(super) events: Vec<Event>,
 }
+pub(super) fn compatibility_shapes() -> [usize; 4] {
+    [
+        size_of::<State>(),
+        size_of::<Activation>(),
+        size_of::<Owner>(),
+        size_of::<Event>(),
+    ]
+}
 #[derive(Clone, Copy)]
 pub(super) struct Context {
     pub(super) activation: u64,
@@ -63,6 +71,88 @@ pub(super) struct Context {
 }
 
 impl State {
+    pub(super) fn observe(&self, c: &mut conformance::Capture) {
+        use conformance::{Part, Record, ABSENT};
+        c.row(
+            Part::State,
+            &[
+                2,
+                self.frames.capacity() as u64,
+                self.events.capacity() as u64,
+            ],
+        );
+        for frame in &self.frames {
+            if !c.spend() {
+                return;
+            }
+            c.row(
+                Part::TemporaryActivation,
+                &[
+                    frame.id,
+                    frame.frame,
+                    frame.function.0 as u64,
+                    frame.region.0 as u64,
+                    frame.parent.unwrap_or(ABSENT),
+                    match frame.phase {
+                        Phase::Active => 0,
+                        Phase::Retiring => 1,
+                        Phase::Retired => 2,
+                    },
+                    frame.cursor as u64,
+                    frame.owners.capacity() as u64,
+                ],
+            );
+            for (index, owner) in frame.owners.iter().enumerate() {
+                if !c.spend() {
+                    return;
+                }
+                c.row(
+                    Part::TemporaryOwner,
+                    &[
+                        frame.id,
+                        index as u64,
+                        owner.site.0 as u64,
+                        match owner.custody {
+                            Custody::Owned => 0,
+                            Custody::Transferred => 1,
+                            Custody::Cleaning => 2,
+                            Custody::Cleaned => 3,
+                        },
+                    ],
+                );
+                if let Some(value) = &owner.value {
+                    c.push(Record::Payload);
+                    c.value(value);
+                } else {
+                    c.push(Record::Absent);
+                }
+                c.push(Record::End);
+            }
+            if let Some(value) = &frame.protected {
+                c.push(Record::Payload);
+                c.value(value);
+            } else {
+                c.push(Record::Absent);
+            }
+            c.push(Record::End);
+        }
+        for event in &self.events {
+            if !c.spend() {
+                return;
+            }
+            c.push(match *event {
+                Event::Begin(id, frame, region, parent) => {
+                    Record::TemporaryBegin(id, frame, region, parent)
+                }
+                Event::Register(id, site) => {
+                    Record::TemporaryRegister(id.activation, id.ordinal, site)
+                }
+                Event::Transfer(id, at) => Record::TemporaryTransfer(id.activation, id.ordinal, at),
+                Event::Cleanup(id) => Record::TemporaryCleanup(id.activation, id.ordinal),
+                Event::Retire(id) => Record::TemporaryRetire(id),
+            });
+        }
+    }
     pub(super) fn owned_value(&self, id: OwnerId) -> Option<&Value> {
         self.frames
             .iter()
@@ -74,15 +164,23 @@ impl State {
             .as_ref()
     }
     pub(super) fn storage(&self) -> Option<usize> {
-        let mut n = size_of::<Self>()
+        let mut n = contract::Schedule::reference().temporaries[0]
             .checked_add(
                 self.frames
                     .capacity()
-                    .checked_mul(size_of::<Activation>())?,
+                    .checked_mul(contract::Schedule::reference().temporaries[1])?,
             )?
-            .checked_add(self.events.capacity().checked_mul(size_of::<Event>())?)?;
+            .checked_add(
+                self.events
+                    .capacity()
+                    .checked_mul(contract::Schedule::reference().temporaries[3])?,
+            )?;
         for f in &self.frames {
-            n = n.checked_add(f.owners.capacity().checked_mul(size_of::<Owner>())?)?;
+            n = n.checked_add(
+                f.owners
+                    .capacity()
+                    .checked_mul(contract::Schedule::reference().temporaries[2])?,
+            )?;
             for value in f
                 .owners
                 .iter()
@@ -146,14 +244,14 @@ impl<'a> Machine<'a> {
         {
             return Err(self.integrity("completion receiving region mismatch"));
         }
-        let owners =
-            usize::from(frame.owners.len() == frame.owners.capacity()) * size_of::<Owner>();
+        let owners = usize::from(frame.owners.len() == frame.owners.capacity())
+            * self.executable.approval.schedule.temporaries[2];
         let events = &self.temporaries.as_ref().unwrap().events;
         owners
             .checked_add(
                 2usize
                     .saturating_sub(events.capacity() - events.len())
-                    .checked_mul(size_of::<Event>())
+                    .checked_mul(self.executable.approval.schedule.temporaries[3])
                     .ok_or_else(|| self.integrity("completion temporary event overflow"))?,
             )
             .ok_or_else(|| self.integrity("completion temporary envelope overflow"))
@@ -208,7 +306,7 @@ impl<'a> Machine<'a> {
         let growth = 2usize.saturating_sub(events.capacity() - events.len());
         self.reserve(
             growth
-                .checked_mul(size_of::<Event>())
+                .checked_mul(self.executable.approval.schedule.temporaries[3])
                 .ok_or_else(|| self.integrity("completion transfer events overflow"))?,
         )?;
         #[cfg(test)]
@@ -281,7 +379,7 @@ impl<'a> Machine<'a> {
     fn temporary_event_reserve(&mut self) -> Result<(), ExecutionError> {
         let s = self.temporaries.as_ref().unwrap();
         if s.events.len() == s.events.capacity() {
-            self.reserve(size_of::<Event>())?;
+            self.reserve(self.executable.approval.schedule.temporaries[3])?;
             #[cfg(test)]
             self.temporary_allocation()?;
             self.temporaries
@@ -336,8 +434,8 @@ impl<'a> Machine<'a> {
         }
         if self.temporaries.is_none() {
             self.reserve(
-                size_of::<State>()
-                    .checked_add(size_of::<Activation>())
+                self.executable.approval.schedule.temporaries[0]
+                    .checked_add(self.executable.approval.schedule.temporaries[1])
                     .ok_or_else(|| self.integrity("temporary state size"))?,
             )?;
             self.temporaries = Some(State::default());
@@ -348,7 +446,7 @@ impl<'a> Machine<'a> {
             .checked_add(1)
             .ok_or_else(|| self.integrity("temporary activation exhausted"))?;
         if s.frames.len() == s.frames.capacity() {
-            self.reserve(size_of::<Activation>())?;
+            self.reserve(self.executable.approval.schedule.temporaries[1])?;
             #[cfg(test)]
             self.temporary_allocation()?;
             self.temporaries
@@ -511,13 +609,13 @@ impl<'a> Machine<'a> {
             return Err(self.integrity("invalid trusted receiving temporary activation"));
         }
         let owner_growth = if f.owners.len() == f.owners.capacity() {
-            size_of::<Owner>()
+            self.executable.approval.schedule.temporaries[2]
         } else {
             0
         };
         let events = &self.temporaries.as_ref().unwrap().events;
         let event_growth = if events.len() == events.capacity() {
-            size_of::<Event>()
+            self.executable.approval.schedule.temporaries[3]
         } else {
             0
         };
@@ -527,7 +625,7 @@ impl<'a> Machine<'a> {
                 .ok_or_else(|| self.integrity("temporary prospective storage overflow"))?,
         )?;
         if owner_growth > 0 {
-            self.reserve(size_of::<Owner>())?;
+            self.reserve(self.executable.approval.schedule.temporaries[2])?;
             #[cfg(test)]
             self.trusted_allocation(super::trusted::Allocation::TemporaryOwner, true)?;
             #[cfg(test)]

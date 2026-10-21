@@ -4,6 +4,7 @@
 // must not require an additional allocation merely to return the error itself.
 #![allow(clippy::result_large_err)]
 mod audit;
+pub mod contract;
 mod domain;
 mod machine;
 mod render;
@@ -15,6 +16,7 @@ use crate::{
     lexer::Span,
     mir::{self, Origin},
 };
+pub use machine::conformance;
 pub use machine::trusted::{Event as TrustedEvent, ExecutionSession};
 pub use render::write_output;
 use std::{io::Read, rc::Rc};
@@ -194,6 +196,8 @@ impl std::error::Error for ExecutionError {}
 // catches compiler-internal replacement with a merely typed program as well as
 // numeric-ID-aligned substitutions; this never re-runs ownership at execution.
 struct Approval {
+    schema: contract::Schema,
+    schedule: contract::Schedule,
     outcomes: Vec<crate::ownership::outcomes::Witness>,
     program: hir::Program,
     cleanup_sites: Vec<crate::effects::custody::Site>,
@@ -287,6 +291,8 @@ impl CheckedExecutable {
             .ok_or_else(|| ExecutionError::integrity("lowering origin missing"))
     }
     fn validate(&self) -> Result<(), ExecutionError> {
+        self.approval.schema.validate()?;
+        self.approval.schedule.validate()?;
         if !Rc::ptr_eq(&self.approval, &self.mir_approval)
             || !Rc::ptr_eq(&self.approval, &self.origin_approval)
         {
@@ -595,6 +601,8 @@ fn seal_in_domain(
         })?;
     approved_outcomes.extend_from_slice(&outcomes);
     let approval = Rc::new(Approval {
+        schema: contract::Schema::V1,
+        schedule: contract::Schedule::reference(),
         outcomes: approved_outcomes,
         program: program.clone(),
         cleanup_sites,

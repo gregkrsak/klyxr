@@ -21,6 +21,45 @@ pub(in crate::execution::machine) struct Prepared {
     pub(super) displaced: Option<Value>,
 }
 impl Prepared {
+    pub(super) fn observe(&self, c: &mut conformance::Capture) {
+        use conformance::{Part, Record, ABSENT};
+        let (kind, place) = match self.at.place {
+            Place::Local(id) => (0, id.0),
+            Place::Parameter(id) => (1, id.0),
+        };
+        c.row(
+            Part::Replacement,
+            &[
+                self.id,
+                self.at.frame,
+                kind,
+                place as u64,
+                self.record.0 as u64,
+                self.scope.0 as u64,
+                self.activation,
+                self.old_generation.unwrap_or(ABSENT),
+            ],
+        );
+        c.row(
+            Part::ReplacementState,
+            &[match self.phase {
+                Phase::Rhs => 0,
+                Phase::Protected => 1,
+                Phase::Prepared => 2,
+                Phase::Detached => 3,
+                Phase::Discharged => 4,
+            }],
+        );
+        for value in [&self.protected, &self.displaced] {
+            if let Some(value) = value {
+                c.push(Record::Payload);
+                c.value(value);
+            } else {
+                c.push(Record::Absent);
+            }
+        }
+        c.push(Record::End);
+    }
     pub(super) fn payload_storage(&self) -> Option<usize> {
         self.protected
             .as_ref()
@@ -106,7 +145,7 @@ impl<'a> Machine<'a> {
             .ok_or_else(|| self.integrity("replacement identity exhausted"))?;
         let grow = s.replacements.len() == s.replacements.capacity();
         if grow {
-            self.reserve(size_of::<Prepared>())?;
+            self.reserve(self.executable.approval.schedule.cleanup[8])?;
             self.resources
                 .as_mut()
                 .unwrap()
@@ -242,7 +281,7 @@ impl<'a> Machine<'a> {
         let next_generation = if old.is_some() {
             let history = &self.resources.as_ref().unwrap().frames[r].scopes[a].initialized;
             if history.len() == history.capacity() {
-                self.reserve(size_of::<Generation>())?;
+                self.reserve(self.executable.approval.schedule.cleanup[4])?;
                 self.resources.as_mut().unwrap().frames[r].scopes[a]
                     .initialized
                     .try_reserve_exact(1)

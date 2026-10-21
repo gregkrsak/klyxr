@@ -5,6 +5,34 @@ use super::*;
 use crate::trusted::{approval::Invocation, Binding, OperationClass, Scenario};
 use std::sync::atomic::{AtomicU64, Ordering};
 mod completion;
+#[cfg(test)]
+thread_local! {
+    static CONFORMANCE_RESPONSE: std::cell::Cell<Option<(u64,hir::RangeTypeId,i64)>>=const {std::cell::Cell::new(None)};
+}
+#[cfg(test)]
+pub(in crate::execution::machine) fn conformance_physical_receipt_failure(
+    machine: &mut Machine<'_>,
+    invocation: u64,
+) {
+    machine.trusted.as_mut().unwrap().fault = Some((Fault::AfterReceiptHost, invocation));
+}
+#[cfg(test)]
+pub(in crate::execution::machine) fn with_conformance_response<T>(
+    invocation: u64,
+    ty: hir::RangeTypeId,
+    value: i64,
+    run: impl FnOnce() -> T,
+) -> T {
+    struct Restore(Option<(u64, hir::RangeTypeId, i64)>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            CONFORMANCE_RESPONSE.with(|slot| slot.set(self.0));
+        }
+    }
+    let _restore =
+        Restore(CONFORMANCE_RESPONSE.with(|slot| slot.replace(Some((invocation, ty, value)))));
+    run()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
@@ -119,31 +147,224 @@ pub(super) struct State {
     #[cfg(test)]
     fault: Option<(Fault, u64)>,
 }
+pub(super) fn compatibility_shapes() -> [usize; 8] {
+    [
+        size_of::<State>(),
+        size_of::<Entry>(),
+        size_of::<Production>(),
+        size_of::<Event>(),
+        size_of::<Sensor>(),
+        size_of::<Receipt>(),
+        size_of::<completion::Pending>(),
+        size_of::<Payload>(),
+    ]
+}
 impl State {
+    pub(in crate::execution::machine) fn controlled_response(
+        &self,
+        sensor: hir::ResourceTypeId,
+    ) -> Option<conformance::replay::Response> {
+        use conformance::replay::Response;
+        let receipt = self.receipt.as_ref()?;
+        let prefix = self.events.iter().try_fold(0u8, |sum, event| {
+            if let Event::FinishPrefix(invocation, units) = event {
+                if *invocation == receipt.invocation {
+                    return sum.checked_add(*units);
+                }
+            }
+            Some(sum)
+        })?;
+        match (receipt.tag, receipt.payload.as_ref()) {
+            (0, Some(Payload::Sensor(_))) => Some(Response::Open(sensor)),
+            (0, Some(Payload::Range(value))) => {
+                Some(Response::Value(value.ty, value.value, prefix))
+            }
+            (1, Some(Payload::Range(value))) => {
+                Some(Response::Error(value.ty, value.value, prefix))
+            }
+            _ => None,
+        }
+    }
+    pub(in crate::execution::machine) fn observe(&self, c: &mut conformance::Capture) {
+        use conformance::{Part, Record, ABSENT};
+        c.row(
+            Part::TrustedState,
+            &[
+                self.realm,
+                self.entry.0 as u64,
+                self.entries.len() as u64,
+                self.entries.capacity() as u64,
+                self.productions.capacity() as u64,
+                self.events.capacity() as u64,
+                self.stop_storage as u64,
+            ],
+        );
+        let (status, kind, capacity) = match &self.status {
+            Status::Pending => (0, 0, 0),
+            Status::Stopped(error) => (2, 1, error.trace.capacity()),
+            Status::Complete(ExecutionResult::Value(RuntimeValue::Result(layers))) => {
+                (1, 2, layers.capacity())
+            }
+            Status::Complete(ExecutionResult::Value(RuntimeValue::Record { fields, .. })) => {
+                (1, 3, fields.capacity())
+            }
+            Status::Complete(_) => (1, 0, 0),
+        };
+        c.row(
+            Part::TrustedRetained,
+            &[
+                status,
+                kind,
+                capacity as u64,
+                self.diagnostic.borrow().as_ref().map_or(0, Vec::capacity) as u64,
+            ],
+        );
+        // Token-table positions are physical. Emit actual tokens in their
+        // logical acquisition order; retain only the abstract table history
+        // quantities needed by the compatibility schedule.
+        let mut seen = 0;
+        for (index, production) in self.productions.iter().enumerate() {
+            if !c.spend() {
+                return;
+            }
+            c.row(
+                Part::Production,
+                &[
+                    index as u64,
+                    production.realm,
+                    production.cell.0 as u64,
+                    production.plan as u64,
+                    production.invocation,
+                    match production.tag {
+                        hir::ResultTag::Ok => 0,
+                        hir::ResultTag::Error => 1,
+                    },
+                    production.sensor.unwrap_or(ABSENT),
+                ],
+            );
+            if let Some(value) = &production.range {
+                c.push(Record::Range(value.ty, value.value));
+            } else {
+                c.push(Record::Absent);
+            }
+            if let Some(sensor) = production.sensor {
+                for entry in &self.entries {
+                    if !c.spend() {
+                        return;
+                    }
+                    if let Some(token) = &entry.token {
+                        if token.identity == sensor {
+                            if token.realm != self.realm {
+                                c.fail(conformance::Incomplete::InvalidState);
+                                return;
+                            }
+                            c.row(Part::Token, &[token.realm, token.identity]);
+                            seen += 1;
+                        }
+                    }
+                }
+            }
+            c.push(Record::End);
+        }
+        let mut live = 0;
+        for (index, entry) in self.entries.iter().enumerate() {
+            if !c.spend() {
+                return;
+            }
+            if let Some(token) = &entry.token {
+                live += 1;
+                if token.realm != self.realm {
+                    c.fail(conformance::Incomplete::InvalidState);
+                    return;
+                }
+                for other in &self.entries[..index] {
+                    if !c.spend() {
+                        return;
+                    }
+                    if other
+                        .token
+                        .as_ref()
+                        .is_some_and(|v| v.identity == token.identity)
+                    {
+                        c.fail(conformance::Incomplete::InvalidState);
+                        return;
+                    }
+                }
+            }
+        }
+        if seen != live {
+            c.fail(conformance::Incomplete::InvalidState);
+            return;
+        }
+        if let Some(receipt) = &self.receipt {
+            c.row(
+                if receipt.payload.is_none() {
+                    Part::PendingReceipt
+                } else {
+                    Part::Receipt
+                },
+                &[receipt.invocation, receipt.plan as u64, receipt.tag as u64],
+            );
+            match &receipt.payload {
+                Some(Payload::Sensor(token)) => {
+                    if token.realm != self.realm {
+                        c.fail(conformance::Incomplete::InvalidState);
+                        return;
+                    }
+                    c.row(Part::Token, &[token.realm, token.identity]);
+                }
+                Some(Payload::Range(value)) => c.push(Record::Range(value.ty, value.value)),
+                None => c.push(Record::Absent),
+            }
+            c.push(Record::End);
+        }
+        if let Some(pending) = &self.completion {
+            pending.observe(c);
+        }
+        for event in &self.events {
+            if !c.spend() {
+                return;
+            }
+            c.push(Record::TrustedEvent(*event));
+        }
+    }
     pub(super) fn take_diagnostic(&self) -> Option<Vec<CallTrace>> {
         self.diagnostic.borrow_mut().take()
     }
     pub(super) fn storage(&self) -> Option<usize> {
-        let mut n = size_of::<Self>()
-            .checked_add(self.entries.capacity().checked_mul(size_of::<Entry>())?)?
+        let mut n = contract::Schedule::reference().trusted[0]
+            .checked_add(
+                self.entries
+                    .capacity()
+                    .checked_mul(contract::Schedule::reference().trusted[1])?,
+            )?
             .checked_add(
                 self.productions
                     .capacity()
-                    .checked_mul(size_of::<Production>())?,
+                    .checked_mul(contract::Schedule::reference().trusted[2])?,
             )?
-            .checked_add(self.events.capacity().checked_mul(size_of::<Event>())?)?;
+            .checked_add(
+                self.events
+                    .capacity()
+                    .checked_mul(contract::Schedule::reference().trusted[3])?,
+            )?;
         let outcome = match &self.status {
-            Status::Stopped(e) => e.trace.capacity().checked_mul(size_of::<CallTrace>())?,
-            Status::Complete(ExecutionResult::Value(RuntimeValue::Result(v))) => {
-                v.capacity().checked_mul(size_of::<ResultLayer>())?
-            }
+            Status::Stopped(e) => e
+                .trace
+                .capacity()
+                .checked_mul(contract::Schedule::reference().machine[6])?,
+            Status::Complete(ExecutionResult::Value(RuntimeValue::Result(v))) => v
+                .capacity()
+                .checked_mul(contract::Schedule::reference().machine[7])?,
             Status::Complete(ExecutionResult::Value(RuntimeValue::Record { fields, .. })) => fields
                 .capacity()
-                .checked_mul(size_of::<(hir::FieldId, RangeValue)>())?,
+                .checked_mul(contract::Schedule::reference().machine[5])?,
             _ => 0,
         };
         let diagnostic = self.diagnostic.borrow().as_ref().map_or(Some(0), |trace| {
-            trace.capacity().checked_mul(size_of::<CallTrace>())
+            trace
+                .capacity()
+                .checked_mul(contract::Schedule::reference().machine[6])
         })?;
         n = n.checked_add(self.stop_storage.max(outcome.checked_add(diagnostic)?))?;
         Some(n)
@@ -161,9 +382,18 @@ impl State {
 /// One opaque owner remains alive through completion or terminal reporting.
 /// Repeated advancement returns the recorded outcome without executing again.
 pub struct ExecutionSession<'a> {
-    machine: Machine<'a>,
+    pub(in crate::execution::machine) machine: Machine<'a>,
 }
 impl<'a> ExecutionSession<'a> {
+    pub(in crate::execution::machine) fn recorded(
+        &self,
+    ) -> Option<Result<&ExecutionResult, &ExecutionError>> {
+        match &self.machine.trusted.as_ref().unwrap().status {
+            Status::Pending => None,
+            Status::Complete(value) => Some(Ok(value)),
+            Status::Stopped(error) => Some(Err(error)),
+        }
+    }
     /// Private milestone control: preserve the tested pre-enable boundary.
     #[cfg(test)]
     pub(crate) fn disable_completion(&mut self) {
@@ -191,7 +421,7 @@ impl<'a> ExecutionSession<'a> {
             })?;
         let stop_storage = limits
             .trace_depth
-            .checked_mul(size_of::<CallTrace>())
+            .checked_mul(contract::Schedule::reference().machine[6])
             .ok_or_else(|| ExecutionError::integrity("stopped diagnostic storage overflow"))?;
         let mut machine = Machine::new(executable, limits);
         machine.trusted = Some(State {
@@ -230,6 +460,15 @@ impl<'a> ExecutionSession<'a> {
                 Ok(v) => Status::Complete(v),
                 Err(e) => Status::Stopped(e),
             };
+            self.machine.observe(conformance::Cut::Final);
+            let state = self.machine.trusted.as_ref().unwrap();
+            if let Some(capture) = self.machine.observation.borrow_mut().as_mut() {
+                capture.outcome(match &state.status {
+                    Status::Complete(value) => Ok(value),
+                    Status::Stopped(error) => Err(error),
+                    Status::Pending => unreachable!(),
+                });
+            }
         }
         match &self.machine.trusted.as_ref().unwrap().status {
             Status::Complete(v) => Ok(v),
@@ -281,7 +520,7 @@ impl<'a> Machine<'a> {
     }
     fn reserve_trusted_operand(&mut self) -> Result<(), ExecutionError> {
         if self.values.len() == self.values.capacity() {
-            self.reserve(size_of::<Value>())?;
+            self.reserve(self.executable.approval.schedule.machine[2])?;
             #[cfg(test)]
             self.trusted_allocation(Allocation::Operand, true)?;
             self.values
@@ -301,14 +540,16 @@ impl<'a> Machine<'a> {
         let entry_growth = usize::from(
             open && state.entries.iter().all(|e| e.token.is_some())
                 && state.entries.len() == state.entries.capacity(),
-        ) * size_of::<Entry>();
+        ) * self.executable.approval.schedule.trusted[1];
         let production_growth =
             usize::from(state.productions.len() == state.productions.capacity())
-                * size_of::<Production>();
+                * self.executable.approval.schedule.trusted[2];
         let events = 3usize.saturating_sub(state.events.capacity() - state.events.len());
         let bytes = entry_growth
             .checked_add(production_growth)
-            .and_then(|n| n.checked_add(events.checked_mul(size_of::<Event>())?))
+            .and_then(|n| {
+                n.checked_add(events.checked_mul(self.executable.approval.schedule.trusted[3])?)
+            })
             .ok_or_else(|| self.integrity("trusted reservation overflow"))?;
         self.reserve(bytes)?;
         if entry_growth > 0 {
@@ -460,7 +701,7 @@ impl<'a> Machine<'a> {
         if open && !approved.catalog.granted(approved.catalog.resource.release) {
             return Err(self.integrity("Sensor acquisition lacks exact release authority"));
         }
-        if size_of::<Payload>() > approved.catalog.resource.payload_bytes {
+        if self.executable.approval.schedule.trusted[7] > approved.catalog.resource.payload_bytes {
             return Err(self.integrity("binding payload exceeds sealed reservation bound"));
         }
         #[cfg(test)]
@@ -519,6 +760,7 @@ impl<'a> Machine<'a> {
         let ticket = self.trusted_result_prepare(production)?;
         self.reserve_trusted_operand()?;
         self.temporary_reserve_register(activation, plan.site)?;
+        self.control_begin(index, invocation)?;
         #[cfg(test)]
         if self.trusted.as_ref().unwrap().fault == Some((Fault::BeforeInvocationHost, invocation)) {
             return Err(self.failure(ErrorKind::Host("injected trusted invocation boundary")));
@@ -534,56 +776,118 @@ impl<'a> Machine<'a> {
             tag: 255,
             payload: None,
         });
-        state.events.push(Event::Attempt(invocation, op.id));
-        match op.binding {
-            Binding::SensorOpenV1 if open && observed.is_none() => {
+        self.control_phase(conformance::replay::Phase::HandoffAccepted)?;
+        self.control_phase(conformance::replay::Phase::BeforeAttempt)?;
+        self.control_response(false)?;
+        self.trusted
+            .as_mut()
+            .unwrap()
+            .events
+            .push(Event::Attempt(invocation, op.id));
+        self.control_phase(conformance::replay::Phase::Attempt)?;
+        let controlled = self.control_response(true)?;
+        let state = self.trusted.as_mut().unwrap();
+        match controlled {
+            Some(conformance::replay::Response::Open(ty))
+                if open && ty == approved.catalog.sensor =>
+            {
                 let receipt = state.receipt.as_mut().unwrap();
-                match approved.catalog.selection.scenario() {
-                    Scenario::NoSensor | Scenario::OpenIoFailure => {
-                        receipt.tag = 1;
-                        receipt.payload = Some(Payload::Range(RangeValue {
-                            ty: approved.ranges[1].id,
-                            value: if approved.catalog.selection.scenario() == Scenario::NoSensor {
-                                1
-                            } else {
-                                3
-                            },
-                        }));
-                    }
-                    _ => {
-                        receipt.payload = Some(Payload::Sensor(Sensor {
-                            realm: state.realm,
-                            identity: expected_sensor,
-                        }));
-                        receipt.tag = 0;
-                        state.next_sensor = expected_sensor + 1;
+                receipt.tag = 0;
+                receipt.payload = Some(Payload::Sensor(Sensor {
+                    realm: state.realm,
+                    identity: expected_sensor,
+                }));
+                state.next_sensor = expected_sensor + 1;
+            }
+            Some(conformance::replay::Response::Value(ty, value, 0)) if !open => {
+                let receipt = state.receipt.as_mut().unwrap();
+                receipt.tag = 0;
+                receipt.payload = Some(Payload::Range(RangeValue { ty, value }));
+            }
+            Some(conformance::replay::Response::Error(ty, value, 0)) => {
+                let receipt = state.receipt.as_mut().unwrap();
+                receipt.tag = 1;
+                receipt.payload = Some(Payload::Range(RangeValue { ty, value }));
+            }
+            Some(_) => return Err(self.integrity("controlled binding response mismatch")),
+            None => match op.binding {
+                Binding::SensorOpenV1 if open && observed.is_none() => {
+                    let receipt = state.receipt.as_mut().unwrap();
+                    match approved.catalog.selection.scenario() {
+                        Scenario::NoSensor | Scenario::OpenIoFailure => {
+                            receipt.tag = 1;
+                            receipt.payload = Some(Payload::Range(RangeValue {
+                                ty: approved.ranges[1].id,
+                                value: if approved.catalog.selection.scenario()
+                                    == Scenario::NoSensor
+                                {
+                                    1
+                                } else {
+                                    3
+                                },
+                            }));
+                        }
+                        _ => {
+                            receipt.payload = Some(Payload::Sensor(Sensor {
+                                realm: state.realm,
+                                identity: expected_sensor,
+                            }));
+                            receipt.tag = 0;
+                            state.next_sensor = expected_sensor + 1;
+                        }
                     }
                 }
-            }
-            Binding::SensorReadV1 if !open && observed.is_some() => {
-                let receipt = state.receipt.as_mut().unwrap();
-                let scenario = approved.catalog.selection.scenario();
-                receipt.tag = u8::from(matches!(
-                    scenario,
-                    Scenario::NoSample | Scenario::ReadIoFailure
-                ));
-                receipt.payload = Some(Payload::Range(RangeValue {
-                    ty: if receipt.tag == 0 {
-                        approved.ranges[0].id
-                    } else {
-                        approved.ranges[1].id
-                    },
-                    value: match scenario {
-                        Scenario::NoSample => 2,
-                        Scenario::ReadIoFailure => 3,
-                        _ => 42,
-                    },
-                }));
-            }
-            _ => return Err(self.integrity("exact trusted runtime binding mismatch; no fallback")),
+                Binding::SensorReadV1 if !open && observed.is_some() => {
+                    let receipt = state.receipt.as_mut().unwrap();
+                    let scenario = approved.catalog.selection.scenario();
+                    receipt.tag = u8::from(matches!(
+                        scenario,
+                        Scenario::NoSample | Scenario::ReadIoFailure
+                    ));
+                    receipt.payload = Some(Payload::Range(RangeValue {
+                        ty: if receipt.tag == 0 {
+                            approved.ranges[0].id
+                        } else {
+                            approved.ranges[1].id
+                        },
+                        value: match scenario {
+                            Scenario::NoSample => 2,
+                            Scenario::ReadIoFailure => 3,
+                            _ => 42,
+                        },
+                    }));
+                }
+                _ => {
+                    return Err(
+                        self.integrity("exact trusted runtime binding mismatch; no fallback")
+                    )
+                }
+            },
         }
         let tag = state.receipt.as_ref().unwrap().tag;
         state.events.push(Event::Received(invocation, tag));
+        #[cfg(test)]
+        if let Some((_, ty, value)) = CONFORMANCE_RESPONSE
+            .with(|slot| slot.get())
+            .filter(|(at, _, _)| *at == invocation)
+        {
+            CONFORMANCE_RESPONSE.with(|slot| slot.set(None));
+            if let Some(Payload::Range(actual)) = self
+                .trusted
+                .as_mut()
+                .unwrap()
+                .receipt
+                .as_mut()
+                .unwrap()
+                .payload
+                .as_mut()
+            {
+                *actual = RangeValue { ty, value };
+            }
+        }
+        self.control_committed_response()?;
+        #[cfg(test)]
+        let state = self.trusted.as_mut().unwrap();
         #[cfg(test)]
         if let Some((fault, _)) = state.fault.filter(|(_, selected)| *selected == invocation) {
             match fault {
@@ -633,6 +937,7 @@ impl<'a> Machine<'a> {
             }
         }
         self.validate_receipt(plan, open)?;
+        self.control_phase(conformance::replay::Phase::Validation)?;
         #[cfg(test)]
         if self.trusted.as_ref().unwrap().fault == Some((Fault::PublicationLimit, invocation)) {
             return Err(self.failure(ErrorKind::ConfiguredLimit("trusted publication storage")));
@@ -648,6 +953,7 @@ impl<'a> Machine<'a> {
         {
             return Err(self.failure(ErrorKind::ConfiguredLimit("trusted publication storage")));
         }
+        self.control_phase(conformance::replay::Phase::Delivery)?;
         // No fallible operation follows removal from the receipt. The physical
         // Sensor enters a reserved machine-owned table; the non-Copy value is
         // its sole language-level ticket. A terminal session retains both.
@@ -695,6 +1001,7 @@ impl<'a> Machine<'a> {
             self.values.pop();
         }
         self.trusted_result_commit(ticket, plan, tag, payload);
+        self.control_end();
         Ok(())
     }
 
@@ -885,7 +1192,7 @@ impl<'a> Machine<'a> {
         let needed = 2usize.saturating_sub(state.events.capacity() - state.events.len());
         self.reserve(
             needed
-                .checked_mul(size_of::<Event>())
+                .checked_mul(self.executable.approval.schedule.trusted[3])
                 .ok_or_else(|| self.integrity("Sensor release audit overflow"))?,
         )?;
         #[cfg(test)]
@@ -896,6 +1203,21 @@ impl<'a> Machine<'a> {
             .events
             .try_reserve_exact(2)
             .map_err(|_| self.failure(ErrorKind::Host("Sensor release audit reservation")))?;
+        let controlled_invocation = if self.control.borrow().is_some() {
+            let state = self.trusted.as_ref().unwrap();
+            Some(
+                state
+                    .productions
+                    .iter()
+                    .find(|row| row.sensor == Some(identity) && row.realm == state.realm)
+                    .ok_or_else(|| self.integrity("controlled release provenance"))?
+                    .invocation,
+            )
+        } else {
+            None
+        };
+        self.control_begin_release()?;
+        self.control_release_response(controlled_invocation, false)?;
         let state = self.trusted.as_mut().unwrap();
         state
             .events
@@ -906,12 +1228,41 @@ impl<'a> Machine<'a> {
             .is_some_and(|(fault, _)| fault == Fault::ReleaseFailure)
         {
             state.events.push(Event::ReleaseFailure(identity));
+            self.control_release_failed();
             return Err(self.failure(ErrorKind::Host("injected fixed Sensor release")));
         }
+        let modeled = self.control_release_attempt()?;
+        let response = if modeled {
+            None
+        } else {
+            self.control_release_response(controlled_invocation, true)?
+        };
+        if modeled || response == Some(false) {
+            self.trusted
+                .as_mut()
+                .unwrap()
+                .events
+                .push(Event::ReleaseFailure(identity));
+            self.control_release_failed();
+            return Err(self.failure(ErrorKind::Host("modeled abstract Host")));
+        }
+        let state = self.trusted.as_mut().unwrap();
         // Ordinary source gains no explicit completion Result from fixed release.
         state.entries[index].token = None;
         state.events.push(Event::ReleaseComplete(identity));
         self.resources.as_mut().unwrap().current = None;
+        if !self
+            .trusted
+            .as_ref()
+            .unwrap()
+            .completion
+            .as_ref()
+            .is_some_and(|pending| {
+                pending.phase == crate::trusted::approval::CompletionPhase::Releasing
+            })
+        {
+            self.control_release_complete()?;
+        }
         Ok(())
     }
 }

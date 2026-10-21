@@ -3,6 +3,7 @@ use crate::hir::{BinaryOp, BorrowKind, ExprKind, ExprType, Place, ReferentType, 
 use crate::mir::{BasicBlockId, OriginKind, Statement, Terminator};
 use std::mem::size_of;
 mod cleanup;
+pub mod conformance;
 mod results;
 mod temporaries;
 pub(super) mod trusted;
@@ -64,14 +65,14 @@ impl Value {
                 .try_fold(
                     fields
                         .capacity()
-                        .checked_mul(size_of::<(hir::FieldId, Value)>())
+                        .checked_mul(contract::Schedule::reference().machine[4])
                         .unwrap_or(usize::MAX),
                     |sum, (_, v)| sum.checked_add(v.extra_storage()),
                 )
                 .unwrap_or(usize::MAX),
             Self::Public(RuntimeValue::Record { fields, .. }) => fields
                 .capacity()
-                .checked_mul(size_of::<(hir::FieldId, RangeValue)>())
+                .checked_mul(contract::Schedule::reference().machine[5])
                 .unwrap_or(usize::MAX),
             _ => 0,
         }
@@ -142,11 +143,13 @@ struct Task<'a> {
 }
 
 pub(super) struct Machine<'a> {
+    observation: std::cell::RefCell<Option<conformance::Capture>>,
     executable: &'a CheckedExecutable,
     limits: ExecutionLimits,
     frames: Vec<Frame>,
     tasks: Vec<Task<'a>>,
     values: Vec<Value>,
+    control: std::cell::RefCell<Option<conformance::replay::Controller>>,
     next_frame: u64,
     steps: u64,
     origin: Origin,
@@ -161,9 +164,33 @@ pub(super) struct Machine<'a> {
     #[cfg(test)]
     max_storage: std::cell::Cell<usize>,
 }
+
+pub(super) fn compatibility_schedule() -> contract::Schedule {
+    contract::Schedule {
+        machine: [
+            size_of::<Frame>(),
+            size_of::<Task<'_>>(),
+            size_of::<Value>(),
+            size_of::<(Place, Slot)>(),
+            size_of::<(hir::FieldId, Value)>(),
+            size_of::<(hir::FieldId, RangeValue)>(),
+            size_of::<CallTrace>(),
+            size_of::<ResultLayer>(),
+        ],
+        cleanup: cleanup::compatibility_shapes(),
+        results: results::compatibility_shapes(),
+        temporaries: temporaries::compatibility_shapes(),
+        trusted: trusted::compatibility_shapes(),
+        observation: conformance::compatibility_shapes(),
+        comparison: conformance::comparison_shapes(),
+        extraction: contract::compatibility_shapes(),
+    }
+}
 impl<'a> Machine<'a> {
     pub fn new(executable: &'a CheckedExecutable, limits: ExecutionLimits) -> Self {
         Self {
+            observation: std::cell::RefCell::new(None),
+            control: std::cell::RefCell::new(None),
             executable,
             limits,
             frames: Vec::new(),
@@ -227,9 +254,10 @@ impl<'a> Machine<'a> {
         self.failure(ErrorKind::Integrity(message))
     }
     fn charge(&mut self) -> Result<(), ExecutionError> {
+        self.observe(conformance::Cut::Fuel);
         let next = self
             .steps
-            .checked_add(1)
+            .checked_add(self.executable.approval.schema.fuel_unit())
             .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("steps")))?;
         if next > self.limits.steps {
             return Err(self.failure(ErrorKind::ConfiguredLimit("steps")));
@@ -241,11 +269,23 @@ impl<'a> Machine<'a> {
         let mut n = self
             .frames
             .capacity()
-            .checked_mul(size_of::<Frame>())?
-            .checked_add(self.tasks.capacity().checked_mul(size_of::<Task<'_>>())?)?
-            .checked_add(self.values.capacity().checked_mul(size_of::<Value>())?)?;
+            .checked_mul(self.executable.approval.schedule.machine[0])?
+            .checked_add(
+                self.tasks
+                    .capacity()
+                    .checked_mul(self.executable.approval.schedule.machine[1])?,
+            )?
+            .checked_add(
+                self.values
+                    .capacity()
+                    .checked_mul(self.executable.approval.schedule.machine[2])?,
+            )?;
         for f in &self.frames {
-            n = n.checked_add(f.slots.capacity().checked_mul(size_of::<(Place, Slot)>())?)?;
+            n = n.checked_add(
+                f.slots
+                    .capacity()
+                    .checked_mul(self.executable.approval.schedule.machine[3])?,
+            )?;
             for (_, s) in &f.slots {
                 if let Slot::Available(v) = s {
                     n = n.checked_add(v.extra_storage())?;
@@ -270,6 +310,7 @@ impl<'a> Machine<'a> {
         Some(n)
     }
     fn reserve(&self, bytes: usize) -> Result<(), ExecutionError> {
+        self.observe(conformance::Cut::Storage(bytes));
         let wanted = self.storage().and_then(|n| n.checked_add(bytes));
         #[cfg(test)]
         if let Some(n) = wanted {
@@ -277,6 +318,9 @@ impl<'a> Machine<'a> {
         }
         if wanted.map_or(true, |n| n > self.limits.working_storage) {
             return Err(self.failure(ErrorKind::ConfiguredLimit("working storage")));
+        }
+        if bytes > 0 {
+            self.control_capacity()?;
         }
         Ok(())
     }
@@ -288,7 +332,7 @@ impl<'a> Machine<'a> {
         action: Action<'a>,
     ) -> Result<(), ExecutionError> {
         if self.tasks.len() == self.tasks.capacity() {
-            self.reserve(size_of::<Task<'_>>())?;
+            self.reserve(self.executable.approval.schedule.machine[1])?;
             #[cfg(test)]
             self.temporary_allocation()?;
             self.tasks
@@ -345,6 +389,13 @@ impl<'a> Machine<'a> {
     }
     fn value(&mut self, value: Value) -> Result<(), ExecutionError> {
         let ordinary = self.retain_publication(value)?;
+        let transit = match ordinary.as_ref() {
+            Some(Value::Result(id)) => Some(*id),
+            _ => None,
+        };
+        if let Some(id) = transit {
+            self.observe_transit(id, false, None);
+        }
         let grow = self.values.len() == self.values.capacity();
         // Retained resources already participate in storage(); ordinary payloads
         // remain prospective until publication, preserving predecessor accounting.
@@ -352,7 +403,11 @@ impl<'a> Machine<'a> {
             ordinary
                 .as_ref()
                 .map_or(0, Value::extra_storage)
-                .checked_add(if grow { size_of::<Value>() } else { 0 })
+                .checked_add(if grow {
+                    self.executable.approval.schedule.machine[2]
+                } else {
+                    0
+                })
                 .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
         )?;
         if grow {
@@ -364,6 +419,9 @@ impl<'a> Machine<'a> {
         }
         let value = self.take_publication(ordinary);
         self.values.push(value);
+        if let Some(id) = transit {
+            self.observe_transit(id, true, None);
+        }
         Ok(())
     }
     fn pop(&mut self) -> Result<Value, ExecutionError> {
@@ -402,7 +460,11 @@ impl<'a> Machine<'a> {
         let grow = self.frames[f].slots.len() == self.frames[f].slots.capacity();
         self.reserve(
             payload
-                .checked_add(if grow { size_of::<(Place, Slot)>() } else { 0 })
+                .checked_add(if grow {
+                    self.executable.approval.schedule.machine[3]
+                } else {
+                    0
+                })
                 .ok_or_else(|| self.failure(ErrorKind::ConfiguredLimit("working storage")))?,
         )?;
         if grow {
@@ -483,12 +545,22 @@ impl<'a> Machine<'a> {
         match destination {
             Destination::Slot(at) => {
                 let ordinary = self.retain_publication(value)?;
+                let transit = match ordinary.as_ref() {
+                    Some(Value::Result(id)) => Some(*id),
+                    _ => None,
+                };
+                if let Some(id) = transit {
+                    self.observe_transit(id, false, Some(Destination::Slot(at)));
+                }
                 let (f, i) = self.slot_index_with_payload(
                     at,
                     ordinary.as_ref().map_or(0, Value::extra_storage),
                 )?;
                 let value = self.take_publication(ordinary);
                 self.frames[f].slots[i].1 = Slot::Available(value);
+                if let Some(id) = transit {
+                    self.observe_transit(id, true, Some(Destination::Slot(at)));
+                }
             }
             Destination::Field(at, record, field) => {
                 let Value::Public(RuntimeValue::Range(value)) = value else {
@@ -534,6 +606,7 @@ impl<'a> Machine<'a> {
     fn enter(&mut self, function: FunctionId, count: usize) -> Result<u64, ExecutionError> {
         // Stable precedence: entry fuel, call depth, storage, host allocation.
         self.charge()?;
+        self.observe(conformance::Cut::Depth);
         if self.frames.len() >= self.limits.call_depth {
             return Err(self.failure(ErrorKind::ConfiguredLimit("call depth")));
         }
@@ -575,10 +648,10 @@ impl<'a> Machine<'a> {
             self.enable_resources()?;
         }
         let bytes = count
-            .checked_mul(size_of::<(Place, Slot)>())
+            .checked_mul(self.executable.approval.schedule.machine[3])
             .and_then(|n| {
                 n.checked_add(if self.frames.len() == self.frames.capacity() {
-                    size_of::<Frame>()
+                    self.executable.approval.schedule.machine[0]
                 } else {
                     0
                 })
@@ -614,6 +687,7 @@ impl<'a> Machine<'a> {
             slots,
             call_site: self.expression.unwrap_or(self.origin.span),
         });
+        self.control_activate(id, function, self.expression.unwrap_or(self.origin.span))?;
         self.cleanup_frame(id)?;
         for (offset, parameter) in definition.parameters.iter().enumerate() {
             let value = std::mem::replace(&mut self.values[start + offset], Value::Completion);
@@ -629,6 +703,8 @@ impl<'a> Machine<'a> {
                 .push((Place::Parameter(*parameter), Slot::Available(value)));
         }
         self.values.truncate(start);
+        #[cfg(test)]
+        self.conformance_parameter_control(function);
         Ok(id)
     }
     fn eval(&mut self, frame: u64, e: &'a TypedExpr, depth: usize) -> Result<(), ExecutionError> {
@@ -899,6 +975,7 @@ impl<'a> Machine<'a> {
     ) -> Result<(), ExecutionError> {
         // Expression fuel precedes expression depth; no child starts on failure.
         self.charge()?;
+        self.observe(conformance::Cut::ExpressionDepth(depth));
         if depth > self.limits.expression_depth {
             return Err(self.failure(ErrorKind::ConfiguredLimit("expression depth")));
         }
@@ -1218,7 +1295,7 @@ impl<'a> Machine<'a> {
         self.reserve(
             fields
                 .len()
-                .checked_mul(size_of::<(hir::FieldId, RangeValue)>())
+                .checked_mul(self.executable.approval.schedule.machine[5])
                 .ok_or_else(|| self.integrity("record storage overflow"))?,
         )?;
         let mut result = Vec::new();
@@ -1308,10 +1385,13 @@ impl<'a> Machine<'a> {
                 }),
             );
         }
+        self.control_position(task.frame)?;
+        self.observe_action(&task);
         let result = self.step_inner(task);
         if result.is_err() {
             self.terminal = true;
         }
+        self.observe(conformance::Cut::Transition);
         result
     }
     fn step_inner(&mut self, task: Task<'a>) -> Result<(), ExecutionError> {
@@ -1408,6 +1488,7 @@ impl<'a> Machine<'a> {
         Ok(())
     }
     fn start(&mut self, entry: FunctionId) -> Result<(), ExecutionError> {
+        self.control_check_entry(entry)?;
         if self
             .executable
             .program
@@ -1465,7 +1546,14 @@ impl<'a> Machine<'a> {
             return Err(self.integrity("incomplete execution state"));
         }
         match self.pop()? {
-            Value::Result(id) => self.result_export(id).map(ExecutionResult::Value),
+            Value::Result(id) => {
+                // Cells remain the actual primary owner during fallible export.
+                // The observer records the non-owning publication association.
+                self.observe_publication(id, false);
+                let value = self.result_export(id)?;
+                self.observe_publication(id, true);
+                Ok(ExecutionResult::Value(value))
+            }
             Value::Completion => Ok(ExecutionResult::NoValue),
             Value::Public(v) => Ok(ExecutionResult::Value(v)),
             _ => Err(self.integrity("ineligible public result")),

@@ -1582,3 +1582,45 @@ concurrency, verified/harness trusted execution or arbitrary resource declaratio
 Release promises no flush/commit/durability/completion; fallible completion is
 explicitly deferred to KED-034. Historical public-resource exclusions above are
 narrowed only for this exact frozen family. See its implementation guide and ledger.
+
+## Frozen KED-035 — Approved-MIR execution equivalence, Stage I candidate
+
+**Status:** Frozen Issue #84 Draft 2; Stage I separately authorized by directive
+6296001700. Draft PR #85 supplies implementation evidence, pending Sarah's
+independent review and Greg's acceptance. No new Accepted KD number is assigned.
+
+Execution consumes the exact opaque approved composite and bound versioned
+semantic/accounting/cut/replay identities. Neither source similarity, matching
+names, observed runtime behavior nor independently lowered HIR creates authority.
+The complete structural ordinary closure includes empty-effect calls and both
+alternatives. Existing nominal types, ordered Result roles, ownership/outcome
+witnesses, effects, cleanup plans, domains and selected binding contracts remain
+canonical; this adds no language expression, pattern, inference or recovery rule.
+
+Complete separately admitted non-owning observations validate local state before
+one anchored injective correspondence. Equal and Different require complete valid
+evidence; incomplete, malformed, unavailable or exhausted evidence is Inconclusive,
+which is a tool result. Logical activation/site/occurrence/phase addresses govern
+private conformance replay and modeled Host. Earlier inherited gates retain
+precedence; skipped and preempted events consume no controlled item. Controlled
+responses create no root, grant, ownership, binding or cleanup edge. Public roots
+remain zero-parameter and public live-resource/reference egress stays excluded.
+
+Recoverable Error remains ordinary data. Host, Limit, Integrity, trap, cleanup
+failure and excluded terminal stops retain actual prefix, protected outcomes and
+remaining responsibilities without retry, rollback, source recovery or delivery.
+Detected physical Host with surviving state is not automatically matched input;
+substrate destruction carries no fabricated structured-retention guarantee.
+
+Version-one public preparation/run/audit/reporting and exact accounting neighbors
+are preserved. New observation, validation, replay, structured audit and presentation
+accounts remain separate. Reference representation sizes define the compatibility
+schedule on its supported configuration, not a portable native layout. Inlining,
+preallocation and eliminated physical work remain possible under the fixed logical
+relation. The interpreter is an implementation under test, not a semantic oracle.
+
+No backend/target/ABI/emitter/optimizer/runtime/transport or packaging design is
+chosen. Actual native production, installation, runtime binding, optimized and
+unoptimized equality and physical-failure evidence remain mandatory Stage N
+obligations under a later authorization. Stage I evidence is finite interpreter,
+independent-oracle, protocol and malformed-boundary evidence, not universal proof.
