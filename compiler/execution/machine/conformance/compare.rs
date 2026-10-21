@@ -451,10 +451,16 @@ impl Validator<'_, '_> {
             }
             // FunctionId is source-global; origin rows follow ordinary MIR order.
             // Resolve that canonical relationship, including verified-ID gaps.
-            for (position, ordinary) in self.contract.executable.mir.functions().iter().enumerate() {
+            for (position, ordinary) in self.contract.executable.mir.functions().iter().enumerate()
+            {
                 self.work.spend()?;
                 if ordinary.function() == *function {
-                    let row = self.contract.executable.origins.get(position).ok_or(Incomplete::InvalidState)?;
+                    let row = self
+                        .contract
+                        .executable
+                        .origins
+                        .get(position)
+                        .ok_or(Incomplete::InvalidState)?;
                     for canonical in row {
                         self.work.spend()?;
                         if *canonical == origin {
@@ -638,7 +644,11 @@ impl Validator<'_, '_> {
         self.held = self.held.checked_add(1).ok_or(Incomplete::InvalidState)?;
         let value = self.value(0, cleanup)?;
         if let Some(reference) = value.reference {
-            self.scratch.link(Link::Borrow(key(Kind::Frame, reference.frame), reference.place, reference.kind))?;
+            self.scratch.link(Link::Borrow(
+                key(Kind::Frame, reference.frame),
+                reference.place,
+                reference.kind,
+            ))?;
         }
         self.add_storage(value.extra)?;
         Ok(value)
@@ -674,7 +684,12 @@ impl Validator<'_, '_> {
             }
             Record::Raw(_) | Record::NoValue => (),
             Record::Reference(kind, referent, frame, place) => {
-                info.reference = Some(references::ReferenceValue { kind, referent, frame, place });
+                info.reference = Some(references::ReferenceValue {
+                    kind,
+                    referent,
+                    frame,
+                    place,
+                });
                 let target = self.place(frame, place)?;
                 require(target == referent.value_type())?;
                 info.ty = Some(match kind {
@@ -2697,7 +2712,11 @@ impl Validator<'_, '_> {
                     if let Some(reference) = value.reference {
                         let (expected, root) = self.reference_origin(id, place)?;
                         require(reference == expected)?;
-                        let slot = self.scratch.slots.last_mut().ok_or(Incomplete::InvalidState)?;
+                        let slot = self
+                            .scratch
+                            .slots
+                            .last_mut()
+                            .ok_or(Incomplete::InvalidState)?;
                         slot.reference = Some(reference);
                         slot.reference_root = Some(root);
                     }

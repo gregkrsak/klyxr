@@ -16,14 +16,22 @@ impl<'a> Validator<'a, '_> {
         let function = self.function(frame)?;
         self.place(frame, place)?;
         let contract = self.contract;
-        let definition = contract.executable.function(function).map_err(|_| Incomplete::InvalidState)?;
+        let definition = contract
+            .executable
+            .function(function)
+            .map_err(|_| Incomplete::InvalidState)?;
         match place {
             Place::Local(local) => {
                 let mut found = None;
                 for (_, block) in definition.blocks() {
                     for statement in block.statements() {
                         self.work.spend()?;
-                        if let Statement::Let { local: id, initializer, .. } = statement {
+                        if let Statement::Let {
+                            local: id,
+                            initializer,
+                            ..
+                        } = statement
+                        {
                             if *id == local {
                                 require(found.is_none())?;
                                 found = Some(initializer);
@@ -37,18 +45,31 @@ impl<'a> Validator<'a, '_> {
                 let node = self.node(key(Kind::Frame, frame))?;
                 let parent = node.parent.ok_or(Incomplete::InvalidState)?.1;
                 let caller = self.function(parent)?;
-                let ordinary = contract.executable.program.function(function).as_ordinary().ok_or(Incomplete::InvalidState)?;
+                let ordinary = contract
+                    .executable
+                    .program
+                    .function(function)
+                    .as_ordinary()
+                    .ok_or(Incomplete::InvalidState)?;
                 let mut position = None;
                 for (index, id) in ordinary.parameters.iter().enumerate() {
                     self.work.spend()?;
-                    if *id == parameter { position = Some(index); }
+                    if *id == parameter {
+                        position = Some(index);
+                    }
                 }
                 let position = position.ok_or(Incomplete::InvalidState)?;
                 let mut argument = None;
                 for (expression, site) in contract.expressions() {
                     self.work.spend()?;
-                    if contract.sites()[*site].function == caller && Some(expression.span) == node.origin {
-                        if let ExprKind::Call { function: target, arguments } = &expression.kind {
+                    if contract.sites()[*site].function == caller
+                        && Some(expression.span) == node.origin
+                    {
+                        if let ExprKind::Call {
+                            function: target,
+                            arguments,
+                        } = &expression.kind
+                        {
                             if *target == function {
                                 require(argument.is_none())?;
                                 argument = arguments.get(position);
@@ -56,11 +77,19 @@ impl<'a> Validator<'a, '_> {
                         }
                     }
                 }
-                let caller_definition = contract.executable.function(caller).map_err(|_| Incomplete::InvalidState)?;
+                let caller_definition = contract
+                    .executable
+                    .function(caller)
+                    .map_err(|_| Incomplete::InvalidState)?;
                 for (_, block) in caller_definition.blocks() {
                     for statement in block.statements() {
                         self.work.spend()?;
-                        if let Statement::CallNoValue { function: target, arguments, span } = statement {
+                        if let Statement::CallNoValue {
+                            function: target,
+                            arguments,
+                            span,
+                        } = statement
+                        {
                             if *target == function && Some(*span) == node.origin {
                                 require(argument.is_none())?;
                                 argument = arguments.get(position);
@@ -72,7 +101,11 @@ impl<'a> Validator<'a, '_> {
             }
         }
     }
-    pub(super) fn reference_origin(&mut self, mut frame: u64, mut place: Place) -> Valid<(ReferenceValue, (u64, usize))> {
+    pub(super) fn reference_origin(
+        &mut self,
+        mut frame: u64,
+        mut place: Place,
+    ) -> Valid<(ReferenceValue, (u64, usize))> {
         // A checked finite lineage walk, not recursive lifetime reconstruction.
         for _ in 0..self.lineage {
             self.work.spend()?;
@@ -90,7 +123,15 @@ impl<'a> Validator<'a, '_> {
                     for (canonical, index) in self.contract.expressions() {
                         self.work.spend()?;
                         if std::ptr::eq(*canonical, expression) {
-                            return Ok((ReferenceValue { kind, referent, frame, place: owner }, (frame, *index)));
+                            return Ok((
+                                ReferenceValue {
+                                    kind,
+                                    referent,
+                                    frame,
+                                    place: owner,
+                                },
+                                (frame, *index),
+                            ));
                         }
                     }
                     return Err(Incomplete::InvalidState);
@@ -104,13 +145,17 @@ impl<'a> Validator<'a, '_> {
         for index in 0..self.scratch.slots.len() {
             self.work.spend()?;
             let slot = self.scratch.slots[index];
-            let Some(reference) = slot.reference else { continue; };
+            let Some(reference) = slot.reference else {
+                continue;
+            };
             let target = self.node(key(Kind::Frame, reference.frame))?;
             require(target.declared == self.stamp && target.status == 0)?;
             let mut exists = false;
             for owner in &self.scratch.slots {
                 self.work.spend()?;
-                if owner.frame == reference.frame && owner.place == reference.place { exists = true; }
+                if owner.frame == reference.frame && owner.place == reference.place {
+                    exists = true;
+                }
             }
             // A moved owner can leave dead handle bits behind. Their canonical
             // relationship survives; their mere storage grants no live loan.
@@ -120,7 +165,10 @@ impl<'a> Validator<'a, '_> {
                     self.work.spend()?;
                     // Mutable transfers cannot duplicate the SAME provenance.
                     // Distinct borrows of one owner may have disjoint last uses.
-                    if prior.reference.is_some_and(|r| r.kind == BorrowKind::Mutable) {
+                    if prior
+                        .reference
+                        .is_some_and(|r| r.kind == BorrowKind::Mutable)
+                    {
                         require(prior.reference_root != slot.reference_root)?;
                     }
                 }
@@ -139,16 +187,39 @@ impl<'a> Validator<'a, '_> {
         }
         let reference = value.ok_or(Incomplete::InvalidState)?;
         require(!write || reference.kind == BorrowKind::Mutable)?;
-        self.scratch.link(Link::Borrow(key(Kind::Frame, reference.frame), reference.place, reference.kind))
+        self.scratch.link(Link::Borrow(
+            key(Kind::Frame, reference.frame),
+            reference.place,
+            reference.kind,
+        ))
     }
     pub(super) fn reference_expression_use(&mut self, frame: u64, ordinal: usize) -> Valid {
         for (expression, index) in self.contract.expressions() {
             self.work.spend()?;
-            if *index != ordinal { continue; }
+            if *index != ordinal {
+                continue;
+            }
             return match expression.kind {
-                ExprKind::Deref { reference } | ExprKind::CopyReferenceFieldRead { reference, .. } => self.live_reference(frame, reference, false),
-                ExprKind::Local(local) if matches!(expression.ty, ExprType::SharedRef(_) | ExprType::MutableRef(_)) => self.live_reference(frame, Place::Local(local), false),
-                ExprKind::Parameter(parameter) if matches!(expression.ty, ExprType::SharedRef(_) | ExprType::MutableRef(_)) => self.live_reference(frame, Place::Parameter(parameter), false),
+                ExprKind::Deref { reference }
+                | ExprKind::CopyReferenceFieldRead { reference, .. } => {
+                    self.live_reference(frame, reference, false)
+                }
+                ExprKind::Local(local)
+                    if matches!(
+                        expression.ty,
+                        ExprType::SharedRef(_) | ExprType::MutableRef(_)
+                    ) =>
+                {
+                    self.live_reference(frame, Place::Local(local), false)
+                }
+                ExprKind::Parameter(parameter)
+                    if matches!(
+                        expression.ty,
+                        ExprType::SharedRef(_) | ExprType::MutableRef(_)
+                    ) =>
+                {
+                    self.live_reference(frame, Place::Parameter(parameter), false)
+                }
                 _ => Ok(()),
             };
         }
@@ -156,11 +227,19 @@ impl<'a> Validator<'a, '_> {
     }
     pub(super) fn reference_write_use(&mut self, frame: u64) -> Valid {
         let node = self.node(key(Kind::Frame, frame))?;
-        let definition = self.contract.executable.function(self.function(frame)?).map_err(|_| Incomplete::InvalidState)?;
+        let definition = self
+            .contract
+            .executable
+            .function(self.function(frame)?)
+            .map_err(|_| Incomplete::InvalidState)?;
         for (id, block) in definition.blocks() {
             self.work.spend()?;
             if id.0 == node.block {
-                if let Some(Statement::DerefAssign { reference, .. } | Statement::CopyReferenceFieldAssign { reference, .. }) = block.statements().get(node.statement) {
+                if let Some(
+                    Statement::DerefAssign { reference, .. }
+                    | Statement::CopyReferenceFieldAssign { reference, .. },
+                ) = block.statements().get(node.statement)
+                {
                     return self.live_reference(frame, *reference, true);
                 }
                 return Ok(());
