@@ -711,3 +711,33 @@ questions for a separately authorized KED. Analytic preallocation/address fixtur
 are protocol evidence only. Incomplete observations and substrate destruction do
 not acquire equality or survival guarantees. Public inputs, resources, profiles,
 verified/harness execution and existing predecessor boundaries are not widened.
+
+
+## OQ-027 — Structured documentation comments
+
+DP-016 and the repository documentation policy accept documentation as part of
+the program's human-facing contract. The current executable prototype recognizes
+ordinary `//` line comments as trivia and assigns no special documentation
+meaning to `///`, `//!`, block comments, Doxygen tags, or another spelling.
+
+Still open:
+
+- exact documentation-comment and module/file-comment syntax;
+- lexical and AST attachment rules;
+- whether ordinary comments are preserved for formatting independently of
+  structured documentation;
+- the documentation markup and structured metadata model;
+- generated-documentation format and stable links;
+- compiled documentation examples and their assurance/profile context;
+- checked references to parameters, fields, types, effects, contracts, and
+  trusted assumptions;
+- formatter/linter policy and the severity of missing or stale documentation;
+- inheritance through traits, implementations, modules, and future generics;
+- versioning and compatibility treatment for documentation contracts;
+- editor, audit, and review integration.
+
+Documentation metadata must not grant authority, change language semantics,
+create proof evidence by assertion, conceal trust, or override canonical compiler
+artifacts. Mechanically checkable claims should be derived from or validated
+against canonical facts where practical; broader prose remains subject to human
+review.
