@@ -9,6 +9,8 @@ thread_local! {
 mod authority;
 mod compare;
 pub(super) mod replay;
+#[cfg(test)]
+mod sentinel_tests;
 pub use compare::{compare, Comparison, ComparisonLimits};
 
 /// All limits belong to observation, never to ordinary fuel or storage.

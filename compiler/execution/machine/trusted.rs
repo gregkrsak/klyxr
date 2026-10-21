@@ -827,6 +827,13 @@ impl<'a> Machine<'a> {
                                 },
                             }));
                         }
+                        Scenario::Warning | Scenario::Critical if expected_sensor >= 2 => {
+                            receipt.tag = 1;
+                            receipt.payload = Some(Payload::Range(RangeValue {
+                                ty: approved.ranges[1].id,
+                                value: 1,
+                            }));
+                        }
                         _ => {
                             receipt.payload = Some(Payload::Sensor(Sensor {
                                 realm: state.realm,
@@ -853,6 +860,19 @@ impl<'a> Machine<'a> {
                         value: match scenario {
                             Scenario::NoSample => 2,
                             Scenario::ReadIoFailure => 3,
+                            // Successful acquisition identity is session-local and
+                            // never reused. Reads do not advance it; release only
+                            // vacates the physical token slot, not this identity.
+                            Scenario::Warning => match observed {
+                                Some(0) => 60,
+                                Some(1) => 42,
+                                _ => return Err(self.integrity("warning fixture Sensor identity")),
+                            },
+                            Scenario::Critical => match observed {
+                                Some(0) => 90,
+                                Some(1) => 60,
+                                _ => return Err(self.integrity("critical fixture Sensor identity")),
+                            },
                             _ => 42,
                         },
                     }));
@@ -1273,5 +1293,7 @@ mod completion_bound_tests;
 mod completion_composition_tests;
 #[cfg(test)]
 mod completion_runtime_tests;
+#[cfg(test)]
+mod sentinel_tests;
 #[cfg(test)]
 mod tests;

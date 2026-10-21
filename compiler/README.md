@@ -1850,3 +1850,13 @@ The [ledger](../docs/engineering/KED-033-IMPLEMENTATION-LEDGER.md) and evidence
 manifest separate frozen semantics, implementation tests and pending independent
 review. This is not a physical driver, general FFI or a new verifier claim.
 Release is cleanup-only; explicit fallible completion remains deferred to KED-034.
+
+## Sentinel reference application
+
+See [Sentinel 0](../docs/SENTINEL.md) and `examples/sentinel.klx` for the complete
+interpreter application and exact CLI allowances. The finite public scenarios
+`warning` (60,42) and `critical` (90,60) select readings by session-local successful
+Sensor identity. Reads of each Sensor remain stable; later acquisitions return
+Error(1) after the two values. Live-limit precedence, nominal types, operation
+contracts, effects, grants, custody and every predecessor scenario remain intact.
+This adds no general script/input facility or native execution.

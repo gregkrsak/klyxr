@@ -265,6 +265,8 @@ fn run_execution(mut args: impl Iterator<Item = String>, audit: bool) -> Result<
             "read-io-failure" => Scenario::ReadIoFailure,
             "finish-io-failure" => Scenario::FinishIoFailure,
             "finish-partial-io-failure" => Scenario::FinishPartialIoFailure,
+            "warning" => Scenario::Warning,
+            "critical" => Scenario::Critical,
             _ => {
                 eprintln!("error: unknown fixed fixture scenario");
                 return Err(2);

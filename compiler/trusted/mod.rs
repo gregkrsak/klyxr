@@ -37,6 +37,8 @@ pub enum Scenario {
     ReadIoFailure,
     FinishIoFailure,
     FinishPartialIoFailure,
+    Warning,
+    Critical,
 }
 
 /// Operation-specific grants. Merely declaring `effects io` changes none of them.
