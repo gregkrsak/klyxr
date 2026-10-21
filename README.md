@@ -15,6 +15,7 @@
 
 <p align="center">
   <a href="#why-klyxr">Why Klyxr?</a> ·
+  <a href="#documentation-is-part-of-the-program">Documentation</a> ·
   <a href="#a-quick-taste">Quick taste</a> ·
   <a href="#safe--checked--verified">Assurance model</a> ·
   <a href="#how-is-klyxr-different-from-rust">vs. Rust</a> ·
@@ -83,6 +84,25 @@ The goal is **engineering clarity**:
 
 ---
 
+## Documentation is part of the program
+
+> **Documentation is part of the program's human-facing contract. Code and
+> documentation are reviewed together, and disagreement between them is a
+> defect.**
+
+Klyxr does not assume that source code is self-explanatory. Public declarations
+and examples should explain purpose, domain meaning, effects, authority, failure
+behavior, lifecycle obligations, important policy, assumptions, bounds, and
+non-guarantees in language people can read directly.
+
+Machine-readable types, contracts, and effects establish facts for the toolchain.
+Documentation explains what those facts mean in the application. Neither silently
+substitutes for the other.
+
+See the [Klyxr documentation policy](docs/DOCUMENTATION_POLICY.md).
+
+---
+
 ## A quick taste
 
 ### Constrain the domain
@@ -102,8 +122,8 @@ The type says what values may exist.
 ### State the contract
 
 ```text
-verified fn consume(
-    battery: &mut Battery,
+verified function consume(
+    battery: &mutable Battery,
     amount: Percent
 )
     requires amount <= battery.charge
@@ -116,9 +136,9 @@ verified fn consume(
 Now consider:
 
 ```text
-let mut battery = Battery { charge: 80 };
+let mutable battery = Battery { charge: 80 };
 
-consume(&mut battery, 90);
+consume(&mutable battery, 90);
 ```
 
 Nothing here is memory-unsafe.
@@ -132,7 +152,7 @@ error: precondition cannot be established
 
   --> src/battery.klx:14:1
 
-14 | consume(&mut battery, 90);
+14 | consume(&mutable battery, 90);
    | ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 required:
@@ -157,7 +177,7 @@ Some rules are operational rather than mathematical.
 
 ```text
 #[deny_effects(heap, blocking)]
-fn control_loop(...)
+function control_loop(...)
     effects clock
 {
     estimate_state(...);
@@ -205,7 +225,7 @@ Ordinary Klyxr code gets the language's core guarantees:
 Additional constraints and contracts may be enforced dynamically.
 
 ```text
-checked fn withdraw(...)
+checked function withdraw(...)
     requires amount <= balance
 ```
 
@@ -214,7 +234,7 @@ checked fn withdraw(...)
 Declared properties become proof obligations.
 
 ```text
-verified fn withdraw(...)
+verified function withdraw(...)
     requires amount <= balance
     ensures balance == old(balance) - amount
 ```

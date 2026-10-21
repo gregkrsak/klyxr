@@ -47,6 +47,28 @@ Klyxr's core proposition is:
 
 Once they are part of the program, the compiler and verifier should be able to reason about them.
 
+## Documentation philosophy
+
+> **Documentation is part of the program's human-facing contract. Code and
+> documentation are reviewed together, and disagreement between them is a
+> defect.**
+
+Klyxr does not assume that code is self-explanatory. Public declarations,
+examples, and reference applications should explain purpose, domain meaning,
+effects, authority, failures, lifecycle obligations, important policy,
+assumptions, bounds, and non-guarantees in clear human language.
+
+The toolchain should eventually preserve structured documentation comments,
+generate reference material, compile documentation examples, and validate
+mechanically checkable claims against canonical compiler facts. Documentation
+metadata may never grant authority, change semantics, or create proof evidence
+by assertion. Exact documentation-comment syntax remains open; the current
+prototype accepts ordinary `//` line comments only.
+
+Klyxr-owned public examples prefer implemented explicit aliases such as
+`function`, `mutable`, and `Error`. Compact spellings remain equal language
+aliases under KD-014. See [the documentation policy](../DOCUMENTATION_POLICY.md).
+
 ## Current implementation status
 
 An executable compiler prototype, written in Rust, supports ordinary
@@ -286,8 +308,8 @@ record Battery {
     charge: Percent
 }
 
-verified fn consume(
-    battery: &mut Battery,
+verified function consume(
+    battery: &mutable Battery,
     amount: Percent
 )
     requires amount <= battery.charge
@@ -306,8 +328,8 @@ That distinction is central to Klyxr.
 Frozen KED-030 Draft 2's first phase uses ordinary explicit upper bounds:
 
 ```klyxr
-fn observe() -> bool effects clock, io { return true; }
-fn demo() -> bool effects io, clock { return observe(); }
+function observe() -> bool effects clock, io { return true; }
+function demo() -> bool effects io, clock { return observe(); }
 ```
 
 The complete declaration is caller-visible even when its body does not perform an
@@ -321,7 +343,7 @@ The following remains illustrative future policy syntax, outside KED-030:
 
 ```klyxr
 #[deny_effects(heap, blocking)]
-fn control_loop(...)
+function control_loop(...)
     effects clock
 {
     estimate_state(...);

@@ -60,6 +60,28 @@ Klyxr's core proposition is:
 
 Once they are part of the program, the compiler and verifier should be able to reason about them.
 
+## Documentation philosophy
+
+> **Documentation is part of the program's human-facing contract. Code and
+> documentation are reviewed together, and disagreement between them is a
+> defect.**
+
+Klyxr does not assume that code is self-explanatory. Public declarations,
+examples, and reference applications should explain purpose, domain meaning,
+effects, authority, failures, lifecycle obligations, important policy,
+assumptions, bounds, and non-guarantees in clear human language.
+
+The toolchain should eventually preserve structured documentation comments,
+generate reference material, compile documentation examples, and validate
+mechanically checkable claims against canonical compiler facts. Documentation
+metadata may never grant authority, change semantics, or create proof evidence
+by assertion. Exact documentation-comment syntax remains open; the current
+prototype accepts ordinary `//` line comments only.
+
+Klyxr-owned public examples prefer implemented explicit aliases such as
+`function`, `mutable`, and `Error`. Compact spellings remain equal language
+aliases under KD-014. See [the documentation policy](../DOCUMENTATION_POLICY.md).
+
 ## Current implementation status
 
 An executable compiler prototype, written in Rust, supports ordinary
@@ -299,8 +321,8 @@ record Battery {
     charge: Percent
 }
 
-verified fn consume(
-    battery: &mut Battery,
+verified function consume(
+    battery: &mutable Battery,
     amount: Percent
 )
     requires amount <= battery.charge
@@ -319,8 +341,8 @@ That distinction is central to Klyxr.
 Frozen KED-030 Draft 2's first phase uses ordinary explicit upper bounds:
 
 ```klyxr
-fn observe() -> bool effects clock, io { return true; }
-fn demo() -> bool effects io, clock { return observe(); }
+function observe() -> bool effects clock, io { return true; }
+function demo() -> bool effects io, clock { return observe(); }
 ```
 
 The complete declaration is caller-visible even when its body does not perform an
@@ -334,7 +356,7 @@ The following remains illustrative future policy syntax, outside KED-030:
 
 ```klyxr
 #[deny_effects(heap, blocking)]
-fn control_loop(...)
+function control_loop(...)
     effects clock
 {
     estimate_state(...);
@@ -1004,6 +1026,29 @@ A human statement that a pull request is authorized for merge authorizes the AI
 to record that decision and hand the ready pull request back to the human. It does
 not authorize the AI to perform the merge. This boundary applies equally to code,
 documentation, and governance changes.
+
+## DP-016 — Documentation is a human-facing contract
+
+Code is an exact machine artifact, not a complete human explanation merely
+because its author finds it readable. Documentation is part of the program's
+human-facing contract. Code and documentation are reviewed together, and
+disagreement between them is a defect.
+
+Public documentation should explain purpose, domain meaning, effects, authority,
+failure behavior, lifecycle obligations, important policy, assumptions, bounds,
+and non-guarantees in clear human language. A machine-readable type, contract,
+or effect does not make that explanation unnecessary; prose does not replace the
+machine-readable rule.
+
+Klyxr should eventually preserve structured documentation comments, generate
+reference material, compile documentation examples, and validate mechanically
+checkable claims against canonical compiler facts. Documentation metadata may
+never grant authority, change semantics, create proof evidence by assertion, or
+override canonical artifacts. Exact documentation-comment syntax and tooling
+require a focused future decision.
+
+Klyxr-owned public examples prefer implemented explicit aliases under KD-014.
+See [the documentation policy](../DOCUMENTATION_POLICY.md).
 
 KD-041 applies the existing trust-boundary principles to bounded ordinary
 execution: an opaque successful-ownership artifact grants authority, MIR controls
@@ -4734,5 +4779,35 @@ questions for a separately authorized KED. Analytic preallocation/address fixtur
 are protocol evidence only. Incomplete observations and substrate destruction do
 not acquire equality or survival guarantees. Public inputs, resources, profiles,
 verified/harness execution and existing predecessor boundaries are not widened.
+
+
+## OQ-027 — Structured documentation comments
+
+DP-016 and the repository documentation policy accept documentation as part of
+the program's human-facing contract. The current executable prototype recognizes
+ordinary `//` line comments as trivia and assigns no special documentation
+meaning to `///`, `//!`, block comments, Doxygen tags, or another spelling.
+
+Still open:
+
+- exact documentation-comment and module/file-comment syntax;
+- lexical and AST attachment rules;
+- whether ordinary comments are preserved for formatting independently of
+  structured documentation;
+- the documentation markup and structured metadata model;
+- generated-documentation format and stable links;
+- compiled documentation examples and their assurance/profile context;
+- checked references to parameters, fields, types, effects, contracts, and
+  trusted assumptions;
+- formatter/linter policy and the severity of missing or stale documentation;
+- inheritance through traits, implementations, modules, and future generics;
+- versioning and compatibility treatment for documentation contracts;
+- editor, audit, and review integration.
+
+Documentation metadata must not grant authority, change language semantics,
+create proof evidence by assertion, conceal trust, or override canonical compiler
+artifacts. Mechanically checkable claims should be derived from or validated
+against canonical facts where practical; broader prose remains subject to human
+review.
 
 <!-- END OPEN_QUESTIONS.md -->
