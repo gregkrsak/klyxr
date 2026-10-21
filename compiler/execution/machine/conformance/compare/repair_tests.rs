@@ -395,20 +395,62 @@ fn i02_expired_reference_use_is_not_granted_authority_by_stored_bits() {
     let c = contract(&e);
     let a = session(&c, 1024);
     let b = session(&c, 1024);
-    let owner = e.program.locals().iter().find(|local| local.name == "value").unwrap().id;
-    let ordinal = c.expressions().iter().find(|(e, _)| matches!(e.kind, ExprKind::Deref { .. })).unwrap().1;
+    let owner = e
+        .program
+        .locals()
+        .iter()
+        .find(|local| local.name == "value")
+        .unwrap()
+        .id;
+    let ordinal = c
+        .expressions()
+        .iter()
+        .find(|(e, _)| matches!(e.kind, ExprKind::Deref { .. }))
+        .unwrap()
+        .1;
     for session in [&a, &b] {
         let mut observer = session.machine().observation.borrow_mut();
         let records = &mut observer.as_mut().unwrap().records;
-        let at = records.windows(2).position(|r| r[0] == Record::Slot(Place::Local(owner), 1) && r[1] == Record::Bool(false)).unwrap();
-        let end = records[at..].iter().position(|r| matches!(r, Record::Cut(..))).map(|i| at + i).unwrap();
-        let frame = records[..at].iter().rev().find_map(|r| if let Record::Frame(frame, ..) = r { Some(*frame) } else { None }).unwrap();
+        let at = records
+            .windows(2)
+            .position(|r| {
+                r[0] == Record::Slot(Place::Local(owner), 1) && r[1] == Record::Bool(false)
+            })
+            .unwrap();
+        let end = records[at..]
+            .iter()
+            .position(|r| matches!(r, Record::Cut(..)))
+            .map(|i| at + i)
+            .unwrap();
+        let frame = records[..at]
+            .iter()
+            .rev()
+            .find_map(|r| {
+                if let Record::Frame(frame, ..) = r {
+                    Some(*frame)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
         let mut task = [ABSENT; 8];
         task[0] = 1;
         task[1] = 1;
-        records.splice(end..end, [Record::Executing, Record::Continuation(frame), Record::Meta(Part::Task, task), Record::Expression(ordinal), Record::End]);
+        records.splice(
+            end..end,
+            [
+                Record::Executing,
+                Record::Continuation(frame),
+                Record::Meta(Part::Task, task),
+                Record::Expression(ordinal),
+                Record::End,
+            ],
+        );
     }
-    assert_eq!(compare(&a, &b, comparison()), Comparison::Inconclusive(Incomplete::InvalidState));
+    assert_eq!(
+        compare(&a, &b, comparison()),
+        Comparison::Inconclusive(Incomplete::InvalidState)
+    );
 }
 
 #[test]
