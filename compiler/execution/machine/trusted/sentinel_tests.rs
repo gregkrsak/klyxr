@@ -26,7 +26,11 @@ fn artifact(source: &str, root: &str, scenario: Scenario, live: usize) -> Checke
 
 // Validate the typed outer Result, exact record identity, and every nominal field.
 // Rendering is tested separately; process success is never this assertion.
-fn fields(e: &CheckedExecutable, value: &ExecutionResult, tag: hir::ResultTag) -> BTreeMap<String, i64> {
+fn fields(
+    e: &CheckedExecutable,
+    value: &ExecutionResult,
+    tag: hir::ResultTag,
+) -> BTreeMap<String, i64> {
     let ExecutionResult::Value(RuntimeValue::Result(layers)) = value else {
         panic!("expected typed Result: {value:?}");
     };
@@ -36,7 +40,14 @@ fn fields(e: &CheckedExecutable, value: &ExecutionResult, tag: hir::ResultTag) -
         panic!("expected record payload");
     };
     let declaration = &e.program.records()[record.0];
-    assert_eq!(declaration.name, if tag == hir::ResultTag::Ok { "Report" } else { "Failure" });
+    assert_eq!(
+        declaration.name,
+        if tag == hir::ResultTag::Ok {
+            "Report"
+        } else {
+            "Failure"
+        }
+    );
     assert_eq!(fields.len(), declaration.fields.len());
     fields
         .iter()
@@ -81,7 +92,14 @@ fn lifecycle(s: &ExecutionSession<'_>, readings: &[i64]) {
             Event::Published(invocation + 2, hir::ResultTag::Ok),
         ]);
         assert_eq!(state.productions[ordinal * 3].sensor, Some(id));
-        assert_eq!(state.productions[ordinal * 3 + 1].range.as_ref().unwrap().value, *value);
+        assert_eq!(
+            state.productions[ordinal * 3 + 1]
+                .range
+                .as_ref()
+                .unwrap()
+                .value,
+            *value
+        );
     }
     assert_eq!(s.events(), wanted);
     assert_eq!(s.live_sensors(), 0);
@@ -99,16 +117,31 @@ fn sentinel_warning_and_critical_typed_reports_have_identity_associated_lifecycl
         let e = artifact(SENTINEL, "monitor", scenario, 1);
         let audit = e.render_authority(ExecutionLimits::default()).unwrap();
         assert!(audit.contains(&format!("scenario={scenario:?}")));
-        let mut s = ExecutionSession::new(&e, e.entry("monitor").unwrap(), ExecutionLimits::default()).unwrap();
+        let mut s =
+            ExecutionSession::new(&e, e.entry("monitor").unwrap(), ExecutionLimits::default())
+                .unwrap();
         let result = fields(&e, s.advance().unwrap(), hir::ResultTag::Ok);
-        assert_eq!(result, expected(&[("observations", 2), ("warnings", warning), ("critical", critical), ("peak", peak), ("disposition", disposition), ("completed", 2)]));
+        assert_eq!(
+            result,
+            expected(&[
+                ("observations", 2),
+                ("warnings", warning),
+                ("critical", critical),
+                ("peak", peak),
+                ("disposition", disposition),
+                ("completed", 2)
+            ])
+        );
         lifecycle(&s, &readings);
         let events = s.events().to_vec();
         let steps = s.machine.steps;
         assert_eq!(fields(&e, s.advance().unwrap(), hir::ResultTag::Ok), result);
         assert_eq!(s.events(), events);
         assert_eq!(s.machine.steps, steps);
-        assert_eq!(e.render_authority(ExecutionLimits::default()).unwrap(), audit);
+        assert_eq!(
+            e.render_authority(ExecutionLimits::default()).unwrap(),
+            audit
+        );
     }
 }
 
@@ -123,11 +156,38 @@ fn sentinel_existing_failure_matrix_preserves_partial_reads_and_completed_resour
         (Scenario::FinishPartialIoFailure, 3, 3, 0, 2, 1, 0),
     ] {
         let e = artifact(SENTINEL, "monitor", scenario, 1);
-        let mut s = ExecutionSession::new(&e, e.entry("monitor").unwrap(), ExecutionLimits::default()).unwrap();
-        assert_eq!(fields(&e, s.advance().unwrap(), hir::ResultTag::Error), expected(&[("phase", phase), ("problem", problem), ("read_status", read), ("completion", completion), ("observations", observations), ("warnings", 0), ("critical", 0), ("peak", if observations == 0 { 0 } else { 42 }), ("disposition", 0), ("completed", completed)]));
+        let mut s =
+            ExecutionSession::new(&e, e.entry("monitor").unwrap(), ExecutionLimits::default())
+                .unwrap();
+        assert_eq!(
+            fields(&e, s.advance().unwrap(), hir::ResultTag::Error),
+            expected(&[
+                ("phase", phase),
+                ("problem", problem),
+                ("read_status", read),
+                ("completion", completion),
+                ("observations", observations),
+                ("warnings", 0),
+                ("critical", 0),
+                ("peak", if observations == 0 { 0 } else { 42 }),
+                ("disposition", 0),
+                ("completed", completed)
+            ])
+        );
         assert_eq!(s.live_sensors(), 0);
-        assert_eq!(s.events().iter().filter(|e| matches!(e, Event::ReleaseComplete(_))).count(), usize::from(phase != 1));
-        assert_eq!(s.events().iter().any(|e| matches!(e, Event::FinishPrefix(_, 1))), scenario == Scenario::FinishPartialIoFailure);
+        assert_eq!(
+            s.events()
+                .iter()
+                .filter(|e| matches!(e, Event::ReleaseComplete(_)))
+                .count(),
+            usize::from(phase != 1)
+        );
+        assert_eq!(
+            s.events()
+                .iter()
+                .any(|e| matches!(e, Event::FinishPrefix(_, 1))),
+            scenario == Scenario::FinishPartialIoFailure
+        );
     }
 }
 
@@ -137,9 +197,21 @@ fn sentinel_sequences_reset_only_for_fresh_sessions_and_old_slots_do_not_reset_t
         for _ in 0..2 {
             let e = artifact(SENTINEL, "monitor", scenario, 1);
             for _ in 0..2 {
-                let mut s = ExecutionSession::new(&e, e.entry("monitor").unwrap(), ExecutionLimits::default()).unwrap();
+                let mut s = ExecutionSession::new(
+                    &e,
+                    e.entry("monitor").unwrap(),
+                    ExecutionLimits::default(),
+                )
+                .unwrap();
                 s.advance().unwrap();
-                lifecycle(&s, if scenario == Scenario::Warning { &[60, 42] } else { &[90, 60] });
+                lifecycle(
+                    &s,
+                    if scenario == Scenario::Warning {
+                        &[60, 42]
+                    } else {
+                        &[90, 60]
+                    },
+                );
             }
         }
     }
@@ -150,13 +222,27 @@ fn sentinel_repeated_reads_follow_actual_sensor_not_slot_or_operation_counter() 
     let source = "record Report{first:Reading,again:Reading,second:Reading,last:Reading}fn demo()->Result<success:Report,failure:SensorError>effects io{let first=sensor_open()or return;let second=sensor_open()or return;let b=sensor_read(&second)or return;let a=sensor_read(&first)or return;let again=sensor_read(&first)or return;let last=sensor_read(&second)or return;let done_b=sensor_finish(second)or return;let done_a=sensor_finish(first)or return;return Ok(Report{first:a,again:again,second:b,last:last});}";
     for (scenario, a, b) in [(Scenario::Warning, 60, 42), (Scenario::Critical, 90, 60)] {
         let e = artifact(source, "demo", scenario, 2);
-        let mut s = ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).unwrap();
-        assert_eq!(fields(&e, s.advance().unwrap(), hir::ResultTag::Ok), expected(&[("first", a), ("again", a), ("second", b), ("last", b)]));
+        let mut s = ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default())
+            .unwrap();
+        assert_eq!(
+            fields(&e, s.advance().unwrap(), hir::ResultTag::Ok),
+            expected(&[("first", a), ("again", a), ("second", b), ("last", b)])
+        );
         let state = s.machine.trusted.as_ref().unwrap();
         assert_eq!(state.productions[0].sensor, Some(0));
         assert_eq!(state.productions[1].sensor, Some(1));
         assert_eq!(state.entries.len(), 2);
-        assert_eq!(s.events().iter().filter_map(|e| if let Event::ReleaseComplete(id) = e { Some(*id) } else { None }).collect::<Vec<_>>(), [1, 0]);
+        assert_eq!(
+            s.events()
+                .iter()
+                .filter_map(|e| if let Event::ReleaseComplete(id) = e {
+                    Some(*id)
+                } else {
+                    None
+                })
+                .collect::<Vec<_>>(),
+            [1, 0]
+        );
     }
 }
 
@@ -165,12 +251,23 @@ fn sentinel_exhaustion_never_wraps_after_release_or_repeated_failed_open() {
     let source = "fn demo()->Result<success:bool,failure:SensorError>effects io{let first=sensor_open()or return;let a=sensor_read(&first)or return;let done=sensor_finish(first)or return;let second=sensor_open()or return;let b=sensor_read(&second)or return;let done_second=sensor_finish(second)or return;match sensor_open(){Ok(extra)=>{let closed=sensor_finish(extra)or return;return Ok(false);}Error(problem)=>{match sensor_open(){Ok(extra)=>{let closed=sensor_finish(extra)or return;return Ok(false);}Error(again)=>{return Ok((problem==1)&&(again==1));}}}}}";
     for scenario in [Scenario::Warning, Scenario::Critical] {
         let e = artifact(source, "demo", scenario, 1);
-        let mut s = ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).unwrap();
-        assert_eq!(e.render_result(s.advance().unwrap(), 4096).unwrap(), "Ok(Bool(true))");
+        let mut s = ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default())
+            .unwrap();
+        assert_eq!(
+            e.render_result(s.advance().unwrap(), 4096).unwrap(),
+            "Ok(Bool(true))"
+        );
         let state = s.machine.trusted.as_ref().unwrap();
         assert_eq!(state.next_sensor, 2);
         assert_eq!(state.entries.len(), 1);
-        assert_eq!(state.productions.iter().filter_map(|p| p.sensor).collect::<Vec<_>>(), [0, 1]);
+        assert_eq!(
+            state
+                .productions
+                .iter()
+                .filter_map(|p| p.sensor)
+                .collect::<Vec<_>>(),
+            [0, 1]
+        );
         assert_eq!(s.live_sensors(), 0);
     }
 }
@@ -181,9 +278,20 @@ fn sentinel_live_limit_precedes_sequence_exhaustion_without_excess_attempt() {
     for scenario in [Scenario::Warning, Scenario::Critical] {
         for live in [1, 2] {
             let e = artifact(source, "demo", scenario, live);
-            let mut s = ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default()).unwrap();
-            assert_eq!(s.advance().unwrap_err().kind, ErrorKind::ConfiguredLimit("live Sensor count"));
-            assert_eq!(s.events().iter().filter(|e| matches!(e, Event::Attempt(..))).count(), live);
+            let mut s =
+                ExecutionSession::new(&e, e.entry("demo").unwrap(), ExecutionLimits::default())
+                    .unwrap();
+            assert_eq!(
+                s.advance().unwrap_err().kind,
+                ErrorKind::ConfiguredLimit("live Sensor count")
+            );
+            assert_eq!(
+                s.events()
+                    .iter()
+                    .filter(|e| matches!(e, Event::Attempt(..)))
+                    .count(),
+                live
+            );
             assert_eq!(s.live_sensors(), live);
         }
     }
@@ -191,27 +299,59 @@ fn sentinel_live_limit_precedes_sequence_exhaustion_without_excess_attempt() {
 
 #[test]
 fn sentinel_scenario_substitution_cannot_authenticate() {
-    for (from, to) in [(Scenario::Warning, Scenario::Critical), (Scenario::Critical, Scenario::Sample)] {
+    for (from, to) in [
+        (Scenario::Warning, Scenario::Critical),
+        (Scenario::Critical, Scenario::Sample),
+    ] {
         let mut e = artifact(SENTINEL, "monitor", from, 1);
-        e.trusted.as_mut().unwrap().catalog.selection = Selection::sensor_demo(to, Grants::ALL, &["monitor"]).unwrap().with_sensor_limit(1).unwrap();
-        assert!(matches!(e.validate().unwrap_err().kind, ErrorKind::Integrity(_)));
-        assert!(ExecutionSession::new(&e, e.entry("monitor").unwrap(), ExecutionLimits::default()).is_err());
+        e.trusted.as_mut().unwrap().catalog.selection =
+            Selection::sensor_demo(to, Grants::ALL, &["monitor"])
+                .unwrap()
+                .with_sensor_limit(1)
+                .unwrap();
+        assert!(matches!(
+            e.validate().unwrap_err().kind,
+            ErrorKind::Integrity(_)
+        ));
+        assert!(
+            ExecutionSession::new(&e, e.entry("monitor").unwrap(), ExecutionLimits::default())
+                .is_err()
+        );
     }
 }
 
 #[test]
 fn sentinel_all_fuel_cuts_preserve_custody_and_terminal_non_delivery() {
     let e = artifact(SENTINEL, "monitor", Scenario::Warning, 1);
-    let mut full = ExecutionSession::new(&e, e.entry("monitor").unwrap(), ExecutionLimits::default()).unwrap();
+    let mut full =
+        ExecutionSession::new(&e, e.entry("monitor").unwrap(), ExecutionLimits::default()).unwrap();
     full.advance().unwrap();
     let mut after_acquisition = false;
     let mut after_release_before_delivery = false;
     for steps in 1..full.machine.steps {
-        let mut s = ExecutionSession::new(&e, e.entry("monitor").unwrap(), ExecutionLimits { steps, ..ExecutionLimits::default() }).unwrap();
-        assert_eq!(s.advance().unwrap_err().kind, ErrorKind::ConfiguredLimit("steps"));
+        let mut s = ExecutionSession::new(
+            &e,
+            e.entry("monitor").unwrap(),
+            ExecutionLimits {
+                steps,
+                ..ExecutionLimits::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            s.advance().unwrap_err().kind,
+            ErrorKind::ConfiguredLimit("steps")
+        );
         super::completion_bound_tests::conserved(&s.machine);
         after_acquisition |= s.live_sensors() == 1;
-        after_release_before_delivery |= s.machine.trusted.as_ref().unwrap().completion.as_ref().is_some_and(|p| p.phase == crate::trusted::approval::CompletionPhase::Released);
+        after_release_before_delivery |= s
+            .machine
+            .trusted
+            .as_ref()
+            .unwrap()
+            .completion
+            .as_ref()
+            .is_some_and(|p| p.phase == crate::trusted::approval::CompletionPhase::Released);
         let before = s.events().to_vec();
         let spent = s.machine.steps;
         assert!(s.advance().is_err());
@@ -226,7 +366,9 @@ fn sentinel_threshold_neighbors_use_the_actual_application_through_private_recei
     let e = artifact(SENTINEL, "monitor", Scenario::Sample, 1);
     let reading = e.trusted.as_ref().unwrap().catalog.reading;
     for value in [0, 49, 50, 79, 80, 4095] {
-        let mut s = ExecutionSession::new(&e, e.entry("monitor").unwrap(), ExecutionLimits::default()).unwrap();
+        let mut s =
+            ExecutionSession::new(&e, e.entry("monitor").unwrap(), ExecutionLimits::default())
+                .unwrap();
         // Existing private receipt control: still validates nominal identity and
         // bounds, executes Sentinel, and retains real Sensor custody/events.
         let result = with_conformance_response(1, reading, value, || s.advance().unwrap().clone());
@@ -236,7 +378,10 @@ fn sentinel_threshold_neighbors_use_the_actual_application_through_private_recei
         assert_eq!(actual["warnings"], warning);
         assert_eq!(actual["critical"], critical);
         assert_eq!(actual["peak"], value.max(42));
-        assert_eq!(actual["disposition"], if critical == 1 { 2 } else { warning });
+        assert_eq!(
+            actual["disposition"],
+            if critical == 1 { 2 } else { warning }
+        );
         assert_eq!(s.live_sensors(), 0);
     }
 }
