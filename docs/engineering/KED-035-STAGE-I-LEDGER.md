@@ -22,6 +22,10 @@ independent confirmation, acceptance, or authority for another project step.
 I03: `compare/transitions.rs` binds newly queued expressions to canonical operands
 of the approved statement/terminator or already authorized parent evaluation.
 It preserves the producer's frame, operand order, depth and continuation relation.
+Frame cursors start at canonical entry and advance only along the producing
+approved statement or selected control edge. Field staging cursors retain their
+canonical production order; incomplete operand scheduling cannot start a new
+action. These are existing MIR control facts, not an ownership/lifetime analysis.
 Queue prefixes persist unchanged across cuts; reached tasks consume their prior
 validated queued representation. Canonical parent operands, rather than agreement
 between two mutable fragments, establish the relationship. Field staging and

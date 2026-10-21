@@ -479,18 +479,54 @@ fn i03_same_parent_operand_substitution_cannot_redefine_canonical_order() {
     let c = contract(&e);
     let a = session(&c, 1024);
     let b = session(&c, 1024);
-    assert_eq!(a.primary().unwrap(), Ok(&ExecutionResult::Value(RuntimeValue::Bool(false))));
+    assert_eq!(
+        a.primary().unwrap(),
+        Ok(&ExecutionResult::Value(RuntimeValue::Bool(false)))
+    );
     assert_eq!(a.primary(), b.primary());
     assert_eq!(compare(&a, &b, comparison()), Comparison::Equal);
-    let children: Vec<_> = c.expressions().iter().filter(|(e, _)| matches!(e.kind, ExprKind::Deref { .. })).map(|(_, i)| *i).collect();
+    let children: Vec<_> = c
+        .expressions()
+        .iter()
+        .filter(|(e, _)| matches!(e.kind, ExprKind::Deref { .. }))
+        .map(|(_, i)| *i)
+        .collect();
     assert_eq!(children.len(), 2);
     let left = c.sites()[children[0]];
     let right = c.sites()[children[1]];
-    assert_eq!((left.function, left.block, left.statement), (right.function, right.block, right.statement));
+    assert_eq!(
+        (left.function, left.block, left.statement),
+        (right.function, right.block, right.statement)
+    );
     for session in [&a, &b] {
         substitute(session, children[0], children[1], false);
     }
     assert_protection(&a, &b, Protection::Operand);
+    let a = session(&c, 1024);
+    let b = session(&c, 1024);
+    assert_eq!(compare(&a, &b, comparison()), Comparison::Equal);
+    for session in [&a, &b] {
+        let mut observer = session.machine().observation.borrow_mut();
+        let mut changed = 0;
+        for record in &mut observer.as_mut().unwrap().records {
+            if let Record::Frame(_, _, _, statement, _, _) = record {
+                if *statement == left.statement {
+                    *statement = 1;
+                    changed += 1;
+                }
+            }
+        }
+        assert!(changed > 0);
+    }
+    REJECTED_PROTECTION.with(|slot| slot.set(None));
+    assert_eq!(compare(&a, &b, comparison()), Comparison::Inconclusive(Incomplete::InvalidState));
+    assert_eq!(REJECTED_PROTECTION.with(|slot| slot.get()), Some(Protection::Control));
+    // A bad control cursor is rejected independently before its downstream
+    // operand/continuation mismatch. Removing Control reaches that second gate.
+    REJECTED_PROTECTION.with(|slot| slot.set(None));
+    assert_eq!(disabled(Protection::Control, || compare(&a, &b, comparison())), Comparison::Inconclusive(Incomplete::InvalidState));
+    assert_eq!(REJECTED_PROTECTION.with(|slot| slot.get()), Some(Protection::Operand));
+
 }
 #[test]
 fn i03_nested_operands_calls_and_short_circuit_remain_authorized() {

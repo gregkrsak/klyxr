@@ -1319,8 +1319,8 @@ witnesses, but identifies I03 (coordinated queued/reached substitution) and I04
 (masked private negative controls). The new candidate binds queued operands to
 approved producer transitions and preserves their queue until reached consumption.
 Canonical parent/operand/continuation relationships supply authority independently
-of two observation fragments agreeing. This comparison validation evaluates no
-values or lifetime rules. Private tests distinguish sealing, queue mismatch,
+of two observation fragments agreeing. Frame/field cursors and selected continuation edges remain bound to approved
+control history. This validation reruns no source expressions or lifetime rules. Private tests distinguish sealing, queue mismatch,
 unauthorized matching operands, duplicate production, resurrection and reached
 referent availability, with targeted guard-removal discriminators. The prior
 length-changing tests' downstream claims were unsupported and are corrected in

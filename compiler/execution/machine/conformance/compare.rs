@@ -14,6 +14,7 @@ enum Protection {
     Resurrection = 8,
     Duplicate = 16,
     Access = 32,
+    Control = 64,
 }
 #[cfg(test)]
 thread_local! {
@@ -359,6 +360,8 @@ struct Validator<'a, 'b> {
     pending_task: Option<(usize, usize)>,
     queue: Option<(usize, usize)>,
     producer: Option<transitions::Producer<'a>>,
+    top_bool: Option<bool>,
+    top_result: Option<u64>,
 }
 impl Validator<'_, '_> {
     fn peek(&self) -> Option<Record> {
@@ -1993,7 +1996,7 @@ impl Validator<'_, '_> {
                         None,
                         true,
                     )?;
-                    self.scratch.nodes[index].statement = r[4] as usize;
+                    self.staging_cursor(index, r[4] as usize)?;
                     require((r[2] as usize) < self.contract.executable.program.records().len())?;
                     if r[5] != ABSENT {
                         self.reference(key(Kind::Temporary, r[5]))?;
@@ -2719,6 +2722,7 @@ impl Validator<'_, '_> {
             if let Some(previous) = self.scratch.nodes[index].origin {
                 require(previous == call_site)?;
             }
+            self.control_cursor(index, block, statement, definition.entry())?;
             self.scratch.nodes[index].origin = Some(call_site);
             self.scratch.nodes[index].block = block.0;
             self.scratch.nodes[index].statement = statement;
@@ -2773,9 +2777,12 @@ impl Validator<'_, '_> {
             self.end()?;
         }
         require(frame_count == depth && slot_count == slots)?;
+        self.top_bool = None;
+        self.top_result = None;
         for _ in 0..operands {
             require(self.take()? == Record::Operand)?;
-            self.held_value(false)?;
+            self.top_bool = match self.peek() { Some(Record::Bool(value)) => Some(value), _ => None };
+            self.top_result = self.held_value(false)?.handle.filter(|k| k.0 == Kind::Result).map(|k| k.1);
         }
         let queue_start = self.at;
         let (mut previous, previous_end) = self.queue.unwrap_or((0, 0));
@@ -2890,6 +2897,8 @@ fn validate<'a>(
         pending_task: None,
         queue: None,
         producer: None,
+        top_bool: None,
+        top_result: None,
     };
     let result = (|| {
         require(capture.controlled == control.is_some())?;
@@ -3030,6 +3039,7 @@ fn validate<'a>(
                 }
                 Some(Record::Executing) => {
                     require(v.model_host.is_none())?;
+                    v.transition_complete()?;
                     v.take()?;
                     let Some(Record::Continuation(frame)) = v.peek() else {
                         return Err(Incomplete::InvalidState);
