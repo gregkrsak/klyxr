@@ -294,10 +294,18 @@ fn i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree(
     for session in [&a, &b] {
         let mut observer = session.machine().observation.borrow_mut();
         let capture = observer.as_mut().unwrap();
-        let value = capture.records.iter().find_map(|r| match r {
-            Record::Reference(BorrowKind::Mutable, ..) => Some(*r), _ => None,
-        }).unwrap();
-        assert!(capture.records.iter().any(|r| *r == Record::Slot(Place::Local(second), 1)));
+        let value = capture
+            .records
+            .iter()
+            .find_map(|r| match r {
+                Record::Reference(BorrowKind::Mutable, ..) => Some(*r),
+                _ => None,
+            })
+            .unwrap();
+        assert!(capture
+            .records
+            .iter()
+            .any(|r| *r == Record::Slot(Place::Local(second), 1)));
         // Keep the original producing source available throughout the transfer.
         // Its history is never Moved then Available: duplicate production, not
         // resurrection, must be the effective discriminator.
@@ -338,7 +346,9 @@ fn i02_expired_reference_use_is_not_granted_authority_by_stored_bits() {
 fn disabled<T>(boundary: Protection, action: impl FnOnce() -> T) -> T {
     struct Restore(u8);
     impl Drop for Restore {
-        fn drop(&mut self) { DISABLED_PROTECTIONS.with(|slot| slot.set(self.0)); }
+        fn drop(&mut self) {
+            DISABLED_PROTECTIONS.with(|slot| slot.set(self.0));
+        }
     }
     let restore = Restore(DISABLED_PROTECTIONS.with(|slot| slot.replace(boundary as u8)));
     let result = action();
@@ -347,17 +357,39 @@ fn disabled<T>(boundary: Protection, action: impl FnOnce() -> T) -> T {
 }
 fn assert_protection(a: &Session<'_>, b: &Session<'_>, boundary: Protection) {
     REJECTED_PROTECTION.with(|slot| slot.set(None));
-    assert_eq!(compare(a, b, comparison()), Comparison::Inconclusive(Incomplete::InvalidState));
+    assert_eq!(
+        compare(a, b, comparison()),
+        Comparison::Inconclusive(Incomplete::InvalidState)
+    );
     assert_eq!(REJECTED_PROTECTION.with(|slot| slot.get()), Some(boundary));
-    assert_eq!(disabled(boundary, || compare(a, b, comparison())), Comparison::Equal);
+    assert_eq!(
+        disabled(boundary, || compare(a, b, comparison())),
+        Comparison::Equal
+    );
     eprintln!("K35 semantic discriminator: {boundary:?} rejects InvalidState; removing only that guard yields Equal");
 }
 fn return_and_deref(c: &contract::Contract<'_>) -> (usize, usize) {
     let function = c.executable.function(c.entry()).unwrap();
-    let value = function.blocks().find_map(|(_, b)| match b.terminator() { Terminator::Return { value } => Some(value), _ => None }).unwrap();
+    let value = function
+        .blocks()
+        .find_map(|(_, b)| match b.terminator() {
+            Terminator::Return { value } => Some(value),
+            _ => None,
+        })
+        .unwrap();
     assert!(matches!(value.kind, ExprKind::Local(_)));
-    let returned = c.expressions().iter().find(|(e, _)| std::ptr::eq(*e, value)).unwrap().1;
-    let deref = c.expressions().iter().find(|(e, _)| matches!(e.kind, ExprKind::Deref { .. })).unwrap().1;
+    let returned = c
+        .expressions()
+        .iter()
+        .find(|(e, _)| std::ptr::eq(*e, value))
+        .unwrap()
+        .1;
+    let deref = c
+        .expressions()
+        .iter()
+        .find(|(e, _)| matches!(e.kind, ExprKind::Deref { .. }))
+        .unwrap()
+        .1;
     assert_ne!(returned, deref);
     (returned, deref)
 }
@@ -370,11 +402,19 @@ fn substitute(session: &Session<'_>, returned: usize, deref: usize, reached_only
     let mut executing = false;
     let (mut queued, mut reached) = (0, 0);
     for record in &mut capture.records {
-        if matches!(record, Record::Cut(..)) { executing = false; }
-        if *record == Record::Executing { executing = true; }
+        if matches!(record, Record::Cut(..)) {
+            executing = false;
+        }
+        if *record == Record::Executing {
+            executing = true;
+        }
         if *record == Record::Expression(returned) && (!reached_only || executing) {
             *record = Record::Expression(deref);
-            if executing { reached += 1; } else { queued += 1; }
+            if executing {
+                reached += 1;
+            } else {
+                queued += 1;
+            }
         }
     }
     assert_eq!(reached, 1);
@@ -384,7 +424,10 @@ fn substitute(session: &Session<'_>, returned: usize, deref: usize, reached_only
     assert_eq!(sealed, Some(capture.records.len()));
     assert_eq!(capture.records.capacity(), capacity);
     for (old, new) in before.iter().zip(&capture.records) {
-        assert!(old == new || (*old == Record::Expression(returned) && *new == Record::Expression(deref)));
+        assert!(
+            old == new
+                || (*old == Record::Expression(returned) && *new == Record::Expression(deref))
+        );
     }
 }
 fn coordinated_stale_case() {
@@ -393,14 +436,24 @@ fn coordinated_stale_case() {
     let a = session(&c, 1024);
     let b = session(&c, 1024);
     for s in [&a, &b] {
-        assert_eq!(s.primary().unwrap(), Ok(&ExecutionResult::Value(RuntimeValue::Bool(false))));
+        assert_eq!(
+            s.primary().unwrap(),
+            Ok(&ExecutionResult::Value(RuntimeValue::Bool(false)))
+        );
         assert_eq!(s.completeness(), Ok(()));
     }
     assert_eq!(compare(&a, &b, comparison()), Comparison::Equal);
     let (returned, deref) = return_and_deref(&c);
-    for s in [&a, &b] { substitute(s, returned, deref, false); }
+    for s in [&a, &b] {
+        substitute(s, returned, deref, false);
+    }
     assert_protection(&a, &b, Protection::Operand);
-    for s in [&a, &b] { assert_eq!(s.primary().unwrap(), Ok(&ExecutionResult::Value(RuntimeValue::Bool(false)))); }
+    for s in [&a, &b] {
+        assert_eq!(
+            s.primary().unwrap(),
+            Ok(&ExecutionResult::Value(RuntimeValue::Bool(false)))
+        );
+    }
 }
 #[test]
 fn i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary() {
@@ -414,8 +467,30 @@ fn i03_reached_only_substitution_rejects_at_queued_consumption_boundary() {
     let b = session(&c, 1024);
     assert_eq!(compare(&a, &b, comparison()), Comparison::Equal);
     let (returned, deref) = return_and_deref(&c);
-    for s in [&a, &b] { substitute(s, returned, deref, true); }
+    for s in [&a, &b] {
+        substitute(s, returned, deref, true);
+    }
     assert_protection(&a, &b, Protection::Queue);
+}
+#[test]
+fn i03_same_parent_operand_substitution_cannot_redefine_canonical_order() {
+    let source = "fn demo()->bool{let a=true;let b=false;let first=&a;let second=&b;return *first==*second;}";
+    let e = prepare_execution(source, AdmissionLimits::default()).unwrap();
+    let c = contract(&e);
+    let a = session(&c, 1024);
+    let b = session(&c, 1024);
+    assert_eq!(a.primary().unwrap(), Ok(&ExecutionResult::Value(RuntimeValue::Bool(false))));
+    assert_eq!(a.primary(), b.primary());
+    assert_eq!(compare(&a, &b, comparison()), Comparison::Equal);
+    let children: Vec<_> = c.expressions().iter().filter(|(e, _)| matches!(e.kind, ExprKind::Deref { .. })).map(|(_, i)| *i).collect();
+    assert_eq!(children.len(), 2);
+    let left = c.sites()[children[0]];
+    let right = c.sites()[children[1]];
+    assert_eq!((left.function, left.block, left.statement), (right.function, right.block, right.statement));
+    for session in [&a, &b] {
+        substitute(session, children[0], children[1], false);
+    }
+    assert_protection(&a, &b, Protection::Operand);
 }
 #[test]
 fn i03_nested_operands_calls_and_short_circuit_remain_authorized() {
@@ -434,7 +509,10 @@ fn i03_approved_transition_binding_preserves_stopped_primary_and_budgets() {
         let b = session(&c, steps);
         assert_eq!(a.primary(), b.primary());
         assert_eq!(compare(&a, &b, comparison()), Comparison::Equal);
-        match a.primary().unwrap() { Ok(_) => complete += 1, Err(_) => stopped += 1 }
+        match a.primary().unwrap() {
+            Ok(_) => complete += 1,
+            Err(_) => stopped += 1,
+        }
     }
     assert!(stopped > 0 && complete > 0);
 }
@@ -443,14 +521,34 @@ fn i04_resurrected_transfer_rejects_at_reference_history_boundary() {
     let source="fn demo()->bool{let mutable item=true;let first=&mut item;let second=first;*second=false;return item;}";
     let e = prepare_execution(source, AdmissionLimits::default()).unwrap();
     let c = contract(&e);
-    let first = e.program.locals().iter().find(|l| l.name == "first").unwrap().id;
-    let second = e.program.locals().iter().find(|l| l.name == "second").unwrap().id;
-    let steps = (1..40).find(|steps| {
-        let s = session(&c, *steps);
-        let capture = s.capture();
-        let at = capture.records.iter().rposition(|r| matches!(r, Record::Cut(Cut::Final, ..))).unwrap();
-        s.primary().unwrap().is_err() && capture.records[at..].contains(&Record::Slot(Place::Local(first), 2)) && capture.records[at..].contains(&Record::Slot(Place::Local(second), 1))
-    }).unwrap();
+    let first = e
+        .program
+        .locals()
+        .iter()
+        .find(|l| l.name == "first")
+        .unwrap()
+        .id;
+    let second = e
+        .program
+        .locals()
+        .iter()
+        .find(|l| l.name == "second")
+        .unwrap()
+        .id;
+    let steps = (1..40)
+        .find(|steps| {
+            let s = session(&c, *steps);
+            let capture = s.capture();
+            let at = capture
+                .records
+                .iter()
+                .rposition(|r| matches!(r, Record::Cut(Cut::Final, ..)))
+                .unwrap();
+            s.primary().unwrap().is_err()
+                && capture.records[at..].contains(&Record::Slot(Place::Local(first), 2))
+                && capture.records[at..].contains(&Record::Slot(Place::Local(second), 1))
+        })
+        .unwrap();
     let a = session(&c, steps);
     let b = session(&c, steps);
     assert_eq!(compare(&a, &b, comparison()), Comparison::Equal);
@@ -458,12 +556,24 @@ fn i04_resurrected_transfer_rejects_at_reference_history_boundary() {
         let mut observer = s.machine().observation.borrow_mut();
         let capture = observer.as_mut().unwrap();
         let length = capture.records.len();
-        let cut = capture.records.iter().rposition(|r| matches!(r, Record::Cut(Cut::Final, ..))).unwrap();
-        let at = cut + capture.records[cut..].iter().position(|r| *r == Record::Slot(Place::Local(second), 1)).unwrap();
+        let cut = capture
+            .records
+            .iter()
+            .rposition(|r| matches!(r, Record::Cut(Cut::Final, ..)))
+            .unwrap();
+        let at = cut
+            + capture.records[cut..]
+                .iter()
+                .position(|r| *r == Record::Slot(Place::Local(second), 1))
+                .unwrap();
         let value = capture.records.remove(at + 1);
         assert!(matches!(value, Record::Reference(BorrowKind::Mutable, ..)));
         capture.records[at] = Record::Slot(Place::Local(second), 2);
-        let at = cut + capture.records[cut..].iter().position(|r| *r == Record::Slot(Place::Local(first), 2)).unwrap();
+        let at = cut
+            + capture.records[cut..]
+                .iter()
+                .position(|r| *r == Record::Slot(Place::Local(first), 2))
+                .unwrap();
         capture.records[at] = Record::Slot(Place::Local(first), 1);
         capture.records.insert(at + 1, value);
         assert_eq!(capture.records.len(), length);
@@ -473,18 +583,40 @@ fn i04_resurrected_transfer_rejects_at_reference_history_boundary() {
 }
 #[test]
 fn i04_authorized_reached_access_requires_available_referent() {
-    let e = prepare_execution("fn demo()->bool{let value=true;let view=&value;return *view;}", AdmissionLimits::default()).unwrap();
+    let e = prepare_execution(
+        "fn demo()->bool{let value=true;let view=&value;return *view;}",
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let c = contract(&e);
-    let owner = e.program.locals().iter().find(|l| l.name == "value").unwrap().id;
-    let ordinal = c.expressions().iter().find(|(e, _)| matches!(e.kind, ExprKind::Deref { .. })).unwrap().1;
+    let owner = e
+        .program
+        .locals()
+        .iter()
+        .find(|l| l.name == "value")
+        .unwrap()
+        .id;
+    let ordinal = c
+        .expressions()
+        .iter()
+        .find(|(e, _)| matches!(e.kind, ExprKind::Deref { .. }))
+        .unwrap()
+        .1;
     let a = session(&c, 1024);
     let b = session(&c, 1024);
     assert_eq!(compare(&a, &b, comparison()), Comparison::Equal);
     for s in [&a, &b] {
         let mut observer = s.machine().observation.borrow_mut();
         let capture = observer.as_mut().unwrap();
-        let expression = capture.records.iter().position(|r| *r == Record::Expression(ordinal)).unwrap();
-        let mut at = capture.records[..expression].iter().rposition(|r| matches!(r, Record::Cut(..))).unwrap();
+        let expression = capture
+            .records
+            .iter()
+            .position(|r| *r == Record::Expression(ordinal))
+            .unwrap();
+        let mut at = capture.records[..expression]
+            .iter()
+            .rposition(|r| matches!(r, Record::Cut(..)))
+            .unwrap();
         let mut changed = 0;
         while at < capture.records.len() {
             if capture.records[at] == Record::Slot(Place::Local(owner), 1) {
@@ -507,14 +639,29 @@ fn i04_capture_length_gate_is_distinct_from_reference_validation() {
     let b = session(&c, 1024);
     assert_eq!(compare(&a, &b, comparison()), Comparison::Equal);
     for s in [&a, &b] {
-        s.machine().observation.borrow_mut().as_mut().unwrap().records.push(Record::Executing);
+        s.machine()
+            .observation
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .records
+            .push(Record::Executing);
     }
     REJECTED_PROTECTION.with(|slot| slot.set(None));
-    assert_eq!(compare(&a, &b, comparison()), Comparison::Inconclusive(Incomplete::InvalidState));
-    assert_eq!(REJECTED_PROTECTION.with(|slot| slot.get()), Some(Protection::Seal));
+    assert_eq!(
+        compare(&a, &b, comparison()),
+        Comparison::Inconclusive(Incomplete::InvalidState)
+    );
+    assert_eq!(
+        REJECTED_PROTECTION.with(|slot| slot.get()),
+        Some(Protection::Seal)
+    );
     // Removing only the seal check still leaves an invalid trailing record.
     // This fixture establishes the shape gate, never downstream reference rules.
-    assert_eq!(disabled(Protection::Seal, || compare(&a, &b, comparison())), Comparison::Inconclusive(Incomplete::InvalidState));
+    assert_eq!(
+        disabled(Protection::Seal, || compare(&a, &b, comparison())),
+        Comparison::Inconclusive(Incomplete::InvalidState)
+    );
 }
 
 #[test]

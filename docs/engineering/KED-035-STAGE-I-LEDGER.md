@@ -41,7 +41,9 @@ The coordinated witness retains two independent complete sessions producing bool
 false and Equal, then changes only final `Local(value)` ordinals to the earlier
 `Deref(shared)` in both queued and reached records. Length, sealed count, capacities,
 primary outcomes, inventory, cuts, origins and accounting remain intact. Operand
-validation must reject it. A reached-only substitution instead rejects at Queue.
+validation must reject it. A second length-preserving witness substitutes siblings
+inside one approved Binary expression, so same-instruction membership alone cannot
+satisfy canonical operand order. A reached-only substitution instead rejects at Queue.
 The duplicate fixture keeps the original production available throughout transfer,
 so Duplicate is the first failing protection. The resurrection fixture changes
 only the final stopped snapshot, returns bits to the Moved source and removes the
@@ -65,9 +67,11 @@ history uses bounded record ranges and fixed scalar producer state without new
 heap allocation or recursive traversal. Existing reference history is pre-reserved,
 charged and capped; exhaustion remains Inconclusive. No primary layout, accounting
 schedule, custody, capture vocabulary, public API or selected-profile gate changes.
+These are logical evaluation witnesses, not a requirement that a later engine
+physically retain interpreter tasks or frames; K35-P09 remains binding.
 
 Expected inventory: 2,045 predecessors + 48 original reviewed K35 controls + 11
-retained focused identities + 7 new classified I03/I04 identities = 2,111 per
+retained focused identities + 8 new classified I03/I04 identities = 2,112 per
 complete profile. The manifest and verifier pin both retained identity/classification
 sets. Exact executed debug/release totals, eight run/job identities, changed files
 and readbacks belong to the final exact-head repair report. Actions and Sarah's

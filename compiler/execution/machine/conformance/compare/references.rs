@@ -253,7 +253,10 @@ impl<'a> Validator<'a, '_> {
                         .reference
                         .is_some_and(|r| r.kind == BorrowKind::Mutable)
                     {
-                        protection(Protection::Duplicate, prior.reference_root != slot.reference_root)?;
+                        protection(
+                            Protection::Duplicate,
+                            prior.reference_root != slot.reference_root,
+                        )?;
                     }
                 }
             }

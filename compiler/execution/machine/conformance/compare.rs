@@ -7,7 +7,14 @@ mod transitions;
 // Private discriminators can remove one guard at a time. Production always
 // enforces every guard; no public option or capture-sealing bypass exists.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Protection { Seal = 1, Queue = 2, Operand = 4, Resurrection = 8, Duplicate = 16, Access = 32 }
+enum Protection {
+    Seal = 1,
+    Queue = 2,
+    Operand = 4,
+    Resurrection = 8,
+    Duplicate = 16,
+    Access = 32,
+}
 #[cfg(test)]
 thread_local! {
     static DISABLED_PROTECTIONS: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
@@ -15,7 +22,9 @@ thread_local! {
 }
 fn protection(boundary: Protection, condition: bool) -> Valid {
     #[cfg(test)]
-    if DISABLED_PROTECTIONS.with(|mask| mask.get() & boundary as u8 != 0) { return Ok(()); }
+    if DISABLED_PROTECTIONS.with(|mask| mask.get() & boundary as u8 != 0) {
+        return Ok(());
+    }
     if !condition {
         #[cfg(test)]
         REJECTED_PROTECTION.with(|slot| slot.set(Some(boundary)));
@@ -2775,7 +2784,9 @@ impl Validator<'_, '_> {
             let start = self.at;
             self.task(false)?;
             if previous < previous_end {
-                let end = previous.checked_add(self.at - start).ok_or(Incomplete::InvalidState)?;
+                let end = previous
+                    .checked_add(self.at - start)
+                    .ok_or(Incomplete::InvalidState)?;
                 protection(Protection::Queue, end <= previous_end)?;
                 self.same_task_records((previous, end), (start, self.at))?;
                 previous = end;
@@ -3035,9 +3046,16 @@ fn validate<'a>(
                         // The initial Drive can be pushed and popped between
                         // the last admission snapshot and its first action.
                         let node = v.node(key(Kind::Frame, frame))?;
-                        protection(Protection::Queue, v.producer.is_none()
-                            && v.records.get(start + 1).is_some_and(|r| matches!(r, Record::Meta(Part::Task, d) if d[0] == 0))
-                            && node.a == contract.entry().0 as u64 && node.block == 0 && node.statement == 0)?;
+                        protection(
+                            Protection::Queue,
+                            v.producer.is_none()
+                                && v.records.get(start + 1).is_some_and(
+                                    |r| matches!(r, Record::Meta(Part::Task, d) if d[0] == 0),
+                                )
+                                && node.a == contract.entry().0 as u64
+                                && node.block == 0
+                                && node.statement == 0,
+                        )?;
                     }
                     v.transition_producer(start, v.at)?;
                     v.finish_graph()?;
@@ -3307,7 +3325,10 @@ fn compare_inner(a: &Session<'_>, b: &Session<'_>, limits: ComparisonLimits) -> 
         if !capture.finished {
             return Err(Incomplete::Pending);
         }
-        protection(Protection::Seal, capture.sealed_count == Some(capture.records.len()))?;
+        protection(
+            Protection::Seal,
+            capture.sealed_count == Some(capture.records.len()),
+        )?;
         if capture.records.len() > limits.records {
             return Err(Incomplete::Records);
         }

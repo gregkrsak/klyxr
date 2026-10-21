@@ -1,5 +1,5 @@
 {
-  "stage": "Stage I focused I01/I02 repair candidate; exact-head gate and independent confirmation pending",
+  "stage": "Stage I focused I03/I04 repair candidate; retained I01/I02 evidence, exact-head gate and confirmation pending",
   "baseline_commit": "5f28977a42a7df1817e5cac46b3f6660a38435d3",
   "baseline_tree": "0b330328f3f213a26b6fc4af9f45ca06a98876b8",
   "m0_commit": "0443dfd32dec70e0c72f1a0a886b9eedc284fb9c",
@@ -915,7 +915,8 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_same_parent_operand_substitution_cannot_redefine_canonical_order"
       ]
     },
     "6": {
@@ -963,7 +964,8 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_same_parent_operand_substitution_cannot_redefine_canonical_order"
       ]
     },
     "7": {
@@ -1114,7 +1116,8 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_same_parent_operand_substitution_cannot_redefine_canonical_order"
       ]
     },
     "14": {
@@ -1306,7 +1309,8 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_same_parent_operand_substitution_cannot_redefine_canonical_order"
       ]
     },
     "18": {
@@ -1438,7 +1442,8 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_same_parent_operand_substitution_cannot_redefine_canonical_order"
       ]
     },
     "K35-P04": {
@@ -1496,7 +1501,8 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_same_parent_operand_substitution_cannot_redefine_canonical_order"
       ]
     },
     "K35-P05": {
@@ -1652,7 +1658,8 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_same_parent_operand_substitution_cannot_redefine_canonical_order"
       ]
     },
     "K35-P08": {
@@ -1846,7 +1853,8 @@
     "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
     "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
     "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
-    "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i03_same_parent_operand_substitution_cannot_redefine_canonical_order"
   ],
   "fixture_adaptations": [
     {
@@ -1963,7 +1971,8 @@
     "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets": "logical_or_observation_boundary",
     "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary": "private_malformed_observation",
     "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent": "private_malformed_observation",
-    "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation": "private_malformed_observation"
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i03_same_parent_operand_substitution_cannot_redefine_canonical_order": "private_malformed_observation"
   },
   "m5_checkpoint": {
     "commit": "e31f6104d8222ee201bc392a3daf87bcb03734ab",
@@ -2147,7 +2156,8 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_same_parent_operand_substitution_cannot_redefine_canonical_order"
       ]
     },
     "15.09": {
@@ -2351,7 +2361,8 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_same_parent_operand_substitution_cannot_redefine_canonical_order"
       ]
     },
     "15.23": {
@@ -2396,7 +2407,8 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_same_parent_operand_substitution_cannot_redefine_canonical_order"
       ]
     },
     "15.26": {
@@ -3104,9 +3116,10 @@
       "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
       "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
       "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
-      "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i03_same_parent_operand_substitution_cannot_redefine_canonical_order"
     ],
-    "expected_per_profile": 2111,
+    "expected_per_profile": 2112,
     "reviewed_control_count": 48,
     "reviewed_controls_sha256": "513b6decc1a21aafd30c0b54faa8cac1f58ec105aa7ebe078d8c7e90c5e41a6c",
     "predecessor_migrations": {},
@@ -3169,7 +3182,8 @@
           "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
           "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary",
           "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized",
-          "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets"
+          "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
+          "lib.rs::execution::machine::conformance::compare::repair_tests::i03_same_parent_operand_substitution_cannot_redefine_canonical_order"
         ]
       },
       "K35-I04": {
