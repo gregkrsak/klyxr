@@ -78,4 +78,5 @@ assert len(f['retained_repair_identities']) == 11
 assert [t for t, _ in retained] == f['retained_repair_identities']
 assert hashlib.sha256(json.dumps(retained, separators=(',', ':')).encode()).hexdigest() == '7584d2513b23d0c72110a532d50a1cc9bb69d70301bb74b4c09cb81e6df1b05e'
 assert f['retained_repairs_sha256'] == '7584d2513b23d0c72110a532d50a1cc9bb69d70301bb74b4c09cb81e6df1b05e'
-assert len(r['effective_rejection_paths']) == 6 and r['evidence_correction']
+assert len(r['effective_rejection_paths']) == 7 and r['evidence_correction']
+assert r['discriminator_limits']

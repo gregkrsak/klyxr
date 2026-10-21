@@ -53,8 +53,11 @@ so Duplicate is the first failing protection. The resurrection fixture changes
 only the final stopped snapshot, returns bits to the Moved source and removes the
 alias's bits, so Resurrection is decisive without simultaneous duplication. A
 lawfully queued/reached dereference with an unavailable referent rejects at Access.
-Each semantic control checks its named rejection and requires Equal when only that
-specific private test guard is removed. These test-only switches are thread-local,
+For Operand, Queue, Duplicate, Resurrection and Access, each principal fixture
+checks its named rejection and requires Equal when only that specific private
+test guard is removed. An extra cursor subcontrol checks Control rejection and
+shows that disabling Control reaches a separate Operand rejection; it does not
+claim an Equal counterfactual. These test-only switches are thread-local,
 restored by a guard, and absent from production. Actions must execute all assertions
 before any test is reported as passing.
 

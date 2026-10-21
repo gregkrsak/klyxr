@@ -3125,7 +3125,7 @@
     "predecessor_migrations": {},
     "public_api_changes": [],
     "constraints": "K35-P01\u2013P10 retained; no semantics, public authority, ownership/lifetime engine or Stage N change",
-    "bounds": "canonical origin and initializer/call-lineage scans charge comparison work; lineage is capped; reference initialization/Move history is pre-reserved at comparison node cap and charged through comparison geometry, never runtime storage; queue-prefix persistence and operand-production scans charge comparison work; canonical operands are borrowed, queue history uses record ranges and fixed scalar state without allocation or recursive traversal",
+    "bounds": "canonical origin and initializer/call-lineage scans charge comparison work; lineage is capped; reference initialization/Move history is pre-reserved at comparison node cap and charged through comparison geometry, never runtime storage; queue-prefix persistence and operand-production scans charge comparison work; canonical operands are borrowed, queue history uses record ranges and fixed scalar state without allocation or recursive traversal; frame and field cursors reuse existing comparison node metadata, with canonical successor and completed-operand checks before the next action; no primary or evidence geometry change",
     "findings": {
       "K35-I01": {
         "status": "resolved by Sarah focused confirmation 6306899488; retained unchanged",
@@ -3176,7 +3176,10 @@
         "symbols": [
           "fn transition_producer",
           "fn bind_queued_task",
-          "fn same_task_records"
+          "fn same_task_records",
+          "fn control_cursor",
+          "fn staging_cursor",
+          "fn transition_complete"
         ],
         "tests": [
           "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
@@ -3231,8 +3234,10 @@
       "exclusive_duplicate": "Duplicate: original producer remains available throughout, so no resurrection preempts duplicate-root rejection",
       "resurrection": "Resurrection: final stopped snapshot transfers stored bits back to Moved source; no simultaneous duplicate remains",
       "authorized_reached_access": "Access: approved queued/reached dereference retains available handle but its referent is unavailable",
-      "length_control": "Seal: count mismatch only; not reference evidence"
+      "length_control": "Seal: count mismatch only; not reference evidence",
+      "control_cursor": "Control: canonical entry/statement/selected-edge cursor history; cursor subcontrol disables Control and reaches a separate Operand rejection, not Equal"
     },
-    "evidence_correction": "Prior I02 duplicate/stale artifact assertions at 23dd37c stopped at sealed-count rejection. Their original reported downstream discrimination was unsupported. Replacement private fixtures preserve length or explicitly maintain only their private envelope and require a named guard plus isolated guard-removal Equal."
+    "evidence_correction": "Prior I02 duplicate/stale artifact assertions at 23dd37c stopped at sealed-count rejection. Their original reported downstream discrimination was unsupported. Replacement private fixtures preserve length or explicitly maintain only their private envelope and require a named guard plus isolated guard-removal Equal.",
+    "discriminator_limits": "Operand (two substitutions), Queue, Duplicate, Resurrection and Access fixtures require Equal with only their named private guard disabled. The extra cursor subcontrol instead demonstrates Control then Operand; shape control remains InvalidState after Seal bypass. Those latter controls do not claim Equal counterfactuals."
   }
 }
