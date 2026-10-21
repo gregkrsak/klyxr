@@ -325,7 +325,10 @@ fn i02_expired_reference_use_is_not_granted_authority_by_stored_bits() {
     for source in [
         "fn demo()->bool{let mutable item=true;let shared=&item;let seen=*shared;let exclusive=&mut item;*exclusive=false;return *shared;}",
         "type N=range 0..1;record R{x:N}fn consume(item:R){}fn demo()->N{let item=R{x:1};let view=&item;let seen=view.x;consume(item);return view.x;}",
-    ] { assert!(prepare_execution(source,AdmissionLimits::default()).is_err()); }
+    ] {
+        assert!(matches!(crate::compile_source(source), Err(crate::FrontendError::Ownership(_))));
+        assert!(prepare_execution(source, AdmissionLimits::default()).is_err());
+    }
     let e = prepare_execution(SHARED_THEN_MOVE, AdmissionLimits::default()).unwrap();
     let c = contract(&e);
     let a = session(&c, 1024);

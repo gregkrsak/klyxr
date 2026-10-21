@@ -5,6 +5,7 @@ This is a manifest check, not execution evidence or a semantic proof. Cargo
 identity reconciliation and exact numeric neighbors have separate CI checks.
 """
 import json
+import hashlib
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
@@ -47,3 +48,22 @@ assert all(f'K35-P{i:02}' in ledger for i in range(1, 11))
 assert all(f'M{i}' in ledger for i in range(10))
 print('KED-035 map: frozen sections 4–18; 30 obligations; P01–P10; M0–M9; named malformed families')
 print(f'2045 retained identities + {len(p["additions"])} classified additions; native evidence explicitly deferred')
+
+# Preserve every reviewed Stage I control while classifying focused additions.
+r = p['repair']
+assert r['baseline_commit'] == '4922296a04b479915ad58001275e491af1287d58'
+assert r['baseline_tree'] == '08712b0f327e65f91ef39db4a19bad9311debd0e'
+assert r['reviewed_control_count'] == 48 and r['predecessor_migrations'] == {}
+reviewed = [[t, p['classifications'][t]] for t in p['additions'][:48]]
+expected_digest = '513b6decc1a21aafd30c0b54faa8cac1f58ec105aa7ebe078d8c7e90c5e41a6c'
+assert hashlib.sha256(json.dumps(reviewed, separators=(',', ':')).encode()).hexdigest() == expected_digest
+assert r['reviewed_controls_sha256'] == expected_digest
+assert set(p['additions'][48:]) == set(r['tests'])
+assert r['expected_per_profile'] == 2045 + len(p['additions'])
+assert r['public_api_changes'] == []
+assert set(r['findings']) == {'K35-I01', 'K35-I02'}
+for finding in r['findings'].values():
+    assert finding['tests'] and set(finding['tests']) <= set(r['tests'])
+    code = '\n'.join((root / path).read_text() for path in finding['code'])
+    assert all(symbol in code for symbol in finding['symbols'])
+print(f'Focused repair: 48 reviewed controls retained, {len(r["tests"])} classified repair tests; zero migrations')

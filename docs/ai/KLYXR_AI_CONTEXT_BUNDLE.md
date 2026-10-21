@@ -912,6 +912,14 @@ actual optimized/unoptimized comparisons and native physical-failure evidence ar
 mandatory deferred Stage N work requiring separate authority. See
 `docs/engineering/KED-035-STAGE-I-LEDGER.md` and its evidence manifest.
 
+Sarah's independent review of the Stage I candidate found K35-I01 (mixed-kind
+canonical origin lookup) and K35-I02 (stored reference bits confused with active
+loans). The focused repair candidate validates canonical ordinary origin rows and
+preserves stored reference identity separately from reached access and Move
+history. The existing ownership checker remains the sole lifetime authority.
+Fresh Actions evidence and Sarah's focused confirmation govern the repair;
+Greg's acceptance remains pending. No Stage N or public authority is added.
+
 <!-- END KLYXR_CONTEXT.md -->
 
 ---
@@ -3961,6 +3969,23 @@ recorded in the engineering ledger/manifest. Exact KED-034/033/032 predecessors,
 opaque-authority doctest and affine cases are reconciled in debug/release Actions.
 No local Rust execution is used. No native implementation, physical optimized
 execution or portable artifact identity is claimed; K35-P10 remains Stage N.
+
+### KED-035 focused observation-validation repair candidate
+
+Sarah's independent Stage I review (Issue #84 comment 6305818246) identified I01
+and I02. The focused repair resolves source-global FunctionIds through the actual
+ordinary MIR/origin row; verified/harness declarations grant no ordinary authority.
+Stored reference bits retain exact canonical initializer, alias/transfer and
+caller-argument identity after last use. They do not imply a currently active
+loan or require the owner to remain available after a lawful Move. Reached
+reference accesses and held reference operands still require available referents.
+Bounded reference-value initialization/Move history distinguishes repeated
+executions of one borrow site and rejects resurrected or duplicate exclusive
+transfer representations. This is comparison metadata, not a lifetime engine;
+the existing ownership checker remains the only loan authority. Comparison work,
+lineage and pre-reserved history bounds are separate from primary execution.
+Focused independent confirmation and Greg's acceptance remain pending. No frozen
+semantics, public API, predecessor restriction or Stage N decision changes.
 
 <!-- END ARCHITECTURE.md -->
 

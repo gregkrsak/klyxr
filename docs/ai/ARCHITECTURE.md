@@ -1296,3 +1296,20 @@ recorded in the engineering ledger/manifest. Exact KED-034/033/032 predecessors,
 opaque-authority doctest and affine cases are reconciled in debug/release Actions.
 No local Rust execution is used. No native implementation, physical optimized
 execution or portable artifact identity is claimed; K35-P10 remains Stage N.
+
+### KED-035 focused observation-validation repair candidate
+
+Sarah's independent Stage I review (Issue #84 comment 6305818246) identified I01
+and I02. The focused repair resolves source-global FunctionIds through the actual
+ordinary MIR/origin row; verified/harness declarations grant no ordinary authority.
+Stored reference bits retain exact canonical initializer, alias/transfer and
+caller-argument identity after last use. They do not imply a currently active
+loan or require the owner to remain available after a lawful Move. Reached
+reference accesses and held reference operands still require available referents.
+Bounded reference-value initialization/Move history distinguishes repeated
+executions of one borrow site and rejects resurrected or duplicate exclusive
+transfer representations. This is comparison metadata, not a lifetime engine;
+the existing ownership checker remains the only loan authority. Comparison work,
+lineage and pre-reserved history bounds are separate from primary execution.
+Focused independent confirmation and Greg's acceptance remain pending. No frozen
+semantics, public API, predecessor restriction or Stage N decision changes.

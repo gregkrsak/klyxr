@@ -898,3 +898,11 @@ transport, serialization, signing or packaging is selected. Native installation,
 actual optimized/unoptimized comparisons and native physical-failure evidence are
 mandatory deferred Stage N work requiring separate authority. See
 `docs/engineering/KED-035-STAGE-I-LEDGER.md` and its evidence manifest.
+
+Sarah's independent review of the Stage I candidate found K35-I01 (mixed-kind
+canonical origin lookup) and K35-I02 (stored reference bits confused with active
+loans). The focused repair candidate validates canonical ordinary origin rows and
+preserves stored reference identity separately from reached access and Move
+history. The existing ownership checker remains the sole lifetime authority.
+Fresh Actions evidence and Sarah's focused confirmation govern the repair;
+Greg's acceptance remains pending. No Stage N or public authority is added.

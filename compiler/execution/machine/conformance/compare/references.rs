@@ -27,11 +27,19 @@ impl<'a> Validator<'a, '_> {
         for index in 0..self.scratch.references.len() {
             self.work.spend()?;
             let history = self.scratch.references[index];
-            if history.frame == frame && history.place == place { return Ok(Some(index)); }
+            if history.frame == frame && history.place == place {
+                return Ok(Some(index));
+            }
         }
         Ok(None)
     }
-    pub(super) fn reference_binding(&mut self, frame: u64, place: Place, value: ReferenceValue, canonical: (u64, usize)) -> Valid<(u64, usize, usize)> {
+    pub(super) fn reference_binding(
+        &mut self,
+        frame: u64,
+        place: Place,
+        value: ReferenceValue,
+        canonical: (u64, usize),
+    ) -> Valid<(u64, usize, usize)> {
         if let Some(index) = self.history_index(frame, place)? {
             let prior = self.scratch.references[index];
             if prior.state == 1 {
@@ -52,7 +60,9 @@ impl<'a> Validator<'a, '_> {
             _ => return Err(Incomplete::InvalidState),
         };
         if let Some(source) = source {
-            let index = self.history_index(at, source)?.ok_or(Incomplete::InvalidState)?;
+            let index = self
+                .history_index(at, source)?
+                .ok_or(Incomplete::InvalidState)?;
             let history = self.scratch.references[index];
             require(history.value == Some(value))?;
             let root = history.root.ok_or(Incomplete::InvalidState)?;
@@ -72,8 +82,16 @@ impl<'a> Validator<'a, '_> {
                 history.root = slot.reference_root;
             }
         } else {
-            if self.scratch.references.len() == self.scratch.cap { return Err(Incomplete::Records); }
-            self.scratch.references.push(History { frame, place, state, value: slot.reference, root: slot.reference_root });
+            if self.scratch.references.len() == self.scratch.cap {
+                return Err(Incomplete::Records);
+            }
+            self.scratch.references.push(History {
+                frame,
+                place,
+                state,
+                value: slot.reference,
+                root: slot.reference_root,
+            });
         }
         Ok(())
     }

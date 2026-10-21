@@ -10,6 +10,72 @@ This is an implementation ledger, not acceptance or permission for Stage N.
 GitHub Actions is the only Rust compilation/execution environment used. No local
 Rust installation, repair, compiler, formatter, linker, or executable test is run.
 
+## Focused K35-I01 / K35-I02 repair candidate
+
+Sarah's independent review of M9 head
+`4922296a04b479915ad58001275e491af1287d58` / tree
+`08712b0f327e65f91ef39db4a19bad9311debd0e` identified two Major defects in
+observation validation (Issue #84 comment 6305818246). The original handoff and
+green workflows did not settle these valid cases. This section records Greg's
+focused repair, not independent confirmation or acceptance. All implementation
+history and the required M5 checkpoint remain; repair commits are normal
+Conventional-Commit descendants of the reviewed head.
+
+I01: `Validator::origin_pair` now resolves each source-global FunctionId through
+its canonical ordinary MIR position before reading the parallel origin row. It
+checks the row and charges the lookup/scan work. It does not treat a verified-ID
+gap as unavailable evidence. Normal and stopped ordinary observations in mixed
+files compare Equal, including function-boundary and expression/statement origins.
+Foreign function/origin metadata rejects through bounded InvalidState.
+
+I02: stored reference representation no longer creates a live Borrow link merely
+because reference bits remain in a frame. Exact kind, referent type, frame/place
+and canonical initializer/alias/transfer/caller-argument lineage are retained and
+validated. Moved owners can leave unused shared-reference bits stored. Reached
+reads/writes/reference transfers and held reference operands still require actual
+available referents; operand overlap still enforces permitted shared/exclusive
+access. No future-use, loan-count, recurrence or lifetime analysis is introduced.
+The existing ownership checker remains the sole loan authority.
+
+A pre-reserved bounded reference-value history records actual initialization and
+Move state. It retains production occurrence across shared copies and exclusive
+transfers, distinguishes repeated execution of the same borrow expression, and
+rejects resurrection or duplicate exclusive representations of the same
+production. A newly executed borrow and a dead alias from an earlier iteration
+are different productions even when their frame/place bits match. Occurrence
+metadata is derived from complete actual cuts; it is not a new runtime LoanId,
+cleanup authority or public identity. Every scan charges comparison work; the
+lineage cap bounds resolution; history count is capped by comparison nodes and
+its storage/header is charged in comparison geometry. Primary runtime layouts,
+logical charges, capture vocabulary and public APIs are unchanged.
+
+The eleven repair identities are in `repair.tests` in the evidence manifest:
+three mixed-layout/origin/isolation tests, seven borrowing/Move/provenance controls,
+and one independent work/lineage-bound discriminator. Expected primary values are
+explicit (bool true/false and exact nominal record with field 1). Positive tests
+compare independent same-contract sessions as Equal under sufficient budgets.
+Repeated loops include shared-to-exclusive access, record Move after field read,
+and exclusive alias transfer across two iterations; repeated calls and distinct
+expired exclusive borrows are also covered. Negative tests preserve foreign-frame,
+wrong referent/permission, duplicate exclusive transfer, illegal expired source
+use and a coordinated stale-use artifact. Equal-looking malformed copies reject.
+
+All 2,045 predecessor identities and the 48 previously reviewed K35 controls are
+retained. The map verifier pins the original 48 identity/classification pairs by
+SHA-256 and checks that all additional identities are classified repair tests.
+The complete expected per-profile total is 2,104 = 2,045 + 48 + 11, including the
+unchanged authority compile-fail doctest and 1,800 affine cases. Tests execute
+only in GitHub Actions. Initial candidate failures were new loop-fixture syntax
+and Actions-reported formatting; they did not justify weakening predecessor or
+ownership assertions. The final exact-head repair report supplies the fresh
+complete eight-run gate and verified dual publication.
+
+No specification or KD is reopened. The repairs implement existing KD-021/KD-024/
+KD-029/KD-030/KD-039/KD-041 distinctions and K35-P03/P04/P07/P08 requirements.
+No public execution/profile/resource/proof boundary or Stage N choice changes.
+Finite tests are not universal conformance proof. Sarah's focused confirmation
+and Greg's acceptance decision remain pending; PR #85 stays draft and unmerged.
+
 ## M0–M5 implementation and checkpoint scope
 
 M0's exact-tree checkpoint and eight successful push/PR workflows are recorded
