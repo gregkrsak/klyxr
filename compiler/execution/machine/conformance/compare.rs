@@ -326,6 +326,8 @@ struct Validator<'a, 'b> {
     logical_count: usize,
     model_host: Option<replay::Address>,
     last_reached: Option<replay::Address>,
+    pending_reference_task: Option<(usize, usize)>,
+    reference_access: bool,
 }
 impl Validator<'_, '_> {
     fn peek(&self) -> Option<Record> {
@@ -2743,8 +2745,11 @@ impl Validator<'_, '_> {
             require(self.take()? == Record::Operand)?;
             self.held_value(false)?;
         }
+        self.pending_reference_task = None;
         for _ in 0..tasks {
+            let start = self.at;
             self.task(false)?;
+            self.pending_reference_task = Some((start, self.at));
         }
         for which in 0..3 {
             if mask & (1 << which) != 0 {
@@ -2836,6 +2841,8 @@ fn validate<'a>(
         logical_count: 0,
         model_host: None,
         last_reached: None,
+        pending_reference_task: None,
+        reference_access: false,
     };
     let result = (|| {
         require(capture.controlled == control.is_some())?;
@@ -2981,7 +2988,20 @@ fn validate<'a>(
                         return Err(Incomplete::InvalidState);
                     };
                     v.action_frame = Some(frame);
+                    let expected = v.pending_reference_task.take();
+                    let start = v.at;
+                    v.reference_access = false;
                     v.task(true)?;
+                    if v.reference_access {
+                        let (from, to) = expected.ok_or(Incomplete::InvalidState)?;
+                        let expected = v.records.get(from..to).ok_or(Incomplete::InvalidState)?;
+                        let actual = v.records.get(start..v.at).ok_or(Incomplete::InvalidState)?;
+                        require(expected.len() == actual.len())?;
+                        for (expected, actual) in expected.iter().zip(actual) {
+                            v.work.spend()?;
+                            require(expected == actual)?;
+                        }
+                    }
                     v.finish_graph()?;
                 }
                 Some(Record::Publication(id, delivered)) => {

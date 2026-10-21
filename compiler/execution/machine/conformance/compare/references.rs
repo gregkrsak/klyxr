@@ -261,6 +261,9 @@ impl<'a> Validator<'a, '_> {
         Ok(())
     }
     fn live_reference(&mut self, frame: u64, place: Place, write: bool) -> Valid {
+        // An approved expression ordinal alone cannot authorize a stale use.
+        // The reached access must also be the captured queued continuation.
+        self.reference_access = true;
         let mut value = None;
         for slot in &self.scratch.slots {
             self.work.spend()?;

@@ -36,6 +36,10 @@ reads/writes/reference transfers and held reference operands still require actua
 available referents; operand overlap still enforces permitted shared/exclusive
 access. No future-use, loan-count, recurrence or lifetime analysis is introduced.
 The existing ownership checker remains the sole loan authority.
+Reached reference accesses additionally match the actual captured pending
+continuation; an old approved expression ordinal cannot authorize a later stale
+read merely because the original owner is still available. The negative artifact
+controls exercise both moved-owner and still-available-owner cases.
 
 A pre-reserved bounded reference-value history records actual initialization and
 Move state. It retains production occurrence across shared copies and exclusive
