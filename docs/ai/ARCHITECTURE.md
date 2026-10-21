@@ -1313,3 +1313,15 @@ the existing ownership checker remains the only loan authority. Comparison work,
 lineage and pre-reserved history bounds are separate from primary execution.
 Focused independent confirmation and Greg's acceptance remain pending. No frozen
 semantics, public API, predecessor restriction or Stage N decision changes.
+
+Sarah's focused confirmation 6306899488 resolves I01 and retains the I02 positive
+witnesses, but identifies I03 (coordinated queued/reached substitution) and I04
+(masked private negative controls). The new candidate binds queued operands to
+approved producer transitions and preserves their queue until reached consumption.
+Canonical parent/operand/continuation relationships supply authority independently
+of two observation fragments agreeing. This comparison validation evaluates no
+values or lifetime rules. Private tests distinguish sealing, queue mismatch,
+unauthorized matching operands, duplicate production, resurrection and reached
+referent availability, with targeted guard-removal discriminators. The prior
+length-changing tests' downstream claims were unsupported and are corrected in
+the ledger. Fresh exact-head Actions and independent confirmation remain required.

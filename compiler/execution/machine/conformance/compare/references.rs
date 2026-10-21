@@ -50,7 +50,7 @@ impl<'a> Validator<'a, '_> {
             }
             // A transferred handle cannot resurrect. Reinitialization must have
             // reached its observed Uninitialized state before a new binding.
-            require(prior.state == 0)?;
+            protection(Protection::Resurrection, prior.state == 0)?;
         }
         let (at, expression) = self.reference_initializer(frame, place)?;
         let source = match expression.kind {
@@ -253,7 +253,7 @@ impl<'a> Validator<'a, '_> {
                         .reference
                         .is_some_and(|r| r.kind == BorrowKind::Mutable)
                     {
-                        require(prior.reference_root != slot.reference_root)?;
+                        protection(Protection::Duplicate, prior.reference_root != slot.reference_root)?;
                     }
                 }
             }
@@ -261,9 +261,8 @@ impl<'a> Validator<'a, '_> {
         Ok(())
     }
     fn live_reference(&mut self, frame: u64, place: Place, write: bool) -> Valid {
-        // An approved expression ordinal alone cannot authorize a stale use.
-        // The reached access must also be the captured queued continuation.
-        self.reference_access = true;
+        // The operation has an independently bound approved producer/operand;
+        // retained bits alone never establish a new access transition.
         let mut value = None;
         for slot in &self.scratch.slots {
             self.work.spend()?;

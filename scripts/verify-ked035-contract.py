@@ -61,9 +61,21 @@ assert r['reviewed_controls_sha256'] == expected_digest
 assert set(p['additions'][48:]) == set(r['tests'])
 assert r['expected_per_profile'] == 2045 + len(p['additions'])
 assert r['public_api_changes'] == []
-assert set(r['findings']) == {'K35-I01', 'K35-I02'}
+assert set(r['findings']) == {'K35-I01', 'K35-I02', 'K35-I03', 'K35-I04'}
 for finding in r['findings'].values():
     assert finding['tests'] and set(finding['tests']) <= set(r['tests'])
     code = '\n'.join((root / path).read_text() for path in finding['code'])
     assert all(symbol in code for symbol in finding['symbols'])
 print(f'Focused repair: 48 reviewed controls retained, {len(r["tests"])} classified repair tests; zero migrations')
+
+# Retain every original focused identity/classification; corrected assertions are
+# audited by discriminators, not by this inventory digest.
+f = r['focused_baseline']
+assert f['commit'] == '23dd37ca32c0ec6c9df34fc3cbc44b0a7371060a'
+assert f['tree'] == '6536a0a21ba266ef4a29880f0bfeac02bb08ee1b'
+retained = [[t, p['classifications'][t]] for t in p['additions'][48:59]]
+assert len(f['retained_repair_identities']) == 11
+assert [t for t, _ in retained] == f['retained_repair_identities']
+assert hashlib.sha256(json.dumps(retained, separators=(',', ':')).encode()).hexdigest() == '7584d2513b23d0c72110a532d50a1cc9bb69d70301bb74b4c09cb81e6df1b05e'
+assert f['retained_repairs_sha256'] == '7584d2513b23d0c72110a532d50a1cc9bb69d70301bb74b4c09cb81e6df1b05e'
+assert len(r['effective_rejection_paths']) == 6 and r['evidence_correction']

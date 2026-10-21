@@ -2,6 +2,27 @@
 //! repairs or acquires authority over the retained interpreter state.
 use super::*;
 mod references;
+mod transitions;
+
+// Private discriminators can remove one guard at a time. Production always
+// enforces every guard; no public option or capture-sealing bypass exists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Protection { Seal = 1, Queue = 2, Operand = 4, Resurrection = 8, Duplicate = 16, Access = 32 }
+#[cfg(test)]
+thread_local! {
+    static DISABLED_PROTECTIONS: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+    static REJECTED_PROTECTION: std::cell::Cell<Option<Protection>> = const { std::cell::Cell::new(None) };
+}
+fn protection(boundary: Protection, condition: bool) -> Valid {
+    #[cfg(test)]
+    if DISABLED_PROTECTIONS.with(|mask| mask.get() & boundary as u8 != 0) { return Ok(()); }
+    if !condition {
+        #[cfg(test)]
+        REJECTED_PROTECTION.with(|slot| slot.set(Some(boundary)));
+    }
+    let _ = boundary;
+    require(condition)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Comparison {
@@ -326,8 +347,9 @@ struct Validator<'a, 'b> {
     logical_count: usize,
     model_host: Option<replay::Address>,
     last_reached: Option<replay::Address>,
-    pending_reference_task: Option<(usize, usize)>,
-    reference_access: bool,
+    pending_task: Option<(usize, usize)>,
+    queue: Option<(usize, usize)>,
+    producer: Option<transitions::Producer<'a>>,
 }
 impl Validator<'_, '_> {
     fn peek(&self) -> Option<Record> {
@@ -1105,7 +1127,7 @@ impl Validator<'_, '_> {
                     ))?;
                 }
                 let index = self.expression(frame)?;
-                if executing && d[0] == 1 {
+                if executing && matches!(d[0], 1 | 2) {
                     self.reference_expression_use(frame, index)?;
                 }
             }
@@ -1954,7 +1976,7 @@ impl Validator<'_, '_> {
                     inert += 1;
                     self.pending_states += 1;
                     let r = self.meta(Part::InertRecord)?;
-                    self.declaration(
+                    let index = self.declaration(
                         key(Kind::Staging, r[0]),
                         r[2],
                         0,
@@ -1962,6 +1984,7 @@ impl Validator<'_, '_> {
                         None,
                         true,
                     )?;
+                    self.scratch.nodes[index].statement = r[4] as usize;
                     require((r[2] as usize) < self.contract.executable.program.records().len())?;
                     if r[5] != ABSENT {
                         self.reference(key(Kind::Temporary, r[5]))?;
@@ -2407,7 +2430,7 @@ impl Validator<'_, '_> {
                             available = true;
                         }
                     }
-                    require(available)?;
+                    protection(Protection::Access, available)?;
                     for prior in &self.scratch.links[..index] {
                         self.work.spend()?;
                         if let Link::Borrow(other, location, access) = prior {
@@ -2745,12 +2768,24 @@ impl Validator<'_, '_> {
             require(self.take()? == Record::Operand)?;
             self.held_value(false)?;
         }
-        self.pending_reference_task = None;
+        let queue_start = self.at;
+        let (mut previous, previous_end) = self.queue.unwrap_or((0, 0));
+        self.pending_task = None;
         for _ in 0..tasks {
             let start = self.at;
             self.task(false)?;
-            self.pending_reference_task = Some((start, self.at));
+            if previous < previous_end {
+                let end = previous.checked_add(self.at - start).ok_or(Incomplete::InvalidState)?;
+                protection(Protection::Queue, end <= previous_end)?;
+                self.same_task_records((previous, end), (start, self.at))?;
+                previous = end;
+            } else {
+                self.bind_queued_task(start, self.at)?;
+            }
+            self.pending_task = Some((start, self.at));
         }
+        protection(Protection::Queue, previous == previous_end)?;
+        self.queue = Some((queue_start, self.at));
         for which in 0..3 {
             if mask & (1 << which) != 0 {
                 self.state(which)?;
@@ -2841,8 +2876,9 @@ fn validate<'a>(
         logical_count: 0,
         model_host: None,
         last_reached: None,
-        pending_reference_task: None,
-        reference_access: false,
+        pending_task: None,
+        queue: None,
+        producer: None,
     };
     let result = (|| {
         require(capture.controlled == control.is_some())?;
@@ -2988,20 +3024,22 @@ fn validate<'a>(
                         return Err(Incomplete::InvalidState);
                     };
                     v.action_frame = Some(frame);
-                    let expected = v.pending_reference_task.take();
+                    let expected = v.pending_task.take();
                     let start = v.at;
-                    v.reference_access = false;
                     v.task(true)?;
-                    if v.reference_access {
-                        let (from, to) = expected.ok_or(Incomplete::InvalidState)?;
-                        let expected = v.records.get(from..to).ok_or(Incomplete::InvalidState)?;
-                        let actual = v.records.get(start..v.at).ok_or(Incomplete::InvalidState)?;
-                        require(expected.len() == actual.len())?;
-                        for (expected, actual) in expected.iter().zip(actual) {
-                            v.work.spend()?;
-                            require(expected == actual)?;
-                        }
+                    if let Some(expected) = expected {
+                        v.same_task_records(expected, (start, v.at))?;
+                        let (from, _) = v.queue.ok_or(Incomplete::InvalidState)?;
+                        v.queue = Some((from, expected.0));
+                    } else {
+                        // The initial Drive can be pushed and popped between
+                        // the last admission snapshot and its first action.
+                        let node = v.node(key(Kind::Frame, frame))?;
+                        protection(Protection::Queue, v.producer.is_none()
+                            && v.records.get(start + 1).is_some_and(|r| matches!(r, Record::Meta(Part::Task, d) if d[0] == 0))
+                            && node.a == contract.entry().0 as u64 && node.block == 0 && node.statement == 0)?;
                     }
+                    v.transition_producer(start, v.at)?;
                     v.finish_graph()?;
                 }
                 Some(Record::Publication(id, delivered)) => {
@@ -3269,7 +3307,7 @@ fn compare_inner(a: &Session<'_>, b: &Session<'_>, limits: ComparisonLimits) -> 
         if !capture.finished {
             return Err(Incomplete::Pending);
         }
-        require(capture.sealed_count == Some(capture.records.len()))?;
+        protection(Protection::Seal, capture.sealed_count == Some(capture.records.len()))?;
         if capture.records.len() > limits.records {
             return Err(Incomplete::Records);
         }

@@ -10,75 +10,70 @@ This is an implementation ledger, not acceptance or permission for Stage N.
 GitHub Actions is the only Rust compilation/execution environment used. No local
 Rust installation, repair, compiler, formatter, linker, or executable test is run.
 
-## Focused K35-I01 / K35-I02 repair candidate
+## Focused I03 / I04 repair candidate
 
-Sarah's independent review of M9 head
-`4922296a04b479915ad58001275e491af1287d58` / tree
-`08712b0f327e65f91ef39db4a19bad9311debd0e` identified two Major defects in
-observation validation (Issue #84 comment 6305818246). The original handoff and
-green workflows did not settle these valid cases. This section records Greg's
-focused repair, not independent confirmation or acceptance. All implementation
-history and the required M5 checkpoint remain; repair commits are normal
-Conventional-Commit descendants of the reviewed head.
+Sarah's focused confirmation (Issue #84 comment 6306899488) resolves K35-I01
+and confirms the original I02 lawful last-use witnesses. It also identifies two
+Major blockers at head `23dd37ca32c0ec6c9df34fc3cbc44b0a7371060a`, tree
+`6536a0a21ba266ef4a29880f0bfeac02bb08ee1b`. Greg authorizes only I03/I04 repair.
+All implementation history and M5 remain normal ancestors. This candidate is not
+independent confirmation, acceptance, or authority for another project step.
 
-I01: `Validator::origin_pair` now resolves each source-global FunctionId through
-its canonical ordinary MIR position before reading the parallel origin row. It
-checks the row and charges the lookup/scan work. It does not treat a verified-ID
-gap as unavailable evidence. Normal and stopped ordinary observations in mixed
-files compare Equal, including function-boundary and expression/statement origins.
-Foreign function/origin metadata rejects through bounded InvalidState.
+I03: `compare/transitions.rs` binds newly queued expressions to canonical operands
+of the approved statement/terminator or already authorized parent evaluation.
+It preserves the producer's frame, operand order, depth and continuation relation.
+Queue prefixes persist unchanged across cuts; reached tasks consume their prior
+validated queued representation. Canonical parent operands, rather than agreement
+between two mutable fragments, establish the relationship. Field staging and
+short-circuit continuations carry their canonical operand relationships forward.
+The checker resolves immutable MIR facts; it evaluates no source values, recomputes
+no future uses or loans, and grants no execution or cleanup authority.
 
-I02: stored reference representation no longer creates a live Borrow link merely
-because reference bits remain in a frame. Exact kind, referent type, frame/place
-and canonical initializer/alias/transfer/caller-argument lineage are retained and
-validated. Moved owners can leave unused shared-reference bits stored. Reached
-reads/writes/reference transfers and held reference operands still require actual
-available referents; operand overlap still enforces permitted shared/exclusive
-access. No future-use, loan-count, recurrence or lifetime analysis is introduced.
-The existing ownership checker remains the sole loan authority.
-Reached reference accesses additionally match the actual captured pending
-continuation; an old approved expression ordinal cannot authorize a later stale
-read merely because the original owner is still available. The negative artifact
-controls exercise both moved-owner and still-available-owner cases.
+I04 evidence correction: the former duplicate and stale artifact assertions
+changed capture length without its sealed count. Their observed InvalidState
+proved the shape gate, not the advertised reference protections. The earlier
+report's description of all eleven identities as discriminating was too strong.
+Those identities are retained with corrected assertions. Private builders now
+preserve length, or explicitly keep only their own malformed envelope coherent.
+Production sealing remains mandatory and has its own separately labeled control.
 
-A pre-reserved bounded reference-value history records actual initialization and
-Move state. It retains production occurrence across shared copies and exclusive
-transfers, distinguishes repeated execution of the same borrow expression, and
-rejects resurrection or duplicate exclusive representations of the same
-production. A newly executed borrow and a dead alias from an earlier iteration
-are different productions even when their frame/place bits match. Occurrence
-metadata is derived from complete actual cuts; it is not a new runtime LoanId,
-cleanup authority or public identity. Every scan charges comparison work; the
-lineage cap bounds resolution; history count is capped by comparison nodes and
-its storage/header is charged in comparison geometry. Primary runtime layouts,
-logical charges, capture vocabulary and public APIs are unchanged.
+The coordinated witness retains two independent complete sessions producing bool
+false and Equal, then changes only final `Local(value)` ordinals to the earlier
+`Deref(shared)` in both queued and reached records. Length, sealed count, capacities,
+primary outcomes, inventory, cuts, origins and accounting remain intact. Operand
+validation must reject it. A reached-only substitution instead rejects at Queue.
+The duplicate fixture keeps the original production available throughout transfer,
+so Duplicate is the first failing protection. The resurrection fixture changes
+only the final stopped snapshot, returns bits to the Moved source and removes the
+alias's bits, so Resurrection is decisive without simultaneous duplication. A
+lawfully queued/reached dereference with an unavailable referent rejects at Access.
+Each semantic control checks its named rejection and requires Equal when only that
+specific private test guard is removed. These test-only switches are thread-local,
+restored by a guard, and absent from production. Actions must execute all assertions
+before any test is reported as passing.
 
-The eleven repair identities are in `repair.tests` in the evidence manifest:
-three mixed-layout/origin/isolation tests, seven borrowing/Move/provenance controls,
-and one independent work/lineage-bound discriminator. Expected primary values are
-explicit (bool true/false and exact nominal record with field 1). Positive tests
-compare independent same-contract sessions as Equal under sufficient budgets.
-Repeated loops include shared-to-exclusive access, record Move after field read,
-and exclusive alias transfer across two iterations; repeated calls and distinct
-expired exclusive borrows are also covered. Negative tests preserve foreign-frame,
-wrong referent/permission, duplicate exclusive transfer, illegal expired source
-use and a coordinated stale-use artifact. Equal-looking malformed copies reject.
+The I01 canonical ordinary origin resolution remains unchanged. Stored references
+retain kind, nominal referent, dynamic frame/place, initializer/alias/transfer and
+caller-argument identity without asserting current loan activity. The original
+I02 positives, repeated scopes/calls/productions, exclusive transfers and wrong
+frame/referent/permission controls remain. Source borrowing/lifetimes still have
+one authority: the existing ownership checker (KD-021/KD-024/KD-029/KD-030/KD-039).
+This corrects K35-P03/P04/P07/P08 validation/evidence under KD-041, not language rules.
 
-All 2,045 predecessor identities and the 48 previously reviewed K35 controls are
-retained. The map verifier pins the original 48 identity/classification pairs by
-SHA-256 and checks that all additional identities are classified repair tests.
-The complete expected per-profile total is 2,104 = 2,045 + 48 + 11, including the
-unchanged authority compile-fail doctest and 1,800 affine cases. Tests execute
-only in GitHub Actions. Initial candidate failures were new loop-fixture syntax
-and Actions-reported formatting; they did not justify weakening predecessor or
-ownership assertions. The final exact-head repair report supplies the fresh
-complete eight-run gate and verified dual publication.
+All scans debit comparison Work. Canonical operand views are borrowed; queue
+history uses bounded record ranges and fixed scalar producer state without new
+heap allocation or recursive traversal. Existing reference history is pre-reserved,
+charged and capped; exhaustion remains Inconclusive. No primary layout, accounting
+schedule, custody, capture vocabulary, public API or selected-profile gate changes.
 
-No specification or KD is reopened. The repairs implement existing KD-021/KD-024/
-KD-029/KD-030/KD-039/KD-041 distinctions and K35-P03/P04/P07/P08 requirements.
-No public execution/profile/resource/proof boundary or Stage N choice changes.
-Finite tests are not universal conformance proof. Sarah's focused confirmation
-and Greg's acceptance decision remain pending; PR #85 stays draft and unmerged.
+Expected inventory: 2,045 predecessors + 48 original reviewed K35 controls + 11
+retained focused identities + 7 new classified I03/I04 identities = 2,111 per
+complete profile. The manifest and verifier pin both retained identity/classification
+sets. Exact executed debug/release totals, eight run/job identities, changed files
+and readbacks belong to the final exact-head repair report. Actions and Sarah's
+focused confirmation remain pending for this candidate. Finite controls are not
+universal proof; Stage N evidence remains deferred, not waived. PR #85 stays draft
+and unmerged for Sarah's confirmation and Greg's acceptance decision.
 
 ## M0–M5 implementation and checkpoint scope
 

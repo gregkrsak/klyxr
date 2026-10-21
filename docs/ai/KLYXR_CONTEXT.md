@@ -906,3 +906,12 @@ preserves stored reference identity separately from reached access and Move
 history. The existing ownership checker remains the sole lifetime authority.
 Fresh Actions evidence and Sarah's focused confirmation govern the repair;
 Greg's acceptance remains pending. No Stage N or public authority is added.
+
+Sarah's focused confirmation 6306899488 resolves I01 and confirms I02's original
+positive witnesses. It finds I03/I04 blockers in independent transition binding
+and negative-test discrimination. The focused candidate derives queued operands
+from canonical approved producers and checks unchanged queued consumption. Private
+controls now identify their effective semantic rejection and isolate each guard;
+prior sealed-count-only assertions are explicitly corrected. The ownership checker,
+primary interpreter, public boundaries and Stage N exclusions remain unchanged.
+Exact-head Actions, Sarah's focused confirmation and Greg's acceptance are pending.

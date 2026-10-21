@@ -920,6 +920,15 @@ history. The existing ownership checker remains the sole lifetime authority.
 Fresh Actions evidence and Sarah's focused confirmation govern the repair;
 Greg's acceptance remains pending. No Stage N or public authority is added.
 
+Sarah's focused confirmation 6306899488 resolves I01 and confirms I02's original
+positive witnesses. It finds I03/I04 blockers in independent transition binding
+and negative-test discrimination. The focused candidate derives queued operands
+from canonical approved producers and checks unchanged queued consumption. Private
+controls now identify their effective semantic rejection and isolate each guard;
+prior sealed-count-only assertions are explicitly corrected. The ownership checker,
+primary interpreter, public boundaries and Stage N exclusions remain unchanged.
+Exact-head Actions, Sarah's focused confirmation and Greg's acceptance are pending.
+
 <!-- END KLYXR_CONTEXT.md -->
 
 ---
@@ -3986,6 +3995,18 @@ the existing ownership checker remains the only loan authority. Comparison work,
 lineage and pre-reserved history bounds are separate from primary execution.
 Focused independent confirmation and Greg's acceptance remain pending. No frozen
 semantics, public API, predecessor restriction or Stage N decision changes.
+
+Sarah's focused confirmation 6306899488 resolves I01 and retains the I02 positive
+witnesses, but identifies I03 (coordinated queued/reached substitution) and I04
+(masked private negative controls). The new candidate binds queued operands to
+approved producer transitions and preserves their queue until reached consumption.
+Canonical parent/operand/continuation relationships supply authority independently
+of two observation fragments agreeing. This comparison validation evaluates no
+values or lifetime rules. Private tests distinguish sealing, queue mismatch,
+unauthorized matching operands, duplicate production, resurrection and reached
+referent availability, with targeted guard-removal discriminators. The prior
+length-changing tests' downstream claims were unsupported and are corrected in
+the ledger. Fresh exact-head Actions and independent confirmation remain required.
 
 <!-- END ARCHITECTURE.md -->
 

@@ -875,7 +875,8 @@
       "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
       "code": [
         "compiler/execution/machine/conformance.rs",
-        "compiler/execution/machine/conformance/compare.rs"
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/machine/conformance/compare/transitions.rs"
       ],
       "tests": [
         "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
@@ -907,7 +908,14 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
       ]
     },
     "6": {
@@ -915,7 +923,8 @@
       "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
       "code": [
         "compiler/execution/machine/conformance/compare.rs",
-        "compiler/execution/machine/conformance/replay.rs"
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare/transitions.rs"
       ],
       "tests": [
         "lib.rs::execution::machine::conformance::replay_tests::ordinary_modeled_capacity_host_is_equal_and_storage_precedes_consumption",
@@ -947,7 +956,14 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
       ]
     },
     "7": {
@@ -1074,7 +1090,8 @@
       "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
       "code": [
         "compiler/execution/machine/conformance/compare.rs",
-        "compiler/execution/machine/conformance/compare/oracle_tests.rs"
+        "compiler/execution/machine/conformance/compare/oracle_tests.rs",
+        "compiler/execution/machine/conformance/compare/transitions.rs"
       ],
       "tests": [
         "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
@@ -1090,7 +1107,14 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
       ]
     },
     "14": {
@@ -1253,7 +1277,8 @@
         "compiler/execution/contract.rs",
         "compiler/execution/machine/conformance/compare.rs",
         "compiler/execution/machine/conformance/replay.rs",
-        "compiler/execution/machine/conformance/authority.rs"
+        "compiler/execution/machine/conformance/authority.rs",
+        "compiler/execution/machine/conformance/compare/transitions.rs"
       ],
       "tests": [
         "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
@@ -1274,7 +1299,14 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
       ]
     },
     "18": {
@@ -1347,7 +1379,8 @@
       "code": [
         "compiler/execution/machine/conformance.rs",
         "compiler/execution/machine/conformance/compare.rs",
-        "compiler/execution/machine/conformance/replay.rs"
+        "compiler/execution/machine/conformance/replay.rs",
+        "compiler/execution/machine/conformance/compare/transitions.rs"
       ],
       "tests": [
         "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
@@ -1398,7 +1431,14 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
       ]
     },
     "K35-P04": {
@@ -1409,7 +1449,8 @@
         "compiler/execution/machine/conformance/compare.rs",
         "compiler/execution/contract.rs",
         "compiler/execution/machine/conformance/replay.rs",
-        "compiler/execution/machine/conformance/authority.rs"
+        "compiler/execution/machine/conformance/authority.rs",
+        "compiler/execution/machine/conformance/compare/transitions.rs"
       ],
       "tests": [
         "lib.rs::execution::machine::conformance::tests::selected_completion_census_preserves_real_delivery_and_repeat",
@@ -1448,7 +1489,14 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
       ]
     },
     "K35-P05": {
@@ -1535,7 +1583,8 @@
         "compiler/execution/machine/conformance/compare.rs",
         "compiler/execution/machine/conformance/compare/oracle_tests.rs",
         "scripts/verify-ked035-tests.py",
-        "scripts/verify-ked035-contract.py"
+        "scripts/verify-ked035-contract.py",
+        "compiler/execution/machine/conformance/compare/transitions.rs"
       ],
       "tests": [
         "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
@@ -1596,7 +1645,14 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
       ]
     },
     "K35-P08": {
@@ -1783,7 +1839,14 @@
     "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
     "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
     "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
-    "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
+    "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
   ],
   "fixture_adaptations": [
     {
@@ -1893,7 +1956,14 @@
     "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid": "private_malformed_observation",
     "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree": "private_malformed_observation",
     "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits": "private_malformed_observation",
-    "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality": "logical_or_observation_boundary"
+    "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality": "logical_or_observation_boundary",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized": "ordinary_source",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets": "logical_or_observation_boundary",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent": "private_malformed_observation",
+    "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation": "private_malformed_observation"
   },
   "m5_checkpoint": {
     "commit": "e31f6104d8222ee201bc392a3daf87bcb03734ab",
@@ -2054,7 +2124,8 @@
       "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
       "code": [
         "compiler/execution/machine.rs",
-        "compiler/execution/machine/conformance/compare.rs"
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/machine/conformance/compare/transitions.rs"
       ],
       "tests": [
         "lib.rs::execution::machine::conformance::compare::identity_tests::lawful_raw_frame_changes_preserve_shared_alias_equality_and_ancestry",
@@ -2069,7 +2140,14 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
       ]
     },
     "15.09": {
@@ -2244,7 +2322,8 @@
         "compiler/execution/contract.rs",
         "compiler/execution/machine/conformance/compare.rs",
         "compiler/execution/machine/conformance/replay.rs",
-        "compiler/execution/machine/conformance/authority.rs"
+        "compiler/execution/machine/conformance/authority.rs",
+        "compiler/execution/machine/conformance/compare/transitions.rs"
       ],
       "tests": [
         "lib.rs::execution::contract::tests::independent_contract_schema_site_and_closure_mutations_reject",
@@ -2265,7 +2344,14 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
       ]
     },
     "15.23": {
@@ -2285,7 +2371,8 @@
       "status": "Stage I with focused I01/I02 repair candidate; independent confirmation and acceptance pending",
       "code": [
         "compiler/execution/machine/conformance/compare/oracle_tests.rs",
-        "compiler/execution/machine/conformance/compare.rs"
+        "compiler/execution/machine/conformance/compare.rs",
+        "compiler/execution/machine/conformance/compare/transitions.rs"
       ],
       "tests": [
         "lib.rs::execution::machine::conformance::compare::oracle_tests::hand_derived_full_success_and_first_insufficient_observations_match",
@@ -2302,7 +2389,14 @@
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
         "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
-        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
+        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
       ]
     },
     "15.26": {
@@ -2991,7 +3085,7 @@
     "review": "https://github.com/gregkrsak/klyxr/issues/84#issuecomment-6305818246",
     "baseline_commit": "4922296a04b479915ad58001275e491af1287d58",
     "baseline_tree": "08712b0f327e65f91ef39db4a19bad9311debd0e",
-    "status": "focused I01/I02 candidate; Actions and independent confirmation pending",
+    "status": "I01 independently confirmed; I02 positives retained; focused I03/I04 candidate, exact-head Actions and independent confirmation pending",
     "tests": [
       "lib.rs::execution::machine::conformance::compare::repair_tests::i01_verified_prefix_resolves_ordinary_boundary_and_nonboundary_origins",
       "lib.rs::execution::machine::conformance::compare::repair_tests::i01_verified_between_caller_callee_and_failing_harness_stay_isolated",
@@ -3003,18 +3097,25 @@
       "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
       "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
       "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
-      "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
+      "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
+      "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation"
     ],
-    "expected_per_profile": 2104,
+    "expected_per_profile": 2111,
     "reviewed_control_count": 48,
     "reviewed_controls_sha256": "513b6decc1a21aafd30c0b54faa8cac1f58ec105aa7ebe078d8c7e90c5e41a6c",
     "predecessor_migrations": {},
     "public_api_changes": [],
     "constraints": "K35-P01\u2013P10 retained; no semantics, public authority, ownership/lifetime engine or Stage N change",
-    "bounds": "canonical origin and initializer/call-lineage scans charge comparison work; lineage is capped; reference initialization/Move history is pre-reserved at comparison node cap and charged through comparison geometry, never runtime storage",
+    "bounds": "canonical origin and initializer/call-lineage scans charge comparison work; lineage is capped; reference initialization/Move history is pre-reserved at comparison node cap and charged through comparison geometry, never runtime storage; queue-prefix persistence and operand-production scans charge comparison work; canonical operands are borrowed, queue history uses record ranges and fixed scalar state without allocation or recursive traversal",
     "findings": {
       "K35-I01": {
-        "status": "implemented; exact-head Actions and focused independent confirmation pending",
+        "status": "resolved by Sarah focused confirmation 6306899488; retained unchanged",
         "code": [
           "compiler/execution/machine/conformance/compare.rs"
         ],
@@ -3029,7 +3130,7 @@
         ]
       },
       "K35-I02": {
-        "status": "implemented; exact-head Actions and focused independent confirmation pending",
+        "status": "original positives pass; closure pending I03/I04 repair confirmation",
         "code": [
           "compiler/execution/machine/conformance/compare.rs",
           "compiler/execution/machine/conformance/compare/references.rs"
@@ -3052,7 +3153,72 @@
           "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
           "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
         ]
+      },
+      "K35-I03": {
+        "status": "candidate; exact-head Actions and focused confirmation pending",
+        "code": [
+          "compiler/execution/machine/conformance/compare.rs",
+          "compiler/execution/machine/conformance/compare/transitions.rs"
+        ],
+        "symbols": [
+          "fn transition_producer",
+          "fn bind_queued_task",
+          "fn same_task_records"
+        ],
+        "tests": [
+          "lib.rs::execution::machine::conformance::compare::repair_tests::i03_coordinated_final_return_substitution_rejects_at_approved_operand_boundary",
+          "lib.rs::execution::machine::conformance::compare::repair_tests::i03_reached_only_substitution_rejects_at_queued_consumption_boundary",
+          "lib.rs::execution::machine::conformance::compare::repair_tests::i03_nested_operands_calls_and_short_circuit_remain_authorized",
+          "lib.rs::execution::machine::conformance::compare::repair_tests::i03_approved_transition_binding_preserves_stopped_primary_and_budgets"
+        ]
+      },
+      "K35-I04": {
+        "status": "candidate; replacement evidence must reject at named semantic boundary with guard-removal discriminator",
+        "code": [
+          "compiler/execution/machine/conformance/compare/repair_tests.rs",
+          "compiler/execution/machine/conformance/compare/references.rs"
+        ],
+        "symbols": [
+          "fn assert_protection",
+          "Protection::Duplicate",
+          "Protection::Resurrection"
+        ],
+        "tests": [
+          "lib.rs::execution::machine::conformance::compare::repair_tests::i04_resurrected_transfer_rejects_at_reference_history_boundary",
+          "lib.rs::execution::machine::conformance::compare::repair_tests::i04_authorized_reached_access_requires_available_referent",
+          "lib.rs::execution::machine::conformance::compare::repair_tests::i04_capture_length_gate_is_distinct_from_reference_validation",
+          "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
+          "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits"
+        ]
       }
-    }
+    },
+    "focused_baseline": {
+      "commit": "23dd37ca32c0ec6c9df34fc3cbc44b0a7371060a",
+      "tree": "6536a0a21ba266ef4a29880f0bfeac02bb08ee1b",
+      "review": "https://github.com/gregkrsak/klyxr/issues/84#issuecomment-6306899488",
+      "retained_repair_identities": [
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i01_verified_prefix_resolves_ordinary_boundary_and_nonboundary_origins",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i01_verified_between_caller_callee_and_failing_harness_stay_isolated",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i01_foreign_function_and_origin_metadata_reject_without_indexing_panics",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i02_final_shared_use_allows_exclusive_access_with_old_bits_retained",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i02_record_move_after_final_field_read_preserves_stored_reference_identity",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i02_repeated_scopes_expire_shared_handles_before_exclusive_access_and_move",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i02_repeated_activations_and_exclusive_transfers_keep_distinct_provenance",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i02_foreign_wrong_referent_and_permission_bits_remain_invalid",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i02_duplicate_mutable_transfer_provenance_rejects_even_when_both_views_agree",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::i02_expired_reference_use_is_not_granted_authority_by_stored_bits",
+        "lib.rs::execution::machine::conformance::compare::repair_tests::repair_canonical_resolution_limits_preserve_primary_and_prevent_truncated_equality"
+      ],
+      "retained_repairs_sha256": "7584d2513b23d0c72110a532d50a1cc9bb69d70301bb74b4c09cb81e6df1b05e"
+    },
+    "effective_rejection_paths": {
+      "coordinated_matching_substitution": "Operand: canonical approved producer/operand mismatch; seal and queued/reached pairing remain coherent",
+      "reached_only_substitution": "Queue: consumed task differs from independently validated queued task",
+      "exclusive_duplicate": "Duplicate: original producer remains available throughout, so no resurrection preempts duplicate-root rejection",
+      "resurrection": "Resurrection: final stopped snapshot transfers stored bits back to Moved source; no simultaneous duplicate remains",
+      "authorized_reached_access": "Access: approved queued/reached dereference retains available handle but its referent is unavailable",
+      "length_control": "Seal: count mismatch only; not reference evidence"
+    },
+    "evidence_correction": "Prior I02 duplicate/stale artifact assertions at 23dd37c stopped at sealed-count rejection. Their original reported downstream discrimination was unsupported. Replacement private fixtures preserve length or explicitly maintain only their private envelope and require a named guard plus isolated guard-removal Equal."
   }
 }
