@@ -3,7 +3,8 @@
 **Status:** Active migration plan; M0 planning and staging setup authorized on 2026-10-23. No production rename or merge is authorized by this document.  
 **Prepared:** 2026-10-23  
 **Repository baseline inspected:** `gregkrsak/klyxr` at `prod` commit `3c0a540df7d5ad75510db4ecad80e27fb4d0903a`  
-**Working premise:** Bowfin is the selected migration candidate. Klyxr remains the canonical production identity until the adoption gate in Phase 0 is passed.\n**Domain reservation:** `bowfin-lang.com`, `.org`, `.net`, `.info`, and `.online` were acquired by Greg on 2026-10-23. Registrar hardening and DNS configuration remain pending.
+**Working premise:** Bowfin is the selected migration candidate. Klyxr remains the canonical production identity until the adoption gate in Phase 0 is passed.
+**Domain reservation:** `bowfin-lang.com`, `.org`, `.net`, `.info`, and `.online` were acquired by Greg on 2026-10-23. Registrar hardening and DNS configuration remain pending.
 
 ## 1. Objective
 
@@ -11,7 +12,24 @@ Rename the project from **Klyxr** to **Bowfin** without changing language behavi
 
 The migration is an identity change, not a feature release. Each implementation pull request should be reviewable as a bounded transformation with explicit predecessor correspondence.
 
-## 2. Branch and integration policy\n\nThe migration uses `bowfin-migration-staging` as its sole integration target. Phase branches never target `prod` directly. Each phase PR must target staging, pass its phase gate, and be accepted before the next dependent branch is updated from staging. The final staging-to-`prod` PR is a separate human merge decision after full migration review.\n\nReserved branch set:\n\n- `bowfin-m0-migration-contract`\n- `bowfin-m1-machine-compatibility`\n- `bowfin-m2-toolchain-identity`\n- `bowfin-m3-source-extension`\n- `bowfin-m4-docs-governance`\n- `bowfin-m5-visual-identity`\n- `bowfin-m6-public-cutover`\n- `bowfin-m7-stabilization`\n\nAll branches were cut from production commit `3c0a540df7d5ad75510db4ecad80e27fb4d0903a`, tree `928accaa6c71068a6bce273f73f8c152b4c4d348`. The later phase branches are parking branches only until refreshed from the accepted staging head immediately before their work begins.\n\n## 3. Proposed identity map
+## 2. Branch and integration policy
+
+The migration uses `bowfin-migration-staging` as its sole integration target. Phase branches never target `prod` directly. Each phase PR must target staging, pass its phase gate, and be accepted before the next dependent branch is updated from staging. The final staging-to-`prod` PR is a separate human merge decision after full migration review.
+
+Reserved branch set:
+
+- `bowfin-m0-migration-contract`
+- `bowfin-m1-machine-compatibility`
+- `bowfin-m2-toolchain-identity`
+- `bowfin-m3-source-extension`
+- `bowfin-m4-docs-governance`
+- `bowfin-m5-visual-identity`
+- `bowfin-m6-public-cutover`
+- `bowfin-m7-stabilization`
+
+All branches were cut from production commit `3c0a540df7d5ad75510db4ecad80e27fb4d0903a`, tree `928accaa6c71068a6bce273f73f8c152b4c4d348`. The later phase branches are parking branches only until refreshed from the accepted staging head immediately before their work begins.
+
+## 3. Proposed identity map
 
 | Surface | Current | Proposed | Treatment |
 | --- | --- | --- | --- |
