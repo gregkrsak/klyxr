@@ -111,7 +111,7 @@ Actions:
 
 1. Adopt the display name `Bowfin` and lowercase form `bowfin`, or stop.
 2. Complete a second-stage name search covering USPTO, WIPO/EUIPO as practical, companies, software products, GitHub, package registries, app stores, and defense/aerospace usage.
-3. Register `bowfin-lang.com` before publicly announcing the rename. Consider defensive registration of one affordable adjacent name only if useful.
+3. Confirm the acquired `bowfin-lang.com`, `.org`, `.net`, `.info`, and `.online` registrations are under Greg’s control. Registrar hardening and DNS configuration may be completed separately.
 4. Decide whether the GitHub destination remains `gregkrsak/bowfin` or later moves to a `bowfin-lang` organization.
 5. Finalize the source extension.
 6. Record package-namespace choices. The unscoped npm name `bowfin` is already occupied; use a scoped namespace if JavaScript tooling is ever published.
@@ -340,7 +340,7 @@ After repository/domain cutover:
 
 ## 11. Preliminary external findings
 
-- `bowfin-lang.com` returned a registry “not found” response during this planning pass, consistent with availability but not a reservation or guarantee.
+- Greg acquired `bowfin-lang.com`, `bowfin-lang.org`, `bowfin-lang.net`, `bowfin-lang.info`, and `bowfin-lang.online` on 2026-10-23.
 - The GitHub destination `gregkrsak/bowfin` returned “not found” during this pass; this is not a reservation.
 - GitHub search found other repositories named Bowfin, chiefly biological projects and one small inactive TypeScript repository, but no identified programming language/compiler project using Bowfin.
 - The npm package `bowfin` exists at version `0.0.0`, published in 2020, with no description. Future JavaScript packages should use a controlled scope.
@@ -361,7 +361,7 @@ These are point-in-time technical observations, not legal clearance. Recheck the
 Do **Phase 0 only**:
 
 1. Greg accepts or rejects Bowfin as the final name.
-2. Register `bowfin-lang.com` if accepted.
+2. Complete registrar hardening when practical; domain ownership is already secured.
 3. Run the focused `.bow` extension gate.
 4. Freeze the mapping and compatibility policy in M0.
 
