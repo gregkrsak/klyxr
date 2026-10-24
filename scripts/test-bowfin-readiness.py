@@ -113,6 +113,15 @@ class GateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unclassified"):
             gate.validate_locations([], self.observed, set(), set())
 
+    def test_unused_mapping_has_no_invented_location(self):
+        with self.assertRaisesRegex(ValueError, "unused or unlocated"):
+            gate.validate_locations([self.row], self.observed,
+                                    {self.row["mapping"], "engineering_decision:KED-034"}, {"review"})
+
+    def test_unknown_identity_cannot_hide_in_consumer_description(self):
+        with self.assertRaisesRegex(ValueError, "unknown descriptive identity"):
+            gate.validate_descriptions([("consumer:0:producer", "KED-035")], set())
+
     def test_stale_location(self):
         with self.assertRaisesRegex(ValueError, "drift"):
             self.locations(dict(self.row, start=1))

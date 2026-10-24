@@ -19,6 +19,8 @@ nor implements the future identities described in it.
   mapping, producer, consumer and historical relationship. Offsets in text are
   Unicode code points; JSON offsets index the decoded string, not escaped bytes.
   JSON Pointer escaping distinguishes keys from values; `@key` marks key text.
+  Filename-component selectors additionally locate typed components inside the
+  exact tracked path; they are distinct from its complete filename identity.
 - `allowlist.json` contains one exact entry for every historical or compatibility
   occurrence. No directory, path glob or blanket historical-file exception exists.
 - `denylist.json` records the scanner vocabulary and exact live obligations. This

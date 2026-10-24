@@ -190,6 +190,8 @@ def occurrences(path, data, source="compiler"):
         kind = ("context_output" if path.endswith("KLYXR_AI_CONTEXT_BUNDLE.md") else
                 "context_input" if path.endswith("KLYXR_CONTEXT.md") else "filename")
         add("filename", path, 0, len(path), kind, path)
+        for start, end, component_kind, token in tokens(path):
+            add("filename-component", path, start, end, component_kind, token)
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
@@ -285,7 +287,16 @@ def validate_locations(rows, observed, mappings, consumers):
                 "unknown occurrence phase")
         assigned[row["id"]] = row
     require(set(assigned) == set(core), "unclassified discovered occurrence")
+    require({r["mapping"] for r in rows} == mappings, "unused or unlocated mapping")
     return assigned
+
+
+def validate_descriptions(descriptions, mappings):
+    """Closed-schema descriptions may reference known names, never hide new ones."""
+    for location, text in descriptions:
+        for _, _, kind, token in tokens(text):
+            require(mapping_key(kind, token) in mappings,
+                    "unknown descriptive identity at " + location)
 
 
 def validate_allowlist(entries, rows):
@@ -341,6 +352,8 @@ def validate(root=ROOT, pr=None, governance_root=None):
     consumers = load(folder / "consumers.json")
     consumer_ids = set()
     for item in consumers:
+        require(set(item) == {"id", "producer", "consumer", "phase", "authority_boundary"},
+                "unknown consumer field")
         require(item["id"] not in consumer_ids and item["producer"] and item["consumer"]
                 and item["authority_boundary"], "duplicate or incomplete consumer")
         consumer_ids.add(item["id"])
@@ -421,7 +434,8 @@ def validate(root=ROOT, pr=None, governance_root=None):
     # Generated data references are checked structurally, not recursively scanned
     # as fresh source occurrences of their own copied tokens (an infinite regress).
     assigned = validate_locations(inventory["occurrences"], observed, mappings, consumer_ids)
-    validate_allowlist(load(folder / "allowlist.json"), assigned)
+    allowlist = load(folder / "allowlist.json")
+    validate_allowlist(allowlist, assigned)
     deny = load(folder / "denylist.json")
     require(deny["phase"] == "M0.1" and deny["rename_performed"] is False
             and deny["patterns"] == PATTERNS_AS_DATA, "denylist vocabulary drift")
@@ -429,6 +443,22 @@ def validate(root=ROOT, pr=None, governance_root=None):
     require(deny["live_obligations"] == sorted(k for k, v in assigned.items()
             if v["role"] == "live" and definitions[v["mapping"]]["canonical"] != v["token"]),
             "live denylist obligation drift")
+    descriptions = []
+    for index, entry in enumerate(manifest["mappings"]):
+        for key in ("policy", "validation"):
+            descriptions.append(("manifest:" + str(index) + ":" + key, entry[key]))
+    for index, item in enumerate(consumers):
+        for key in ("producer", "consumer", "authority_boundary"):
+            descriptions.append(("consumer:" + str(index) + ":" + key, item[key]))
+    for row in assigned.values():
+        for key in ("reason", "historical_relationship"):
+            descriptions.append((row["id"] + ":" + key, row[key]))
+    # Repeated policy text need be recognized only once. This does not remove
+    # occurrence records: their exact selectors remain separately checked above.
+    unique = {}
+    for location, text in descriptions:
+        unique.setdefault(text, location)
+    validate_descriptions([(location, text) for text, location in sorted(unique.items())], mappings)
     validate_pr(load(folder / "pr-evidence.json"), pr)
     summary = {"base_commit": BASE, "base_tree": TREE, "tracked_baseline_files": len(baseline),
                "snapshot_bytes": total_bytes, "binary_assets": len(binary),
