@@ -1,0 +1,14 @@
+{
+"base_commit":"37cb00d5cc01804e46446809fd325322c0c3f05f",
+"base_tree":"d817671d87760f62a603d2de2f696fe49f0a24ac",
+"binary_assets":2,
+"by_kind":{"binary":133,"brand":371,"compiler_identity":4,"configuration_reservation":4,"context_input":16,"context_output":12,"control":159,"control_family":24,"crate":101,"decision_family":154,"domain":11,"engineering_decision":748,"environment":33,"fence":49,"filename":117,"language_decision":870,"local_identifier":38,"machine":4,"monogram":5,"package":6,"pronunciation":8,"repository":456,"rust_identifier":4,"script_stem":39,"source_extension":318,"test_identity":16811},
+"by_role":{"compatibility":308,"historical":15416,"live":4771},
+"by_source":{"compiler":20167,"governance":261,"metadata":61,"visual":6},
+"exceptions":15724,
+"mapping_count":2478,
+"snapshot_bytes":7363327,
+"status":"accounted; independent role review and owner acceptance pending",
+"total":20495,
+"tracked_baseline_files":277
+}

@@ -1,0 +1,14 @@
+{
+"assets":[
+{"blob":"d2ee3c7c400a23d2360ec6374451052c35ddc714","limitations":"Manual full-image inspection; no OCR completeness or pixel-level text recognition guarantee; M5 must reinspect replacement","method":"manual inspection","path":"assets/readme-banner.png","unbranded_text":"Remaining slogans, numerals, Sentinel label and simulated source text are reviewed as nonidentity ephemera, not executed tooling"},
+{"blob":"e977050b7e74923f76f67472c9fa33d6d229ef23","limitations":"Manual full-image inspection; tiny simulated monitor filename glyphs cannot be certified as a source suffix. Region x220..377/y417..558 requires M5 replacement/manual reinspection; illustrated code is ephemera, never valid-source evidence","method":"manual inspection","path":"docs/ephemera/klyxr-1994-ad.jpeg","unbranded_text":"Remaining slogans, numerals, Sentinel label and simulated source text are reviewed as nonidentity ephemera, not executed tooling"}
+],
+"occurrences":[
+{"column":0,"end":5,"id":"6ff41e3347150041af133bd0","kind":"brand","line":0,"path":"assets/readme-banner.png","selector":"region:wordmark","source":"visual","start":0,"token":"KLYXR"},
+{"column":0,"end":3,"id":"158edd773db65dc7c4cd0964","kind":"monogram","line":0,"path":"assets/readme-banner.png","selector":"region:monogram","source":"visual","start":0,"token":"KLX"},
+{"column":0,"end":9,"id":"ed9077adf1e1b92e7276e674","kind":"pronunciation","line":0,"path":"assets/readme-banner.png","selector":"region:pronunciation","source":"visual","start":0,"token":"CLICK-ser"},
+{"column":0,"end":5,"id":"f2ba8f7c9272a2b9021a14b1","kind":"brand","line":0,"path":"docs/ephemera/klyxr-1994-ad.jpeg","selector":"region:top-wordmark","source":"visual","start":0,"token":"KLYXR"},
+{"column":0,"end":5,"id":"02de293d1067980c83084d09","kind":"brand","line":0,"path":"docs/ephemera/klyxr-1994-ad.jpeg","selector":"region:monitor-top-prompt","source":"visual","start":0,"token":"KLYXR"},
+{"column":0,"end":5,"id":"3c9053ae9edb79948e8d6ab9","kind":"brand","line":0,"path":"docs/ephemera/klyxr-1994-ad.jpeg","selector":"region:monitor-bottom-prompt","source":"visual","start":0,"token":"KLYXR"}
+]
+}

@@ -1,0 +1,12 @@
+{
+"allowlist.json":"d4a4ef410095f9986ae09e9e0da2ca1c516b2f9a2227a959066a68da88e9a16d",
+"consumers.json":"3d04c9661a7b76c163e8f241520f35d46dee2fdabd4db3d9dbce3f60780835e4",
+"denylist.json":"1c47a79bc99c99a69f970c966c7a4829fae6c95dcbcfd6eede2d9f5cb41b0657",
+"external.json":"5189beb62030090a7cee5b0f8e03c13224e6a0721207d776cb0799a2fa883459",
+"inventory.json":"e06dde8e740ba726b492656800d6c13ef8723fdc35e478090ac9117cd1a94520",
+"manifest.json":"aced439c1b71f198fea47b276151e8f98d0db6f49076cceb3b1b622253bd4f95",
+"pr-evidence.json":"219db0c00fce74f119768f9da104ab040a86f05e396fda1dad1d9dd2a3eeb558",
+"summary.json":"b1539c2faee6471a5fe73a87240da52e96c49d364889c5eac694ba35644c31de",
+"supplemental.json":"2ab3eec3c7cf7ac30d0f8cad66eb38c8b93bb6441aad26306a0454649afc10f0",
+"visual.json":"53f970839316cbca297b67fc7161eb2959c0c48ac810234da66eee23bafbfa38"
+}

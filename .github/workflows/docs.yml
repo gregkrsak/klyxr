@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
@@ -24,3 +26,12 @@ jobs:
           python scripts/build-ai-context.py
           cmp "$RUNNER_TEMP/klyxr-context-before.md" docs/ai/KLYXR_AI_CONTEXT_BUNDLE.md
           git diff --exit-code
+
+      - name: Validate bounded Bowfin M0.1 readiness
+        run: |
+          python scripts/test-bowfin-readiness.py
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            python scripts/verify-bowfin-readiness.py --pr-json "$GITHUB_EVENT_PATH"
+          else
+            python scripts/verify-bowfin-readiness.py
+          fi

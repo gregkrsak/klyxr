@@ -1,0 +1,12 @@
+{
+"actual_head":"recorded in exact-head PR report, never a self-referential commit field",
+"automatic_merging":false,
+"base_branch":"bowfin-migration-staging",
+"base_sha":"37cb00d5cc01804e46446809fd325322c0c3f05f",
+"base_tree":"d817671d87760f62a603d2de2f696fe49f0a24ac",
+"head_branch":"bowfin-m0-pre-m1-readiness",
+"independent_review":"pending",
+"owner_immediate_target_check":"required immediately before human merge",
+"production_candidate_exception":"none authorized or identified by M0.1",
+"sole_merger":"gregkrsak"
+}
