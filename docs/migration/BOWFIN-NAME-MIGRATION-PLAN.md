@@ -1,8 +1,9 @@
-# Bowfin Name Migration Plan — M0 Draft 2, Amendment 1
+# Bowfin Name Migration Plan — M0 Draft 2, Amendment 2 — Draft 1
 
-**Status:** Active migration contract. M0 planning and staging setup are authorized. No implementation phase, production merge, repository rename, domain cutover, package publication, or external release is authorized by this document.  
+**Status:** Proposed contract-only amendment. Amendment 1 remains the accepted migration contract until Greg explicitly accepts and merges this amendment. This draft recognizes a replacement M0.1 evidence architecture but authorizes no protocol tooling, evidence generation, rename implementation, production merge, repository rename, domain cutover, package publication, or external release. M0.1 remains unaccepted and M1 remains blocked.  
 **Prepared:** 2026-10-23  
 **Draft 2 owner decisions recorded:** 2026-10-23  
+**Amendment 2 Draft 1 prepared:** 2026-10-24  
 **Repository baseline:** `gregkrsak/klyxr` at `prod` commit `3c0a540df7d5ad75510db4ecad80e27fb4d0903a`, tree `928accaa6c71068a6bce273f73f8c152b4c4d348`  
 **Migration integration branch:** `bowfin-migration-staging`
 
@@ -335,7 +336,268 @@ No package publication is part of this plan without separate authorization.
 
 These findings are not legal clearance and must be rechecked at the phase that relies upon them.
 
-## 13. Immediate next move
+## 13. Amendment 2 — Replacement M0.1 evidence architecture
 
-Submit M0 Draft 2 for focused independent confirmation against findings `BOW-M0-01` through `BOW-M0-04`. If the reviewer recommends freeze, Greg decides whether to freeze M0. M1 remains unauthorized until that decision.
+### 13.1 Status, scope, and precedence
+
+This amendment replaces the rejected bulk-artifact approach attempted in closed, unmerged PR #95. The archived PR #95 payload in gregkrsak/bowfin-migration-ledger remains an unaccepted historical snapshot. It is not a protocol, current evidence, an implementation source, or authority for later work.
+
+The replacement architecture is a two-repository, three-layer Rule-to-Occurrence Ledger:
+
+1. humans review compact classification sources;
+2. separately reviewed deterministic tooling expands those sources into occurrence records and independently audits completeness; and
+3. generated evidence is retained only in gregkrsak/bowfin-migration-ledger.
+
+The compiler repository may contain this contract and, if separately accepted, a minimal identity or acceptance anchor. It must not acquire the generated occurrence corpus, duplicated bulk allowlists or denylists, archived tooling, or other multi-megabyte migration evidence.
+
+This section controls wherever it is more specific than Sections 4, 5, 8, 9, 10, or 11. It does not relax any earlier restriction. M0.1 remains unaccepted, and M1 remains blocked, until every gate below is satisfied by exact identities and Greg records the corresponding owner decision.
+
+### 13.2 Required order and separate authorizations
+
+The work proceeds only in this order:
+
+1. Amendment 2 is independently reviewed, explicitly accepted by Greg, and merged as a contract-only change into bowfin-migration-staging.
+2. Greg separately authorizes preparation of the M0.1 v2 protocol specification and tooling in the ledger repository.
+3. The complete protocol specification, tooling, schemas, fixtures, limits, and independent-audit design are reviewed and accepted before they may generate acceptance evidence.
+4. Greg separately authorizes compact classification inputs and evidence generation against one exact compiler candidate and the accepted protocol/tooling revision.
+5. Generated evidence is independently reviewed. Review recommendation, evidence validity, owner acceptance, integration, and next-phase authorization remain distinct records.
+6. Only after the exact M0.1 candidate has been accepted and integrated may Greg decide whether M1 is authorized.
+
+Contract acceptance is not tooling authorization. Tooling acceptance is not evidence acceptance. Evidence preservation is not semantic acceptance. Review is not merge authority. Merge is not next-phase authorization.
+
+### 13.3 Compact classification sources and semantic review
+
+The canonical compact inputs are versioned, machine-readable sources in the ledger repository. The initial expected set is:
+
+- mappings.json
+- classification-rules.json
+- external-surfaces.json
+- visual-inspection.json
+- limitations.json
+
+A later protocol specification may refine filenames without weakening these required meanings.
+
+Mechanical totality proves only that every discovered occurrence received one classification. It does not prove that the classification is correct. Human semantic review is a first-class gate.
+
+Every classification rule must expose, in a reviewable form:
+
+- its selected population and selector meaning;
+- exact namespace-qualified mapping or intentional retention;
+- expected selected count;
+- live, compatibility, or historical role;
+- owning migration phase;
+- human rationale;
+- representative and boundary context sufficient to judge the population;
+- producer and consumer where machine-readable;
+- support or removal policy;
+- explicit validation or test identity; and
+- historical evidence relationship where applicable.
+
+Every expanded occurrence must resolve all fields required by Section 4.2, including an exact occurrence location, original identity, canonical identity or retention, namespace, role, phase, producer, consumer, support or removal policy, validation or test identity, and historical relationship.
+
+A whole file, directory, or population may not be declared homogeneous merely by its own rule or a small sample. The review must establish why the selected population is semantically uniform and must expose exceptions. Mapping injectivity is evaluated within each declared namespace; repeated occurrences of one identity are not duplicate canonical identities.
+
+### 13.4 Independent occurrence discovery and audit
+
+The generator and auditor must not define completeness by the same successful expansion path. The protocol specification must define an occurrence independently of the generator's accepted matches.
+
+The independent auditor must:
+
+- discover candidate occurrences without inheriting the generator's complete path list, token list, selector list, or exclusion list;
+- reconcile exact canonical occurrence-key sets, not merely counts or summary digests;
+- treat filenames and path components, raw-text spans, structured keys, structured values, embedded test or control identities, machine identifiers, and overlapping identities as explicitly defined occurrence-unit kinds;
+- report unknown, ambiguous, overlapping, multiply classified, and unclassified candidates;
+- reject broad wildcard historical exemptions; and
+- retain enough context to permit human adjudication without trusting the generator's classification.
+
+Common low-level Git-object reading, byte reading, hashing, and canonical serialization code may be shared only when the shared component and its resulting common-mode failure are disclosed. Generator and auditor mutation fixtures and expected results must be independently specified. The required adversarial suite includes omitted hidden paths, case variants, structured keys and values, equal-count/different-key substitutions, stale rules, overlap, exclusion drift, and unexpected embedded identities.
+
+### 13.5 Acyclic identity and authority chain
+
+The evidence chain is acyclic:
+
+| Symbol | Meaning |
+| --- | --- |
+| C | One fixed compiler candidate commit and tree, including any accepted minimal compiler-side anchor |
+| E | One immutable ledger evidence package identifying C and every exact dependency used to produce and audit it |
+| D | Later preserved review and owner-decision records identifying the exact C and E dispositions |
+| P | A later integration receipt identifying actual source and ledger merges and proving their correspondence to C, E, and D |
+
+E cannot contain its own future commit identity. C cannot be modified after E is generated in order to embed E. If a compiler-side anchor is used, it must be fixed as part of C before evidence generation; otherwise the acceptance and integration records remain external.
+
+Every E record must carry, at minimum:
+
+- record_class equal to migration_evidence;
+- phase and protocol version;
+- source and ledger repository identities;
+- C commit and tree;
+- accepted staging base commit and tree;
+- governing contract commit, tree, path, and blob;
+- exact protocol/tooling commit, tree, and relevant blobs;
+- exact compact-input commit, tree, paths, blobs, and aggregate identity;
+- required external snapshot identities;
+- generated output index and aggregate identities; and
+- explicit non-authority declarations.
+
+None of C, E, D, or P grants executable authority, approval, custody, replay admission, semantic validity, merge permission, or next-phase permission merely by existing or matching a name or digest.
+
+### 13.6 Drift, ancestry, merge, and post-merge proof
+
+There is no relevant-drift exception. Any change to C, the accepted staging base, governing contract, protocol/tooling, compact inputs, required external snapshot, or required visual snapshot invalidates the corresponding evidence binding. A new evidence package and renewed disposition are required even if generated chunks or aggregate counts appear unchanged.
+
+Source and ledger integration PRs used by this protocol must use ordinary merge commits. Squash merges, rebases, and history replacement are prohibited for M0.1 v2 acceptance. Immediately before each merge, the recorded base, target, head, commit, and tree must be reverified. After each merge, P must record the actual merge commit, tree, parents, target branch, and correspondence to the reviewed head.
+
+A pre-merge test-merge SHA is not post-merge proof. The integration check must also inspect introduced ancestry, not merely the final tree or diff, and must reject compiler history that added prohibited bulk evidence or tooling and later deleted it.
+
+### 13.7 Durable review and owner-decision records
+
+GitHub comments and chat messages are publication venues, not immutable storage. Every decisive review, owner decision, correction, revocation, and integration record required for M0.1 must be preserved in a content-addressed ledger record outside the immutable evidence package it describes.
+
+Each preserved decision record must include:
+
+- the complete recorded body;
+- source URL and stable comment or record identifier where one exists;
+- stated author, publisher, and publication context without claiming cryptographic identity;
+- capture time and capture method;
+- content digest; and
+- exact C, E, D, or P identities to which the record applies.
+
+A copied statement and digest do not independently authenticate authority; process corroboration and Greg's explicit owner role remain required. Corrections and revocations are append-only subsequent records. Prior records are not silently edited or rewritten.
+
+Machine consumers must resolve separately:
+
+- evidence-package structural validity;
+- independent review disposition;
+- Greg's acceptance or rejection;
+- integration status; and
+- authorization for the next phase.
+
+Missing, conflicting, superseded, or unverifiable records fail closed. Latest comment wins, newest timestamp wins, and author-name string matching are forbidden decision rules. A creation-time review_status of proposed is permitted only if later resolution is represented by a separate bound record.
+
+This durability requirement does not retroactively invalidate the already accepted archival treatment of ledger PR #2.
+
+### 13.8 External, governance, and visual coverage
+
+The compact inputs must include a complete surface register. Every relevant surface is classified as:
+
+- inspected;
+- demonstrably not applicable;
+- explicitly limited; or
+- unavailable.
+
+Acquisition failure, access denial, absence of credentials, scanner failure, and incomplete visibility are not not-applicable findings.
+
+External acquisition is separate from deterministic generation. Retained snapshots must be digest-bound and record origin, acquisition time, coverage, freshness, and known limitations. Evidence relying on the governance repository must bind its exact repository, commit, tree, path, and blob identities and retain offline-readable content sufficient for later audit.
+
+Raster and vector review must bind exact blobs and record scope, method, reviewer, inspected regions, and unresolved limitations. The reviewer must inspect the complete image; a list of expected text regions is not a substitute for whole-image review.
+
+Coverage must include, as applicable, paths and filenames, hidden files, case variants, raw text, structured keys and values, generated context inputs and outputs, tests and fixtures, workflows and settings, external facilities, and actual machine consumers. Every limitation records the affected surface, reason, consequence, and disposition.
+
+### 13.9 Canonical retention and availability
+
+Canonical generated occurrence data is committed as uncompressed, bounded JSONL chunks with an authenticated index and compact summary tables. The index authenticates every chunk and aggregate but does not attempt to hash itself. Derived views are reproducible conveniences and may not become independently editable duplicate truth.
+
+Compression is permitted only as transport packaging. Expiring workflow artifacts, caches, issue attachments, or external object-store URLs may not be the sole retained evidence.
+
+The ledger must retain the accepted protocol, inputs, evidence, and decision records through reachable Git history plus a documented backup and recovery path. The protocol must state how repository transfer or rename affects repository identity and how evidence is retired after R8 without erasing the historical record.
+
+Ledger unavailability blocks the migration gate that depends upon it. It must never block normal compiler build, check, verify, run, failure recovery, or already accepted production operation.
+
+### 13.10 Execution isolation and archive exclusion
+
+The protocol specification must enumerate current source roots and exact accepted identities. archive/unaccepted/** and any equivalent unaccepted archive location are permanently ineligible as executable tooling, compact classification input, current evidence, schema authority, fixture authority, or acceptance dependency.
+
+Current evidence must reject bindings to the archived PR #95 snapshot. Only the exact independently reviewed tooling revision may execute.
+
+The protocol and CI design must prevent or reject:
+
+- import or module shadowing;
+- general expression, selector, template, or query evaluation;
+- path escape and filesystem traversal;
+- symlink traversal;
+- execution of repository hooks, Git filters, external diff drivers, or mutable Git configuration;
+- execution of compiler, governance, archive, or candidate code;
+- unpinned direct or transitive dependencies where dependencies exist; and
+- credentials or permissions capable of compiler write, merge, release, cutover, or authority changes.
+
+Evidence jobs use read-only credentials and bounded inputs. Their checks may block a gate; they may not automatically approve, merge, accept, release, rename, or authorize later work.
+
+### 13.11 Mandatory M0.1 v2 protocol specification
+
+Before tooling can be accepted, a separately reviewed M0.1 v2 protocol specification must fix and test:
+
+- exact schema dialect and validation behavior;
+- UTF-8, escaping, newline, number, duplicate-key, and key-order rules;
+- canonical occurrence-key construction and uniqueness;
+- canonical row order and chunk-boundary algorithm;
+- serialized byte, row, chunk, total-package, nesting, string, and processing limits;
+- oversized-row rejection;
+- exact chunk naming;
+- per-chunk and aggregate digest construction;
+- independent recomputation of first and last keys and row counts;
+- rejection of missing, extra, duplicated, renamed, or reordered chunks;
+- the rule that the index contains no self-hash;
+- deterministic handling of locale, time zone, host paths, concurrency, and platform differences;
+- separation of deterministic evidence bytes from runtime provenance such as timestamps, runner identities, job URLs, and acquisition logs; and
+- pinned runtime and trusted-component identities.
+
+The specification must include positive, negative, mutation, resource-bound, and cross-platform fixtures with independently reviewable expected results. These details need not be fully enumerated in Amendment 2, but Amendment 2 requires them to be fixed and accepted before the tooling revision can become an M0.1 dependency.
+
+### 13.12 Bounded implementation shape
+
+The expected ledger layout is:
+
+    protocol/m0.1/v2/
+      schema.json
+      generate.py
+      verify.py
+      audit_scan.py
+      tests/
+
+    evidence/m0.1/<source-commit>/
+      record.json
+      inputs/
+      generated/
+        occurrences/0000.jsonl
+        index.json
+        summary.json
+      reports/
+        generation.md
+
+The exact accepted protocol may refine this layout. Its architecture remains bounded:
+
+- standard-library Python unless a later reviewed specification justifies and pins another dependency;
+- a restricted declarative selector language;
+- no plugin system, database, network service, or general query language;
+- one canonical occurrence stream;
+- no second generated bulk mapping table when it would duplicate occurrence truth;
+- deterministic byte-for-byte regeneration from exact retained inputs; and
+- generated bulk evidence only in the ledger repository.
+
+A rules-only or on-demand-only design is not accepted because it weakens durable independent review and later reproducibility.
+
+### 13.13 M0.1 v2 rejection and exit conditions
+
+M0.1 v2 rejects if any required identity is absent or drifting; an occurrence is missing, ambiguous, overlapping without an explicit rule, or multiply classified; semantic review is incomplete; exact occurrence-key reconciliation fails; an external or visual surface is falsely marked not applicable; a decisive record is missing or conflicting; archive content enters the current trust path; protocol limits are exceeded; deterministic regeneration differs; prohibited compiler ancestry is introduced; or post-merge correspondence is absent.
+
+M0.1 exits only when:
+
+- Amendment 2 and the protocol/tooling revision were accepted through separate decisions;
+- compact inputs were semantically reviewed;
+- generator and independent auditor agree on exact occurrence-key sets;
+- canonical ledger evidence regenerates byte-for-byte within fixed limits;
+- every limitation has an explicit consequence and disposition;
+- independent review recommends the exact C and E pair;
+- Greg explicitly accepts that exact pair;
+- ordinary merge commits integrate the accepted source and ledger heads;
+- P verifies the actual merge identities, parents, trees, targets, ancestry, and correspondence; and
+- Greg separately authorizes M1.
+
+No earlier step implies a later one.
+
+## 14. Immediate next move
+
+Submit Amendment 2 Draft 1 for focused independent review against BOW-M01R-01 through BOW-M01R-10. The reviewer must determine whether Sections 13.1 through 13.10 fully bind BOW-M01R-01 through BOW-M01R-08 and whether Section 13.11 adequately requires BOW-M01R-09 before tooling acceptance. BOW-M01R-10 remains a non-blocking simplification check.
+
+If the reviewer recommends acceptance, Greg decides whether to accept and merge this contract-only amendment. No protocol implementation, compact-input construction, evidence generation, M0.1 acceptance, M1 work, production change, or external cutover is authorized by this draft.
 
