@@ -1,9 +1,10 @@
-# Bowfin Name Migration Plan — M0 Draft 2, Amendment 2 — Draft 1
+# Bowfin Name Migration Plan — M0 Draft 2, Amendment 2 — Draft 2
 
 **Status:** Proposed contract-only amendment. Amendment 1 remains the accepted migration contract until Greg explicitly accepts and merges this amendment. This draft recognizes a replacement M0.1 evidence architecture but authorizes no protocol tooling, evidence generation, rename implementation, production merge, repository rename, domain cutover, package publication, or external release. M0.1 remains unaccepted and M1 remains blocked.  
 **Prepared:** 2026-10-23  
 **Draft 2 owner decisions recorded:** 2026-10-23  
 **Amendment 2 Draft 1 prepared:** 2026-10-24  
+**Amendment 2 Draft 2 repairs:** 2026-10-24  
 **Repository baseline:** `gregkrsak/klyxr` at `prod` commit `3c0a540df7d5ad75510db4ecad80e27fb4d0903a`, tree `928accaa6c71068a6bce273f73f8c152b4c4d348`  
 **Migration integration branch:** `bowfin-migration-staging`
 
@@ -350,7 +351,7 @@ The replacement architecture is a two-repository, three-layer Rule-to-Occurrence
 
 The compiler repository may contain this contract and, if separately accepted, a minimal identity or acceptance anchor. It must not acquire the generated occurrence corpus, duplicated bulk allowlists or denylists, archived tooling, or other multi-megabyte migration evidence.
 
-This section controls wherever it is more specific than Sections 4, 5, 8, 9, 10, or 11. It does not relax any earlier restriction. M0.1 remains unaccepted, and M1 remains blocked, until every gate below is satisfied by exact identities and Greg records the corresponding owner decision.
+This section controls wherever it is more specific than Sections 4, 5, 8, 9, 10, or 11. It does not relax any earlier restriction. M0.1 remains unaccepted until every applicable M0.1 acceptance and integration gate below is satisfied by exact identities and Greg records the corresponding owner decision. M1 remains independently blocked. M0.1 completion neither authorizes nor requires M1 and may remain complete indefinitely while M1 remains unauthorized.
 
 ### 13.2 Required order and separate authorizations
 
@@ -361,7 +362,7 @@ The work proceeds only in this order:
 3. The complete protocol specification, tooling, schemas, fixtures, limits, and independent-audit design are reviewed and accepted before they may generate acceptance evidence.
 4. Greg separately authorizes compact classification inputs and evidence generation against one exact compiler candidate and the accepted protocol/tooling revision.
 5. Generated evidence is independently reviewed. Review recommendation, evidence validity, owner acceptance, integration, and next-phase authorization remain distinct records.
-6. Only after the exact M0.1 candidate has been accepted and integrated may Greg decide whether M1 is authorized.
+6. After the exact M0.1 candidate has been accepted and integrated and P verifies the actual post-merge correspondence, M0.1 may be declared complete. Greg may separately decide later whether to authorize M1; declining or postponing M1 does not invalidate M0.1 completion.
 
 Contract acceptance is not tooling authorization. Tooling acceptance is not evidence acceptance. Evidence preservation is not semantic acceptance. Review is not merge authority. Merge is not next-phase authorization.
 
@@ -489,6 +490,10 @@ Acquisition failure, access denial, absence of credentials, scanner failure, and
 
 External acquisition is separate from deterministic generation. Retained snapshots must be digest-bound and record origin, acquisition time, coverage, freshness, and known limitations. Evidence relying on the governance repository must bind its exact repository, commit, tree, path, and blob identities and retain offline-readable content sufficient for later audit.
 
+Before tooling acceptance, the separately reviewed protocol specification must define a freshness-eligibility policy for every required external-surface class. Each policy must use a justified observation window, named invalidating events, an explicitly bounded point-in-time claim, or a reviewed combination of those mechanisms. The policy must identify its evaluation points, including before owner acceptance and immediately before integration.
+
+Freshness evaluation fails closed when current eligibility cannot be established, an observation window has expired, or a relevant invalidating event is known, even when the retained snapshot bytes and digest are unchanged. A replacement observation requires a renewed evidence binding and disposition. An explicitly historical, unavailable, or limited observation may retain only its bounded recorded meaning and cannot silently become current clearance. Deterministic offline regeneration consumes the exact retained snapshot and must never reacquire, refresh, or substitute live external state.
+
 Raster and vector review must bind exact blobs and record scope, method, reviewer, inspected regions, and unresolved limitations. The reviewer must inspect the complete image; a list of expected text regions is not a substitute for whole-image review.
 
 Coverage must include, as applicable, paths and filenames, hidden files, case variants, raw text, structured keys and values, generated context inputs and outputs, tests and fixtures, workflows and settings, external facilities, and actual machine consumers. Every limitation records the affected surface, reason, consequence, and disposition.
@@ -538,7 +543,8 @@ Before tooling can be accepted, a separately reviewed M0.1 v2 protocol specifica
 - rejection of missing, extra, duplicated, renamed, or reordered chunks;
 - the rule that the index contains no self-hash;
 - deterministic handling of locale, time zone, host paths, concurrency, and platform differences;
-- separation of deterministic evidence bytes from runtime provenance such as timestamps, runner identities, job URLs, and acquisition logs; and
+- separation of deterministic evidence bytes from runtime provenance such as timestamps, runner identities, job URLs, and acquisition logs;
+- per-external-surface freshness classes, eligibility rules, observation windows or invalidating events, bounded point-in-time treatment, required evaluation checkpoints, and fail-closed outcomes; and
 - pinned runtime and trusted-component identities.
 
 The specification must include positive, negative, mutation, resource-bound, and cross-platform fixtures with independently reviewable expected results. These details need not be fully enumerated in Amendment 2, but Amendment 2 requires them to be fixed and accepted before the tooling revision can become an M0.1 dependency.
@@ -578,7 +584,7 @@ A rules-only or on-demand-only design is not accepted because it weakens durable
 
 ### 13.13 M0.1 v2 rejection and exit conditions
 
-M0.1 v2 rejects if any required identity is absent or drifting; an occurrence is missing, ambiguous, overlapping without an explicit rule, or multiply classified; semantic review is incomplete; exact occurrence-key reconciliation fails; an external or visual surface is falsely marked not applicable; a decisive record is missing or conflicting; archive content enters the current trust path; protocol limits are exceeded; deterministic regeneration differs; prohibited compiler ancestry is introduced; or post-merge correspondence is absent.
+M0.1 v2 rejects if any required identity is absent or drifting; an occurrence is missing, ambiguous, overlapping without an explicit rule, or multiply classified; semantic review is incomplete; exact occurrence-key reconciliation fails; an external or visual surface is falsely marked not applicable; a required external observation is stale, its current eligibility is unverifiable, or a named invalidating event has occurred at a required checkpoint; a decisive record is missing or conflicting; archive content enters the current trust path; protocol limits are exceeded; deterministic regeneration differs; prohibited compiler ancestry is introduced; or post-merge correspondence is absent.
 
 M0.1 exits only when:
 
@@ -591,13 +597,13 @@ M0.1 exits only when:
 - Greg explicitly accepts that exact pair;
 - ordinary merge commits integrate the accepted source and ledger heads;
 - P verifies the actual merge identities, parents, trees, targets, ancestry, and correspondence; and
-- Greg separately authorizes M1.
+- every required external observation remains eligible under its accepted freshness policy at the required acceptance and pre-integration checkpoints.
 
-No earlier step implies a later one.
+At that point M0.1 may be complete while M1 remains unauthorized. M1 begins only through a separate later owner authorization; no M0.1 acceptance, integration, completion, review, or receipt supplies that authorization. No earlier step implies a later one.
 
 ## 14. Immediate next move
 
-Submit Amendment 2 Draft 1 for focused independent review against BOW-M01R-01 through BOW-M01R-10. The reviewer must determine whether Sections 13.1 through 13.10 fully bind BOW-M01R-01 through BOW-M01R-08 and whether Section 13.11 adequately requires BOW-M01R-09 before tooling acceptance. BOW-M01R-10 remains a non-blocking simplification check.
+Submit Amendment 2 Draft 2 for focused independent confirmation of BOW-M0A2-01 and BOW-M0A2-02 and regression review of BOW-M01R-01 through BOW-M01R-10. The reviewer must confirm that M0.1 may complete while M1 remains unauthorized, that M1 still requires a separate later owner decision, and that the protocol must establish and enforce per-surface freshness eligibility before tooling acceptance.
 
 If the reviewer recommends acceptance, Greg decides whether to accept and merge this contract-only amendment. No protocol implementation, compact-input construction, evidence generation, M0.1 acceptance, M1 work, production change, or external cutover is authorized by this draft.
 
