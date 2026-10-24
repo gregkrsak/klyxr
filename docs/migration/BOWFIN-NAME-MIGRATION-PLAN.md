@@ -1,4 +1,4 @@
-# Bowfin Name Migration Plan — M0 Draft 2
+# Bowfin Name Migration Plan — M0 Draft 2, Amendment 1
 
 **Status:** Active migration contract. M0 planning and staging setup are authorized. No implementation phase, production merge, repository rename, domain cutover, package publication, or external release is authorized by this document.  
 **Prepared:** 2026-10-23  
@@ -34,6 +34,7 @@ The following choices bind Draft 2 and later migration work:
 10. Existing canonical KED and KD files may move to BED and BD filenames and live headings through the manifest. Historical evidence fields retain their original tokens.
 11. The compiler repository and the separate AI-governance repository are distinct authority surfaces. Governance migration requires its own explicitly authorized branch and pull request; compiler-repository work cannot silently change governance authority.
 12. The current repository tree will contain only the Bowfin Gateway 2000-style advertisement after M5. The Klyxr advertisement is removed from the live tree but remains faithfully recoverable from Git history. It is not retained beside the Bowfin advertisement.
+13. Greg remains the sole merge authority during the migration. Base-target enforcement is therefore an explicit, recorded owner merge gate rather than a production-resident workflow or repository-settings control. If merge authority broadens or automated merging is introduced, migration work stops until this control is re-evaluated.
 
 These decisions select the destination. They do not authorize M1 or later implementation.
 
@@ -61,7 +62,11 @@ All eight branches were initially parked at the baseline above. Before work begi
 - no accepted staging work was replaced by a similar-looking cherry-pick; and
 - any intervening `prod` change was incorporated into staging and re-reviewed before dependent work continued.
 
-A migration-specific CI gate must reject an M0–M7 PR whose base is `prod`. The only permitted staging-to-`prod` PR is the separately identified final production-candidate PR, and only a human may merge it.
+Base-target protection is an explicit owner merge gate. Every M0–M7 PR must record its head and base branch names and SHAs. The implementer and independent reviewer must verify that the base is `bowfin-migration-staging`; Greg must verify the displayed target immediately before merging. Any mismatch blocks acceptance and merge.
+
+Because Greg is the sole merge authority during this migration, no workflow on `prod` or repository-settings change is required for this control. If merge authority broadens, automated merging is introduced, or this assumption becomes false, migration work stops until an independently reviewed automated control is established.
+
+The only permitted staging-to-`prod` PR is the separately identified final production-candidate PR, and only Greg may merge it.
 
 ## 4. Namespace-qualified identity contract
 
