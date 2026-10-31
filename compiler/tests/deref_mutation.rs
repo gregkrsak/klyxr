@@ -1,4 +1,4 @@
-use klyxr_compiler::{
+use bowfin_compiler::{
     ast, compile_source,
     diagnostics::Diagnostic,
     hir::{ExprKind, ExprType, ParameterType, Place, ValueStatement, ValueType},
@@ -16,7 +16,7 @@ fn consume(value: Ticket) -> Ticket { return value; }";
 fn source(body: &str) -> String {
     format!("{DECLS}\n{body}")
 }
-fn valid(body: &str) -> klyxr_compiler::hir::Program {
+fn valid(body: &str) -> bowfin_compiler::hir::Program {
     compile_source(&source(body)).unwrap()
 }
 fn type_error(body: &str) -> Diagnostic {

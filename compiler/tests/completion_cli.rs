@@ -1,6 +1,6 @@
 use std::process::{Command, Output};
 fn run(command: &str, file: &str, extra: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_klyxr"))
+    Command::new(env!("CARGO_BIN_EXE_bowfin"))
         .args([
             command,
             &format!("{}/../examples/{file}", env!("CARGO_MANIFEST_DIR")),

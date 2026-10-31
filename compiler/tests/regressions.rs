@@ -1,4 +1,4 @@
-use klyxr_compiler::{
+use bowfin_compiler::{
     compile_source,
     verify::{verify_report, VerificationReport},
     FrontendError,

@@ -17,6 +17,34 @@ No ordinary contract proof or native code
 generation is implied.
 See [bounded execution](../docs/BOUNDED_EXECUTION.md).
 
+## M2 toolchain identity on migration staging
+
+The Cargo package is now `bowfin-compiler` and the Rust library crate is
+`bowfin_compiler`, at the unchanged version `0.0.1` with `publish = false`.
+Direct Cargo package selectors and Rust imports using the old names must change;
+the command compatibility promise does not provide an old package or crate facade.
+The canonical command is `bowfin`. Cargo's explicit `default-run = "bowfin"`
+preserves unqualified `cargo run -- <arguments>` selection with two binaries.
+
+`klyxr` remains supported until a future accepted BED removes it. Both binaries
+compile the same `main.rs` implementation; the compatibility entry file includes
+that source without a child process, argument rewriting or a second dispatcher.
+Existing normal stdout, stderr, exit status, `.klx` paths, `sensor-demo` selection,
+limits and M1 approval/authority rules are unchanged across commands.
+Only version and usage identify the invoked build target. Canonical version output
+is `bowfin 0.0.1 (vertical-slice prototype)`; the old command says
+`klyxr 0.0.1 (Bowfin compatibility command; vertical-slice prototype)`.
+Usage names the command, and only compatibility usage adds
+`klyxr is the compatibility command for bowfin`. No normal-operation banner is
+emitted. `--help` remains an unknown command with usage, as before; this phase adds
+no subcommand or source extension. Other branding and decision-document changes
+remain assigned to later migration phases.
+
+The private budget-test evidence variable is now `B34_EVIDENCE_DIR`; its only
+producer is the tests workflow and its only reader is
+`completion_bound_tests.rs::metric`. JSON metric filenames, fields and budgets
+are unchanged. This is not an application environment or configuration API.
+
 ## Run it
 
 Install Rust through rustup. `rust-toolchain.toml` pins Rust 1.80.0, rustfmt, and Clippy,
@@ -25,9 +53,9 @@ matching the workspace's minimum supported Rust version.
 From the repository root:
 
 ```bash
-cargo run --locked --bin klyxr -- verify examples/battery_ok.klx
-cargo run --locked --bin klyxr -- check examples/battery_ok.klx
-cargo run --locked --bin klyxr -- run examples/ordinary_run.klx --function demo
+cargo run --locked --bin bowfin -- verify examples/battery_ok.klx
+cargo run --locked --bin bowfin -- check examples/battery_ok.klx
+cargo run --locked --bin bowfin -- run examples/ordinary_run.klx --function demo
 cargo test --locked --workspace
 cargo clippy --locked --workspace --all-targets -- -D warnings
 ```
@@ -1695,7 +1723,7 @@ exclusions are narrowly refined here.
 Run the public inert example with:
 
 ```bash
-cargo run --locked --bin klyxr -- run examples/owned_replacement.klx --function demo
+cargo run --locked --bin bowfin -- run examples/owned_replacement.klx --function demo
 ```
 
 Expected result: `Reading { value: Percent(59) }`. `check` and `verify` continue to
@@ -1773,8 +1801,8 @@ resumption refused after failure. `unsafe` bypasses no safety or validation rule
 Run the positive example (conservative declarations, no clock/I/O operation):
 
 ```bash
-cargo run --locked --bin klyxr -- check examples/explicit_effects.klx
-cargo run --locked --bin klyxr -- run examples/explicit_effects.klx --function demo
+cargo run --locked --bin bowfin -- check examples/explicit_effects.klx
+cargo run --locked --bin bowfin -- run examples/explicit_effects.klx --function demo
 ```
 
 The run returns `Bool(true)`. Both `check` and `verify` report zero proof bodies and
@@ -1839,8 +1867,8 @@ The first public trusted Resource family is available only by explicit immutable
 sensor-demo selection. Run the real defining example with:
 
 ```bash
-cargo run --locked --bin klyxr -- run examples/trusted_sensor.klx --function sample --profile sensor-demo
-cargo run --locked --bin klyxr -- audit examples/trusted_sensor.klx --function sample --profile sensor-demo
+cargo run --locked --bin bowfin -- run examples/trusted_sensor.klx --function sample --profile sensor-demo
+cargo run --locked --bin bowfin -- audit examples/trusted_sensor.klx --function sample --profile sensor-demo
 ```
 
 See the [trusted Sensor guide](../docs/engineering/KED-033-TRUSTED-SENSOR.md) for the

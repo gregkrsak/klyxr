@@ -1,4 +1,4 @@
-use klyxr_compiler::{compile_source, hir, mir, verify, FrontendError};
+use bowfin_compiler::{compile_source, hir, mir, verify, FrontendError};
 const DECL: &str = "type P = range 0..100; type Q = range 0..100; record Ticket { value: P } record Triple { a: P, b: Q, c: P } fn id(p: P) -> P { return p; } fn other(q: Q) -> Q { return q; } fn take(a: P,b: P,c: P) {} fn sum(a: P,b: P,c: P) -> P { return a; } fn consume(t: Ticket) -> P { return t.value; } fn sink(r: &mut P) {} fn inspect(r: &P) -> P { return *r; } fn predicate(t: Triple) -> bool { return true; }";
 fn good(body: &str) -> hir::Program {
     let p = compile_source(&format!("{DECL}\n{body}")).unwrap();
@@ -7,7 +7,7 @@ fn good(body: &str) -> hir::Program {
     }
     p
 }
-fn bad(body: &str, phase: &str, message: &str) -> (String, klyxr_compiler::lexer::Span) {
+fn bad(body: &str, phase: &str, message: &str) -> (String, bowfin_compiler::lexer::Span) {
     let s = format!("{DECL}\n{body}");
     let (actual, text, span) = match compile_source(&s).unwrap_err() {
         FrontendError::Type(e) => (

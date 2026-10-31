@@ -5175,7 +5175,7 @@ mod tests {
         );
     }
 
-    // K19-01 tests invoke the statement transaction directly. A surrounding
+    // B19-01 tests invoke the statement transaction directly. A surrounding
     // expression/statement-list/conditional rollback cannot mask a partial commit.
     const NO_VALUE_HELPERS: &str = "fn observe(view: &bool) {} fn consume(ticket: Ticket) {} fn receive(first: Ticket, held: &bool, last: Ticket) {} fn nested(first: Ticket, held: &bool, last: bool) {} fn touch(access: &mut bool) -> bool { return true; } fn read(view: &bool) -> bool { return *view; } fn shared_bool(view: &bool, last: bool) {} fn reset(access: &mut bool) {}";
     fn no_value_typed(source: &str) -> Program {

@@ -1,4 +1,4 @@
-use klyxr_compiler::{compile_source, hir, mir, parse_source, FrontendError};
+use bowfin_compiler::{compile_source, hir, mir, parse_source, FrontendError};
 const DECL: &str = "type Percent = range 0..100; type Other = range 0..100; record Ticket { value: Percent } fn fresh() -> Ticket { return fresh(); } fn consume(ticket: Ticket) -> bool { return true; } fn sink(access: &mut bool) -> bool { return true; } fn read(view: &bool) -> bool { return *view; } fn both(view: &bool, value: bool) -> bool { return value; }";
 fn good(body: &str) -> hir::Program {
     let p = compile_source(&format!("{DECL} {body}")).unwrap();
@@ -197,13 +197,13 @@ fn terminal_move_diagnostic_describes_the_retained_boundary() {
 fn source_and_canonical_hir_keep_break_span() {
     let source = "fn f(flag: bool) -> bool { while flag { break; } return flag; }";
     let ast = parse_source(source).unwrap();
-    let klyxr_compiler::ast::FunctionDecl::Ordinary(f) = &ast.functions[0] else {
+    let bowfin_compiler::ast::FunctionDecl::Ordinary(f) = &ast.functions[0] else {
         panic!()
     };
-    let klyxr_compiler::ast::ValueStatement::While { body, .. } = &f.body[0] else {
+    let bowfin_compiler::ast::ValueStatement::While { body, .. } = &f.body[0] else {
         panic!()
     };
-    let klyxr_compiler::ast::ValueStatement::Break { span } = body[0] else {
+    let bowfin_compiler::ast::ValueStatement::Break { span } = body[0] else {
         panic!()
     };
     assert_eq!(&source[span.start..span.end], "break;");
@@ -315,27 +315,27 @@ fn nested_mir_targets_restore_outer_header_and_exit() {
 fn public_ast_resolution_rejects_bad_break_placement_and_suffix() {
     let mut ast =
         parse_source("fn f(flag: bool) -> bool { while flag { break; } return flag; }").unwrap();
-    let klyxr_compiler::ast::FunctionDecl::Ordinary(f) = &mut ast.functions[0] else {
+    let bowfin_compiler::ast::FunctionDecl::Ordinary(f) = &mut ast.functions[0] else {
         panic!()
     };
-    let klyxr_compiler::ast::ValueStatement::While { body, .. } = &f.body[0] else {
+    let bowfin_compiler::ast::ValueStatement::While { body, .. } = &f.body[0] else {
         panic!()
     };
     let statement = body[0].clone();
     f.body.insert(0, statement);
-    assert!(klyxr_compiler::resolve::resolve(&ast).unwrap_err()[0]
+    assert!(bowfin_compiler::resolve::resolve(&ast).unwrap_err()[0]
         .message
         .contains("only inside"));
-    let klyxr_compiler::ast::FunctionDecl::Ordinary(f) = &mut ast.functions[0] else {
+    let bowfin_compiler::ast::FunctionDecl::Ordinary(f) = &mut ast.functions[0] else {
         panic!()
     };
     f.body.remove(0);
     let suffix = f.body[1].clone();
-    let klyxr_compiler::ast::ValueStatement::While { body, .. } = &mut f.body[0] else {
+    let bowfin_compiler::ast::ValueStatement::While { body, .. } = &mut f.body[0] else {
         panic!()
     };
     body.push(suffix);
-    assert!(klyxr_compiler::resolve::resolve(&ast).unwrap_err()[0]
+    assert!(bowfin_compiler::resolve::resolve(&ast).unwrap_err()[0]
         .message
         .contains("no fallthrough"));
 }

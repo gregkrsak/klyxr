@@ -14,7 +14,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          K34_EVIDENCE_DIR="$RUNNER_TEMP/ked034-debug-evidence" cargo test --locked --workspace 2>&1 | tee "$RUNNER_TEMP/ked034-debug.log"
+          B34_EVIDENCE_DIR="$RUNNER_TEMP/ked034-debug-evidence" cargo test --locked --workspace 2>&1 | tee "$RUNNER_TEMP/ked034-debug.log"
           python scripts/verify-ked035-tests.py "$RUNNER_TEMP/ked034-debug.log"
           python scripts/verify-ked034-budgets.py "$RUNNER_TEMP/ked034-debug-evidence"
 
@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          K34_EVIDENCE_DIR="$RUNNER_TEMP/ked034-release-evidence" cargo test --locked --workspace --release 2>&1 | tee "$RUNNER_TEMP/ked034-release.log"
+          B34_EVIDENCE_DIR="$RUNNER_TEMP/ked034-release-evidence" cargo test --locked --workspace --release 2>&1 | tee "$RUNNER_TEMP/ked034-release.log"
           python scripts/verify-ked035-tests.py "$RUNNER_TEMP/ked034-release.log"
           python scripts/verify-ked034-budgets.py "$RUNNER_TEMP/ked034-release-evidence"
 

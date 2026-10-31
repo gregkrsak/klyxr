@@ -1,6 +1,6 @@
 use std::process::{Command, Output};
 fn run(command: &str, extra: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_klyxr"))
+    Command::new(env!("CARGO_BIN_EXE_bowfin"))
         .args([
             command,
             concat!(

@@ -1,4 +1,4 @@
-use klyxr_compiler::{compile_source, hir, mir, FrontendError};
+use bowfin_compiler::{compile_source, hir, mir, FrontendError};
 const DECLARATIONS: &str = "type Percent = range 0..100; type Other = range 0..100; record Ticket { value: Percent } fn fresh() -> Ticket { return fresh(); } fn consume(ticket: Ticket) -> bool { return true; } fn inspect(view: &Ticket) -> bool { return true; } fn read(view: &Percent) -> Percent { return *view; } fn read_bool(view: &bool) -> bool { return *view; } fn sink(access: &mut bool) -> bool { return true; } fn consume_access(access: &mut bool, value: bool) -> bool { return value; } fn shared_call(view: &bool, value: bool) -> bool { return value; } fn owned(value: bool) -> bool { return value; }";
 fn good(body: &str) -> hir::Program {
     let p = compile_source(&format!("{DECLARATIONS} {body}")).unwrap();

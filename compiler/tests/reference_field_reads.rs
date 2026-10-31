@@ -1,4 +1,4 @@
-use klyxr_compiler::{ast, compile_source, hir, mir, parse_source, verify, FrontendError};
+use bowfin_compiler::{ast, compile_source, hir, mir, parse_source, verify, FrontendError};
 const DECL: &str = "type Percent = range 0..100; type Temperature = range 0..100; record Battery { charge: Percent, health: Percent, temperature: Temperature } record Capacitor { charge: Percent } record Snapshot { first: Percent, middle: Percent, last: Percent } fn id(p: Percent) -> Percent { return p; } fn three(a: Percent,b: Percent,c: Percent) -> Percent { return a; } fn finish(v: &Battery) {} fn finish_mut(v: &mut Battery) {} fn inspect(v: &Battery) -> Percent { return v.charge; } fn inspect_mut(v: &mut Battery) -> Percent { return v.health; } fn consume(b: Battery) -> Percent { return b.charge; } fn held(v: &Battery,p: Percent,b: Battery) {} fn held_mut(v: &mut Battery,p: Percent,b: Battery) {} fn copy_move(p: Percent,b: Battery) {} fn receive(s: Snapshot,b: Battery) {}";
 fn good(body: &str) -> hir::Program {
     let p = compile_source(&format!("{DECL}\n{body}")).unwrap();

@@ -1,4 +1,4 @@
-use klyxr_compiler::{
+use bowfin_compiler::{
     compile_source, diagnostics::Diagnostic, hir::*, ownership, parse_source, resolve, types,
     verify::verify_report, FrontendError,
 };
