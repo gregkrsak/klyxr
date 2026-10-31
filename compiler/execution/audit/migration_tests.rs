@@ -241,7 +241,10 @@ fn m1_machine_names_cannot_substitute_original_opaque_approval() {
     let independent = artifact();
     for (field, _, current) in MAPPINGS {
         assert_eq!(identity(first.trusted.as_ref().unwrap(), field), current);
-        assert_eq!(identity(independent.trusted.as_ref().unwrap(), field), current);
+        assert_eq!(
+            identity(independent.trusted.as_ref().unwrap(), field),
+            current
+        );
     }
     let first_contract =
         Contract::extract(&first, first.entry("demo").unwrap(), Limits::default()).unwrap();
