@@ -478,7 +478,7 @@ fn borrowing_does_not_change_verified_proofs_or_execute_ordinary_functions() {
     let ordinary = "fn inspect(value: &Battery) -> bool { return true; } fn example(battery: Battery) -> Battery { let predecessor_ok = inspect(&battery); return battery; }";
     let program = compile_source(&format!(
         "{} {ordinary}",
-        include_str!("../../examples/battery_ok.klx")
+        include_str!("../../examples/battery_ok.bow")
     ))
     .unwrap();
     let report = verify_report(&program);

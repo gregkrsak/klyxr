@@ -3,7 +3,7 @@
 ## 1. High-level pipeline
 
 ```text
-source (.klx)
+source (.bow; explicit .klx input retained)
    │
    ▼
 lexer
@@ -152,7 +152,7 @@ Unsafe operations should be lexically visible.
 
 Possible future direction:
 
-```klyxr
+```bowfin
 unsafe
     assumes ptr != null
     assumes ptr aligned_for T

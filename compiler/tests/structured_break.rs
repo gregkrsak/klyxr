@@ -188,7 +188,7 @@ fn terminal_move_diagnostic_describes_the_retained_boundary() {
     let FrontendError::Ownership(errors) = compile_source(&source).unwrap_err() else {
         panic!()
     };
-    let text = errors[0].render("test.klx", &source);
+    let text = errors[0].render("test.bow", &source);
     assert!(text.contains("terminal break paths do not relax"));
     assert!(text.contains("canonical exits"));
     assert!(!text.contains("transfer would change pre-existing ownership state across a backedge"));

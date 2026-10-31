@@ -339,7 +339,7 @@ fn type_and_parse_diagnostic_token_spans() {
 }
 #[test]
 fn verified_and_harness_positive_controls_and_new_form_exclusions() {
-    let s = include_str!("../../examples/battery_ok.klx");
+    let s = include_str!("../../examples/battery_ok.bow");
     let before = verify::verify_report(&compile_source(s).unwrap());
     assert_eq!((before.functions_proven, before.calls_checked), (1, 1));
     let after = verify::verify_report(

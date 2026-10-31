@@ -47,22 +47,22 @@ fn m2_version_and_usage_identify_canonical_and_compatibility_commands() {
             (
                 vec![],
                 "",
-                format!("usage: {name} <check|verify> <file.klx>\n"),
+                format!("usage: {name} <check|verify> <file.bow>\n"),
             ),
             (
                 vec!["verify"],
-                "error: missing .klx input path\n",
-                format!("usage: {name} <check|verify> <file.klx>\n"),
+                "error: missing .bow input path\n",
+                format!("usage: {name} <check|verify> <file.bow>\n"),
             ),
             (
                 vec!["--help"],
                 "error: unknown command `--help`\n",
-                format!("usage: {name} <check|verify> <file.klx>\n"),
+                format!("usage: {name} <check|verify> <file.bow>\n"),
             ),
             (
                 vec!["run"],
                 "",
-                format!("usage: {name} run <file.klx> --function <name> [limit overrides]\n"),
+                format!("usage: {name} run <file.bow> --function <name> [limit overrides]\n"),
             ),
         ] {
             let output = invoke(binary, &args);
@@ -78,13 +78,13 @@ fn m2_version_and_usage_identify_canonical_and_compatibility_commands() {
 
 #[test]
 fn m2_normal_check_verify_and_run_streams_are_identical() {
-    let path = example("battery_ok.klx");
+    let path = example("battery_ok.bow");
     for (command, verb) in [("check", "checked"), ("verify", "verified")] {
         let output = equivalent(&[command, &path], 0);
         assert!(output.stderr.is_empty());
         assert_eq!(String::from_utf8(output.stdout).unwrap(), format!("{verb} supported integer contracts: {path}\n  function bodies proven: 1 (subtraction safety, field ranges, postconditions)\n  calls checked: 1 (argument ranges, mutable access, preconditions)\n  scope: ordinary control flow with loop-stable Copy state and iteration-local Move/borrowing plus stable carried references and specialized signed i64 contract prototype; general ownership, effects, and code generation are not implemented\n"));
     }
-    let path = example("ordinary_run.klx");
+    let path = example("ordinary_run.bow");
     let output = equivalent(&["run", &path, "--function", "loop_demo"], 0);
     assert_eq!(output.stdout, b"Percent(0)\n");
     assert!(output.stderr.is_empty());
@@ -92,7 +92,7 @@ fn m2_normal_check_verify_and_run_streams_are_identical() {
 
 #[test]
 fn m2_selected_results_and_audit_preserve_m1_authority() {
-    let path = example("trusted_sensor.klx");
+    let path = example("trusted_sensor.bow");
     for (scenario, expected) in [
         ("sample", "Ok(Reading(42))\n"),
         ("no-sensor", "Error(SensorError(1))\n"),
@@ -147,7 +147,7 @@ fn m2_selected_results_and_audit_preserve_m1_authority() {
 
 #[test]
 fn m2_failures_and_option_validation_preserve_results() {
-    let path = example("ordinary_run.klx");
+    let path = example("ordinary_run.bow");
     for (args, status, message) in [
         (
             vec!["run", &path, "--function", "trap_demo"],
@@ -198,7 +198,7 @@ fn m2_failures_and_option_validation_preserve_results() {
         assert!(output.stdout.is_empty());
         assert!(String::from_utf8(output.stderr).unwrap().contains(message));
     }
-    let bad = example("battery_fail.klx");
+    let bad = example("battery_fail.bow");
     let output = equivalent(&["verify", &bad], 1);
     assert!(output.stdout.is_empty());
     assert!(String::from_utf8(output.stderr)
@@ -208,7 +208,7 @@ fn m2_failures_and_option_validation_preserve_results() {
 
 #[test]
 fn m2_actual_output_byte_neighbors_are_command_independent() {
-    let path = example("ordinary_run.klx");
+    let path = example("ordinary_run.bow");
     let expected = b"Percent(0)\n";
     // The existing allowance counts rendered text; write_output appends a newline.
     let sufficient = (expected.len() - 1).to_string();
@@ -243,7 +243,7 @@ fn m2_actual_output_byte_neighbors_are_command_independent() {
         b"error: diagnostic rendering allowance exhausted [truncated]\n"
     );
 
-    let path = example("trusted_sensor.klx");
+    let path = example("trusted_sensor.bow");
     let args = [
         "audit",
         &path,

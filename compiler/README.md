@@ -45,6 +45,23 @@ producer is the tests workflow and its only reader is
 `completion_bound_tests.rs::metric`. JSON metric filenames, fields and budgets
 are unchanged. This is not an application environment or configuration API.
 
+## M3 source paths on migration staging
+
+Canonical examples use `.bow`; explicitly supplied `.klx` files remain supported
+through both `bowfin` and `klyxr` until a future accepted BED removes that input.
+The compiler opens the exact supplied path, including existing other filename
+forms. A same-stem sibling is neither discovered nor substituted. The extension
+creates no language, profile, grant, configuration or execution authority.
+
+`.bow` is also VirtualBow's model extension. Greg accepted that format/desktop
+association conflict as BOW-M3-G01; it remains real. A desktop open can select
+VirtualBow according to installed associations/preferences. Use an explicit
+`bowfin ... <path>` command or a deliberately selected editor. No association or
+editor setting is installed or changed here. See the
+[bounded gate and evidence limits](../docs/migration/M3-SOURCE-EXTENSION-GATE.md).
+The `bowfin` Markdown fence is a label, not a syntax-highlighting or language-server
+installation. This phase creates no new editor, MIME or source-discovery facility.
+
 ## Run it
 
 Install Rust through rustup. `rust-toolchain.toml` pins Rust 1.80.0, rustfmt, and Clippy,
@@ -53,9 +70,9 @@ matching the workspace's minimum supported Rust version.
 From the repository root:
 
 ```bash
-cargo run --locked --bin bowfin -- verify examples/battery_ok.klx
-cargo run --locked --bin bowfin -- check examples/battery_ok.klx
-cargo run --locked --bin bowfin -- run examples/ordinary_run.klx --function demo
+cargo run --locked --bin bowfin -- verify examples/battery_ok.bow
+cargo run --locked --bin bowfin -- check examples/battery_ok.bow
+cargo run --locked --bin bowfin -- run examples/ordinary_run.bow --function demo
 cargo test --locked --workspace
 cargo clippy --locked --workspace --all-targets -- -D warnings
 ```
@@ -102,7 +119,7 @@ is outside this prototype. Passing an immutable binding to `&mut` is an error.
 
 ## Ordinary value functions (KED-004 through KED-011)
 
-```klyxr
+```bowfin
 type Percent = range 0..100;
 
 fn remaining(current: Percent, used: Percent) -> Percent {
@@ -120,7 +137,7 @@ fn can_use(current: Percent, used: Percent) -> bool {
 }
 ```
 
-See `examples/value_flow.klx` for these flows and a forward call.
+See `examples/value_flow.bow` for these flows and a forward call.
 
 Ordinary functions accept zero or more named immutable parameters, each typed as
 built-in source `bool` (semantic `Bool`), a declared named range, or an existing
@@ -175,7 +192,7 @@ target only verified functions. These rejections leave OQ-019 unresolved.
 
 ## Core owned-value moves (KED-005)
 
-```klyxr
+```bowfin
 type Percent = range 0..100;
 record Ticket { value: Percent }
 
@@ -201,7 +218,7 @@ passed onward, or returned directly. Nested calls need no artificial locals.
 Forward and recursive calls remain structurally valid; no termination is established.
 Copy parameters and locals remain reusable through all these operations.
 
-```klyxr
+```bowfin
 fn bad(ticket: Ticket) -> Ticket {
     let next = ticket;
     return ticket; // error: use of moved value `ticket`
@@ -223,15 +240,15 @@ In particular, ordinary record equality and arithmetic remain type errors.
 The existing verified mutable state and top-level record harness are excluded
 from this ownership state machine and retain their existing behavior.
 
-`examples/move_values.klx` demonstrates accepted Copy reuse and record transfers.
-`examples/move_fail.klx` intentionally fails ownership analysis. Passing this phase
+`examples/move_values.bow` demonstrates accepted Copy reuse and record transfers.
+`examples/move_fail.bow` intentionally fails ownership analysis. Passing this phase
 does not execute ordinary functions, verify their contracts/ranges, or implement
 the complete future memory-safety model. OQ-023 retains Copy customization, cloning,
 partial moves, and destruction. Advanced borrowing remains open under OQ-024.
 
 ## Core borrowing and reference semantics (KED-006)
 
-```klyxr
+```bowfin
 fn inspect(ticket: &Ticket) -> bool { return true; }
 fn exclusive(ticket: &mut Ticket) -> bool { return true; }
 
@@ -295,8 +312,8 @@ span and earlier borrow/move location. Type incompatibilities remain Type errors
 The first substantive ownership error stops analysis. Loan IDs/state remain private
 and are not attached to public HIR or printed in diagnostics.
 
-`examples/borrow_values.klx` demonstrates valid borrowing and owner recovery;
-`examples/borrow_fail.klx` intentionally moves an owner before a later shared use.
+`examples/borrow_values.bow` demonstrates valid borrowing and owner recovery;
+`examples/borrow_fail.bow` intentionally moves an owner before a later shared use.
 Ordinary borrowing does not execute or prove functions. The verified battery's
 existing special state-reference semantics and harness remain unchanged and are
 excluded from ordinary loan analysis. KD-021 settles this core; OQ-024 retains
@@ -306,7 +323,7 @@ KED-007 adds only the explicit Copy-safe access described below.
 
 ## Explicit dereference and Copy-safe mutation (KED-007)
 
-```klyxr
+```bowfin
 fn read(value: &Percent) -> Percent {
     return *value;
 }
@@ -359,8 +376,8 @@ call-hold the reference loan. Passing `access` to a reference parameter retains
 KED-006 transfer and complete-call hold behavior. Deterministic analysis does not
 settle the full future runtime assignment evaluation-order specification.
 
-See `examples/deref_mutation.klx` and intentional failure
-`examples/deref_mutation_fail.klx`. Ordinary access/mutation remains frontend-only:
+See `examples/deref_mutation.bow` and intentional failure
+`examples/deref_mutation_fail.bow`. Ordinary access/mutation remains frontend-only:
 not executed, interpreted, code-generated, contract-proven, or range-enforced at
 runtime. The verified battery state/field `-=` machinery is unchanged and separate.
 No direct local/reference-binding reassignment, assignment expressions, compound
@@ -370,7 +387,7 @@ and replacement, OQ-023 destruction, and OQ-024 advanced reference behavior.
 
 ## Statement conditionals and ordinary MIR (KED-008)
 
-```klyxr
+```bowfin
 fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
     let mut owned = value;
     if flag {
@@ -430,12 +447,12 @@ execution, interpretation, code generation, or proof of ordinary logic. The veri
 battery path remains HIR-only and excludes ordinary conditionals. MIR has no phi,
 block parameters/results, SSA, temporary flattening, cleanup, backend, or
 verification consumer. KD-023 settles this boundary; OQ-026 retains broader
-conditional expressions, control flow, and dataflow. See `examples/if_control_flow.klx`
-and intentional Ownership failure `examples/if_move_fail.klx`.
+conditional expressions, control flow, and dataflow. See `examples/if_control_flow.bow`
+and intentional Ownership failure `examples/if_move_fail.bow`.
 
 ## Copy-safe direct local reassignment (KED-011)
 
-```klyxr
+```bowfin
 fn next(value: Percent) -> Percent { return value; }
 fn update(start: Percent) -> Percent {
     let mut current = start;
@@ -483,13 +500,13 @@ Validation rejects hidden IfValue nodes in assignment RHSs. `compile_source` and
 general cyclic ownership/lifetime inference, SSA, phi/block parameters, result slots, definite assignment,
 execution, or ordinary verification is introduced.
 
-See `examples/local_reassignment.klx` and the intentional future-use loan conflict
-`examples/local_reassignment_borrow_fail.klx`. KD-026 settles this boundary;
+See `examples/local_reassignment.bow` and the intentional future-use loan conflict
+`examples/local_reassignment_borrow_fail.bow`. KD-026 settles this boundary;
 OQ-022/OQ-024/OQ-025/OQ-026 retain broader mutation and control-flow design.
 
 ## Conditional value initialization (KED-010)
 
-```klyxr
+```bowfin
 fn choose(flag: bool, first: Percent, second: Percent) -> Percent {
     let chosen = if flag { first } else { second };
     return chosen;
@@ -528,13 +545,13 @@ parenthesized expressions, and dereference-write RHSs remain rejected. General
 value blocks, reference joins, and general definite assignment
 remain unresolved. Statement `if` retains its existing grammar and optional else.
 Ordinary functions remain non-executable and unverified; the battery proof path
-is unchanged. See `examples/conditional_value.klx` and the joined-move rejection
-`examples/conditional_value_move_fail.klx`. KD-025 settles this narrow boundary;
+is unchanged. See `examples/conditional_value.bow` and the joined-move rejection
+`examples/conditional_value_move_fail.bow`. KD-025 settles this narrow boundary;
 OQ-022/OQ-024/OQ-026 retain broader conditional value and lifetime design.
 
 ## Path-sensitive acyclic loan liveness (KED-009)
 
-```klyxr
+```bowfin
 fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
     let mut owned = value;
     let view = &owned;
@@ -584,8 +601,8 @@ to the same validated acyclic CFG forms. KD-024 settles only whole-value loans
 across the structured acyclic subset. Cyclic loan analysis, arbitrary CFG lifetime inference,
 reborrowing, reference returns, lifetime syntax, field/partial borrowing, reference-valued conditional
 results, destruction, execution, and code generation remain unsupported. KD-033 adds structured early returns.
-See `examples/path_sensitive_borrowing.klx` and the intentional post-join-loan
-failure `examples/path_sensitive_borrowing_fail.klx`. OQ-024/OQ-026 retain the
+See `examples/path_sensitive_borrowing.bow` and the intentional post-join-loan
+failure `examples/path_sensitive_borrowing_fail.bow`. OQ-024/OQ-026 retain the
 broader lifetime and control-flow questions.
 
 ## Core expressions and types (KED-003)
@@ -738,7 +755,7 @@ and broader HIR features remain future work.
 
 The verifier recognizes the resolved structure of exactly this proof family:
 
-```klyxr
+```bowfin
 requires amount <= state.field
 ensures state.field == old(state.field) - amount
 { state.field -= amount; } // integer literal operands also supported
@@ -783,7 +800,7 @@ amount range, and precondition using the **current** field value. It updates sta
 from the proven callee postcondition. A failed executable statement stops later
 call analysis, avoiding conclusions based on stale state.
 
-```klyxr
+```bowfin
 let mut battery = Battery { charge: 80 };
 consume(&mut battery, 50); // leaves 30
 consume(&mut battery, 50); // rejected: 50 <= 30 is false
@@ -797,7 +814,7 @@ auto-dereference, non-Copy replacement, field/reference mutation beyond KD-038/K
 Copy-field assignment and Copy-safe whole-value writes, partial borrowing, general replacement, destruction,
 advanced effects beyond KED-030, runtime contracts, expressions beyond this subset, general cyclic ownership/loans, quantifiers,
 multi-field verified/harness state, record invariants, SMT/VIR or MIR backend/verification lowering, or machine-code generation. In particular,
-`examples/effects.klx` is illustrative and is rejected rather than analyzed.
+`examples/effects.bow` is illustrative and is rejected rather than analyzed.
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
@@ -870,17 +887,17 @@ treated as errors.
 
 The failing examples are intentional:
 
-- `battery_fail.klx`: invalid first-call precondition.
-- `battery_sequence_fail.klx`: invalid second-call precondition after mutation.
-- `battery_body_fail.klx`: uncalled body fails its postcondition.
-- `move_fail.klx`: returning a record parameter after moving it into a local.
-- `borrow_fail.klx`: moving an owner while a later reference use keeps its shared loan live.
-- `deref_mutation_fail.klx`: replacing a non-Copy record before displacement/destruction semantics exist.
+- `battery_fail.bow`: invalid first-call precondition.
+- `battery_sequence_fail.bow`: invalid second-call precondition after mutation.
+- `battery_body_fail.bow`: uncalled body fails its postcondition.
+- `move_fail.bow`: returning a record parameter after moving it into a local.
+- `borrow_fail.bow`: moving an owner while a later reference use keeps its shared loan live.
+- `deref_mutation_fail.bow`: replacing a non-Copy record before displacement/destruction semantics exist.
 
 
 ## Statement while and cyclic MIR (KED-012)
 
-```klyxr
+```bowfin
 fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
     let mut current = value;
     let mut running = flag;
@@ -934,8 +951,8 @@ Ownership stays above MIR with no fixed-point solver or second engine. Reference
 activity/non-Copy transfer across backedges, full MIR dataflow, destruction,
 verified loops/invariants/variants, and termination checking remain unresolved
 under OQ-024/OQ-026. The battery verifier and 1,800-case affine cross-check are
-unchanged. See `examples/while_copy.klx`, `examples/while_nested.klx`, and intentional
-failures `examples/while_reference_fail.klx` / `examples/while_move_fail.klx`.
+unchanged. See `examples/while_copy.bow`, `examples/while_nested.bow`, and intentional
+failures `examples/while_reference_fail.bow` / `examples/while_move_fail.bow`.
 
 
 ## Iteration-local Move ownership (KED-013)
@@ -943,7 +960,7 @@ failures `examples/while_reference_fail.klx` / `examples/while_move_fail.klx`.
 A fresh non-Copy call result may now be bound and transferred inside one while
 iteration using existing Move rules:
 
-```klyxr
+```bowfin
 while running {
     let first = make_ticket();
     let second = identity(first);
@@ -955,7 +972,7 @@ while running {
 Calls remain expressions, so Copy results use existing let/assignment statements;
 no general expression-statement syntax is added. The example helpers have ordinary
 owned signatures. KED-013 originally had no ordinary record construction; its historical
-frontend fixture `examples/while_iteration_move.klx` uses a recursive record-returning
+frontend fixture `examples/while_iteration_move.bow` uses a recursive record-returning
 factory. This demonstrates typing/ownership/MIR structure, not executable value
 creation or termination.
 
@@ -983,15 +1000,15 @@ fixed points, general loop-carried Move joins or MIR ownership. MIR uses unchang
 Let/call trees and Branch/Goto backedges, with no new temporaries or terminators.
 No execution, verification, destruction or termination claim is made.
 
-See `examples/while_iteration_move.klx` and intentional failures
-`examples/while_carried_move_fail.klx` / `examples/while_nested_carried_move_fail.klx`.
+See `examples/while_iteration_move.bow` and intentional failures
+`examples/while_carried_move_fail.bow` / `examples/while_nested_carried_move_fail.bow`.
 KD-028 settles this refinement; OQ-022/OQ-023/OQ-024/OQ-025/OQ-026 retain broader
 control flow, destruction/replacement, and cyclic ownership/lifetime questions.
 
 
 ## Iteration-local borrowing (KED-014)
 
-```klyxr
+```bowfin
 fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
     let mut owned = value;
     let mut running = flag;
@@ -1024,10 +1041,10 @@ are excluded from semantic equality. This remains one cloned-iteration check abo
 MIR, with unchanged deterministic Branch/Goto backedges, no second engine or cyclic
 fixed-point inference. Ordinary functions remain non-executable and unverified.
 
-See `examples/while_iteration_borrow.klx`, `examples/while_iteration_mut_borrow.klx`,
-and `examples/while_iteration_move_borrow.klx`. Intentional failures
-`examples/while_carried_reference_fail.klx` and
-`examples/while_nested_reference_fail.klx` demonstrate relative header boundaries.
+See `examples/while_iteration_borrow.bow`, `examples/while_iteration_mut_borrow.bow`,
+and `examples/while_iteration_move_borrow.bow`. Intentional failures
+`examples/while_carried_reference_fail.bow` and
+`examples/while_nested_reference_fail.bow` demonstrate relative header boundaries.
 KD-029 settles this subset; KD-030 adds stable carried access. OQ-024/OQ-026 retain
 generalized cyclic lifetimes. Reference returns/results/reassignment,
 reborrowing, implicit coercions, partial loans, non-Copy dereference/replacement,
@@ -1037,7 +1054,7 @@ and independent 1,800-case mathematical cross-check are unchanged.
 
 ## Stable loop-carried references (KED-015)
 
-```klyxr
+```bowfin
 fn update(flag: bool, replacement: bool) -> bool {
     let mut running = flag;
     let mut owned = false;
@@ -1075,9 +1092,9 @@ If a post-loop handle use remains, the loan continues protecting its owner.
 Reference names remaining in scope do not by themselves imply active loans.
 Failed operations restore counts, holds, availability and provenance atomically.
 
-See `examples/while_carried_shared.klx`, `examples/while_carried_mutable.klx`,
-`examples/while_carried_nested.klx`, and intentional conflict
-`examples/while_recurrent_borrow_fail.klx`. Older carried-reference failure examples
+See `examples/while_carried_shared.bow`, `examples/while_carried_mutable.bow`,
+`examples/while_carried_nested.bow`, and intentional conflict
+`examples/while_recurrent_borrow_fail.bow`. Older carried-reference failure examples
 now isolate mutable-handle transfer, which remains forbidden.
 KD-030 adds no syntax, generalized cyclic NLL/fixed-point solver, second checker,
 MIR lifetime analysis, reference conditions/reassignment/returns/results, reborrowing,
@@ -1094,7 +1111,7 @@ Direct continue must end its lexical block. A conditional whose arms both contin
 also terminates that block; any following statement is rejected structurally.
 A loop itself still has its real condition-false exit and may have a suffix.
 
-```klyxr
+```bowfin
 fn update(flag: bool, skip: bool) -> bool {
     let mut value = false;
     while flag {
@@ -1134,8 +1151,8 @@ targets the inner header; after inner false exit, outer continue targets the out
 header. MIR uses the existing Goto and optional live tails; no unreachable join or
 suffix is emitted and structural validation is unchanged.
 
-See `examples/while_continue.klx`, `examples/while_continue_nested.klx`, and
-`examples/while_continue_recurrent_fail.klx`. Ordinary code is neither executed
+See `examples/while_continue.bow`, `examples/while_continue_nested.bow`, and
+`examples/while_continue_recurrent_fail.bow`. Ordinary code is neither executed
 nor proven. This introduces no reborrowing, generalized fixed-point/CFG ownership,
 second checker, MIR loan pass, labels, loop values, general unreachable-code
 policy, destruction, or termination proof. The verified battery path and its
@@ -1150,7 +1167,7 @@ Both-break and mixed break/continue arms have no lexical fallthrough; a suffix i
 that block is rejected. The while itself always retains its real condition-false
 exit, including constant conditions and all-breaking bodies.
 
-```klyxr
+```bowfin
 fn update(flag: bool, stop: bool) -> bool {
     let mut value = false;
     while flag {
@@ -1195,8 +1212,8 @@ Lexical cleanup and loan expiry introduce no destruction or resource release.
 MIR reuses Goto to the innermost exit, while continue targets its header. Optional
 live tails avoid synthetic suffix joins for all-terminal arms. Canonical identities,
 structural validator and specialized battery proof path are unchanged. See
-`examples/while_break.klx`, `examples/while_break_nested.klx`, and
-`examples/while_break_recurrent_fail.klx`. Ordinary code remains non-executable
+`examples/while_break.bow`, `examples/while_break_nested.bow`, and
+`examples/while_break_recurrent_fail.bow`. Ordinary code remains non-executable
 and unverified. Labels, break/loop values, generalized fixed-point ownership,
 MIR borrowing, reborrowing, arbitrary unreachable-code analysis, destruction,
 and termination proof remain open under OQ-022/OQ-024/OQ-025/OQ-026.
@@ -1215,7 +1232,7 @@ Every return operand is checked for the exact declared type in the existing
 Type phase before ownership. Public manually constructed ASTs receive the same
 structural checks and diagnostics as parsed source.
 
-```klyxr
+```bowfin
 fn choose(flag: bool, value: Percent) -> Percent {
     if flag {
         return value;
@@ -1257,13 +1274,13 @@ validator semantics are unchanged; this adds no bottom type, general unreachable
 analysis, generalized CFG/fixed-point ownership, second checker, SSA/phi nodes,
 reference returns, reborrowing, destruction, execution, or verification of ordinary
 logic. The specialized verified battery path and its 1,800-case affine cross-check
-are unchanged. See `examples/early_return.klx`, `examples/early_return_move.klx`,
-and the intentional failure `examples/early_return_recurrent_fail.klx`.
+are unchanged. See `examples/early_return.bow`, `examples/early_return_move.bow`,
+and the intentional failure `examples/early_return_recurrent_fail.bow`.
 
 
 ## No-value ordinary functions and call statements (KED-019 / KD-034)
 
-```klyxr
+```bowfin
 fn reset(flag: &mut bool) {
     *flag = false;
 }
@@ -1281,8 +1298,8 @@ fn prepare(flag: &mut bool) -> bool {
 }
 ```
 
-See `examples/no_value_functions.klx`, `examples/no_value_call_fail.klx`, and
-`examples/no_value_recurrent_fail.klx`. NoValue is function-result metadata,
+See `examples/no_value_functions.bow`, `examples/no_value_call_fail.bow`, and
+`examples/no_value_recurrent_fail.bow`. NoValue is function-result metadata,
 never an expression type. AST/resolution/HIR use `Option<ValueType>`:
 `None` explicitly means NoValue and `Some(T)` means Value(T). No inference,
 unit, void, dummy expression, implicit value return, or general expression
@@ -1332,7 +1349,7 @@ function and top-level battery harness paths are unchanged.
 
 ## Ordinary record construction and Copy-field reads (KED-020 / KD-035)
 
-```klyxr
+```bowfin
 type Percent = range 0..100;
 record Battery { charge: Percent }
 
@@ -1346,8 +1363,8 @@ fn inspect_and_forward(battery: Battery) -> Battery {
 }
 ```
 
-See `examples/ordinary_records.klx`, `examples/ordinary_record_move_fail.klx`
-and `examples/ordinary_record_condition_fail.klx`. KED-020 originally permitted exactly one named-range field; KD-036 now permits
+See `examples/ordinary_records.bow`, `examples/ordinary_record_move_fail.bow`
+and `examples/ordinary_record_condition_fail.bow`. KED-020 originally permitted exactly one named-range field; KD-036 now permits
 one or more fields as described below. An initializer must have that exact nominal
 type; equal numeric bounds confer no conversion. KD-037 now permits
 `Battery { charge: 80 }` when 80 is inside Percent's inclusive bounds.
@@ -1403,7 +1420,7 @@ initializer order for multi-field construction.
 
 ## Multiple-field records and complete named construction (KED-021 / KD-036)
 
-```klyxr
+```bowfin
 type Percent = range 0..100;
 type Millivolts = range 0..5000;
 record Battery { charge: Percent, voltage: Millivolts, reserve: Percent }
@@ -1415,8 +1432,8 @@ fn forward(charge: Percent, voltage: Millivolts) -> Battery {
 }
 ```
 
-See `examples/multiple_field_records.klx` and
-`examples/multiple_field_record_move_fail.klx`. A record has at least one unique
+See `examples/multiple_field_records.bow` and
+`examples/multiple_field_record_move_fail.bow`. A record has at least one unique
 named-range field. Commas are required between entries; trailing commas are
 optional. Complete construction supplies each declared field exactly once.
 Unknown/duplicate entries diagnose their written occurrence before completeness;
@@ -1473,7 +1490,7 @@ Both declared endpoints are inclusive. Out-of-range values are Type errors at th
 literal (including preserved grouped span), identifying the range, bounds and value.
 Malformed/unrepresentable numbers retain earlier lexer/parser errors.
 
-```klyxr
+```bowfin
 type Percent = range 0..100;
 record Battery { charge: Percent, health: Percent }
 fn identity(p: Percent) -> Percent { return p; }
@@ -1486,8 +1503,8 @@ fn revise(access: &mut Percent) -> Percent {
 }
 ```
 
-See `examples/contextual_range_literals.klx` and
-`examples/contextual_range_literal_fail.klx`. Typed HIR publishes a distinct
+See `examples/contextual_range_literals.bow` and
+`examples/contextual_range_literal_fail.bow`. Typed HIR publishes a distinct
 FormedRangeLiteral leaf with its sole canonical identity in ExprType::Range;
 raw IntegerLiteral remains an expression-only operator constant. HIR validation
 checks canonical tables and bounds; MIR retains and validates structural type tags.
@@ -1511,7 +1528,7 @@ representation, eligibility gates, diagnostics, proofs and call-state behavior.
 
 ## Direct Copy-field assignment (KED-023 / KD-038)
 
-```klyxr
+```bowfin
 type Percent = range 0..100;
 record Battery { charge: Percent, health: Percent }
 fn refresh(battery: Battery) -> Battery {
@@ -1522,8 +1539,8 @@ fn refresh(battery: Battery) -> Battery {
 }
 ```
 
-See `examples/copy_field_assignment.klx` and its intentional borrowed-root failure
-`examples/copy_field_assignment_fail.klx`. The root must be a directly named,
+See `examples/copy_field_assignment.bow` and its intentional borrowed-root failure
+`examples/copy_field_assignment_fail.bow`. The root must be a directly named,
 previously declared mutable owned ordinary record local. Parameter, immutable,
 reference and non-record roots reject; so do temporary/nested projection, compound
 assignment, assignment expressions and reference-field mutation. Canonical field
@@ -1571,7 +1588,7 @@ remain open under OQ-004/OQ-020/OQ-023/OQ-024/OQ-025/OQ-026.
 
 ## Copy-field reads through named record references (KED-024 / KD-039)
 
-```klyxr
+```bowfin
 type Percent = range 0..100;
 record Battery { charge: Percent, health: Percent }
 fn inspect(view: &Battery) -> Percent {
@@ -1583,8 +1600,8 @@ fn inspect_exclusive(access: &mut Battery) -> Percent {
 }
 ```
 
-See `examples/reference_field_reads.klx` and the intentional live-loan conflict
-in `examples/reference_field_reads_fail.klx`. A directly named ordinary parameter
+See `examples/reference_field_reads.bow` and the intentional live-loan conflict
+in `examples/reference_field_reads_fail.bow`. A directly named ordinary parameter
 or inferred local of exact `&Record` / `&mut Record` type can copy any declared
 named-range field. Field selection uses that referent's canonical record identity;
 result typing is exactly nominal. This extends the historical owned-only KD-035/
@@ -1624,14 +1641,14 @@ with unchanged battery proofs, diagnostics and independent affine coverage.
 
 ## Copy-field assignment through exclusive named record references (KED-025 / KD-040)
 
-```klyxr
+```bowfin
 fn set_charge(access: &mut Battery, charge: Percent) {
     access.charge = charge;
 }
 ```
 
-See `examples/reference_field_assignment.klx` and the intentional moved-target
-failure in `examples/reference_field_assignment_fail.klx`. A directly named
+See `examples/reference_field_assignment.bow` and the intentional moved-target
+failure in `examples/reference_field_assignment_fail.bow`. A directly named
 ordinary exact `&mut Record` parameter or local can write any declared Copy
 named-range field. Its binding need not be mutable. Field selection uses the
 actual referent's canonical record; RHS typing is exact and nominal, with direct
@@ -1702,7 +1719,7 @@ and 86 new KD-042 identities (76 original plus 10 repair regressions) separately
 Accepted KED-028 Draft 1 permits exact-typed whole-value replacement of an available
 mutable owned record local:
 
-```klyxr
+```bowfin
 let mut current = Reading { value: 80 };
 let incoming = Reading { value: 60 };
 current = incoming;
@@ -1723,7 +1740,7 @@ exclusions are narrowly refined here.
 Run the public inert example with:
 
 ```bash
-cargo run --locked --bin bowfin -- run examples/owned_replacement.klx --function demo
+cargo run --locked --bin bowfin -- run examples/owned_replacement.bow --function demo
 ```
 
 Expected result: `Reading { value: Percent(59) }`. `check` and `verify` continue to
@@ -1764,7 +1781,7 @@ with independent exact-head review and Greg's acceptance pending. It does not ch
 KD-008's broader Direction Accepted status. Ordinary Value and NoValue functions
 support the same contextual clause for both keyword spellings:
 
-```klyxr
+```bowfin
 function observe() -> bool effects clock, io { return true; }
 fn sample() effects io, clock { let value = observe(); }
 ```
@@ -1801,14 +1818,14 @@ resumption refused after failure. `unsafe` bypasses no safety or validation rule
 Run the positive example (conservative declarations, no clock/I/O operation):
 
 ```bash
-cargo run --locked --bin bowfin -- check examples/explicit_effects.klx
-cargo run --locked --bin bowfin -- run examples/explicit_effects.klx --function demo
+cargo run --locked --bin bowfin -- check examples/explicit_effects.bow
+cargo run --locked --bin bowfin -- run examples/explicit_effects.bow --function demo
 ```
 
 The run returns `Bool(true)`. Both `check` and `verify` report zero proof bodies and
-zero proof calls for these ordinary functions. `examples/explicit_effects_fail.klx`
+zero proof calls for these ordinary functions. `examples/explicit_effects_fail.bow`
 rejects the three-function transitive edge missing `io`, including under `run`.
-The older `examples/effects.klx` remains future policy illustration and rejects.
+The older `examples/effects.bow` remains future policy illustration and rejects.
 No production resource/effectful API, policy attribute, effect hierarchy, alias,
 polymorphism, unsafe construct, unwinding or effects-aware proof behavior is added.
 See the [implementation ledger](../docs/engineering/KED-030-IMPLEMENTATION-LEDGER.md)
@@ -1824,8 +1841,8 @@ families Result/Ok/Error/Err/match are reserved. The closed statement match requ
 one Ok binding arm and one Error or Err binding arm in either order. Each Result
 must be explicitly matched or transferred on every successful scope exit.
 
-Run `examples/result_handling.klx` with `--function demo` or `success_demo`;
-`examples/result_unhandled_fail.klx` deliberately rejects. Result is always Move,
+Run `examples/result_handling.bow` with `--function demo` or `success_demo`;
+`examples/result_unhandled_fail.bow` deliberately rejects. Result is always Move,
 including Copy payloads. Matching nested Results leaves independent inner duties.
 No raw named-range literal formation, Result conditional initializer/replacement,
 reference payload, public record Result field, verified/harness Result, `?`, general
@@ -1856,9 +1873,9 @@ Parenthesizing propagation does not make it an expression. `?`, `try`, malformed
 phrases, nested/expression positions, assignments, verified/harness use and
 Result-valued conditional initializers remain excluded.
 
-Run `examples/result_propagation.klx` with `--function demo` for
+Run `examples/result_propagation.bow` with `--function demo` for
 `Ok(Reading(42))`, or `failure_demo` for `Error(ReadError(1))`. The nominally distinct
-failure types in `result_propagation_mismatch.klx` reject. Full authority, scope,
+failure types in `result_propagation_mismatch.bow` reject. Full authority, scope,
 conservation and bound evidence is recorded in the KED-032 implementation ledger.
 
 ## Frozen KED-033 selected trusted Sensor slice
@@ -1867,8 +1884,8 @@ The first public trusted Resource family is available only by explicit immutable
 sensor-demo selection. Run the real defining example with:
 
 ```bash
-cargo run --locked --bin bowfin -- run examples/trusted_sensor.klx --function sample --profile sensor-demo
-cargo run --locked --bin bowfin -- audit examples/trusted_sensor.klx --function sample --profile sensor-demo
+cargo run --locked --bin bowfin -- run examples/trusted_sensor.bow --function sample --profile sensor-demo
+cargo run --locked --bin bowfin -- audit examples/trusted_sensor.bow --function sample --profile sensor-demo
 ```
 
 See the [trusted Sensor guide](../docs/engineering/KED-033-TRUSTED-SENSOR.md) for the
@@ -1881,7 +1898,7 @@ Release is cleanup-only; explicit fallible completion remains deferred to KED-03
 
 ## Sentinel reference application
 
-See [Sentinel 0](../docs/SENTINEL.md) and `examples/sentinel.klx` for the complete
+See [Sentinel 0](../docs/SENTINEL.md) and `examples/sentinel.bow` for the complete
 interpreter application and exact CLI allowances. The finite public scenarios
 `warning` (60,42) and `critical` (90,60) select readings by session-local successful
 Sensor identity. Reads of each Sensor remain stable; later acquisitions return

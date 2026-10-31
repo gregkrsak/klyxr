@@ -28,5 +28,5 @@ jobs:
 
       - name: Verify compact and explicit examples remain present
         run: |
-          grep -q "verified fn consume" examples/battery_fail.klx
-          grep -q "verified function consume" examples/battery_ok.klx
+          grep -q "verified fn consume" examples/battery_fail.bow
+          grep -q "verified function consume" examples/battery_ok.bow

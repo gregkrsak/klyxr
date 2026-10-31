@@ -1166,7 +1166,7 @@ mod tests {
 
     #[test]
     fn expression_typing_uses_ids_when_diagnostic_names_change() {
-        let ast = parse_source(include_str!("../../examples/battery_ok.klx")).unwrap();
+        let ast = parse_source(include_str!("../../examples/battery_ok.bow")).unwrap();
         let mut resolved = resolve::resolve(&ast).unwrap();
         let range = resolved.declarations.ranges[0].id;
         for declaration in &mut resolved.declarations.ranges {
@@ -1194,7 +1194,7 @@ mod tests {
         ] {
             let text = format!(
                 "type Other = range 0..100;\n{}",
-                include_str!("../../examples/battery.klx")
+                include_str!("../../examples/battery.bow")
             )
             .replace("amount: Percent", "amount: Other")
             .replace(

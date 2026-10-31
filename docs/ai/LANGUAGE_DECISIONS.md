@@ -16,7 +16,7 @@ Statuses:
 **Decision:** The public language name is **Klyxr**, pronounced **“CLICK-ser.”**
 
 **CLI:** `klyxr`  
-**Primary source extension:** `.klx`  
+**Primary source extension:** `.bow` on migration staging; explicit `.klx` input retained<br>
 **Primary domain:** `klyxr.com`  
 **Secondary owned domain:** `klyxr.online`
 
@@ -74,7 +74,7 @@ Move semantics are the default for non-`Copy` values.
 
 Klyxr supports real distinct constrained types.
 
-```klyxr
+```bowfin
 type Percent = range 0..100;
 ```
 
@@ -262,11 +262,11 @@ The spellings are lexical synonyms and normalize to the same semantic token.
 
 Examples:
 
-```klyxr
+```bowfin
 pub verified fn transfer(source: &mut Account)
 ```
 
-```klyxr
+```bowfin
 public verified function transfer(source: &mutable Account)
 ```
 
@@ -363,7 +363,7 @@ Klyxr uses explicit value returns in block-bodied functions.
 A value-returning block function declares its return type with `-> Type` and
 returns a value with:
 
-```klyxr
+```bowfin
 return expression;
 ```
 
@@ -512,7 +512,7 @@ unresolved under OQ-024/OQ-026; KD-027 later settles narrow statement loops.
 
 An ordinary local initializer may select an owned value with:
 
-```klyxr
+```bowfin
 let chosen = if flag { first } else { second };
 ```
 
@@ -561,7 +561,7 @@ An ordinary local declared with `let mut` / `let mutable` may be directly
 reassigned when it holds an owned non-reference Copy value. Initially the
 permitted target types are Bool and named constrained ranges:
 
-```klyxr
+```bowfin
 let mut current = start;
 current = next(current);
 ```

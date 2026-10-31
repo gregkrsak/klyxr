@@ -254,14 +254,14 @@ fn loans_holds_recurrence_and_moved_handles_still_reject() {
 fn verified_harness_literals_remain_isolated() {
     let source = format!(
         "{}\nfn ordinary() -> Percent {{ return 80; }}",
-        include_str!("../../examples/battery_ok.klx")
+        include_str!("../../examples/battery_ok.bow")
     );
     let p = compile_source(&source).unwrap();
     let report = verify::verify_report(&p);
     assert_eq!(report.functions_proven, 1);
     assert_eq!(report.calls_checked, 1);
     assert!(!p.bindings().is_empty());
-    let fail = compile_source(include_str!("../../examples/battery_fail.klx")).unwrap();
+    let fail = compile_source(include_str!("../../examples/battery_fail.bow")).unwrap();
     assert!(!verify::verify_report(&fail).diagnostics.is_empty());
 }
 
@@ -285,7 +285,7 @@ fn negative_singleton_bounds_reject_neighbors_with_type_phase_and_signed_span() 
 #[test]
 fn verified_call_literals_preserve_specialized_eligibility_bounds_and_proof_counts() {
     for amount in [0, 100, -1, 101] {
-        let s = include_str!("../../examples/battery_ok.klx")
+        let s = include_str!("../../examples/battery_ok.bow")
             .replace("charge: 80", "charge: 100")
             .replace(", 50)", &format!(", {amount})"));
         let p = compile_source(&s).unwrap();
@@ -303,7 +303,7 @@ fn verified_call_literals_preserve_specialized_eligibility_bounds_and_proof_coun
         };
         assert_eq!(call.amount, amount); // Scalar harness path, never ordinary formed HIR.
     }
-    let p = compile_source(include_str!("../../examples/battery_ok.klx")).unwrap();
+    let p = compile_source(include_str!("../../examples/battery_ok.bow")).unwrap();
     let hir::Function::Verified(v) = &p.functions()[0] else {
         panic!()
     };

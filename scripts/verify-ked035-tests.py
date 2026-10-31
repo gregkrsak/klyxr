@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reconcile a complete Cargo profile with the exact M2 identity correspondence.
+"""Reconcile a complete Cargo profile through M3's source-extension controls.
 
 Historical manifests remain unchanged. Only the named crate doctest identity is
 mapped; target inventory also accounts for both zero-test command binaries.
@@ -92,18 +92,33 @@ m2 = [
     "tests/toolchain_identity.rs::m2_actual_output_byte_neighbors_are_command_independent",
     "tests/toolchain_identity.rs::m2_cargo_metadata_selects_canonical_and_retains_alias",
 ]
+m3 = {
+    "tests/source_extension.rs::m3_corpus_frontend_expectations_are_explicit": "corpus_frontend_expectations",
+    "tests/source_extension.rs::m3_corpus_runs_and_audits_have_independent_outcomes": "corpus_execution_expectations",
+    "tests/source_extension.rs::m3_legacy_and_canonical_paths_preserve_both_commands": "legacy_command_and_suffix_compatibility",
+    "tests/source_extension.rs::m3_same_stem_and_other_explicit_paths_select_actual_bytes": "explicit_path_selection",
+    "tests/source_extension.rs::m3_missing_paths_and_diagnostic_spans_remain_honest": "diagnostic_origin_and_input_failure",
+    "tests/source_extension.rs::m3_equal_length_suffixes_preserve_actual_byte_neighbors": "actual_byte_boundary",
+}
 historical = set(expected) | set(additions) | set(new) | set(application)
 assert len(m1) == len(set(m1)) == 5, "duplicate or unexpected M1 control count"
 assert not set(m1) & historical, "M1 control reuses a historical identity"
 assert len(m2) == len(set(m2)) == 6, "duplicate or unexpected M2 control count"
 assert not set(m2) & (historical | set(m1)), "M2 control reuses a predecessor identity"
+assert len(m3) == 6, "unexpected M3 control count"
+assert not set(m3) & (historical | set(m1) | set(m2)), "M3 control reuses a predecessor identity"
+assert set(m3.values()) == {
+    "corpus_frontend_expectations", "corpus_execution_expectations",
+    "legacy_command_and_suffix_compatibility", "explicit_path_selection",
+    "diagnostic_origin_and_input_failure", "actual_byte_boundary",
+}, "unclassified M3 control"
 # A second binary must neither duplicate a nonempty test group nor hide a
 # predecessor behind an unchanged aggregate total. Check Cargo targets even when
 # they contain no tests; only these two binary groups may be empty.
-expected_targets = {identity.split("::", 1)[0] for identity in historical | set(m1) | set(m2)}
+expected_targets = {identity.split("::", 1)[0] for identity in historical | set(m1) | set(m2) | set(m3)}
 expected_targets.remove("doctest:klyxr_compiler")
 expected_targets |= {"doctest:bowfin_compiler", "main.rs", "compat_main.rs"}
-assert len(targets) == len(set(targets)) == len(expected_targets) == 38, "duplicate or missing Cargo target"
+assert len(targets) == len(set(targets)) == len(expected_targets) == 39, "duplicate or missing Cargo target"
 assert set(targets) == expected_targets, "changed Cargo target inventory"
 for target, group in zip(targets, groups):
     assert bool(group) == (target not in {"main.rs", "compat_main.rs"}), "unexpected empty or repeated binary coverage"
@@ -125,9 +140,9 @@ assert set(k35["classifications"].values()) <= {
 }, "unknown KED-035 evidence class"
 assert not set(new) & (set(expected) | set(additions))
 assert len(additions) == len(set(additions))
-assert set(actual) - set(expected) == set(additions) | set(new) | set(application) | set(m1) | set(m2), "missing or unclassified complete-profile identity"
+assert set(actual) - set(expected) == set(additions) | set(new) | set(application) | set(m1) | set(m2) | set(m3), "missing or unclassified complete-profile identity"
 assert manifest["expected_per_profile"] == 1981 + len(additions)
-assert len(actual) == sum(summaries) == manifest["expected_per_profile"] + len(new) + len(application) + len(m1) + len(m2)
+assert len(actual) == sum(summaries) == manifest["expected_per_profile"] + len(new) + len(application) + len(m1) + len(m2) + len(m3)
 assert set(manifest["classifications"]) == set(additions)
 assert set(manifest["classifications"].values()) <= {"ordinary_source", "private_canonical_catalog", "private_catalog_envelope", "trusted_boundary", "private_malformed_authority"}
 k33 = json.loads((root / "docs/engineering/ked-033-evidence.json").read_text())
@@ -179,11 +194,15 @@ print("compile-fail authority doctest: passed; affine cross-check: 1,800 cases p
 
 print(f"KED-035 {k35['stage']} reconciliation: 2045 exact predecessors + {len(new)} additions = {2045 + len(new)} retained")
 
-assert len(actual) - len(m1) - len(m2) == sentinel["expected_per_profile"]
+assert len(actual) - len(m1) - len(m2) - len(m3) == sentinel["expected_per_profile"]
 print(f"Sentinel 0 reconciliation: 2112 exact predecessors + {len(application)} classified additions = {len(historical)} retained; migrations: 0")
-assert len(actual) - len(m2) == sentinel["expected_per_profile"] + len(m1) == 2131
+assert len(actual) - len(m2) - len(m3) == sentinel["expected_per_profile"] + len(m1) == 2131
 print(f"Bowfin M1 reconciliation: {len(historical)} retained predecessors + {len(m1)} machine-identity controls = 2131 retained through the explicit M2 map")
-assert len(actual) == len(observed) == 2131 + len(m2) == 2137
-print("Bowfin M2 reconciliation: 2131 predecessors retained; one exact crate-doctest identity migration; 6 new command controls; 2137 passed across 38 distinct Cargo targets (two empty binaries)")
+assert len(actual) - len(m3) == 2131 + len(m2) == 2137
+print("Bowfin M2 reconciliation: 2131 predecessors retained; one exact crate-doctest identity migration; all 6 command controls retained; 2137 predecessor identities")
 for legacy, successor in identity_migrations.items():
     print(f"M2 one-to-one identity: {legacy} -> {successor}")
+assert len(actual) == len(observed) == 2137 + len(m3) == 2143
+print("Bowfin M3 reconciliation: all 2137 predecessors retained; no new identity migrations; 6 classified source-extension controls; 2143 passed across 39 distinct Cargo targets (two empty binaries)")
+for identity, classification in m3.items():
+    print(f"M3 control: {identity}; class={classification}")

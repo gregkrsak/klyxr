@@ -10,7 +10,7 @@ State the decision in precise, testable terms.
 
 **Example:**
 
-```klyxr
+```bowfin
 // minimal example if useful
 ```
 

@@ -20,16 +20,16 @@ fn bad(body: &str, phase: &str, wording: &str) {
         FrontendError::Parse(_) => ("Parse", e.to_string()),
         FrontendError::Resolve(ds) => (
             "Resolve",
-            ds[0].render("case.klx", &format!("{DECL} {body}")),
+            ds[0].render("case.bow", &format!("{DECL} {body}")),
         ),
-        FrontendError::Type(ds) => ("Type", ds[0].render("case.klx", &format!("{DECL} {body}"))),
+        FrontendError::Type(ds) => ("Type", ds[0].render("case.bow", &format!("{DECL} {body}"))),
         FrontendError::Ownership(ds) => (
             "Ownership",
-            ds[0].render("case.klx", &format!("{DECL} {body}")),
+            ds[0].render("case.bow", &format!("{DECL} {body}")),
         ),
         FrontendError::Effects(ds) => (
             "Effects",
-            ds[0].render("case.klx", &format!("{DECL} {body}")),
+            ds[0].render("case.bow", &format!("{DECL} {body}")),
         ),
     };
     assert_eq!(actual, phase, "{body}: {detail}");

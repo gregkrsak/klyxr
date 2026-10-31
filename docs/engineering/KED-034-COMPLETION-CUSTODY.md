@@ -18,7 +18,7 @@ sensor_finish(Sensor)
 FinishReceipt is the exact nominal named range `1..1`. It is Copy status data.
 Ordinary source can form it at existing named-range boundaries; it is not proof,
 authority, attestation or evidence that finish occurred. Same-shaped foreign
-ranges do not substitute. The defining source is `examples/sensor_finish.klx`.
+ranges do not substitute. The defining source is `examples/sensor_finish.bow`.
 
 The parameter consumes one whole canonical Sensor, including a lawful relay
 temporary or selected Ok payload. No reference, moved owner, live conflicting
@@ -80,14 +80,14 @@ These commands are for the authorized GitHub Actions environment. No local Rust
 execution is authorized for this task.
 
 ```bash
-cargo run --locked --bin klyxr -- run examples/sensor_finish.klx --function sample --profile sensor-demo
-cargo run --locked --bin klyxr -- run examples/sensor_finish.klx --function sample --profile sensor-demo --scenario finish-io-failure
-cargo run --locked --bin klyxr -- run examples/sensor_finish.klx --function sample --profile sensor-demo --scenario finish-partial-io-failure
-cargo run --locked --bin klyxr -- audit examples/sensor_finish.klx --function sample --profile sensor-demo
+cargo run --locked --bin klyxr -- run examples/sensor_finish.bow --function sample --profile sensor-demo
+cargo run --locked --bin klyxr -- run examples/sensor_finish.bow --function sample --profile sensor-demo --scenario finish-io-failure
+cargo run --locked --bin klyxr -- run examples/sensor_finish.bow --function sample --profile sensor-demo --scenario finish-partial-io-failure
+cargo run --locked --bin klyxr -- audit examples/sensor_finish.bow --function sample --profile sensor-demo
 ```
 
 The CLI integration tests execute these real paths through the built binary.
-`sensor_finish_live_loan_fail.klx` and `sensor_finish_reuse_fail.klx` are rejection
+`sensor_finish_live_loan_fail.bow` and `sensor_finish_reuse_fail.bow` are rejection
 controls. Existing `open-release` denies finish; `finish-release` denies open/read;
 `open-finish-release` denies read. An effect declaration changes none of these grants.
 

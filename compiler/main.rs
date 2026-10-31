@@ -50,7 +50,7 @@ fn run() -> Result<(), i32> {
     }
 
     let Some(path) = args.next() else {
-        eprintln!("error: missing .klx input path");
+        eprintln!("error: missing .bow input path");
         print_usage();
         return Err(2);
     };
@@ -160,7 +160,7 @@ fn run() -> Result<(), i32> {
 }
 
 fn print_usage() {
-    eprintln!("usage: {COMMAND} <check|verify> <file.klx>");
+    eprintln!("usage: {COMMAND} <check|verify> <file.bow>");
     print_compatibility_role();
 }
 
@@ -173,7 +173,7 @@ fn print_compatibility_role() {
 fn run_execution(mut args: impl Iterator<Item = String>, audit: bool) -> Result<(), i32> {
     use execution::{AdmissionLimits, ExecutionLimits};
     let Some(path) = args.next() else {
-        eprintln!("usage: {COMMAND} run <file.klx> --function <name> [limit overrides]");
+        eprintln!("usage: {COMMAND} run <file.bow> --function <name> [limit overrides]");
         print_compatibility_role();
         return Err(2);
     };

@@ -586,7 +586,7 @@ fn identifier_binary_unary_and_nested_condition_blocks_are_preserved() {
 }
 #[test]
 fn verified_battery_path_and_literal_harness_remain_separate() {
-    let source = include_str!("../../examples/battery_ok.klx");
+    let source = include_str!("../../examples/battery_ok.bow");
     let p = compile_source(source).unwrap();
     let report = bowfin_compiler::verify::verify_report(&p);
     assert_eq!(report.functions_proven, 1);
