@@ -1,4 +1,4 @@
-# KED-033 implementation ledger
+# BED-033 implementation ledger
 
 ## Authority and fixed baseline
 
@@ -596,7 +596,7 @@ All five canonical AI files describe frozen semantics, the implemented slice,
 remaining exclusions, ownership-derived effects, exact trust/receipt/session/audit
 boundaries, deferred fallible completion and pending independent acceptance.
 The generated bundle is rebuilt from those files. The compiler guide links the
-focused [fixture and bounded-execution guide](KED-033-TRUSTED-SENSOR.md), which
+focused [fixture and bounded-execution guide](BED-033-TRUSTED-SENSOR.md), which
 documents actual commands, fixed assumptions, budgets, error classes, stopped
 custody versus successful release, and no production fault authority.
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Reconcile one complete Cargo profile against the exact KED-032 predecessor."""
+"""Reconcile one complete Cargo profile against the exact BED-032 predecessor."""
 import json
 from pathlib import Path
 import re
 import sys
 
 root = Path(__file__).resolve().parents[1]
-baseline = json.loads((root / "docs/engineering/ked-032-predecessors.json").read_text())
+baseline = json.loads((root / "docs/engineering/bed-032-predecessors.json").read_text())
 targets = []
 groups = []
 current = None
@@ -46,7 +46,7 @@ for target, group in zip(targets, groups):
         assert identity not in actual, "duplicate identity: " + identity
         assert outcome == "ok", identity + ": " + outcome
         actual[identity] = outcome
-manifest = json.loads((root / "docs/engineering/ked-032-evidence.json").read_text())
+manifest = json.loads((root / "docs/engineering/bed-032-evidence.json").read_text())
 expected = {row["id"]:row["outcome"] for row in baseline["identities"]}
 assert baseline["commit"] == manifest["baseline_commit"] == "74c1bedc8f847ffaeb38ed4795ee91730e35b949"
 assert baseline["tree"] == manifest["baseline_tree"] == "2d0cc78b67a8cb69ea8feaff183dbf1b91938e63"
@@ -55,19 +55,19 @@ assert manifest["migrations"] == {} and manifest["contract_corrections"] == []
 assert all(actual.get(k)==v for k,v in expected.items()), "missing or changed predecessor"
 additions=manifest["additions"]
 assert len(additions)==len(set(additions))==29
-assert set(actual)-set(expected)==set(additions), "missing or unclassified KED-032 identity"
+assert set(actual)-set(expected)==set(additions), "missing or unclassified BED-032 identity"
 assert len(actual)==sum(summaries)==1846+len(additions)
 assert set(manifest["classifications"])==set(additions)
 assert set(manifest["classifications"].values()) <= {"ordinary_source","private_canonical_resources","primitive_protocol"}
-old=json.loads((root / "docs/engineering/ked-031-predecessors.json").read_text())
-k31=json.loads((root / "docs/engineering/ked-031-evidence.json").read_text())
+old=json.loads((root / "docs/engineering/bed-031-predecessors.json").read_text())
+k31=json.loads((root / "docs/engineering/bed-031-evidence.json").read_text())
 assert {r["id"] for r in old["identities"]} | set(k31["additions"]) == set(expected)
 assert len(k31["repair"]["reviewed_additions"])==46 and len(k31["repair"]["new_identities"])==10
 assert actual.get("lib.rs::verify::tests::affine_proofs_match_exhaustive_execution_on_small_domains")=="ok"
 doctests=[k for k in actual if k.startswith("doctest:")]
 assert len(doctests)==1 and "CheckedExecutable - compile fail" in doctests[0]
-print(f"KED-032 reconciliation: 1,846 exact predecessors + {len(additions)} additions = {len(actual)} passed")
-print("KED-031 reconciliation retained: 1,790 original + 46 reviewed + 10 MR01 = 1,846")
+print(f"BED-032 reconciliation: 1,846 exact predecessors + {len(additions)} additions = {len(actual)} passed")
+print("BED-031 reconciliation retained: 1,790 original + 46 reviewed + 10 MR01 = 1,846")
 print("identity migrations: 0; failed/ignored/filtered: 0/0/0")
 print("compile-fail authority doctest: passed; affine cross-check: 1,800 cases passed")
 print("evidence lanes:", {d:list(manifest["classifications"].values()).count(d) for d in sorted(set(manifest["classifications"].values()))})

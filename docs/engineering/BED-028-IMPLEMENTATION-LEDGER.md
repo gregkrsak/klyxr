@@ -1,4 +1,4 @@
-# KED-028 implementation ledger
+# BED-028 implementation ledger
 
 Issue: https://github.com/gregkrsak/klyxr/issues/64
 Frozen specification: Draft 1; freeze comment 6195981810.

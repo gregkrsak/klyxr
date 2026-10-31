@@ -1,8 +1,9 @@
-# Klyxr Repository Structure
+# Bowfin Repository Structure
 
-This repository contains the initial Klyxr scaffold plus an executable Rust-based
-compiler prototype. Current GitHub home: `gregkrsak/klyxr`. The repository may
-later move to a dedicated Klyxr organization.
+This repository contains the initial Bowfin scaffold plus an executable Rust-based
+compiler prototype. Current operational GitHub home: `gregkrsak/klyxr`. The adopted destination is
+`gregkrsak/bowfin`; no repository cutover has occurred. A future organization
+transfer requires a separate owner decision.
 
 ```text
 klyxr/
@@ -53,8 +54,8 @@ klyxr/
 │   │   ├── DECISION_TEMPLATE.md
 │   │   ├── DESIGN_PRINCIPLES.md
 │   │   ├── HANDOFF_PROMPT.md
-│   │   ├── KLYXR_AI_CONTEXT_BUNDLE.md
-│   │   ├── KLYXR_CONTEXT.md
+│   │   ├── BOWFIN_AI_CONTEXT_BUNDLE.md
+│   │   ├── BOWFIN_CONTEXT.md
 │   │   ├── LANGUAGE_DECISIONS.md
 │   │   ├── OPEN_QUESTIONS.md
 │   │   └── README.md
@@ -91,4 +92,4 @@ The scaffold does **not** choose these yet because the project has not locked th
 Those should be added through explicit project decisions rather than guessed into the initial repository.
 
 The prototype compiler uses a Cargo workspace with a pinned Rust toolchain.
-That implementation choice does not settle the future Klyxr package manifest.
+That implementation choice does not settle the future Bowfin package manifest.

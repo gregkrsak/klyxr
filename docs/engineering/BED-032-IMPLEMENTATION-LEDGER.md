@@ -1,4 +1,4 @@
-# KED-032 implementation ledger
+# BED-032 implementation ledger
 
 ## Authority and exact baseline
 

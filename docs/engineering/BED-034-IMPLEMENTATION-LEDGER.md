@@ -1,4 +1,4 @@
-# KED-034 implementation ledger
+# BED-034 implementation ledger
 
 Frozen authority: Issue #82 Draft 2; freeze 6274604644; implementation
 authorization 6274641666; accepted K34-P01 through K34-P09. GitHub Actions is

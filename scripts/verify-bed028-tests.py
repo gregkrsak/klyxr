@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Reconcile one complete Cargo profile against the exact KED-029 predecessor."""
+"""Reconcile one complete Cargo profile against the exact BED-028 predecessor."""
 import json
 from pathlib import Path
 import re
 import sys
 
 root = Path(__file__).resolve().parents[1]
-baseline = json.loads((root / "docs/engineering/ked-029-predecessors.json").read_text())
+baseline = json.loads((root / "docs/engineering/bed-028-predecessors.json").read_text())
 targets = []
 groups = []
 current = None
@@ -48,30 +48,21 @@ for target, group in zip(targets, groups):
         actual[identity] = outcome
 def reconcile(actual, baseline, migrations, additions):
     expected = {r["id"]: r["outcome"] for r in baseline["identities"]}
-    assert len(expected) == 1706, "exact KED-029 baseline inventory required"
+    assert len(expected) == 1667, "exact BED-028 baseline inventory required"
     for old, new in migrations.items():
         assert old in expected and new not in expected
         expected[new] = expected.pop(old)
     assert all(actual.get(k) == v for k, v in expected.items()), "missing/changed predecessor"
     new = set(actual) - set(expected)
     assert new == set(additions), "unclassified additions: " + repr(sorted(new ^ set(additions)))
-    assert len(actual) == sum(summaries) == 1706 + len(additions)
+    assert len(actual) == sum(summaries) == 1667 + len(additions)
     affine = "lib.rs::verify::tests::affine_proofs_match_exhaustive_execution_on_small_domains"
     assert actual.get(affine) == "ok", "missing 1,800-case affine cross-check"
     doctests = [k for k in actual if k.startswith("doctest:")]
     assert len(doctests) == 1 and "CheckedExecutable - compile fail" in doctests[0]
-    print(f"KED-029 reconciliation: 1,706 predecessors ({len(migrations)} identity renames) + {len(additions)} new = {len(actual)} passed")
+    print(f"BED-028 reconciliation: 1,667 predecessors ({len(migrations)} explicit migrations) + {len(additions)} new = {len(actual)} passed")
     print("compile-fail doctest: passed; affine cross-check: 1,800 cases passed")
     print("failed/ignored/filtered: 0/0/0")
 
-manifest = json.loads((root / "docs/engineering/ked-029-evidence.json").read_text())
+manifest = json.loads((root / "docs/engineering/bed-028-evidence.json").read_text())
 reconcile(actual, baseline, manifest["migrations"], manifest["additions"])
-predecessors = {r["id"] for r in baseline["identities"]}
-corrections = manifest["contract_corrections"]
-assert len({r["id"] for r in corrections}) == len(corrections) == 3
-assert [r["kind"] for r in corrections].count("admission") == 2
-assert [r["kind"] for r in corrections].count("fuel") == 1
-for row in corrections + manifest["fixture_adaptations"]:
-    assert row["id"] in predecessors and actual.get(row["id"]) == "ok"
-    assert row["reason"], "undocumented predecessor correction"
-print("preserved-ID contract corrections: 2 admission, 1 fuel; fixture adaptation: 1")

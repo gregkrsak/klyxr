@@ -1,7 +1,7 @@
-# KED-035 Stage I: M1 contract and compatibility inventory
+# BED-035 Stage I: M1 contract and compatibility inventory
 
 Authority: frozen Issue #84 Draft 2, freeze 6295819136, implementation directive
-6296001700 and accepted K35-P01–P10. This inventory does not authorize a migration.
+6296001700 and accepted B35-P01–P10. This inventory does not authorize a migration.
 Baseline: `5f28977a42a7df1817e5cac46b3f6660a38435d3`, tree
 `0b330328f3f213a26b6fc4af9f45ca06a98876b8`.
 
@@ -87,7 +87,7 @@ comparison possible. Terminal advance remains idempotent and non-resuming.
 ## Evidence status
 
 M1 is static inventory. M2–M8 consumed implementation and finite evidence are
-recorded in `KED-035-STAGE-I-LEDGER.md` and the complete JSON matrix. The distinct
+recorded in `BED-035-STAGE-I-LEDGER.md` and the complete JSON matrix. The distinct
 M5 checkpoint obtained all eight applicable successful Actions gates before M6
 source changes. M6 and M7 gates also passed. M9 requires fresh exact-final-head
 checks and identical verified report publications on PR #85 and Issue #84.
