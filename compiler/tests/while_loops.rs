@@ -1,4 +1,4 @@
-use klyxr_compiler::{
+use bowfin_compiler::{
     compile_source,
     hir::{self, ExprKind, ValueStatement},
     mir::{self, Statement, Terminator},
@@ -195,10 +195,10 @@ fn unsupported_loop_grammar_boundaries() {
 fn lexical_child_scope_and_static_ids() {
     let text = format!("{DECL} fn f(flag: bool) -> bool {{ while flag {{ let temporary = flag; while temporary {{ let inner = temporary; }} }} while flag {{ let temporary = flag; }} return flag; }}");
     let ast = parse_source(&text).unwrap();
-    let klyxr_compiler::ast::FunctionDecl::Ordinary(f) = &ast.functions[0] else {
+    let bowfin_compiler::ast::FunctionDecl::Ordinary(f) = &ast.functions[0] else {
         panic!()
     };
-    let klyxr_compiler::ast::ValueStatement::While { span, .. } = &f.body[0] else {
+    let bowfin_compiler::ast::ValueStatement::While { span, .. } = &f.body[0] else {
         panic!()
     };
     assert_eq!(

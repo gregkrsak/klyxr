@@ -1,4 +1,4 @@
-use klyxr_compiler::{ast, compile_source, hir, mir, parse_source, resolve, types, FrontendError};
+use bowfin_compiler::{ast, compile_source, hir, mir, parse_source, resolve, types, FrontendError};
 const DECL: &str = "type Percent = range 0..100; type OtherPercent = range 0..100; type Voltage = range -5..5000; record Battery { charge: Percent, voltage: Voltage, health: Percent } record Ticket { value: Percent } record Capacitor { charge: Percent } record Meter { level: Percent } fn id(p: Percent) -> Percent { return p; } fn consume(t: Ticket) -> Percent { return t.value; } fn measure(b: Battery) -> Percent { return b.charge; } fn shared(v: &Battery) -> Percent { return 80; } fn exclusive(v: &mut Battery) -> Percent { return 80; } fn finish_shared(v: &Battery) {} fn finish_exclusive(v: &mut Battery) {} fn held(v: &Battery,p: Percent) -> Percent { return p; } fn held_mut(v: &mut Battery,p: Percent) -> Percent { return p; } fn pair(a: Percent,b: Percent,c: Percent) -> Percent { return a; }";
 fn source(body: &str) -> String {
     format!("{DECL}\n{body}")
@@ -300,8 +300,8 @@ fn nested_rhs_first_middle_final_call_and_construction_children() {
 fn verified_and_harness_path_isolation_with_ordinary_field_write() {
     let battery = include_str!("../../examples/battery_ok.klx");
     let ordinary="fn update(b: Battery) -> Battery { let mut working = b; working.charge = 80; return working; }";
-    let before = klyxr_compiler::verify::verify_report(&compile_source(battery).unwrap());
-    let after = klyxr_compiler::verify::verify_report(
+    let before = bowfin_compiler::verify::verify_report(&compile_source(battery).unwrap());
+    let after = bowfin_compiler::verify::verify_report(
         &compile_source(&format!("{battery}\n{ordinary}")).unwrap(),
     );
     assert_eq!(before.diagnostics, after.diagnostics);

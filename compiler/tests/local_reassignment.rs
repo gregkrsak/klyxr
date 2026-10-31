@@ -1,4 +1,4 @@
-use klyxr_compiler::{
+use bowfin_compiler::{
     compile_source,
     hir::{self, ExprKind, ValueStatement},
     mir::{self, Statement, Terminator},
@@ -188,10 +188,10 @@ fn grammar_remains_statement_only_and_direct_local() {
 fn ast_and_hir_preserve_target_identity_and_complete_span() {
     let text = format!("{DECL} fn f(a: Percent) -> Percent {{ let mut current = a; current = current; return current; }}");
     let ast = parse_source(&text).unwrap();
-    let klyxr_compiler::ast::FunctionDecl::Ordinary(f) = &ast.functions[0] else {
+    let bowfin_compiler::ast::FunctionDecl::Ordinary(f) = &ast.functions[0] else {
         panic!()
     };
-    let klyxr_compiler::ast::ValueStatement::Assign { target, span, .. } = &f.body[1] else {
+    let bowfin_compiler::ast::ValueStatement::Assign { target, span, .. } = &f.body[1] else {
         panic!()
     };
     assert_eq!(target, "current");

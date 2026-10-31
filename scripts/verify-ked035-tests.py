@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Reconcile one complete Cargo profile, preserving historical controls plus M1."""
+"""Reconcile a complete Cargo profile with the exact M2 identity correspondence.
+
+Historical manifests remain unchanged. Only the named crate doctest identity is
+mapped; target inventory also accounts for both zero-test command binaries.
+"""
 import json
 from pathlib import Path
 import re
@@ -46,6 +50,19 @@ for target, group in zip(targets, groups):
         assert identity not in actual, "duplicate identity: " + identity
         assert outcome == "ok", identity + ": " + outcome
         actual[identity] = outcome
+# M2 changes only this predecessor's Cargo crate target, not its test body or
+# compile-fail authority assertion. Never normalize arbitrary prefixes or names.
+identity_migrations = {
+    "doctest:klyxr_compiler::compiler/execution/mod.rs - execution::CheckedExecutable - compile fail":
+    "doctest:bowfin_compiler::compiler/execution/mod.rs - execution::CheckedExecutable - compile fail",
+}
+observed = actual
+inverse = {current: legacy for legacy, current in identity_migrations.items()}
+assert len(inverse) == len(identity_migrations) == 1, "non-injective M2 identity map"
+for legacy, successor in identity_migrations.items():
+    assert legacy not in observed and successor in observed, "missing or conflicting M2 doctest migration"
+actual = {inverse.get(identity, identity): outcome for identity, outcome in observed.items()}
+assert len(actual) == len(observed), "M2 mapping conflates observed identities"
 manifest = json.loads((root / "docs/engineering/ked-034-evidence.json").read_text())
 expected = {row["id"]: row["outcome"] for row in baseline["identities"]}
 assert baseline["commit"] == manifest["baseline_commit"] == "372230df1d359b13d28f5c136130ac031507716a"
@@ -67,9 +84,29 @@ m1 = [
     "lib.rs::execution::audit::migration_tests::m1_machine_names_cannot_substitute_original_opaque_approval",
     "lib.rs::execution::audit::migration_tests::m1_canonical_machine_names_grant_no_operations_or_extra_roots",
 ]
+m2 = [
+    "tests/toolchain_identity.rs::m2_version_and_usage_identify_canonical_and_compatibility_commands",
+    "tests/toolchain_identity.rs::m2_normal_check_verify_and_run_streams_are_identical",
+    "tests/toolchain_identity.rs::m2_selected_results_and_audit_preserve_m1_authority",
+    "tests/toolchain_identity.rs::m2_failures_and_option_validation_preserve_results",
+    "tests/toolchain_identity.rs::m2_actual_output_byte_neighbors_are_command_independent",
+    "tests/toolchain_identity.rs::m2_cargo_metadata_selects_canonical_and_retains_alias",
+]
 historical = set(expected) | set(additions) | set(new) | set(application)
 assert len(m1) == len(set(m1)) == 5, "duplicate or unexpected M1 control count"
 assert not set(m1) & historical, "M1 control reuses a historical identity"
+assert len(m2) == len(set(m2)) == 6, "duplicate or unexpected M2 control count"
+assert not set(m2) & (historical | set(m1)), "M2 control reuses a predecessor identity"
+# A second binary must neither duplicate a nonempty test group nor hide a
+# predecessor behind an unchanged aggregate total. Check Cargo targets even when
+# they contain no tests; only these two binary groups may be empty.
+expected_targets = {identity.split("::", 1)[0] for identity in historical | set(m1) | set(m2)}
+expected_targets.remove("doctest:klyxr_compiler")
+expected_targets |= {"doctest:bowfin_compiler", "main.rs", "compat_main.rs"}
+assert len(targets) == len(set(targets)) == len(expected_targets) == 38, "duplicate or missing Cargo target"
+assert set(targets) == expected_targets, "changed Cargo target inventory"
+for target, group in zip(targets, groups):
+    assert bool(group) == (target not in {"main.rs", "compat_main.rs"}), "unexpected empty or repeated binary coverage"
 assert len(historical) == sentinel["expected_per_profile"] == 2126
 assert sentinel["predecessor_count"] == 2112 and sentinel["migrations"] == {}
 assert len(application) == len(set(application))
@@ -88,9 +125,9 @@ assert set(k35["classifications"].values()) <= {
 }, "unknown KED-035 evidence class"
 assert not set(new) & (set(expected) | set(additions))
 assert len(additions) == len(set(additions))
-assert set(actual) - set(expected) == set(additions) | set(new) | set(application) | set(m1), "missing or unclassified complete-profile identity"
+assert set(actual) - set(expected) == set(additions) | set(new) | set(application) | set(m1) | set(m2), "missing or unclassified complete-profile identity"
 assert manifest["expected_per_profile"] == 1981 + len(additions)
-assert len(actual) == sum(summaries) == manifest["expected_per_profile"] + len(new) + len(application) + len(m1)
+assert len(actual) == sum(summaries) == manifest["expected_per_profile"] + len(new) + len(application) + len(m1) + len(m2)
 assert set(manifest["classifications"]) == set(additions)
 assert set(manifest["classifications"].values()) <= {"ordinary_source", "private_canonical_catalog", "private_catalog_envelope", "trusted_boundary", "private_malformed_authority"}
 k33 = json.loads((root / "docs/engineering/ked-033-evidence.json").read_text())
@@ -137,12 +174,16 @@ if manifest["stage"] == "M9":
     print("Frozen KED-034 map: 26 semantic obligations, 12 malformed families, P01-P09, M0-M9; production symbols and exact assertions present")
 print(f"KED-034 {manifest['stage']} reconciliation: 1,981 exact predecessors + {len(additions)} additions = {manifest['expected_per_profile']} retained")
 print("KED-033 retained: 1,875 predecessors + 106 additions = 1,981")
-print("identity migrations: 0; failed/ignored/filtered: 0/0/0")
+print("Historical KED manifest migrations: 0; failed/ignored/filtered: 0/0/0")
 print("compile-fail authority doctest: passed; affine cross-check: 1,800 cases passed")
 
 print(f"KED-035 {k35['stage']} reconciliation: 2045 exact predecessors + {len(new)} additions = {2045 + len(new)} retained")
 
-assert len(actual) - len(m1) == sentinel["expected_per_profile"]
+assert len(actual) - len(m1) - len(m2) == sentinel["expected_per_profile"]
 print(f"Sentinel 0 reconciliation: 2112 exact predecessors + {len(application)} classified additions = {len(historical)} retained; migrations: 0")
-assert len(actual) == sentinel["expected_per_profile"] + len(m1) == 2131
-print(f"Bowfin M1 reconciliation: {len(historical)} retained predecessors + {len(m1)} machine-identity controls = {len(actual)} passed; migrations: 0")
+assert len(actual) - len(m2) == sentinel["expected_per_profile"] + len(m1) == 2131
+print(f"Bowfin M1 reconciliation: {len(historical)} retained predecessors + {len(m1)} machine-identity controls = 2131 retained through the explicit M2 map")
+assert len(actual) == len(observed) == 2131 + len(m2) == 2137
+print("Bowfin M2 reconciliation: 2131 predecessors retained; one exact crate-doctest identity migration; 6 new command controls; 2137 passed across 38 distinct Cargo targets (two empty binaries)")
+for legacy, successor in identity_migrations.items():
+    print(f"M2 one-to-one identity: {legacy} -> {successor}")

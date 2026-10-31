@@ -9,7 +9,7 @@ fn example(name: &str) -> String {
 }
 
 fn run(args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_klyxr"))
+    Command::new(env!("CARGO_BIN_EXE_bowfin"))
         .args(args)
         .output()
         .unwrap()

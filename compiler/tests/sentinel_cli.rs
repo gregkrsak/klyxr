@@ -1,7 +1,7 @@
 use std::process::{Command, Output};
 
 fn invoke(command: &str, scenario: &str, extra: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_klyxr"))
+    Command::new(env!("CARGO_BIN_EXE_bowfin"))
         .args([
             command,
             concat!(env!("CARGO_MANIFEST_DIR"), "/../examples/sentinel.klx"),
