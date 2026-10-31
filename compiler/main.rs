@@ -31,7 +31,10 @@ fn run() -> Result<(), i32> {
                 env!("CARGO_PKG_VERSION")
             );
         } else {
-            println!("bowfin {} (vertical-slice prototype)", env!("CARGO_PKG_VERSION"));
+            println!(
+                "bowfin {} (vertical-slice prototype)",
+                env!("CARGO_PKG_VERSION")
+            );
         }
         return Ok(());
     }

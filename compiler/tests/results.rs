@@ -303,7 +303,9 @@ fn source_alias_metadata_does_not_create_an_err_semantic_variant() {
 }
 
 fn run(source: &str) -> String {
-    use bowfin_compiler::execution::{execute, prepare_execution, AdmissionLimits, ExecutionLimits};
+    use bowfin_compiler::execution::{
+        execute, prepare_execution, AdmissionLimits, ExecutionLimits,
+    };
     let executable = prepare_execution(source, AdmissionLimits::default())
         .unwrap_or_else(|e| panic!("{source}\n{e}"));
     let output = execute(

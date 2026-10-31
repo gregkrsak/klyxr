@@ -24,8 +24,18 @@ fn example(name: &str) -> String {
 #[test]
 fn m2_version_and_usage_identify_canonical_and_compatibility_commands() {
     for (binary, name, version, role) in [
-        (COMMANDS[0], "bowfin", "bowfin 0.0.1 (vertical-slice prototype)\n", ""),
-        (COMMANDS[1], "klyxr", "klyxr 0.0.1 (Bowfin compatibility command; vertical-slice prototype)\n", "klyxr is the compatibility command for bowfin\n"),
+        (
+            COMMANDS[0],
+            "bowfin",
+            "bowfin 0.0.1 (vertical-slice prototype)\n",
+            "",
+        ),
+        (
+            COMMANDS[1],
+            "klyxr",
+            "klyxr 0.0.1 (Bowfin compatibility command; vertical-slice prototype)\n",
+            "klyxr is the compatibility command for bowfin\n",
+        ),
     ] {
         for flag in ["--version", "-V"] {
             let output = invoke(binary, &[flag]);
@@ -34,10 +44,26 @@ fn m2_version_and_usage_identify_canonical_and_compatibility_commands() {
             assert!(output.stderr.is_empty());
         }
         for (args, prefix, usage) in [
-            (vec![], "", format!("usage: {name} <check|verify> <file.klx>\n")),
-            (vec!["verify"], "error: missing .klx input path\n", format!("usage: {name} <check|verify> <file.klx>\n")),
-            (vec!["--help"], "error: unknown command `--help`\n", format!("usage: {name} <check|verify> <file.klx>\n")),
-            (vec!["run"], "", format!("usage: {name} run <file.klx> --function <name> [limit overrides]\n")),
+            (
+                vec![],
+                "",
+                format!("usage: {name} <check|verify> <file.klx>\n"),
+            ),
+            (
+                vec!["verify"],
+                "error: missing .klx input path\n",
+                format!("usage: {name} <check|verify> <file.klx>\n"),
+            ),
+            (
+                vec!["--help"],
+                "error: unknown command `--help`\n",
+                format!("usage: {name} <check|verify> <file.klx>\n"),
+            ),
+            (
+                vec!["run"],
+                "",
+                format!("usage: {name} run <file.klx> --function <name> [limit overrides]\n"),
+            ),
         ] {
             let output = invoke(binary, &args);
             assert_eq!(output.status.code(), Some(2));
@@ -73,11 +99,33 @@ fn m2_selected_results_and_audit_preserve_m1_authority() {
         ("no-sample", "Error(SensorError(2))\n"),
         ("read-io-failure", "Error(SensorError(3))\n"),
     ] {
-        let output = equivalent(&["run", &path, "--function", "sample", "--profile", "sensor-demo", "--scenario", scenario], 0);
+        let output = equivalent(
+            &[
+                "run",
+                &path,
+                "--function",
+                "sample",
+                "--profile",
+                "sensor-demo",
+                "--scenario",
+                scenario,
+            ],
+            0,
+        );
         assert_eq!(output.stdout, expected.as_bytes());
         assert!(output.stderr.is_empty());
     }
-    let output = equivalent(&["audit", &path, "--function", "sample", "--profile", "sensor-demo"], 0);
+    let output = equivalent(
+        &[
+            "audit",
+            &path,
+            "--function",
+            "sample",
+            "--profile",
+            "sensor-demo",
+        ],
+        0,
+    );
     assert!(output.stderr.is_empty());
     let text = String::from_utf8(output.stdout).unwrap();
     assert!(text.starts_with("authority account v1\ntarget=bowfin.ordinary-mir.v1\ncompiler=bowfin-compiler/0.0.1\ncatalog=bowfin.sensor-demo.catalog.v1\nprofile=bowfin.sensor-demo.profile.v1\nassumptions=bowfin.sensor-demo.assumptions.v1\n"));
@@ -85,7 +133,10 @@ fn m2_selected_results_and_audit_preserve_m1_authority() {
     assert!(text.contains("cleanup-only-release="));
     assert!(!text.contains("klyxr."));
     assert!(!text.contains("compatibility command"));
-    for extra in [&[][..], &["--profile", "sensor-demo", "--grants", "open-release"]] {
+    for extra in [
+        &[][..],
+        &["--profile", "sensor-demo", "--grants", "open-release"],
+    ] {
         let mut args = vec!["run", &path, "--function", "sample"];
         args.extend(extra);
         let output = equivalent(&args, 1);
@@ -98,13 +149,50 @@ fn m2_selected_results_and_audit_preserve_m1_authority() {
 fn m2_failures_and_option_validation_preserve_results() {
     let path = example("ordinary_run.klx");
     for (args, status, message) in [
-        (vec!["run", &path, "--function", "trap_demo"], 1, "computed -101"),
-        (vec!["run", &path, "--function", "demo", "--max-steps", "1"], 1, "configured tool limit exhausted"),
-        (vec!["run", &path, "--function", "demo", "--max-steps", "0"], 2, "configured run limit is zero or exceeds supported maximum"),
-        (vec!["run", &path, "--function", "demo", "--max-steps", "1", "--max-steps", "2"], 2, "invalid or repeated run option"),
-        (vec!["run", &path, "--function", "demo", "--profile", "unknown"], 2, "unknown profile"),
-        (vec!["run", &path, "--function", "demo", "--scenario", "sample"], 2, "profile options and audit require --profile sensor-demo"),
-        (vec!["run", "/a/nonexistent/bowfin-input", "--function", "demo"], 2, "detected host/tool failure: source input"),
+        (
+            vec!["run", &path, "--function", "trap_demo"],
+            1,
+            "computed -101",
+        ),
+        (
+            vec!["run", &path, "--function", "demo", "--max-steps", "1"],
+            1,
+            "configured tool limit exhausted",
+        ),
+        (
+            vec!["run", &path, "--function", "demo", "--max-steps", "0"],
+            2,
+            "configured run limit is zero or exceeds supported maximum",
+        ),
+        (
+            vec![
+                "run",
+                &path,
+                "--function",
+                "demo",
+                "--max-steps",
+                "1",
+                "--max-steps",
+                "2",
+            ],
+            2,
+            "invalid or repeated run option",
+        ),
+        (
+            vec!["run", &path, "--function", "demo", "--profile", "unknown"],
+            2,
+            "unknown profile",
+        ),
+        (
+            vec!["run", &path, "--function", "demo", "--scenario", "sample"],
+            2,
+            "profile options and audit require --profile sensor-demo",
+        ),
+        (
+            vec!["run", "/a/nonexistent/bowfin-input", "--function", "demo"],
+            2,
+            "detected host/tool failure: source input",
+        ),
     ] {
         let output = equivalent(&args, status);
         assert!(output.stdout.is_empty());
@@ -113,7 +201,9 @@ fn m2_failures_and_option_validation_preserve_results() {
     let bad = example("battery_fail.klx");
     let output = equivalent(&["verify", &bad], 1);
     assert!(output.stdout.is_empty());
-    assert!(String::from_utf8(output.stderr).unwrap().contains("90 <= 80 is false"));
+    assert!(String::from_utf8(output.stderr)
+        .unwrap()
+        .contains("90 <= 80 is false"));
 }
 
 #[test]
@@ -123,18 +213,50 @@ fn m2_actual_output_byte_neighbors_are_command_independent() {
     // The existing allowance counts rendered text; write_output appends a newline.
     let sufficient = (expected.len() - 1).to_string();
     let insufficient = (expected.len() - 2).to_string();
-    let output = equivalent(&["run", &path, "--function", "loop_demo", "--max-output-bytes", &sufficient], 0);
+    let output = equivalent(
+        &[
+            "run",
+            &path,
+            "--function",
+            "loop_demo",
+            "--max-output-bytes",
+            &sufficient,
+        ],
+        0,
+    );
     assert_eq!(output.stdout, expected);
     assert!(output.stderr.is_empty());
-    let output = equivalent(&["run", &path, "--function", "loop_demo", "--max-output-bytes", &insufficient], 1);
+    let output = equivalent(
+        &[
+            "run",
+            &path,
+            "--function",
+            "loop_demo",
+            "--max-output-bytes",
+            &insufficient,
+        ],
+        1,
+    );
     assert!(output.stdout.is_empty());
-    assert_eq!(output.stderr, b"error: diagnostic rendering allowance exhausted [truncated]\n");
+    assert_eq!(
+        output.stderr,
+        b"error: diagnostic rendering allowance exhausted [truncated]\n"
+    );
 
     let path = example("trusted_sensor.klx");
-    let args = ["audit", &path, "--function", "sample", "--profile", "sensor-demo"];
+    let args = [
+        "audit",
+        &path,
+        "--function",
+        "sample",
+        "--profile",
+        "sensor-demo",
+    ];
     let complete = equivalent(&args, 0);
     assert!(complete.stderr.is_empty());
-    assert!(complete.stdout.starts_with(b"authority account v1\ntarget=bowfin.ordinary-mir.v1\n"));
+    assert!(complete
+        .stdout
+        .starts_with(b"authority account v1\ntarget=bowfin.ordinary-mir.v1\n"));
     let sufficient = (complete.stdout.len() - 1).to_string();
     let insufficient = (complete.stdout.len() - 2).to_string();
     let mut bounded = args.to_vec();
@@ -145,7 +267,9 @@ fn m2_actual_output_byte_neighbors_are_command_independent() {
     *bounded.last_mut().unwrap() = &insufficient;
     let short = equivalent(&bounded, 1);
     assert!(short.stdout.is_empty());
-    assert!(String::from_utf8(short.stderr).unwrap().contains("configured tool limit exhausted: rendered output"));
+    assert!(String::from_utf8(short.stderr)
+        .unwrap()
+        .contains("configured tool limit exhausted: rendered output"));
 }
 
 #[test]
