@@ -170,4 +170,6 @@ pub(super) fn render(
 #[cfg(test)]
 mod completion_tests;
 #[cfg(test)]
+mod migration_tests;
+#[cfg(test)]
 mod tests;

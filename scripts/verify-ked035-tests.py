@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reconcile one complete Cargo profile against the exact KED-034 predecessor and classified KED-035 additions."""
+"""Reconcile one complete Cargo profile, preserving historical controls plus M1."""
 import json
 from pathlib import Path
 import re
@@ -58,6 +58,19 @@ k35 = json.loads((root / "docs/engineering/ked-035-evidence.json").read_text())
 new = k35["additions"]
 sentinel = json.loads((root / "docs/engineering/sentinel-0-evidence.json").read_text())
 application = sentinel["additions"]
+# M1 adds only these five machine-identity controls. Historical KED/Sentinel
+# manifests retain their original counts and meaning; they are not M1 records.
+m1 = [
+    "lib.rs::execution::audit::migration_tests::m1_machine_identity_table_is_exact_injective_and_accounts_for_output_bytes",
+    "lib.rs::execution::audit::migration_tests::m1_all_nonempty_legacy_machine_identity_mixes_reject",
+    "lib.rs::execution::audit::migration_tests::m1_unknown_wrong_role_and_neighbor_machine_identities_reject",
+    "lib.rs::execution::audit::migration_tests::m1_machine_names_cannot_substitute_original_opaque_approval",
+    "lib.rs::execution::audit::migration_tests::m1_canonical_machine_names_grant_no_operations_or_extra_roots",
+]
+historical = set(expected) | set(additions) | set(new) | set(application)
+assert len(m1) == len(set(m1)) == 5, "duplicate or unexpected M1 control count"
+assert not set(m1) & historical, "M1 control reuses a historical identity"
+assert len(historical) == sentinel["expected_per_profile"] == 2126
 assert sentinel["predecessor_count"] == 2112 and sentinel["migrations"] == {}
 assert len(application) == len(set(application))
 assert set(sentinel["classifications"]) == set(application)
@@ -75,9 +88,9 @@ assert set(k35["classifications"].values()) <= {
 }, "unknown KED-035 evidence class"
 assert not set(new) & (set(expected) | set(additions))
 assert len(additions) == len(set(additions))
-assert set(actual) - set(expected) == set(additions) | set(new) | set(application), "missing or unclassified complete-profile identity"
+assert set(actual) - set(expected) == set(additions) | set(new) | set(application) | set(m1), "missing or unclassified complete-profile identity"
 assert manifest["expected_per_profile"] == 1981 + len(additions)
-assert len(actual) == sum(summaries) == manifest["expected_per_profile"] + len(new) + len(application)
+assert len(actual) == sum(summaries) == manifest["expected_per_profile"] + len(new) + len(application) + len(m1)
 assert set(manifest["classifications"]) == set(additions)
 assert set(manifest["classifications"].values()) <= {"ordinary_source", "private_canonical_catalog", "private_catalog_envelope", "trusted_boundary", "private_malformed_authority"}
 k33 = json.loads((root / "docs/engineering/ked-033-evidence.json").read_text())
@@ -129,5 +142,7 @@ print("compile-fail authority doctest: passed; affine cross-check: 1,800 cases p
 
 print(f"KED-035 {k35['stage']} reconciliation: 2045 exact predecessors + {len(new)} additions = {2045 + len(new)} retained")
 
-assert len(actual) == sentinel["expected_per_profile"]
-print(f"Sentinel 0 reconciliation: 2112 exact predecessors + {len(application)} classified additions = {len(actual)} passed; migrations: 0")
+assert len(actual) - len(m1) == sentinel["expected_per_profile"]
+print(f"Sentinel 0 reconciliation: 2112 exact predecessors + {len(application)} classified additions = {len(historical)} retained; migrations: 0")
+assert len(actual) == sentinel["expected_per_profile"] + len(m1) == 2131
+print(f"Bowfin M1 reconciliation: {len(historical)} retained predecessors + {len(m1)} machine-identity controls = {len(actual)} passed; migrations: 0")
