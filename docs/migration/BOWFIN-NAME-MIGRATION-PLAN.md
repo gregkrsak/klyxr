@@ -1,6 +1,13 @@
-# Bowfin Name Migration Plan — M0 Draft 2, Amendment 2 — Draft 2
+# Bowfin Name Migration Plan — M0 Draft 2, Amendment 3 — Proposed
 
-**Status:** Proposed contract-only amendment. Amendment 1 remains the accepted migration contract until Greg explicitly accepts and merges this amendment. This draft recognizes a replacement M0.1 evidence architecture but authorizes no protocol tooling, evidence generation, rename implementation, production merge, repository rename, domain cutover, package publication, or external release. M0.1 remains unaccepted and M1 remains blocked.  
+**Status:** Proposed contract-only simplification. Amendment 2 remains the accepted contract until Greg explicitly accepts and a human merges this amendment into `bowfin-migration-staging`. Section 15 replaces the formal M0.1 prerequisite with phase-local verification; it does not declare M0.1 passed or authorize M1 implementation.
+
+**Amendment 3 prepared:** 2026-10-31
+
+**Amendment 3 baseline:** staging `609822762abd46c13ecd6187ccc8510695e52b2f`, tree `ebaf5e4b7b6a7a09acc693db52e3cdc5e0ec2239`; prior contract blob `03cd2c5b584a996ebfb873491f0d2888c984cfb9`.
+
+**Reading rule:** Sections 1–14 below retain Amendment 2's text and historical preparation dates. Section 15 states the proposed precedence and replacement gates; until adoption, Section 13 remains controlling.
+
 **Prepared:** 2026-10-23  
 **Draft 2 owner decisions recorded:** 2026-10-23  
 **Amendment 2 Draft 1 prepared:** 2026-10-24  
@@ -606,4 +613,159 @@ At that point M0.1 may be complete while M1 remains unauthorized. M1 begins only
 Submit Amendment 2 Draft 2 for focused independent confirmation of BOW-M0A2-01 and BOW-M0A2-02 and regression review of BOW-M01R-01 through BOW-M01R-10. The reviewer must confirm that M0.1 may complete while M1 remains unauthorized, that M1 still requires a separate later owner decision, and that the protocol must establish and enforce per-surface freshness eligibility before tooling acceptance.
 
 If the reviewer recommends acceptance, Greg decides whether to accept and merge this contract-only amendment. No protocol implementation, compact-input construction, evidence generation, M0.1 acceptance, M1 work, production change, or external cutover is authorized by this draft.
+
+## 15. Amendment 3 — Phase-local migration verification
+
+### 15.1 Adoption, precedence, and honest retirement
+
+This amendment changes the migration process, not language semantics. It becomes
+operative only after independent review, Greg's explicit acceptance, and a human
+ordinary merge into `bowfin-migration-staging`. It creates no implementation,
+execution, merge, release, repository-rename, or domain-cutover permission.
+
+Upon adoption, **M0.1 is retired incomplete as a migration prerequisite**. It is
+not passed, accepted, completed, or retrospectively satisfied. The owner accepts
+less exhaustive up-front migration certification in exchange for direct,
+reviewable phase work. Phase-local tests and review do not establish the retired
+protocol's global completeness or reproducibility claims.
+
+This section has precedence over incompatible earlier requirements as follows:
+
+| Earlier requirement | Replacement for this migration |
+| --- | --- |
+| Sections 4.2 and 5: exhaustive pre-M1 manifest/inventory | The phase-local identity table and checks in 15.2–15.3 |
+| Section 8 M0 exit and Section 9 R0: readiness before M1 | Adoption of this amendment, then Greg's separate M1 order |
+| Section 10 and M7 references to a manifest/final ledger | Ordinary phase records and final covered-surface scans, not a generated bulk corpus |
+| Section 13, including 13.2 and 13.13: formal M0.1 acceptance/integration gates | Retired as prerequisites to M1, M2–M7, production acceptance, or cutover |
+| Section 14: earlier immediate next move | Focused review of Amendment 3, followed by an owner decision |
+
+In particular, no C/E/D/P package or proof, recovery-object bundle, global
+occurrence reconciliation, deterministic package regeneration, external-snapshot
+freshness cycle, custom supervisor, containment qualification, or synthetic
+supervisor suite is required to enter or complete a migration phase. These
+requirements must not reappear indirectly through a subordinate ledger document
+or an older migration instruction.
+
+The destinations and compatibility decisions in Section 2, typed namespaces and
+roles in Section 4, authority boundaries in Section 6, permitted differences in
+Section 7, M1–M7 scope boundaries, staging-only/human merge rules, R1–R8 release
+and cutover gates, historical integrity, and rollback obligations remain in force.
+Sections 15.2–15.4 replace their verification machinery where the table specifies,
+not their substantive safety or compatibility requirements. No accepted KD,
+runtime approval rule, ownership rule, or deferred native-backend boundary changes.
+
+### 15.2 Phase entry and identity accounting
+
+Each phase still needs Greg's separate implementation order. Before code edits,
+the implementer records the exact accepted staging base commit/tree and the phase
+scope in its PR or preparation record. Parked branches refresh from that base;
+their PRs target `bowfin-migration-staging`, never `prod`. Intervening production
+changes must be incorporated and dependent work re-reviewed under Section 3.
+
+Use one compact phase-local table, normally in the phase PR description, recording
+the exact namespace-qualified old/new spelling or retention, live/compatibility/
+historical role, affected paths or structured fields, producer/consumer where
+applicable, support policy, and validating test or inspection. Uniform occurrences
+may be grouped by exact spelling, named paths and field roles with an explained
+rationale and exposed exceptions; global `K` replacement and wildcard historical
+exemptions remain forbidden. Mapping injectivity applies within each namespace.
+
+Current non-archived mappings may be working references, not presumed semantic
+approval or proof of completeness. Archived historical payloads, including the
+`UNACCEPTED_HISTORICAL_SNAPSHOT` class, remain inert and ineligible as current
+tooling, fixtures, classifications or acceptance evidence.
+A collision, ambiguous role, unknown machine identifier, unexplained difference,
+or attempted historical rewrite in the affected scope blocks that phase until
+resolved. Unchanged identities assigned to a later phase are deferred work, not
+historical exemptions.
+
+Inventory, implementation, tests and independent review occur within the same
+phase; no separate globally approved inventory is required before M1 begins.
+M1 remains machine/evidence identity compatibility only: no CLI, source-file,
+documentation, branding, domain or repository rename enters through it.
+
+### 15.3 Required checks before each phase merge
+
+1. Review the actual phase diff and its whole affected producer/consumer paths,
+   including structured-field roles. Preserve original historical bytes, hashes,
+   recorded commands and verbatim claims. Renaming both an expected value and
+   its observation must not erase a semantic or authority defect.
+2. Exercise the changed compatibility boundaries with focused positive and
+   negative tests: promised legacy inputs, canonical outputs, unknown/conflicting
+   identities and mixed forms where applicable. Translation cannot manufacture,
+   recover, renew or substitute approval, grants, custody, replay identity,
+   schema validity or execution authority. No absent facility is invented merely
+   to fill a checklist.
+3. Pass the existing build, debug/release tests, formatting/lint, documentation
+   and static-verification workflows on the exact reviewed phase revision.
+   Reconcile predecessors and enumerate intentional one-to-one test renames.
+   Record actual run identities and coverage; predecessor or test-merge success
+   must not be misreported as exact-head success. GitHub Actions remains the
+   authoritative Rust environment; no local Rust or custom M0.1 runner is needed.
+4. Sarah independently reviews the code, table, tests, limitations and phase
+   scope together. Greg separately accepts or rejects and is the sole merger.
+   Only a human performs the ordinary merge into staging.
+5. The phase PR records base/head/tree, the table, historical exceptions, actual
+   CI/test evidence, limitations and rollback boundary. After merge, read back
+   and record the actual merge commit, parents and resulting tree. Ordinary Git
+   history and PR/review/run records suffice for these new phase records; no
+   content-addressed ledger decision package or proof-engine run is required.
+
+Passing CI alone is not acceptance. A substantive compatibility or safety defect,
+unexplained predecessor loss, failed required check or missing affected-surface
+review still blocks merge. This amendment itself authorizes no execution.
+A later phase implementation order may include ordinary builds/tests and existing
+CI for that phase; newly authored migration infrastructure receives no permission
+merely because those ordinary checks are allowed.
+
+### 15.4 Final and external checks remain real, but occur when relevant
+
+At M7, use ordinary repository-wide case-variant, path/name and structured-field
+searches covering Section 4's identity families, plus whole-image/manual visual
+inspection and the existing full CI/Sentinel 0/clean-install checks. Account for
+remaining legacy hits by exact locations, compatibility policies or truthful
+historical reasons; state scan coverage and unresolved limitations plainly.
+There is no claim of formal exhaustive occurrence certification.
+
+Perform the extension gate at M3, coordinated governance work at M4, visual
+replacement at M5 and actual external-surface/runbook checks at M6–M7 and the
+applicable R-state transition. Relevant external facts must be current enough
+for the action they justify; unavailable evidence is not "not applicable."
+Unrelated external or visual observations do not block M1 or require a global
+36-hour snapshot refresh before internal machine-compatibility work. Retiring
+that global freshness mechanism does not clear a domain, extension, redirect,
+package, governance or release surface that has not been inspected.
+
+Production acceptance, post-merge verification and explicit external-cutover
+authorization remain separate under R4–R8. No early repository rename, canonical
+DNS switch, package publication or public-release claim is permitted.
+
+### 15.5 Preserve history; stop the infrastructure critical path
+
+Existing accepted tooling and historical records retain their original bounded
+meaning; adverse or indeterminate results are not rehabilitated. Preserve rather
+than rewrite or delete them. M1 does not depend on completing or merging any ledger
+PR, including PR #18's supervisor and qualification work. Preservation drafts can
+remain open without blocking implementation; no new ledger closeout is an entry
+gate.
+
+Retirement does not disable an installed workflow technically and does not
+authorize operating it. Earlier one-run/campaign authorizations remain spent.
+There is no retry, repair, replacement invocation or suite authority here, and no
+requirement to repair anonymous-API acquisition before starting the rename.
+
+Use existing review, search, diff and CI tools. **No new migration infrastructure
+unless a concrete defect directly prevents the rename or makes its result
+unverifiable.** Any such proposal must explain the minimum necessary change and
+why existing checks are insufficient, and receive a separate owner decision.
+Ordinary phase tests and small source edits are not a new assurance platform;
+optional infrastructure improvements stay off the migration critical path.
+
+### 15.6 Immediate next step
+
+Submit this contract-only amendment for focused independent review. If Greg
+accepts it, a human merges its exact reviewed revision into staging and the
+actual merge is read back. Greg may then issue the separate M1 implementation
+order against that accepted staging head. Neither this draft, its review, its
+future merge nor M0.1's retirement starts M1 automatically.
 
