@@ -10,7 +10,7 @@ use std::{
 };
 
 const COMMANDS: [&str; 2] = [env!("CARGO_BIN_EXE_bowfin"), env!("CARGO_BIN_EXE_klyxr")];
-const ORDINARY_ACCEPTED: [&str; 37] = [
+const UNSELECTED_ACCEPTED: [&str; 37] = [
     "battery",
     "battery_ok",
     "borrow_values",
@@ -53,47 +53,173 @@ const ORDINARY_ACCEPTED: [&str; 37] = [
 // These causes come from the source witnesses and their accepted boundaries,
 // not from running an old or new interpreter and copying its observed result.
 const FRONTEND_REJECTED: [(&str, &str, &str); 30] = [
-    ("borrow_fail", "ownership", "cannot move `ticket` while it is shared-borrowed"),
-    ("conditional_value_move_fail", "ownership", "may have been moved on a previous control-flow path"),
-    ("contextual_range_literal_fail", "type", "literal outside named range `Percent`"),
-    ("copy_field_assignment_fail", "ownership", "cannot assign `working.charge` while it is borrowed"),
-    ("deref_mutation_fail", "ownership", "cannot replace non-Copy value `Ticket`"),
-    ("early_return_recurrent_fail", "ownership", "cannot assign `owned` while it is borrowed"),
+    (
+        "borrow_fail",
+        "ownership",
+        "cannot move `ticket` while it is shared-borrowed",
+    ),
+    (
+        "conditional_value_move_fail",
+        "ownership",
+        "may have been moved on a previous control-flow path",
+    ),
+    (
+        "contextual_range_literal_fail",
+        "type",
+        "literal outside named range `Percent`",
+    ),
+    (
+        "copy_field_assignment_fail",
+        "ownership",
+        "cannot assign `working.charge` while it is borrowed",
+    ),
+    (
+        "deref_mutation_fail",
+        "ownership",
+        "cannot replace non-Copy value `Ticket`",
+    ),
+    (
+        "early_return_recurrent_fail",
+        "ownership",
+        "cannot assign `owned` while it is borrowed",
+    ),
     ("effects", "lex", "unexpected character `#`"),
     ("explicit_effects_fail", "effects", "unadmitted effect `io`"),
-    ("if_move_fail", "ownership", "may have been moved on a previous control-flow path"),
-    ("local_reassignment_borrow_fail", "ownership", "cannot assign `current` while it is borrowed"),
+    (
+        "if_move_fail",
+        "ownership",
+        "may have been moved on a previous control-flow path",
+    ),
+    (
+        "local_reassignment_borrow_fail",
+        "ownership",
+        "cannot assign `current` while it is borrowed",
+    ),
     ("move_fail", "ownership", "use of moved value `ticket`"),
-    ("multiple_field_record_move_fail", "ownership", "use of moved value `ticket`"),
-    ("no_value_call_fail", "ownership", "use of moved value `ticket`"),
-    ("no_value_recurrent_fail", "ownership", "cannot assign `owned` while it is borrowed"),
-    ("ordinary_record_condition_fail", "ownership", "record construction is unsupported in recurring while conditions"),
-    ("ordinary_record_move_fail", "ownership", "use of moved value `battery`"),
-    ("path_sensitive_borrowing_fail", "ownership", "cannot create exclusive borrow of `owned` while shared borrow is active"),
-    ("reference_field_assignment_fail", "ownership", "use of moved value `access`"),
-    ("reference_field_reads_fail", "ownership", "cannot assign `working.health` while it is borrowed"),
-    ("result_propagation_mismatch", "type", "or return failure payload type mismatch"),
-    ("result_unhandled_fail", "ownership", "unresolved Result outcome `pending`"),
-    ("while_break_recurrent_fail", "ownership", "cannot assign `value` while it is borrowed"),
-    ("while_carried_move_fail", "ownership", "cannot move pre-existing non-Copy value `ticket` in while loop"),
-    ("while_carried_reference_fail", "ownership", "cannot move loop-carried mutable reference `access`"),
-    ("while_continue_recurrent_fail", "ownership", "cannot assign `value` while it is borrowed"),
-    ("while_move_fail", "ownership", "cannot move pre-existing non-Copy value `ticket` in while loop"),
-    ("while_nested_carried_move_fail", "ownership", "cannot move pre-existing non-Copy value `outer` in while loop"),
-    ("while_nested_reference_fail", "ownership", "cannot move loop-carried mutable reference `access`"),
-    ("while_recurrent_borrow_fail", "ownership", "cannot assign `owned` while it is borrowed"),
-    ("while_reference_fail", "ownership", "cannot move loop-carried mutable reference `access`"),
+    (
+        "multiple_field_record_move_fail",
+        "ownership",
+        "use of moved value `ticket`",
+    ),
+    (
+        "no_value_call_fail",
+        "ownership",
+        "use of moved value `ticket`",
+    ),
+    (
+        "no_value_recurrent_fail",
+        "ownership",
+        "cannot assign `owned` while it is borrowed",
+    ),
+    (
+        "ordinary_record_condition_fail",
+        "ownership",
+        "record construction is unsupported in recurring while conditions",
+    ),
+    (
+        "ordinary_record_move_fail",
+        "ownership",
+        "use of moved value `battery`",
+    ),
+    (
+        "path_sensitive_borrowing_fail",
+        "ownership",
+        "cannot create exclusive borrow of `owned` while shared borrow is active",
+    ),
+    (
+        "reference_field_assignment_fail",
+        "ownership",
+        "use of moved value `access`",
+    ),
+    (
+        "reference_field_reads_fail",
+        "ownership",
+        "cannot assign `working.health` while it is borrowed",
+    ),
+    (
+        "result_propagation_mismatch",
+        "type",
+        "or return failure payload type mismatch",
+    ),
+    (
+        "result_unhandled_fail",
+        "ownership",
+        "unresolved Result outcome `pending`",
+    ),
+    (
+        "while_break_recurrent_fail",
+        "ownership",
+        "cannot assign `value` while it is borrowed",
+    ),
+    (
+        "while_carried_move_fail",
+        "ownership",
+        "cannot move pre-existing non-Copy value `ticket` in while loop",
+    ),
+    (
+        "while_carried_reference_fail",
+        "ownership",
+        "cannot move loop-carried mutable reference `access`",
+    ),
+    (
+        "while_continue_recurrent_fail",
+        "ownership",
+        "cannot assign `value` while it is borrowed",
+    ),
+    (
+        "while_move_fail",
+        "ownership",
+        "cannot move pre-existing non-Copy value `ticket` in while loop",
+    ),
+    (
+        "while_nested_carried_move_fail",
+        "ownership",
+        "cannot move pre-existing non-Copy value `outer` in while loop",
+    ),
+    (
+        "while_nested_reference_fail",
+        "ownership",
+        "cannot move loop-carried mutable reference `access`",
+    ),
+    (
+        "while_recurrent_borrow_fail",
+        "ownership",
+        "cannot assign `owned` while it is borrowed",
+    ),
+    (
+        "while_reference_fail",
+        "ownership",
+        "cannot move loop-carried mutable reference `access`",
+    ),
 ];
 
 const PROOF_REJECTED: [(&str, usize, usize, &str); 3] = [
-    ("battery_body_fail", 0, 0, "postcondition cannot be established"),
+    (
+        "battery_body_fail",
+        0,
+        0,
+        "postcondition cannot be established",
+    ),
     ("battery_fail", 1, 0, "precondition cannot be established"),
-    ("battery_sequence_fail", 1, 1, "precondition cannot be established"),
+    (
+        "battery_sequence_fail",
+        1,
+        1,
+        "precondition cannot be established",
+    ),
 ];
 const SELECTED: [(&str, &str, Option<&str>); 5] = [
     ("sensor_finish", "sample", None),
-    ("sensor_finish_live_loan_fail", "sample", Some("cannot move `sensor` while it is shared-borrowed")),
-    ("sensor_finish_reuse_fail", "sample", Some("use of moved value `sensor`")),
+    (
+        "sensor_finish_live_loan_fail",
+        "sample",
+        Some("cannot move `sensor` while it is shared-borrowed"),
+    ),
+    (
+        "sensor_finish_reuse_fail",
+        "sample",
+        Some("use of moved value `sensor`"),
+    ),
     ("sentinel", "monitor", None),
     ("trusted_sensor", "sample", None),
 ];
@@ -180,7 +306,7 @@ impl Drop for Scratch {
 
 #[test]
 fn m3_corpus_frontend_expectations_are_explicit() {
-    let declared: Vec<_> = ORDINARY_ACCEPTED
+    let declared: Vec<_> = UNSELECTED_ACCEPTED
         .iter()
         .copied()
         .chain(FRONTEND_REJECTED.iter().map(|row| row.0))
@@ -196,19 +322,36 @@ fn m3_corpus_frontend_expectations_are_explicit() {
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .filter(|name| name.ends_with(".bow") || name.ends_with(".klx"))
         .collect();
-    assert_eq!(actual, expected, "missing, added, or unmigrated corpus source");
+    assert_eq!(
+        actual, expected,
+        "missing, added, or unmigrated corpus source"
+    );
 
-    for name in ORDINARY_ACCEPTED {
+    for name in UNSELECTED_ACCEPTED {
         let program = compile_source(&source(name)).unwrap_or_else(|e| panic!("{name}: {e}"));
-        assert!(mir::lower(&program).functions().iter().all(|function| function.validate().is_ok()), "{name}");
+        assert!(
+            mir::lower(&program)
+                .functions()
+                .iter()
+                .all(|function| function.validate().is_ok()),
+            "{name}"
+        );
         let report = verify::verify_report(&program);
-        assert!(report.diagnostics.is_empty(), "{name}: {:?}", report.diagnostics);
+        assert!(
+            report.diagnostics.is_empty(),
+            "{name}: {:?}",
+            report.diagnostics
+        );
         let expected = match name {
             "battery" => (1, 0),
             "battery_ok" => (1, 1),
             _ => (0, 0),
         };
-        assert_eq!((report.functions_proven, report.calls_checked), expected, "{name}");
+        assert_eq!(
+            (report.functions_proven, report.calls_checked),
+            expected,
+            "{name}"
+        );
     }
     for (name, expected_phase, cause) in FRONTEND_REJECTED {
         let error = compile_source(&source(name)).unwrap_err();
@@ -263,13 +406,25 @@ fn m3_corpus_runs_and_audits_have_independent_outcomes() {
     // entry arguments. These are all finite zero-parameter ordinary roots in
     // the accepted non-profile corpus; recursive factories have an explicit stop.
     for (name, root, expected) in [
-        ("contextual_range_literals", "full", "Battery { charge: Percent(80), health: Percent(100) }\n"),
+        (
+            "contextual_range_literals",
+            "full",
+            "Battery { charge: Percent(80), health: Percent(100) }\n",
+        ),
         ("explicit_effects", "observe", "Bool(true)\n"),
         ("explicit_effects", "sample", "NoValue\n"),
         ("explicit_effects", "demo", "Bool(true)\n"),
-        ("ordinary_run", "demo", "Pair { first: Percent(89), second: Percent(90) }\n"),
+        (
+            "ordinary_run",
+            "demo",
+            "Pair { first: Percent(89), second: Percent(90) }\n",
+        ),
         ("ordinary_run", "loop_demo", "Percent(0)\n"),
-        ("owned_replacement", "demo", "Reading { value: Percent(59) }\n"),
+        (
+            "owned_replacement",
+            "demo",
+            "Reading { value: Percent(59) }\n",
+        ),
         ("result_handling", "sample", "Reading(42)\n"),
         ("result_handling", "read_error_code", "ErrorCode(1)\n"),
         ("result_handling", "demo", "Error(ErrorCode(1))\n"),
@@ -277,23 +432,52 @@ fn m3_corpus_runs_and_audits_have_independent_outcomes() {
         ("result_propagation", "reading", "Reading(42)\n"),
         ("result_propagation", "problem", "ReadError(1)\n"),
         ("result_propagation", "demo", "Ok(Reading(42))\n"),
-        ("result_propagation", "failure_demo", "Error(ReadError(1))\n"),
+        (
+            "result_propagation",
+            "failure_demo",
+            "Error(ReadError(1))\n",
+        ),
         ("value_flow", "enabled", "Bool(true)\n"),
     ] {
         for binary in COMMANDS {
-            let output = invoke(binary, "run", &examples().join(format!("{name}.bow")), &["--function", root]);
+            let output = invoke(
+                binary,
+                "run",
+                &examples().join(format!("{name}.bow")),
+                &["--function", root],
+            );
             assert_result(&output, expected);
         }
     }
     for (name, root, extra, cause) in [
-        ("ordinary_run", "trap_demo", &[][..], "named-range trap: Percent, inclusive 0..100, computed -101"),
-        ("while_iteration_move", "make_ticket", &["--max-call-depth", "4"][..], "configured tool limit exhausted: call depth"),
-        ("while_iteration_move_borrow", "fresh_ticket", &["--max-call-depth", "4"][..], "configured tool limit exhausted: call depth"),
+        (
+            "ordinary_run",
+            "trap_demo",
+            &[][..],
+            "named-range trap: Percent, inclusive 0..100, computed -101",
+        ),
+        (
+            "while_iteration_move",
+            "make_ticket",
+            &["--max-call-depth", "4"][..],
+            "configured tool limit exhausted: call depth",
+        ),
+        (
+            "while_iteration_move_borrow",
+            "fresh_ticket",
+            &["--max-call-depth", "4"][..],
+            "configured tool limit exhausted: call depth",
+        ),
     ] {
         for binary in COMMANDS {
             let mut options = vec!["--function", root];
             options.extend(extra);
-            let output = invoke(binary, "run", &examples().join(format!("{name}.bow")), &options);
+            let output = invoke(
+                binary,
+                "run",
+                &examples().join(format!("{name}.bow")),
+                &options,
+            );
             assert_eq!(output.status.code(), Some(1));
             assert!(output.stdout.is_empty());
             assert!(String::from_utf8(output.stderr).unwrap().contains(cause));
@@ -317,7 +501,12 @@ fn m3_corpus_runs_and_audits_have_independent_outcomes() {
             ("sensor_finish", "sample", true),
             ("sentinel", "monitor", true),
         ] {
-            let output = invoke(binary, "audit", &examples().join(format!("{name}.bow")), &selected_options(root, "sample"));
+            let output = invoke(
+                binary,
+                "audit",
+                &examples().join(format!("{name}.bow")),
+                &selected_options(root, "sample"),
+            );
             assert_eq!(output.status.code(), Some(0));
             assert!(output.stderr.is_empty());
             let text = String::from_utf8(output.stdout).unwrap();
@@ -395,7 +584,10 @@ fn m3_same_stem_and_other_explicit_paths_select_actual_bytes() {
             (&other, "Bool(false)\n"),
             (&no_suffix, "Bool(true)\n"),
         ] {
-            assert_result(&invoke(binary, "run", path, &["--function", "demo"]), expected);
+            assert_result(
+                &invoke(binary, "run", path, &["--function", "demo"]),
+                expected,
+            );
         }
     }
     fs::remove_file(&legacy).unwrap();
@@ -403,7 +595,10 @@ fn m3_same_stem_and_other_explicit_paths_select_actual_bytes() {
         let missing = invoke(binary, "run", &legacy, &["--function", "demo"]);
         assert_eq!(missing.status.code(), Some(2));
         assert!(missing.stdout.is_empty());
-        assert_eq!(missing.stderr, b"error: detected host/tool failure: source input\n");
+        assert_eq!(
+            missing.stderr,
+            b"error: detected host/tool failure: source input\n"
+        );
     }
 }
 
@@ -454,22 +649,50 @@ fn m3_equal_length_suffixes_preserve_actual_byte_neighbors() {
         let path = scratch.write(&format!("result.{suffix}"), &bytes);
         for binary in COMMANDS {
             for (budget, status) in [("10", 0), ("9", 1)] {
-                let output = invoke(binary, "run", &path, &["--function", "loop_demo", "--max-output-bytes", budget]);
+                let output = invoke(
+                    binary,
+                    "run",
+                    &path,
+                    &["--function", "loop_demo", "--max-output-bytes", budget],
+                );
                 assert_eq!(output.status.code(), Some(status));
                 if status == 0 {
                     assert_result(&output, "Percent(0)\n");
                 } else {
                     assert!(output.stdout.is_empty());
-                    assert_eq!(output.stderr, b"error: diagnostic rendering allowance exhausted [truncated]\n");
+                    assert_eq!(
+                        output.stderr,
+                        b"error: diagnostic rendering allowance exhausted [truncated]\n"
+                    );
                 }
             }
             let exact = bytes.len().to_string();
             let insufficient = (bytes.len() - 1).to_string();
-            assert_result(&invoke(binary, "run", &path, &["--function", "loop_demo", "--max-source-bytes", &exact]), "Percent(0)\n");
-            let short = invoke(binary, "run", &path, &["--function", "loop_demo", "--max-source-bytes", &insufficient]);
+            assert_result(
+                &invoke(
+                    binary,
+                    "run",
+                    &path,
+                    &["--function", "loop_demo", "--max-source-bytes", &exact],
+                ),
+                "Percent(0)\n",
+            );
+            let short = invoke(
+                binary,
+                "run",
+                &path,
+                &[
+                    "--function",
+                    "loop_demo",
+                    "--max-source-bytes",
+                    &insufficient,
+                ],
+            );
             assert_eq!(short.status.code(), Some(1));
             assert!(short.stdout.is_empty());
-            assert!(String::from_utf8(short.stderr).unwrap().contains("source bytes"));
+            assert!(String::from_utf8(short.stderr)
+                .unwrap()
+                .contains("source bytes"));
         }
     }
 }
