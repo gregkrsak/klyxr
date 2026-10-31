@@ -13,9 +13,9 @@ fn bad(body: &str, phase: &str, text: &str) {
     let source = format!("{DECLARATIONS} {body}");
     let error = compile_source(&source).unwrap_err();
     let (actual, rendered) = match &error {
-        FrontendError::Ownership(ds) => ("Ownership", ds[0].render("test.klx", &source)),
-        FrontendError::Type(ds) => ("Type", ds[0].render("test.klx", &source)),
-        FrontendError::Resolve(ds) => ("Resolve", ds[0].render("test.klx", &source)),
+        FrontendError::Ownership(ds) => ("Ownership", ds[0].render("test.bow", &source)),
+        FrontendError::Type(ds) => ("Type", ds[0].render("test.bow", &source)),
+        FrontendError::Resolve(ds) => ("Resolve", ds[0].render("test.bow", &source)),
         _ => panic!("unexpected error {error}"),
     };
     assert_eq!(actual, phase, "{rendered}");

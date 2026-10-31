@@ -849,7 +849,7 @@ fn mir_mixed_return_break_continue_and_real_false_edge() {
 }
 #[test]
 fn verified_and_harness_boundary_is_unchanged() {
-    let battery = include_str!("../../examples/battery_ok.klx");
+    let battery = include_str!("../../examples/battery_ok.bow");
     let p = compile_source(&format!("fn nothing() {{}} {battery}")).unwrap();
     let r = bowfin_compiler::verify::verify_report(&p);
     assert!(r.diagnostics.is_empty());
@@ -864,7 +864,7 @@ fn verified_and_harness_boundary_is_unchanged() {
 
 #[test]
 fn public_ast_statement_call_cannot_target_verified_function_or_harness() {
-    let mut source = parse_source(include_str!("../../examples/battery_ok.klx")).unwrap();
+    let mut source = parse_source(include_str!("../../examples/battery_ok.bow")).unwrap();
     let mut caller = parse_source("fn nothing() {} fn caller() { nothing(); }").unwrap();
     let ast::ValueStatement::CallNoValue { callee, .. } = &mut ordinary_mut(&mut caller, 1).body[0]
     else {

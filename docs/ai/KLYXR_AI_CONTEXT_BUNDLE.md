@@ -23,7 +23,7 @@ Pronunciation: **“CLICK-ser.”**
 
 Primary public site: `klyxr.com`  
 Secondary owned domain: `klyxr.online`  
-Primary source extension: `.klx`  
+Primary source extension: `.bow` on migration staging; explicit `.klx` input retained<br>
 CLI executable: `klyxr`
 
 Primary public line:
@@ -314,7 +314,7 @@ Do not market Klyxr as eliminating bugs, proving arbitrary global correctness, o
 
 ### Application-level correctness
 
-```klyxr
+```bowfin
 type Percent = range 0..100;
 
 record Battery {
@@ -340,7 +340,7 @@ That distinction is central to Klyxr.
 
 Frozen KED-030 Draft 2's first phase uses ordinary explicit upper bounds:
 
-```klyxr
+```bowfin
 function observe() -> bool effects clock, io { return true; }
 function demo() -> bool effects io, clock { return observe(); }
 ```
@@ -354,7 +354,7 @@ implementation awaits independent exact-head review and Greg's acceptance.
 
 The following remains illustrative future policy syntax, outside KED-030:
 
-```klyxr
+```bowfin
 #[deny_effects(heap, blocking)]
 function control_loop(...)
     effects clock
@@ -377,7 +377,7 @@ Current locked brand direction:
 - visual wordmark: `KLYXR`
 - CLI / URL casing: `klyxr`
 - icon/monogram: `KLX`
-- source extension: `.klx`
+- source extension: `.bow` on migration staging; explicit `.klx` input retained
 - visual mode: dark-first
 - primary aesthetic: premium developer tooling, precise, modern, non-hype
 - palette direction: obsidian + electric cyan + signal blue + proof violet
@@ -1103,7 +1103,7 @@ Statuses:
 **Decision:** The public language name is **Klyxr**, pronounced **“CLICK-ser.”**
 
 **CLI:** `klyxr`  
-**Primary source extension:** `.klx`  
+**Primary source extension:** `.bow` on migration staging; explicit `.klx` input retained<br>
 **Primary domain:** `klyxr.com`  
 **Secondary owned domain:** `klyxr.online`
 
@@ -1161,7 +1161,7 @@ Move semantics are the default for non-`Copy` values.
 
 Klyxr supports real distinct constrained types.
 
-```klyxr
+```bowfin
 type Percent = range 0..100;
 ```
 
@@ -1349,11 +1349,11 @@ The spellings are lexical synonyms and normalize to the same semantic token.
 
 Examples:
 
-```klyxr
+```bowfin
 pub verified fn transfer(source: &mut Account)
 ```
 
-```klyxr
+```bowfin
 public verified function transfer(source: &mutable Account)
 ```
 
@@ -1450,7 +1450,7 @@ Klyxr uses explicit value returns in block-bodied functions.
 A value-returning block function declares its return type with `-> Type` and
 returns a value with:
 
-```klyxr
+```bowfin
 return expression;
 ```
 
@@ -1599,7 +1599,7 @@ unresolved under OQ-024/OQ-026; KD-027 later settles narrow statement loops.
 
 An ordinary local initializer may select an owned value with:
 
-```klyxr
+```bowfin
 let chosen = if flag { first } else { second };
 ```
 
@@ -1648,7 +1648,7 @@ An ordinary local declared with `let mut` / `let mutable` may be directly
 reassigned when it holds an owned non-reference Copy value. Initially the
 permitted target types are Bool and named constrained ranges:
 
-```klyxr
+```bowfin
 let mut current = start;
 current = next(current);
 ```
@@ -2735,7 +2735,7 @@ proof nor native execution evidence. Stage N remains separately unauthorized.
 ## 1. High-level pipeline
 
 ```text
-source (.klx)
+source (.bow; explicit .klx input retained)
    │
    ▼
 lexer
@@ -2884,7 +2884,7 @@ Unsafe operations should be lexically visible.
 
 Possible future direction:
 
-```klyxr
+```bowfin
 unsafe
     assumes ptr != null
     assumes ptr aligned_for T

@@ -1,6 +1,6 @@
 # Bounded ordinary MIR execution (KED-026 Draft 3)
 
-`cargo run --locked --bin klyxr -- run examples/ordinary_run.klx --function demo`
+`cargo run --locked --bin klyxr -- run examples/ordinary_run.bow --function demo`
 prints `Pair { first: Percent(89), second: Percent(90) }`. Initializers run in
 written order; rendering uses canonical declaration order. `loop_demo` returns
 `Percent(0)`; `trap_demo` stops at the inner subtraction with computed `-101`.
@@ -323,7 +323,7 @@ and acceptance. No local Rust executable evidence is claimed.
 
 ## Frozen KED-031 typed outcomes
 
-`cargo run --locked --bin klyxr -- run examples/result_handling.klx --function demo`
+`cargo run --locked --bin klyxr -- run examples/result_handling.bow --function demo`
 prints `Error(ErrorCode(1))`; `success_demo` prints `Reading(42)`. Both Error and
 Err are accepted source aliases. Public Result output uses a flat active chain
 and one Bool/range/ordinary-record leaf, avoiding recursively owned output trees.

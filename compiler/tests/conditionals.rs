@@ -369,7 +369,7 @@ fn nested_and_sequential_mir_is_deterministic_acyclic_and_has_only_one_return() 
 fn verified_path_excluded_from_mir_and_proof_counts_unchanged() {
     let text = format!(
         "{} {}",
-        include_str!("../../examples/battery_ok.klx"),
+        include_str!("../../examples/battery_ok.bow"),
         source("fn example(flag: bool) -> bool { if flag {} return flag; }")
             .replace("type Percent = range 0..100;", "")
     );
@@ -406,7 +406,7 @@ fn branch_writes_retain_exact_nominal_typing_and_no_mutation_expansion() {
 }
 #[test]
 fn verified_conditionals_remain_outside_the_specialized_grammar() {
-    let text = include_str!("../../examples/battery_ok.klx").replace(
+    let text = include_str!("../../examples/battery_ok.bow").replace(
         "battery.charge -= amount;",
         "if true { battery.charge -= amount; }",
     );

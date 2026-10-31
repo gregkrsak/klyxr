@@ -5,7 +5,7 @@ fn run(command: &str, extra: &[&str]) -> Output {
             command,
             concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/../examples/trusted_sensor.klx"
+                "/../examples/trusted_sensor.bow"
             ),
             "--function",
             "sample",

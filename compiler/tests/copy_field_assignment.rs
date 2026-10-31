@@ -298,7 +298,7 @@ fn nested_rhs_first_middle_final_call_and_construction_children() {
 }
 #[test]
 fn verified_and_harness_path_isolation_with_ordinary_field_write() {
-    let battery = include_str!("../../examples/battery_ok.klx");
+    let battery = include_str!("../../examples/battery_ok.bow");
     let ordinary="fn update(b: Battery) -> Battery { let mut working = b; working.charge = 80; return working; }";
     let before = bowfin_compiler::verify::verify_report(&compile_source(battery).unwrap());
     let after = bowfin_compiler::verify::verify_report(
@@ -375,9 +375,9 @@ fn final_conflict_diagnostic(borrow: &str, finish: &str, field: &str, kind: &str
             origin.line, origin.column
         )]
     );
-    let rendered = e.render("final_conflict.klx", &s);
+    let rendered = e.render("final_conflict.bow", &s);
     assert!(rendered.contains(&format!(
-        "--> final_conflict.klx:{}:{}",
+        "--> final_conflict.bow:{}:{}",
         span.line, span.column
     )));
 }

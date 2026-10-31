@@ -542,13 +542,13 @@ fn mir_direct_return_needs_no_synthetic_final_return() {
 }
 #[test]
 fn verified_return_boundary_and_proof_counts_are_unchanged() {
-    let text = format!("{} fn ordinary(flag: bool) -> bool {{ if flag {{ return true; }} else {{ return false; }} }}", include_str!("../../examples/battery_ok.klx"));
+    let text = format!("{} fn ordinary(flag: bool) -> bool {{ if flag {{ return true; }} else {{ return false; }} }}", include_str!("../../examples/battery_ok.bow"));
     let p = compile_source(&text).unwrap();
     let report = bowfin_compiler::verify::verify_report(&p);
     assert!(report.diagnostics.is_empty());
     assert_eq!(report.functions_proven, 1);
     assert_eq!(mir::lower(&p).functions().len(), 1);
-    let bad = include_str!("../../examples/battery_ok.klx")
+    let bad = include_str!("../../examples/battery_ok.bow")
         .replace("battery.charge -= amount;", "return amount;");
     assert!(matches!(compile_source(&bad), Err(FrontendError::Parse(_))));
 }

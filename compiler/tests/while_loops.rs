@@ -19,10 +19,10 @@ fn bad(body: &str, phase: &str, wording: &str) {
     let (actual, detail) = match &e {
         FrontendError::Lex(_) => ("Lex", e.to_string()),
         FrontendError::Parse(_) => ("Parse", e.to_string()),
-        FrontendError::Resolve(ds) => ("Resolve", ds[0].render("case.klx", &source)),
-        FrontendError::Type(ds) => ("Type", ds[0].render("case.klx", &source)),
-        FrontendError::Ownership(ds) => ("Ownership", ds[0].render("case.klx", &source)),
-        FrontendError::Effects(ds) => ("Effects", ds[0].render("case.klx", &source)),
+        FrontendError::Resolve(ds) => ("Resolve", ds[0].render("case.bow", &source)),
+        FrontendError::Type(ds) => ("Type", ds[0].render("case.bow", &source)),
+        FrontendError::Ownership(ds) => ("Ownership", ds[0].render("case.bow", &source)),
+        FrontendError::Effects(ds) => ("Effects", ds[0].render("case.bow", &source)),
     };
     assert_eq!(actual, phase, "{body}: {detail}");
     assert!(detail.contains(wording), "{body}: {detail}");
@@ -298,7 +298,7 @@ fn mir_nested_cycles_compose_with_conditional_initialization() {
 }
 #[test]
 fn verified_loop_syntax_remains_unsupported() {
-    let text = include_str!("../../examples/battery_ok.klx").replace(
+    let text = include_str!("../../examples/battery_ok.bow").replace(
         "battery.charge -= amount;",
         "while true { battery.charge -= amount; }",
     );

@@ -271,7 +271,7 @@ fn first_middle_final_call_and_construction_children_are_real_handle_uses() {
 fn ordinary_reference_reads_coexist_with_unchanged_verified_battery() {
     let source = format!(
         "{}\n{}",
-        include_str!("../../examples/battery_ok.klx"),
+        include_str!("../../examples/battery_ok.bow"),
         "fn read_battery(v: &Battery) -> Percent { return v.charge; }"
     );
     let p = compile_source(&source).unwrap();
@@ -293,7 +293,7 @@ rejected!(unsupported_verified_shared_state,"Parse","Mut","verified fn bad(v: &B
 fn harness_reference_roots_remain_outside_supported_literal_state() {
     let source = format!(
         "{}\nlet view = &battery;",
-        include_str!("../../examples/battery_ok.klx")
+        include_str!("../../examples/battery_ok.bow")
     );
     assert!(matches!(
         compile_source(&source),

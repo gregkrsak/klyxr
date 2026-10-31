@@ -150,7 +150,7 @@ A Klyxr verifier should be able to explain **why**:
 ```text
 error: precondition cannot be established
 
-  --> src/battery.klx:14:1
+  --> src/battery.bow:14:1
 
 14 | consume(&mutable battery, 90);
    | ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -438,7 +438,7 @@ their performance results are treated as comparable.
 Try the current prototype from the repository root with Rust/rustup installed:
 
 ```bash
-cargo run --locked --bin klyxr -- verify examples/battery_ok.klx
+cargo run --locked --bin klyxr -- verify examples/battery_ok.bow
 cargo test --locked --workspace
 ```
 
@@ -450,7 +450,7 @@ current prototype.
 ### Run an ordinary function
 
 ```sh
-cargo run --locked --bin klyxr -- run examples/ordinary_run.klx --function demo
+cargo run --locked --bin klyxr -- run examples/ordinary_run.bow --function demo
 ```
 
 This prints `Pair { first: Percent(89), second: Percent(90) }`. `run` performs the
@@ -509,8 +509,8 @@ application-success convention and audit limitations.
 │   └── readme-banner.png
 ├── docs/
 ├── examples/
-│   ├── battery.klx
-│   └── effects.klx
+│   ├── battery.bow
+│   └── effects.bow
 ├── scripts/
 │   └── verify-readme.py
 └── README.md

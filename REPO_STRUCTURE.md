@@ -61,12 +61,12 @@ klyxr/
 │   ├── design/
 │   └── language/
 ├── examples/
-│   ├── battery.klx
-│   ├── battery_ok.klx
-│   ├── battery_fail.klx
-│   ├── battery_sequence_fail.klx
-│   ├── battery_body_fail.klx
-│   └── effects.klx
+│   ├── battery.bow
+│   ├── battery_ok.bow
+│   ├── battery_fail.bow
+│   ├── battery_sequence_fail.bow
+│   ├── battery_body_fail.bow
+│   └── effects.bow
 ├── rfcs/
 ├── runtime/
 ├── scripts/

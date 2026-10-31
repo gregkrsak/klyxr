@@ -8,9 +8,9 @@ standard library, general FFI, capability language or new proof claim.
 
 ## Source and explicit configuration
 
-The complete executable example is [trusted_sensor.klx](../../examples/trusted_sensor.klx):
+The complete executable example is [trusted_sensor.bow](../../examples/trusted_sensor.bow):
 
-```klyxr
+```bowfin
 fn sample() -> Result<success: Reading, failure: SensorError> effects io {
     let sensor = sensor_open() or return;
     let reading = sensor_read(&sensor) or return;
@@ -19,9 +19,9 @@ fn sample() -> Result<success: Reading, failure: SensorError> effects io {
 ```
 
 ```bash
-cargo run --locked --bin klyxr -- run examples/trusted_sensor.klx --function sample --profile sensor-demo
-cargo run --locked --bin klyxr -- run examples/trusted_sensor.klx --function sample --profile sensor-demo --scenario no-sample
-cargo run --locked --bin klyxr -- audit examples/trusted_sensor.klx --function sample --profile sensor-demo
+cargo run --locked --bin klyxr -- run examples/trusted_sensor.bow --function sample --profile sensor-demo
+cargo run --locked --bin klyxr -- run examples/trusted_sensor.bow --function sample --profile sensor-demo --scenario no-sample
+cargo run --locked --bin klyxr -- audit examples/trusted_sensor.bow --function sample --profile sensor-demo
 ```
 
 Profile selection precedes source signature collection. Without explicit selection

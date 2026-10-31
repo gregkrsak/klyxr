@@ -5,7 +5,7 @@ accepts two successful readings, counts disjoint warning and critical observatio
 retains the peak and greatest severity, explicitly finishes every acquired Sensor
 on ordinary paths, and returns a typed Report or Failure. It uses one source file
 and a zero-argument `monitor` entry. Read the ordinary `//` comments in
-[the application](../examples/sentinel.klx) as its human-facing contract.
+[the application](../examples/sentinel.bow) as its human-facing contract.
 
 ## Run
 
@@ -13,7 +13,7 @@ From the repository root, use the following existing CLI allowances for the
 complete application (not the smaller predecessor example):
 
 ```bash
-cargo run --locked --bin klyxr -- run examples/sentinel.klx --function monitor --profile sensor-demo --scenario warning --sensor-limit 1 --max-tokens 2048 --max-frontend-work 10000000000000000 --max-admission-storage 1073741824 --max-diagnostic-storage 4194304
+cargo run --locked --bin klyxr -- run examples/sentinel.bow --function monitor --profile sensor-demo --scenario warning --sensor-limit 1 --max-tokens 2048 --max-frontend-work 10000000000000000 --max-admission-storage 1073741824 --max-diagnostic-storage 4194304
 ```
 
 These are supported explicit ceilings, not measured minima or actual host RSS.

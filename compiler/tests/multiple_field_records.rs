@@ -314,7 +314,7 @@ fn multi_field_verified_and_harness_candidates_are_explicitly_ineligible() {
 }
 #[test]
 fn ordinary_multi_field_records_coexist_with_supported_verified_battery() {
-    let s=format!("{}\nrecord Multiple {{ first: Percent, second: Percent }} fn ordinary(p: Percent) -> Multiple {{ return Multiple {{ second: p, first: p }}; }}",include_str!("../../examples/battery_ok.klx"));
+    let s=format!("{}\nrecord Multiple {{ first: Percent, second: Percent }} fn ordinary(p: Percent) -> Multiple {{ return Multiple {{ second: p, first: p }}; }}",include_str!("../../examples/battery_ok.bow"));
     let p = compile_source(&s).unwrap();
     for f in mir::lower(&p).functions() {
         f.validate().unwrap();
