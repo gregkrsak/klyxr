@@ -200,7 +200,7 @@ fn m3_corpus_frontend_expectations_are_explicit() {
 
     for name in ORDINARY_ACCEPTED {
         let program = compile_source(&source(name)).unwrap_or_else(|e| panic!("{name}: {e}"));
-        assert!(mir::lower(&program).validate().is_ok(), "{name}");
+        assert!(mir::lower(&program).functions().iter().all(|function| function.validate().is_ok()), "{name}");
         let report = verify::verify_report(&program);
         assert!(report.diagnostics.is_empty(), "{name}: {:?}", report.diagnostics);
         let expected = match name {
@@ -242,7 +242,9 @@ fn m3_corpus_frontend_expectations_are_explicit() {
             &selection,
         );
         if let Some(cause) = cause {
-            let error = admitted.unwrap_err();
+            let Err(error) = admitted else {
+                panic!("{name}: expected ownership rejection");
+            };
             let execution::ErrorKind::Frontend { phase, message } = error.kind else {
                 panic!("{name}: wrong rejection class: {error:?}");
             };
