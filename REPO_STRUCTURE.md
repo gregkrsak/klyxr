@@ -24,6 +24,7 @@ klyxr/
 │       ├── tests.yml
 │       └── verify.yml
 ├── assets/
+│   ├── bowfin-logo.jpeg
 │   ├── diagrams/
 │   │   ├── assurance-ladder.svg
 │   │   └── knowledge-boundaries.svg
@@ -80,6 +81,9 @@ klyxr/
 ```
 
 Empty implementation directories contain `.gitkeep` so Git will preserve the initial structure.
+
+`assets/bowfin-logo.jpeg` preserves Greg's canonical fish-and-BOWFIN source bytes.
+The README banner is derived artwork at its existing consumer path.
 
 ## Deliberately omitted for now
 
