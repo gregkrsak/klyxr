@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Reconcile one complete Cargo profile against the exact KED-030 predecessor."""
+"""Reconcile one complete Cargo profile against the exact BED-029 predecessor."""
 import json
 from pathlib import Path
 import re
 import sys
 
 root = Path(__file__).resolve().parents[1]
-baseline = json.loads((root / "docs/engineering/ked-030-predecessors.json").read_text())
+baseline = json.loads((root / "docs/engineering/bed-029-predecessors.json").read_text())
 targets = []
 groups = []
 current = None
@@ -48,37 +48,30 @@ for target, group in zip(targets, groups):
         actual[identity] = outcome
 def reconcile(actual, baseline, migrations, additions):
     expected = {r["id"]: r["outcome"] for r in baseline["identities"]}
-    assert len(expected) == 1743, "exact KED-030 baseline inventory required"
+    assert len(expected) == 1706, "exact BED-029 baseline inventory required"
     for old, new in migrations.items():
         assert old in expected and new not in expected
         expected[new] = expected.pop(old)
     assert all(actual.get(k) == v for k, v in expected.items()), "missing/changed predecessor"
     new = set(actual) - set(expected)
     assert new == set(additions), "unclassified additions: " + repr(sorted(new ^ set(additions)))
-    assert len(actual) == sum(summaries) == 1743 + len(additions)
+    assert len(actual) == sum(summaries) == 1706 + len(additions)
     affine = "lib.rs::verify::tests::affine_proofs_match_exhaustive_execution_on_small_domains"
     assert actual.get(affine) == "ok", "missing 1,800-case affine cross-check"
     doctests = [k for k in actual if k.startswith("doctest:")]
     assert len(doctests) == 1 and "CheckedExecutable - compile fail" in doctests[0]
-    print(f"KED-030 reconciliation: 1,743 predecessors ({len(migrations)} identity renames) + {len(additions)} new = {len(actual)} passed")
+    print(f"BED-029 reconciliation: 1,706 predecessors ({len(migrations)} identity renames) + {len(additions)} new = {len(actual)} passed")
     print("compile-fail doctest: passed; affine cross-check: 1,800 cases passed")
     print("failed/ignored/filtered: 0/0/0")
 
-manifest = json.loads((root / "docs/engineering/ked-030-evidence.json").read_text())
-predecessors = {r["id"] for r in baseline["identities"]}
-assert len(manifest["additions"]) == len(set(manifest["additions"])), "duplicate addition"
-for adaptation in manifest["fixture_adaptations"]:
-    identities = adaptation.get("affected_identities", [adaptation.get("id")])
-    assert identities and set(identities) <= predecessors, "foreign fixture adaptation"
-    assert adaptation["reason"], "fixture adaptation requires justification"
-domains = manifest["evidence_domains"]
-primitive = domains["primitive_only_predecessors"]
-assert len(primitive) == len(set(primitive)) and set(primitive) <= predecessors
-prefixes = ("lib.rs::execution::machine::cleanup::",
-            "lib.rs::execution::machine::temporaries::",
-            "lib.rs::execution::temporary_authority_tests::")
-assert set(primitive) == {identity for identity in predecessors if identity.startswith(prefixes)}
-assert domains["reason"], "private domain classifications require justification"
-assert manifest["contract_corrections"] == [], "no predecessor contract change authorized"
+manifest = json.loads((root / "docs/engineering/bed-029-evidence.json").read_text())
 reconcile(actual, baseline, manifest["migrations"], manifest["additions"])
-print(f"private fixture domains: {len(primitive)} predecessor identities explicitly primitive/protocol")
+predecessors = {r["id"] for r in baseline["identities"]}
+corrections = manifest["contract_corrections"]
+assert len({r["id"] for r in corrections}) == len(corrections) == 3
+assert [r["kind"] for r in corrections].count("admission") == 2
+assert [r["kind"] for r in corrections].count("fuel") == 1
+for row in corrections + manifest["fixture_adaptations"]:
+    assert row["id"] in predecessors and actual.get(row["id"]) == "ok"
+    assert row["reason"], "undocumented predecessor correction"
+print("preserved-ID contract corrections: 2 admission, 1 fuel; fixture adaptation: 1")

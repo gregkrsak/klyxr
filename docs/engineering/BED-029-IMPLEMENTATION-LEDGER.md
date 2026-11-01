@@ -1,4 +1,4 @@
-# KED-029 implementation ledger
+# BED-029 implementation ledger
 
 Issue: https://github.com/gregkrsak/klyxr/issues/66
 Frozen specification: Draft 2; freeze 6207528580; authorization 6207551736.

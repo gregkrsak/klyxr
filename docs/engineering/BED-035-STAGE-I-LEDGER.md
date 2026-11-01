@@ -1,4 +1,4 @@
-# KED-035 Stage I engineering ledger
+# BED-035 Stage I engineering ledger
 
 Authority: Issue #84 comment 6296001700; frozen Draft 2 and its freeze record
 6295819136; accepted K35-P01–P10 review 6295569435. The implementation branch was
@@ -259,16 +259,16 @@ language decision number or native implementation claim is invented.
 
 | Finding | Implementation disposition |
 |---|---|
-| K35-P01 | Borrow and validate complete exact approved authority; no second lowering or ownership authority. |
-| K35-P02 | Sealed version-one common schedule and separate observation/audit/presentation domains; exact predecessor neighbors retained. |
-| K35-P03 | Bounded pre-reserved complete actual observation; failure preserves primary and prevents Equal. |
-| K35-P04 | Independent local validation before one anchored injective dynamic map; raw IDs are never cross-engine equality. |
-| K35-P05 | Logical site/activation/occurrence/phase and receiving-growth shadows; future engines must preserve eliminated logical work. |
-| K35-P06 | Reached-only consumption, inherited gate precedence, no-gap custody, protected non-delivery and terminal non-resumption. |
-| K35-P07 | Independent whole-trace and custody oracles plus actual Equal/Different/Inconclusive controls; no interpreter self-certification. |
-| K35-P08 | Ordinary and selected-profile integration without broader source/runtime authority; structured audit is separate from events/text. |
-| K35-P09 | Preserve the semantic relation independently of layout, frame IDs, preallocation or future optimization; no optimizer chosen. |
-| K35-P10 | Mandatory native identity/installation/actual optimized and unoptimized comparisons remain deferred Stage N evidence. |
+| B35-P01 | Borrow and validate complete exact approved authority; no second lowering or ownership authority. |
+| B35-P02 | Sealed version-one common schedule and separate observation/audit/presentation domains; exact predecessor neighbors retained. |
+| B35-P03 | Bounded pre-reserved complete actual observation; failure preserves primary and prevents Equal. |
+| B35-P04 | Independent local validation before one anchored injective dynamic map; raw IDs are never cross-engine equality. |
+| B35-P05 | Logical site/activation/occurrence/phase and receiving-growth shadows; future engines must preserve eliminated logical work. |
+| B35-P06 | Reached-only consumption, inherited gate precedence, no-gap custody, protected non-delivery and terminal non-resumption. |
+| B35-P07 | Independent whole-trace and custody oracles plus actual Equal/Different/Inconclusive controls; no interpreter self-certification. |
+| B35-P08 | Ordinary and selected-profile integration without broader source/runtime authority; structured audit is separate from events/text. |
+| B35-P09 | Preserve the semantic relation independently of layout, frame IDs, preallocation or future optimization; no optimizer chosen. |
+| B35-P10 | Mandatory native identity/installation/actual optimized and unoptimized comparisons remain deferred Stage N evidence. |
 
 ## Bounds, accounting and custody
 
@@ -374,7 +374,7 @@ checks, actual optimized/unoptimized comparisons and physical/native/substrate
 evidence remain mandatory deferred Stage N obligations. No backend, target, ABI,
 layout, emitter, object format, runtime ABI, linker, optimizer, serialization,
 signing or packaging mechanism is selected. Stage N requires a separately reviewed
-and explicitly authorized KED.
+and explicitly authorized BED.
 
 This documentation-only closeout changes no frozen semantics, implementation,
 test identity, workflow or public API. Merging its PR may close Issue #84 as

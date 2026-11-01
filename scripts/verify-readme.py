@@ -21,7 +21,7 @@ for ref in local:
 policy_errors = []
 
 for line_number, line in enumerate(readme.splitlines(), start=1):
-    identifiers = re.findall(r'\b(?:KED|KD)-\d+\b', line)
+    identifiers = re.findall(r'\b(?:BED|BD|KED|KD)-\d+\b', line)
     if identifiers:
         policy_errors.append(
             f"line {line_number}: internal decision identifier(s) "
@@ -49,10 +49,10 @@ public_footer = """<p align="center">
 </p>
 
 <p align="center">
-  <code>klyxr build</code> ·
-  <code>klyxr test</code> ·
-  <code>klyxr verify</code> ·
-  <code>klyxr audit</code>
+  <code>bowfin build</code> ·
+  <code>bowfin test</code> ·
+  <code>bowfin verify</code> ·
+  <code>bowfin audit</code>
 </p>
 
 <p align="center">

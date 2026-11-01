@@ -1,4 +1,4 @@
-# KED-033 trusted Sensor implementation
+# BED-033 trusted Sensor implementation
 
 Frozen [Issue #78 Draft 2](https://github.com/gregkrsak/klyxr/issues/78) governs this
 implementation. Implementation evidence is separate from Sarah's independent
@@ -8,9 +8,9 @@ standard library, general FFI, capability language or new proof claim.
 
 ## Source and explicit configuration
 
-The complete executable example is [trusted_sensor.klx](../../examples/trusted_sensor.klx):
+The complete executable example is [trusted_sensor.bow](../../examples/trusted_sensor.bow):
 
-```klyxr
+```bowfin
 fn sample() -> Result<success: Reading, failure: SensorError> effects io {
     let sensor = sensor_open() or return;
     let reading = sensor_read(&sensor) or return;
@@ -19,9 +19,9 @@ fn sample() -> Result<success: Reading, failure: SensorError> effects io {
 ```
 
 ```bash
-cargo run --locked --bin klyxr -- run examples/trusted_sensor.klx --function sample --profile sensor-demo
-cargo run --locked --bin klyxr -- run examples/trusted_sensor.klx --function sample --profile sensor-demo --scenario no-sample
-cargo run --locked --bin klyxr -- audit examples/trusted_sensor.klx --function sample --profile sensor-demo
+cargo run --locked --bin bowfin -- run examples/trusted_sensor.bow --function sample --profile sensor-demo
+cargo run --locked --bin bowfin -- run examples/trusted_sensor.bow --function sample --profile sensor-demo --scenario no-sample
+cargo run --locked --bin bowfin -- audit examples/trusted_sensor.bow --function sample --profile sensor-demo
 ```
 
 Profile selection precedes source signature collection. Without explicit selection
@@ -67,7 +67,7 @@ contracts and structural edges. Opaque approval seals all copies and witnesses.
 Runtime dispatch uses that approved contract, with no source/HIR/name/host fallback.
 
 Whole owned locals, moves, owned parameters, shared aliases/non-escaping helpers,
-protected internal Sensor returns, nested Results and admitted KD-044 destinations
+protected internal Sensor returns, nested Results and admitted BD-044 destinations
 compose with matches, `or return`, branches, loops, break, continue and returns.
 `retire(sensor: Sensor) -> bool` requires io for residual parameter cleanup;
 `relay(sensor: Sensor) -> Sensor` needs no io for transfer alone. That difference
@@ -99,10 +99,10 @@ tool outcomes. The stopped session retains receipts, binding state, protected
 Results, cleanup cursor, completed prefix and unfinished responsibilities.
 `advance` returns a borrowed recorded outcome; repeat calls never resume, retry,
 unwind or release. A protected Ok or Error retained after a terminal stop has not
-been delivered. Teardown/process reclamation is not successful Klyxr release.
+been delivered. Teardown/process reclamation is not successful Bowfin release.
 Automatic release has no source Result and promises no flush, commit, durability,
 publication or protocol completion. Explicit fallible completion remains deferred
-to KED-034; none is implemented here.
+to BED-034; none is implemented here.
 
 ## Bounded audit and execution
 
@@ -139,11 +139,11 @@ allocation failure, or offer a source/CLI/environment production fault switch.
 
 ## Evidence
 
-The [implementation ledger](KED-033-IMPLEMENTATION-LEDGER.md) records each checkpoint,
+The [implementation ledger](BED-033-IMPLEMENTATION-LEDGER.md) records each checkpoint,
 exact Git identities, local gates, CI jobs, environment limitations and corrections.
-The [evidence manifest](ked-033-evidence.json) maps all 35 section-20 obligations,
+The [evidence manifest](bed-033-evidence.json) maps all 35 section-20 obligations,
 13 section-21 controls and P01-P09 to exact classified identities. The reconciler
 requires every one of the 1,875 predecessor identities plus all additions, zero
 ignored/filtered/failed tests, authority doctest, both profile affine checks and
-the preserved KED-032 reconciliation chain. No test migration, contract correction
+the preserved BED-032 reconciliation chain. No test migration, contract correction
 or numeric-oracle relaxation is claimed. Independent acceptance remains pending.

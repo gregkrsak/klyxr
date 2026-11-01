@@ -17,4 +17,4 @@ assert len(evidence["runtime"]) == 3
 assert all(row["storage"] > 1 and row["fuel"] > 1 for row in evidence["runtime"])
 assert {row["scenario"] for row in evidence["runtime"]} == {"Sample", "FinishIoFailure", "FinishPartialIoFailure"}
 assert evidence["stopped-report"]["audit_storage"] > evidence["stopped-report"]["retained"] > 0
-print("KED-034 measured budget neighbors: " + json.dumps(evidence, sort_keys=True))
+print("BED-034 measured budget neighbors: " + json.dumps(evidence, sort_keys=True))
