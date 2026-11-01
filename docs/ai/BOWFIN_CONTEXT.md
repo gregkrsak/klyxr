@@ -358,14 +358,15 @@ Current locked brand direction:
 
 - name: **Bowfin**
 - prose casing: `Bowfin`
-- adopted wordmark: `BOWFIN`; current artwork replacement is deferred to M5
+- canonical logo: Greg's supplied fish-and-`BOWFIN` artwork at `assets/bowfin-logo.jpeg`, preserving the exact original JPEG bytes (1536 × 1536 pixels, SHA-256 `3fc1f03156b6415c652220c7b405ff7df293b65b26c31d0836878d2547b17323`)
+- wordmark: white `BOWFIN`, preserving the supplied character and proportions
 - canonical CLI casing: `bowfin`; `klyxr` remains the compatibility command
 - adopted repository destination: `gregkrsak/bowfin`; operational repository: `gregkrsak/klyxr` until authorized cutover
-- current `KLX` icon/monogram: deferred M5 artwork, not a Bowfin visual specification
+- desktop and mobile derived layouts may adapt placement, scale and composition while preserving the supplied fish design and proportions
 - source extension: `.bow` on migration staging; explicit `.klx` input retained
 - visual mode: dark-first
 - primary aesthetic: premium developer tooling, precise, modern, non-hype
-- palette direction: obsidian + electric cyan + signal blue + proof violet
+- palette direction: dark/obsidian with cyan, blue, violet and the canonical fish's amber-gold accents
 - tone: exact, serious, plainspoken, engineer-respecting
 
 ## AI collaboration rules

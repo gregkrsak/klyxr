@@ -24,10 +24,14 @@ klyxr/
 │       ├── tests.yml
 │       └── verify.yml
 ├── assets/
+│   ├── bowfin-logo.jpeg
 │   ├── diagrams/
 │   │   ├── assurance-ladder.svg
-│   │   └── knowledge-boundaries.svg
-│   └── readme-banner.png
+│   │   ├── assurance-ladder-mobile.svg
+│   │   ├── knowledge-boundaries.svg
+│   │   └── knowledge-boundaries-mobile.svg
+│   ├── readme-banner.png
+│   └── readme-banner-mobile.png
 ├── compiler/
 │   ├── Cargo.toml
 │   ├── README.md
@@ -80,6 +84,11 @@ klyxr/
 ```
 
 Empty implementation directories contain `.gitkeep` so Git will preserve the initial structure.
+
+`assets/bowfin-logo.jpeg` preserves Greg's canonical source artwork unchanged.
+The README uses derived desktop and mobile banners and diagrams. Its responsive
+`<picture>` blocks select the mobile artwork at widths up to 767 pixels and keep
+the desktop artwork as the fallback.
 
 ## Deliberately omitted for now
 
