@@ -160,7 +160,7 @@ site or change DNS merely to manufacture preview evidence.
 | M6-OP04 | Exact domain FQDNs, controlled registrar/DNS/hosting accounts, renewal/lock status, existing zone/routing exports, restore capability and operator access | Any DNS/hosting/domain operation |
 | M6-OP05 | Existing provider's actual forwarding/TLS capabilities, preview if available, certificate names/expiry/renewal, complete before/after record/rule tuples and approved route policy | Any domain activation or truthful secure-domain claim |
 | M6-OP06 | Existing non-root paths, query handling, mail/subdomain consumers and their exact retention/mapping; explicit decision for `www` and optional secondary routes | Silent loss of existing URL/service behavior |
-| M6-OP07 | Separate authorization for the post-rename URL/verifier and truthful metadata-content PRs; exact content diff and applicable CI | Changing current operational links or deferred-cutover prose |
+| M6-OP07 | Proposed Amendment 4 (contract §16) is pending: independent review, Greg's explicit acceptance, human staging integration/readback, then its separate post-rename preparation/merge gates and exact content/CI evidence | Still unresolved; no current URL/metadata edit, extra production PR, R2/R3 disposition or future merge authority |
 | M6-OP08 | Named announcement channels, exact approved copy, timing and publication operator; any separately authorized release/package plan | Publication or new distribution claims |
 
 These are operational requirements, not language questions or instructions to
@@ -337,25 +337,35 @@ read fallback is not proof that the restricted connection is healthy.
 
 ## 7. A03 — Canonical live links and their coupled verifier (future content PR)
 
-**Operator/access/gate:** Greg authorizes a separate URL-only repository-content
-change after A01 and the relevant A02 checks. It needs ordinary review, required
+**Operator/access/gate (future, not yet authorized):** Greg must separately
+authorize the bounded URL-only repository-content change after A01 and the
+relevant A02 checks. It needs ordinary review, required
 CI and a human merge against the then-authorized target. This M6 candidate
 authorizes none of those edits or merges.
 
 This cannot be implemented by retargeting an M0–M7 phase PR to `prod`. Contract
 §3 also reserves staging-to-production integration to its sole separately
-identified final candidate. Before external execution, Greg and the specification
-steward must record an integration/activation route consistent with that rule in
-M6-OP07. This runbook does not assume that a second production PR or an exception
-is permitted. If the route requires a contract exception, resolve it through the
-accepted owner/review process before execution, not by improvising a merge.
-Any later authorized content merge changes the production identity: record its
-fixed candidate and human integration, obtain the applicable acceptance and fresh
-production verification, and reconcile or renew R6 authorization before relying
-on it. Update the production SHA/tree and repeat dependent byte/route checks.
-Until the integration route is resolved, keep the current links and do not claim
-final live-documentation alignment or complete R8. Original R5 evidence cannot
-be recycled as exact-head evidence for changed production content.
+identified final candidate. Proposed Amendment 4 in contract §16 would permit
+one additional staging-to-production PR solely for its exact six-file content
+boundary. It is **pending and not operative**. Independent review, Greg's explicit
+acceptance, human staging integration and readback are required before it can
+resolve M6-OP07. This preparation does not close M6-OP07 or establish final R2/R3.
+
+If adopted, the follow-up still cannot be prepared until the actual fixed
+production candidate has passed acceptance/human merge/R5 verification, the
+repository rename is separately authorized and executed, relevant old/new routing
+checks pass, and Greg separately authorizes preparation. The then-verified
+production ancestry must enter staging through ordinary reviewed human integration.
+Exact diff, predecessor reconciliation, CI, independent review and Greg's separate
+acceptance precede the one additional human production merge. No second feature
+candidate, verifier algorithm change or wider exception is implied.
+
+Any resulting production commit/tree requires fresh post-merge verification and
+reconciled or renewed dependent external authorization/checks before more external
+writes or R8 completion. Beyond-boundary repair/recovery still requires §11's
+separately reviewed plan and owner authority. Until adoption and those gates are
+satisfied, keep the current links, make no final-alignment/completion claim and do
+not recycle the original R5 evidence for changed content.
 
 The exact eight current URLs are:
 
@@ -662,11 +672,14 @@ Withdrawing an announcement cannot retract an emitted package or granted authori
 
 The order after R6 is: A01 rename; A02 immediate identity/routing/connector
 checks; A04 Git checks; A05 primary then legacy/optional domain routes; A06
-truthful external metadata; separately authorized A03 URL/content alignment;
+truthful external metadata; A03 URL/content alignment only if proposed Amendment 4
+has been adopted and all of its separate follow-up gates are satisfied;
 A07 applicable-consumer checks throughout; A08 source-distribution checks and
 any specifically authorized announcement. Reconcile every changed surface before
 R8. This dependency order does not authorize optional writes or override missing
-prerequisites.
+prerequisites. Amendment 4 remains proposed/pending in this candidate; the current
+§3 rule still controls, M6-OP07 remains open and final R2/R3 disposition awaits
+acceptance and verification of the resulting staging integration.
 
 Greg and the independent checker record actual time/result/evidence/recovery
 status for every applicable item:
