@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/readme-banner.png" alt="Klyxr — Systems programming you can reason about" width="100%">
+  <img src="./assets/readme-banner.png" alt="Bowfin fish logo and wordmark — Systems programming you can reason about" width="100%">
 </p>
 
 <p align="center">
@@ -69,7 +69,7 @@ Today those truths often live in comments, tests, wrapper types, runtime checks,
 **Bowfin wants more of them in the language.**
 
 <p align="center">
-  <img src="./assets/diagrams/knowledge-boundaries.svg" alt="Klyxr makes the boundaries visible" width="100%">
+  <img src="./assets/diagrams/knowledge-boundaries.svg" alt="Bowfin makes the boundaries between known, proved, trusted and unsafe visible" width="100%">
 </p>
 
 The goal is not magical correctness.
@@ -500,12 +500,13 @@ application-success convention and audit limitations.
 │       ├── verify.yml
 │       └── docs.yml
 ├── assets/
+│   ├── bowfin-logo.jpeg
+│   ├── diagrams/
+│   └── readme-banner.png
 ├── Cargo.toml
 ├── Cargo.lock
 ├── rust-toolchain.toml
 ├── compiler/
-│   ├── diagrams/
-│   └── readme-banner.png
 ├── docs/
 ├── examples/
 │   ├── battery.bow
