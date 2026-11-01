@@ -1,0 +1,78 @@
+pub mod ast;
+mod bounded;
+pub mod diagnostics;
+pub mod effects;
+pub mod execution;
+pub mod hir;
+pub mod lexer;
+pub mod mir;
+pub mod ownership;
+pub mod parser;
+pub mod resolve;
+#[cfg(test)]
+mod run_reporting;
+pub mod trusted;
+pub mod types;
+pub mod verify;
+
+use std::fmt;
+
+use ast::Program;
+
+#[derive(Debug)]
+pub enum FrontendError {
+    Lex(lexer::LexError),
+    Parse(parser::ParseError),
+    Resolve(Vec<diagnostics::Diagnostic>),
+    Type(Vec<diagnostics::Diagnostic>),
+    Ownership(Vec<diagnostics::Diagnostic>),
+    Effects(Vec<diagnostics::Diagnostic>),
+}
+
+impl fmt::Display for FrontendError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Lex(error) => write!(f, "{error}"),
+            Self::Parse(error) => write!(f, "{error}"),
+            Self::Resolve(errors)
+            | Self::Type(errors)
+            | Self::Ownership(errors)
+            | Self::Effects(errors) => {
+                for (index, error) in errors.iter().enumerate() {
+                    if index > 0 {
+                        writeln!(f)?;
+                    }
+                    write!(
+                        f,
+                        "{} at {}:{}",
+                        error.message, error.span.line, error.span.column
+                    )?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl std::error::Error for FrontendError {}
+
+/// Parse source syntax without resolving declaration identity.
+pub fn parse_source(source: &str) -> Result<Program, FrontendError> {
+    let tokens = lexer::lex(source).map_err(FrontendError::Lex)?;
+    parser::parse(&tokens).map_err(FrontendError::Parse)
+}
+
+/// Parse, resolve, type-check, and ownership/loan/borrowed-access-check the supported subset to canonical HIR.
+/// Numerical proof and ordered call-state checking are separate verifier work.
+pub fn compile_source(source: &str) -> Result<hir::Program, FrontendError> {
+    let ast = parse_source(source)?;
+    let resolved = resolve::resolve(&ast).map_err(FrontendError::Resolve)?;
+    let program = types::check(resolved).map_err(FrontendError::Type)?;
+    let cleanup_sites = ownership::analyze(&program).map_err(FrontendError::Ownership)?;
+    effects::calls::check(&program).map_err(FrontendError::Effects)?;
+    effects::custody::check(&program, &cleanup_sites).map_err(FrontendError::Effects)?;
+    Ok(program)
+}
+
+#[cfg(test)]
+mod propagation_tests;

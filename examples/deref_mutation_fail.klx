@@ -1,0 +1,8 @@
+// Intentional ownership error: no destruction/displacement semantics for Ticket.
+type Percent = range 0..100;
+record Ticket { value: Percent }
+
+fn replace(ticket: &mut Ticket, replacement: Ticket) -> bool {
+    *ticket = replacement;
+    return true;
+}

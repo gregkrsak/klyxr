@@ -1,0 +1,19 @@
+type Percent = range 0..100;
+
+// Ordinary frontend/MIR example: no execution or numerical proof is claimed.
+fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
+    let mut owned = value;
+    if flag {
+        let access = &mut owned;
+        *access = replacement;
+        if flag {
+            let observed = *access;
+        }
+    } else {
+        let observed = owned;
+    }
+    if flag {
+        let observed = owned;
+    }
+    return owned;
+}

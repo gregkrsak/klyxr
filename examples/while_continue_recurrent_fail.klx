@@ -1,0 +1,13 @@
+// Recurrent carried provenance protects every explicit backedge, even a skipped read.
+fn invalid(flag: bool, skip: bool) -> bool {
+    let mut value = false;
+    let view = &value;
+    while flag {
+        if skip {
+            value = true;
+            continue;
+        }
+        let observed = *view;
+    }
+    return value;
+}

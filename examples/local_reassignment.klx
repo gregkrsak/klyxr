@@ -1,0 +1,19 @@
+type Percent = range 0..100;
+
+// Frontend/ownership/MIR only: this does not execute or prove range bounds.
+fn next(value: Percent) -> Percent {
+    return value;
+}
+
+fn update(flag: bool, start: Percent, replacement: Percent) -> Percent {
+    let mut current = if flag { start } else { replacement };
+    current = next(current);
+    let view = &current;
+    current = *view; // Final shared use ends before the direct write.
+    if flag {
+        current = replacement;
+    }
+    let mutable enabled = false;
+    enabled = true;
+    return current;
+}

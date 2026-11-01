@@ -1,0 +1,13 @@
+// Inner continue preserves carried provenance; outer continue scopes it away.
+fn nested(flag: bool, skip: bool) -> bool {
+    let mut value = false;
+    while flag {
+        let access = &mut value;
+        while skip {
+            *access = true;
+            continue;
+        }
+        continue;
+    }
+    return value;
+}

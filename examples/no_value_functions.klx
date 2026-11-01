@@ -1,0 +1,27 @@
+// No-value calls are statements; nested braces do not complete the function.
+fn reset(flag: &mut bool) {
+    *flag = false;
+}
+
+fn reset_if_needed(flag: &mut bool, skip: bool) {
+    if skip {
+        return;
+    }
+    reset(flag);
+}
+
+fn prepare(flag: &mut bool) -> bool {
+    reset_if_needed(flag, false);
+    return true;
+}
+
+fn process(running: bool, skip: bool) {
+    while running {
+        let mut flag = true;
+        if skip {
+            return;
+        }
+        reset(&mut flag);
+    }
+    // Only this function-level boundary permits normal NoValue completion.
+}

@@ -1,0 +1,8 @@
+type Percent = range 0..100;
+record Ticket { value: Percent }
+
+// The destination is available; a source moved on any path cannot be reused.
+fn invalid(flag: bool, first: Ticket, second: Ticket) -> Ticket {
+    let chosen = if flag { first } else { second };
+    return first;
+}

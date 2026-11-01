@@ -1,0 +1,8 @@
+type Percent = range 0..100;
+record Battery { charge: Percent }
+fn ready(battery: Battery) -> bool { return true; }
+
+fn bad(charge: Percent) {
+    // Bool result alone does not legalize recurring non-Copy construction.
+    while ready(Battery { charge: charge }) {}
+}

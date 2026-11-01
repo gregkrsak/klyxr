@@ -1,0 +1,11 @@
+// Frontend/MIR only. False exit ends the loan before owner recovery.
+fn update(flag: bool, replacement: bool) -> bool {
+    let mut running = flag;
+    let mut owned = false;
+    let access = &mut owned;
+    while running {
+        *access = replacement;
+        running = false;
+    }
+    return owned;
+}

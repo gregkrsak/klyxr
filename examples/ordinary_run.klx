@@ -1,0 +1,27 @@
+// Written mutation order; rendering follows declaration order.
+type Percent = range 0..100;
+record Pair { first: Percent, second: Percent }
+fn seed(value: Percent) -> Percent { return value; }
+fn tick(value: &mut Percent) -> Percent {
+    let previous = *value;
+    *value = previous - 1;
+    return previous;
+}
+fn demo() -> Pair {
+    let mut value = seed(90);
+    return Pair { second: tick(&mut value), first: tick(&mut value) };
+}
+fn loop_demo() -> Percent {
+    let mut value = seed(4);
+    while 0 <= value {
+        let current = value;
+        value = current - 1;
+        if value == 2 { continue; }
+        if value == 0 { break; }
+    }
+    return value;
+}
+fn trap_demo() -> Percent {
+    let value = seed(0);
+    return (value - 101) - -101;
+}

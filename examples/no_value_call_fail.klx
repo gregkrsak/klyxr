@@ -1,0 +1,9 @@
+type Percent = range 0..100;
+record Ticket { value: Percent }
+
+fn receive(first: Ticket, second: Ticket) {}
+
+fn bad(ticket: Ticket) {
+    // The whole call is transactional: a late duplicate move rejects the call.
+    receive(ticket, ticket);
+}

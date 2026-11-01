@@ -1,0 +1,236 @@
+{
+  "measured_at": {
+    "sha": "038defe990882d83eaf6a3460c3f06bfe5f24938",
+    "tree": "2d90aba75dcec41807376635839d3a775702ad33"
+  },
+  "execution": "GitHub Actions, repository-pinned Rust 1.80.0, x86_64-unknown-linux-gnu",
+  "scope": "Exact finite-fixture test-build reservation neighbors; not portable ABI constants, host RSS, hard realtime or an all-program proof.",
+  "profiles": {
+    "push_debug": {
+      "audit-output": {
+        "audit_output": 6193,
+        "audit_storage": 65617,
+        "audit_work": 65584,
+        "diagnostic_output": 126,
+        "result_output": 20
+      },
+      "catalog": {
+        "diagnostics": 9792,
+        "protocol_bytes_per_site": 1320,
+        "storage": 1695808,
+        "work": 102656
+      },
+      "combined-envelope": {
+        "independent_fit_combined_failure": 3848,
+        "largest_growth": 176,
+        "retained": 3672,
+        "sum_growth": 680
+      },
+      "host-growth": {
+        "actual_mask": 1918,
+        "tested_mask": 1918
+      },
+      "preparation": {
+        "diagnostics": 44608,
+        "identifier_bytes": 13,
+        "storage": 18559608,
+        "tokens": 35,
+        "work": 1344662663
+      },
+      "runtime": [
+        {
+          "fuel": 72,
+          "scenario": "Sample",
+          "storage": 4448
+        },
+        {
+          "fuel": 72,
+          "scenario": "FinishIoFailure",
+          "storage": 4448
+        },
+        {
+          "fuel": 72,
+          "scenario": "FinishPartialIoFailure",
+          "storage": 4448
+        }
+      ],
+      "stopped-report": {
+        "audit_storage": 69969,
+        "retained": 4352
+      }
+    },
+    "push_release": {
+      "audit-output": {
+        "audit_output": 6193,
+        "audit_storage": 65617,
+        "audit_work": 65584,
+        "diagnostic_output": 126,
+        "result_output": 20
+      },
+      "catalog": {
+        "diagnostics": 9792,
+        "protocol_bytes_per_site": 1320,
+        "storage": 1695808,
+        "work": 102656
+      },
+      "combined-envelope": {
+        "independent_fit_combined_failure": 3848,
+        "largest_growth": 176,
+        "retained": 3672,
+        "sum_growth": 680
+      },
+      "host-growth": {
+        "actual_mask": 1918,
+        "tested_mask": 1918
+      },
+      "preparation": {
+        "diagnostics": 44608,
+        "identifier_bytes": 13,
+        "storage": 18559608,
+        "tokens": 35,
+        "work": 1344662663
+      },
+      "runtime": [
+        {
+          "fuel": 72,
+          "scenario": "Sample",
+          "storage": 4448
+        },
+        {
+          "fuel": 72,
+          "scenario": "FinishIoFailure",
+          "storage": 4448
+        },
+        {
+          "fuel": 72,
+          "scenario": "FinishPartialIoFailure",
+          "storage": 4448
+        }
+      ],
+      "stopped-report": {
+        "audit_storage": 69969,
+        "retained": 4352
+      }
+    },
+    "pr_debug": {
+      "audit-output": {
+        "audit_output": 6193,
+        "audit_storage": 65617,
+        "audit_work": 65584,
+        "diagnostic_output": 126,
+        "result_output": 20
+      },
+      "catalog": {
+        "diagnostics": 9792,
+        "protocol_bytes_per_site": 1320,
+        "storage": 1695808,
+        "work": 102656
+      },
+      "combined-envelope": {
+        "independent_fit_combined_failure": 3848,
+        "largest_growth": 176,
+        "retained": 3672,
+        "sum_growth": 680
+      },
+      "host-growth": {
+        "actual_mask": 1918,
+        "tested_mask": 1918
+      },
+      "preparation": {
+        "diagnostics": 44608,
+        "identifier_bytes": 13,
+        "storage": 18559608,
+        "tokens": 35,
+        "work": 1344662663
+      },
+      "runtime": [
+        {
+          "fuel": 72,
+          "scenario": "Sample",
+          "storage": 4448
+        },
+        {
+          "fuel": 72,
+          "scenario": "FinishIoFailure",
+          "storage": 4448
+        },
+        {
+          "fuel": 72,
+          "scenario": "FinishPartialIoFailure",
+          "storage": 4448
+        }
+      ],
+      "stopped-report": {
+        "audit_storage": 69969,
+        "retained": 4352
+      }
+    },
+    "pr_release": {
+      "audit-output": {
+        "audit_output": 6193,
+        "audit_storage": 65617,
+        "audit_work": 65584,
+        "diagnostic_output": 126,
+        "result_output": 20
+      },
+      "catalog": {
+        "diagnostics": 9792,
+        "protocol_bytes_per_site": 1320,
+        "storage": 1695808,
+        "work": 102656
+      },
+      "combined-envelope": {
+        "independent_fit_combined_failure": 3848,
+        "largest_growth": 176,
+        "retained": 3672,
+        "sum_growth": 680
+      },
+      "host-growth": {
+        "actual_mask": 1918,
+        "tested_mask": 1918
+      },
+      "preparation": {
+        "diagnostics": 44608,
+        "identifier_bytes": 13,
+        "storage": 18559608,
+        "tokens": 35,
+        "work": 1344662663
+      },
+      "runtime": [
+        {
+          "fuel": 72,
+          "scenario": "Sample",
+          "storage": 4448
+        },
+        {
+          "fuel": 72,
+          "scenario": "FinishIoFailure",
+          "storage": 4448
+        },
+        {
+          "fuel": 72,
+          "scenario": "FinishPartialIoFailure",
+          "storage": 4448
+        }
+      ],
+      "stopped-report": {
+        "audit_storage": 69969,
+        "retained": 4352
+      }
+    }
+  },
+  "runs": [
+    {
+      "run": 39323549295,
+      "event": "pull_request",
+      "name": "tests",
+      "job": 118303452395
+    },
+    {
+      "run": 39323542075,
+      "event": "push",
+      "name": "tests",
+      "job": 118303429615
+    }
+  ]
+}

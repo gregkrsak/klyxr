@@ -1,0 +1,10 @@
+// Intentional failure: mutable carried handle transfer changes backedge state.
+type Percent = range 0..100;
+fn bad(flag: bool, value: Percent) -> Percent {
+    let mut owned = value;
+    let access = &mut owned;
+    while flag {
+        let moved = access;
+    }
+    return value;
+}

@@ -1,0 +1,11 @@
+type Percent = range 0..100;
+record Ticket { value: Percent }
+record Measurements { first: Percent, middle: Percent, last: Percent }
+fn measure(ticket: Ticket) -> Percent { return ticket.value; }
+fn bad(ticket: Ticket, value: Percent) -> Measurements {
+    return Measurements {
+        last: measure(ticket),
+        first: value,
+        middle: measure(ticket), // written final initializer reuses a moved owner
+    };
+}

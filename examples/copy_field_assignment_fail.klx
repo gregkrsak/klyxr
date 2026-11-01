@@ -1,0 +1,11 @@
+type Percent = range 0..100;
+record Battery { charge: Percent, health: Percent }
+fn finish(view: &Battery) {}
+
+fn blocked(battery: Battery) -> Battery {
+    let mut working = battery;
+    let view = &working;
+    working.charge = 80;
+    finish(view);
+    return working;
+}

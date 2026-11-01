@@ -1,0 +1,15 @@
+// Intentional Ownership failure: outer-iteration local is carried by inner loop.
+// Recursive factory is a frontend typing fixture, not executable construction.
+type Percent = range 0..100;
+record Ticket { value: Percent }
+fn make_ticket() -> Ticket { return make_ticket(); }
+fn consume(ticket: Ticket) -> bool { return true; }
+fn bad(flag: bool) -> bool {
+    while flag {
+        let outer = make_ticket();
+        while flag {
+            let done = consume(outer);
+        }
+    }
+    return flag;
+}

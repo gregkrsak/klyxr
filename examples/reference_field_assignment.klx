@@ -1,0 +1,22 @@
+type Percent = range 0..100;
+record Battery { charge: Percent, health: Percent }
+
+fn set_charge(access: &mut Battery, charge: Percent) {
+    access.charge = charge;
+}
+
+fn repair(battery: Battery) -> Battery {
+    let mut working = battery;
+    let first = &mut working;
+    let access = first;
+    access.charge = access.health;
+    access.health = 100;
+    return working;
+}
+
+fn maintain(running: bool, access: &mut Battery, target: Percent) {
+    while running {
+        access.charge = target;
+        continue;
+    }
+}

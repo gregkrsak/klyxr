@@ -1,0 +1,32 @@
+type Percent = range 0..100;
+record Battery { charge: Percent }
+
+fn make_battery(charge: Percent) -> Battery {
+    return Battery { charge: charge };
+}
+
+fn inspect_and_forward(battery: Battery) -> Battery {
+    let observed = battery.charge;
+    return battery;
+}
+
+fn inspect_percent(value: Percent) {}
+
+fn observe_until(battery: Battery, threshold: Percent) -> Percent {
+    while battery.charge <= threshold {
+        inspect_percent(battery.charge);
+    }
+    return battery.charge;
+}
+
+fn consume(battery: Battery) {}
+
+fn prepare(flag: bool, charge: Percent) {
+    let battery = if flag {
+        Battery { charge: charge }
+    } else {
+        Battery { charge: charge - 5 }
+    };
+    inspect_percent(battery.charge);
+    consume(battery);
+}

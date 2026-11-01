@@ -1,0 +1,41 @@
+// Frontend ownership examples: no execution, borrowing, destruction, or proof.
+type Percent = range 0..100;
+record Ticket { value: Percent }
+
+fn identity(ticket: Ticket) -> Ticket {
+    return ticket;
+}
+
+fn forward(ticket: Ticket) -> Ticket {
+    let next = ticket;
+    return next;
+}
+
+fn through_call(ticket: Ticket) -> Ticket {
+    let next = identity(ticket);
+    return next;
+}
+
+fn direct(ticket: Ticket) -> Ticket {
+    return identity(ticket);
+}
+
+fn nested(ticket: Ticket) -> Ticket {
+    return identity(identity(ticket));
+}
+
+fn repeat(value: Percent) -> Percent {
+    let first = value;
+    let second = value;
+    return value;
+}
+
+fn both(value: bool) -> bool {
+    let first = value;
+    let second = value;
+    return value;
+}
+
+fn ignore(ticket: Ticket) -> bool {
+    return true;
+}

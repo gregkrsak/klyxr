@@ -1,0 +1,32 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  compiler-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Rust toolchain
+        run: |
+          rustc -vV
+          cargo -vV
+          rustdoc -V
+
+      - name: Check compiler workspace
+        run: cargo check --locked --workspace --all-targets
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check Clippy without warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Validate README assets
+        run: python scripts/verify-readme.py
+
+      - name: Check Rustdoc without warnings
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --no-deps

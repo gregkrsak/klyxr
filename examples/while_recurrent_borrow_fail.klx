@@ -1,0 +1,13 @@
+// Intentional failure: a skipped use still requires shared backedge protection.
+fn bad(flag: bool, choice: bool) -> bool {
+    let mut owned = false;
+    let view = &owned;
+    while flag {
+        if choice {
+            let seen = *view;
+        } else {
+            owned = true;
+        }
+    }
+    return owned;
+}

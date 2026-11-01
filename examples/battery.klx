@@ -1,0 +1,15 @@
+type Percent = range 0..100;
+
+record Battery {
+    charge: Percent
+}
+
+verified fn consume(
+    battery: &mut Battery,
+    amount: Percent
+)
+    requires amount <= battery.charge
+    ensures battery.charge == old(battery.charge) - amount
+{
+    battery.charge -= amount;
+}

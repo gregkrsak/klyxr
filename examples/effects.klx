@@ -1,0 +1,7 @@
+#[deny_effects(heap, blocking)]
+fn control_loop(sensor: &Sensor, actuator: &mut Actuator)
+    effects clock
+{
+    let state = estimate_state(sensor)?;
+    actuator.apply(state);
+}

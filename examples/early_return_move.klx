@@ -1,0 +1,10 @@
+// Terminal owned Move is permitted only inside the actual return operand.
+type Percent = range 0..100;
+record Ticket { value: Percent }
+fn take(ticket: Ticket) -> Ticket { return ticket; }
+fn forward(flag: bool, ticket: Ticket) -> Ticket {
+    while flag {
+        return take(ticket);
+    }
+    return ticket;
+}

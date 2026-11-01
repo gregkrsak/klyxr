@@ -1,0 +1,14 @@
+// Intentional ownership error: a later reference use keeps the shared loan live.
+type Percent = range 0..100;
+record Ticket { value: Percent }
+
+fn inspect(ticket: &Ticket) -> bool {
+    return true;
+}
+
+fn borrow_fail(ticket: Ticket) -> Ticket {
+    let view = &ticket;
+    let moved = ticket;
+    let later = inspect(view);
+    return moved;
+}

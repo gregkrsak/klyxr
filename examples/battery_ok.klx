@@ -1,0 +1,18 @@
+type Percent = range 0..100;
+
+record Battery {
+    charge: Percent
+}
+
+verified function consume(
+    battery: &mutable Battery,
+    amount: Percent
+)
+    requires amount <= battery.charge
+    ensures battery.charge == old(battery.charge) - amount
+{
+    battery.charge -= amount;
+}
+
+let mutable battery = Battery { charge: 80 };
+consume(&mutable battery, 50);

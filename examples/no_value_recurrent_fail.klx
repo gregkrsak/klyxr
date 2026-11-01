@@ -1,0 +1,12 @@
+fn observe(view: &bool) {}
+
+fn bad(running: bool) {
+    let mut owned = true;
+    let view = &owned;
+    while running {
+        // Statement-call arguments participate in recurrent loan discovery.
+        owned = false;
+        observe(view);
+        return;
+    }
+}

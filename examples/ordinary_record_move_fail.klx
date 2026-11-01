@@ -1,0 +1,9 @@
+type Percent = range 0..100;
+record Battery { charge: Percent }
+fn consume(battery: Battery) {}
+
+fn bad(battery: Battery) -> Percent {
+    consume(battery);
+    // Copy-field reads cannot resurrect a moved owner.
+    return battery.charge;
+}

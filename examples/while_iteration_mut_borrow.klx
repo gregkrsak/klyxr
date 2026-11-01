@@ -1,0 +1,17 @@
+// Frontend/MIR only: final shared use, exclusive write, owner recovery.
+type Percent = range 0..100;
+fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
+    let mut owned = value;
+    let mut running = flag;
+    while running {
+        let view = &owned;
+        let observed = *view;
+        if running {
+            let access = &mut owned;
+            *access = replacement;
+        }
+        let recovered = owned;
+        running = false;
+    }
+    return owned;
+}

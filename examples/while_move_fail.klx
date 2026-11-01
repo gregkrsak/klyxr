@@ -1,0 +1,9 @@
+// Intentional Ownership failure: cyclic non-Copy activity is future work.
+type Percent = range 0..100;
+record Ticket { value: Percent }
+fn bad(flag: bool, ticket: Ticket) -> Ticket {
+    while flag {
+        let moved = ticket;
+    }
+    return ticket;
+}

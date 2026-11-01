@@ -1,0 +1,12 @@
+// Frontend/MIR only: a fresh shared handle borrows a pre-existing owner.
+type Percent = range 0..100;
+fn observe(flag: bool, value: Percent) -> Percent {
+    let mut running = flag;
+    while running {
+        let view = &value;
+        let alias = view;
+        let observed = *alias;
+        running = false;
+    }
+    return value;
+}

@@ -1,0 +1,26 @@
+name: docs
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Validate README and local documentation assets
+        run: python scripts/verify-readme.py
+      - name: Validate repository scaffold
+        run: python scripts/verify-repo-scaffold.py
+      - name: Verify KED-035 ledger and evidence map
+        run: python scripts/verify-ked035-contract.py
+      - name: Check generated context byte-for-byte reproducibility
+        run: |
+          cp docs/ai/KLYXR_AI_CONTEXT_BUNDLE.md "$RUNNER_TEMP/klyxr-context-before.md"
+          python scripts/build-ai-context.py
+          cmp "$RUNNER_TEMP/klyxr-context-before.md" docs/ai/KLYXR_AI_CONTEXT_BUNDLE.md
+          git diff --exit-code

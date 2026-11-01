@@ -1,0 +1,12 @@
+// Intentional failure: outer-created mutable access cannot move inside inner loop.
+type Percent = range 0..100;
+fn bad(flag: bool, value: Percent) -> Percent {
+    let mut owned = value;
+    while flag {
+        let access = &mut owned;
+        while flag {
+            let moved = access;
+        }
+    }
+    return value;
+}

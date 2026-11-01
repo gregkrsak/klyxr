@@ -1,0 +1,70 @@
+{
+  "baseline_commit": "4bd4f8588c0435a018050a64b3f154a076f075ee",
+  "baseline_tree": "198cb0b5b52d806d1d8b6bf45987d9b92ebb12eb",
+  "predecessor_count": 2112,
+  "migrations": {},
+  "additions": [
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_warning_and_critical_typed_reports_have_identity_associated_lifecycles",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_existing_failure_matrix_preserves_partial_reads_and_completed_resources",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_sequences_reset_only_for_fresh_sessions_and_old_slots_do_not_reset_them",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_repeated_reads_follow_actual_sensor_not_slot_or_operation_counter",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_exhaustion_never_wraps_after_release_or_repeated_failed_open",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_live_limit_precedes_sequence_exhaustion_without_excess_attempt",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_scenario_substitution_cannot_authenticate",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_all_fuel_cuts_preserve_custody_and_terminal_non_delivery",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_threshold_neighbors_use_the_actual_application_through_private_receipts",
+    "lib.rs::execution::machine::conformance::sentinel_tests::sentinel_combined_read_and_finish_failure_preserves_both_original_facts",
+    "tests/sentinel_cli.rs::sentinel_cli_success_matrix_matches_the_application_report_and_host_rendering",
+    "tests/sentinel_cli.rs::sentinel_cli_source_failure_is_typed_outer_error_even_with_exit_zero",
+    "tests/sentinel_cli.rs::sentinel_cli_limits_and_reporting_are_terminal_not_application_failures",
+    "tests/sentinel_cli.rs::sentinel_cli_audit_is_static_selected_authority_and_repeated_runs_are_deterministic"
+  ],
+  "classifications": {
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_warning_and_critical_typed_reports_have_identity_associated_lifecycles": "selected_application_and_fixture",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_existing_failure_matrix_preserves_partial_reads_and_completed_resources": "selected_application_and_fixture",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_sequences_reset_only_for_fresh_sessions_and_old_slots_do_not_reset_them": "selected_application_and_fixture",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_repeated_reads_follow_actual_sensor_not_slot_or_operation_counter": "selected_application_and_fixture",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_exhaustion_never_wraps_after_release_or_repeated_failed_open": "selected_application_and_fixture",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_live_limit_precedes_sequence_exhaustion_without_excess_attempt": "selected_application_and_fixture",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_scenario_substitution_cannot_authenticate": "selected_application_and_fixture",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_all_fuel_cuts_preserve_custody_and_terminal_non_delivery": "selected_application_and_fixture",
+    "lib.rs::execution::machine::trusted::sentinel_tests::sentinel_threshold_neighbors_use_the_actual_application_through_private_receipts": "private_receipt_threshold_boundary",
+    "lib.rs::execution::machine::conformance::sentinel_tests::sentinel_combined_read_and_finish_failure_preserves_both_original_facts": "private_addressed_combined_failure",
+    "tests/sentinel_cli.rs::sentinel_cli_success_matrix_matches_the_application_report_and_host_rendering": "public_cli",
+    "tests/sentinel_cli.rs::sentinel_cli_source_failure_is_typed_outer_error_even_with_exit_zero": "public_cli",
+    "tests/sentinel_cli.rs::sentinel_cli_limits_and_reporting_are_terminal_not_application_failures": "public_cli",
+    "tests/sentinel_cli.rs::sentinel_cli_audit_is_static_selected_authority_and_repeated_runs_are_deterministic": "public_cli"
+  },
+  "expected_per_profile": 2126,
+  "scope": "Sentinel interpreter application and finite host fixtures; no native evidence",
+  "fixtures": {
+    "warning": [
+      60,
+      42
+    ],
+    "critical": [
+      90,
+      60
+    ]
+  },
+  "admission": {
+    "tokens": 2048,
+    "frontend_work": 10000000000000000,
+    "working_storage": 1073741824,
+    "diagnostic_storage": 4194304
+  },
+  "publication_provenance": {
+    "local_preparation_commit": "72497d9bf0ee68ee9e8172933ad4d5575967e771",
+    "local_preparation_tree": "dd338cfcfb4014134eff012f55317d952cc433ae",
+    "initial_published_commit": "572cff0b4113a7a00c4f246ae023d04d1a8925fc",
+    "initial_published_tree": "dd338cfcfb4014134eff012f55317d952cc433ae",
+    "relationship": "exact bytes, paths and modes; Greg authorized replacement commit identity; subsequent CI repairs are descendants",
+    "draft_pr": 91
+  },
+  "private_combined_failure_allowances": {
+    "execution_steps": 512,
+    "call_depth": 8,
+    "replay_work": 1000000000,
+    "meaning": "bounded private conformance setup, no production limit or accounting change"
+  }
+}

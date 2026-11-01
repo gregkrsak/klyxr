@@ -1,0 +1,11 @@
+type Percent = range 0..100;
+type Millivolts = range 0..5000;
+record Battery { charge: Percent, voltage: Millivolts, health: Percent }
+
+fn refresh(battery: Battery) -> Battery {
+    let mut working = battery;
+    working.health = 100;
+    working.voltage = 4200;
+    working.charge = working.health;
+    return working;
+}

@@ -1,0 +1,30 @@
+# OS / editors
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Build output
+build/
+dist/
+target/
+out/
+
+# Python helper scripts
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Logs / temporary files
+*.log
+*.tmp
+*.temp
+
+# Local environment
+.env
+.env.*
+!.env.example
