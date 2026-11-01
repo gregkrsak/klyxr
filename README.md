@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="./assets/readme-banner.png" alt="Klyxr — Systems programming you can reason about" width="100%">
+  <picture>
+    <source media="(max-width: 767px)" srcset="./assets/readme-banner-mobile.png">
+    <img src="./assets/readme-banner.png" alt="Bowfin fish logo and wordmark — Systems programming you can reason about" width="100%">
+  </picture>
 </p>
 
 <p align="center">
@@ -69,7 +72,10 @@ Today those truths often live in comments, tests, wrapper types, runtime checks,
 **Bowfin wants more of them in the language.**
 
 <p align="center">
-  <img src="./assets/diagrams/knowledge-boundaries.svg" alt="Klyxr makes the boundaries visible" width="100%">
+  <picture>
+    <source media="(max-width: 767px)" srcset="./assets/diagrams/knowledge-boundaries-mobile.svg">
+    <img src="./assets/diagrams/knowledge-boundaries.svg" alt="Bowfin makes the boundaries between known, proved, trusted and unsafe visible" width="100%">
+  </picture>
 </p>
 
 The goal is not magical correctness.
@@ -203,7 +209,10 @@ It made the rule **compiler-visible**.
 ## Safe → Checked → Verified
 
 <p align="center">
-  <img src="./assets/diagrams/assurance-ladder.svg" alt="Safe to checked to verified" width="100%">
+  <picture>
+    <source media="(max-width: 767px)" srcset="./assets/diagrams/assurance-ladder-mobile.svg">
+    <img src="./assets/diagrams/assurance-ladder.svg" alt="Safe to checked to verified" width="100%">
+  </picture>
 </p>
 
 Bowfin is designed around **one language with escalating assurance**.
