@@ -1,17 +1,17 @@
-# Klyxr compiler prototype
+# Bowfin compiler prototype
 
 This Rust implementation is an executable **prototype**, not a general-purpose
-Klyxr compiler. It implements a restricted source → lexer → parser → AST →
+Bowfin compiler. It implements a restricted source → lexer → parser → AST →
 name resolution → expression and value-flow type checking → typed HIR → core
 ownership, loan, and borrowed-access checking → ordinary MIR CFG lowering or
 specialized verified integer contract proof → diagnostics.
 
-KED-026 Draft 3 additionally provides bounded ordinary MIR interpretation through
-`run`. The KED-004 through KED-025 sections below describe the frontend boundaries
+BED-026 Draft 3 additionally provides bounded ordinary MIR interpretation through
+`run`. The BED-004 through BED-025 sections below describe the frontend boundaries
 introduced by those decisions; their historical execution exclusions are refined
-by KD-041. KED-027 adds private synthetic deterministic cleanup under KD-042;
-it exposes no production resource API. KD-043 adds narrow owned Move local
-replacement, and KD-044 gives admitted resource-bearing expression temporaries
+by BD-041. BED-027 adds private synthetic deterministic cleanup under BD-042;
+it exposes no production resource API. BD-043 adds narrow owned Move local
+replacement, and BD-044 gives admitted resource-bearing expression temporaries
 explicit bounded ownership; their sections refine historical exclusions below.
 No ordinary contract proof or native code
 generation is implied.
@@ -95,7 +95,7 @@ proof failure, `2` for command usage or file-reading errors.
   inclusive. The prototype uses signed i64 values, including negative literals
   and the full i64 bounds. This does not settle future range representation.
 - Records with one or more named-range fields and complete named ordinary
-  construction (KD-036). The specialized verified-state/harness path requires
+  construction (BD-036). The specialized verified-state/harness path requires
   exactly one field.
 - Verified functions with exactly one mutable record reference and one named
   range-valued amount parameter.
@@ -107,7 +107,7 @@ proof failure, `2` for command usage or file-reading errors.
 - Record construction with a literal field value, followed by calls whose second
   argument is a literal. These top-level statements are a prototype execution
   harness, not a settled language entry-point design. Their source order matters.
-- `fn`/`function` and `mut`/`mutable` normalize identically. The other KD-014
+- `fn`/`function` and `mut`/`mutable` normalize identically. The other BD-014
   aliases are not yet exercised by this grammar.
 - ASCII identifiers, whitespace, and `//` comments.
 
@@ -117,7 +117,7 @@ across the input; record bindings must be constructed before their use. Duplicat
 names in a declaration namespace or the binding scope are rejected; shadowing
 is outside this prototype. Passing an immutable binding to `&mut` is an error.
 
-## Ordinary value functions (KED-004 through KED-011)
+## Ordinary value functions (BED-004 through BED-011)
 
 ```bowfin
 type Percent = range 0..100;
@@ -143,20 +143,20 @@ Ordinary functions accept zero or more named immutable parameters, each typed as
 built-in source `bool` (semantic `Bool`), a declared named range, or an existing
 record by value, or an exact shared/exclusive reference to one of those types. The explicit
 `-> Type` return declaration permits only owned Bool/range/record types; reference returns are rejected. `bool` is a reserved
-built-in type token, so user range/record declarations cannot redefine it. Omitting `-> Type` explicitly declares NoValue under KD-034; it never infers a
+built-in type token, so user range/record declarations cannot redefine it. Omitting `-> Type` explicitly declares NoValue under BD-034; it never infers a
 result. Unit/void expression types, `()` values, generics, and inferred return
 types remain unsupported.
 
 The body contains `let name = expression;` locals, immutable by default, and
-explicit **`return expression;`** statements. KD-033 permits return in ordinary
+explicit **`return expression;`** statements. BD-033 permits return in ordinary
 branches and while bodies and requires no structural closing-brace fallthrough.
 For value-returning functions, its semicolon is mandatory. NoValue functions
 instead permit `return;` or validated top-level closing-brace completion. Nested
-branch/body closing braces remain local fallthrough. Klyxr deliberately
-rejects implicit block tails, with or without a semicolon (KD-019). Missing value returns
+branch/body closing braces remain local fallthrough. Bowfin deliberately
+rejects implicit block tails, with or without a semicolon (BD-019). Missing value returns
 are type errors; bare tails and statements after return receive explicit parser
-diagnostics. No general expression statements or local annotations are implemented. KED-006 introduced `let mut`/`let mutable` for owned
-locals eligible for exclusive borrowing; KED-011 adds Copy-safe direct local
+diagnostics. No general expression statements or local annotations are implemented. BED-006 introduced `let mut`/`let mutable` for owned
+locals eligible for exclusive borrowing; BED-011 adds Copy-safe direct local
 reassignment, as described below. The existing
 top-level mutable record harness is unchanged.
 
@@ -177,7 +177,7 @@ recursive calls resolve. No termination or recursion policy is introduced. Calls
 require exact arity and exact concrete argument types; their result has the declared
 return type. Returns likewise require exact concrete types. Distinct ranges or
 records cannot be passed or returned implicitly even with identical bounds or
-field definitions. Direct integer literal leaves may form a signature-required range under KD-037;
+field definitions. Direct integer literal leaves may form a signature-required range under BD-037;
 Bool literals already type as Bool. General conversions remain open under OQ-021.
 
 Ordinary functions are **frontend semantic work only**: parsed, resolved,
@@ -186,11 +186,11 @@ proof, or runtime checks. For example, `return current - used;` can type as Perc
 that every result meets Percent's bounds. The verifier ignores ordinary functions
 as proof targets. Plain `fn` does not yet implement the full `safe` assurance model,
 with only core moves and whole-value, straight-line/acyclic, non-escaping borrowing
-implemented under KD-004, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, KD-033, and KD-034. Ordinary calls may target only ordinary functions; verified
+implemented under BD-004, BD-020, BD-021, BD-022, BD-023, BD-024, BD-025, BD-026, BD-027, BD-028, BD-029, BD-030, BD-031, BD-032, BD-033, and BD-034. Ordinary calls may target only ordinary functions; verified
 contracts/body expressions cannot call functions, and top-level harness calls may
 target only verified functions. These rejections leave OQ-019 unresolved.
 
-## Core owned-value moves (KED-005)
+## Core owned-value moves (BED-005)
 
 ```bowfin
 type Percent = range 0..100;
@@ -232,9 +232,9 @@ are checked in source order for deterministic diagnostics; this is not a runtime
 evaluation-order specification. Unused owned parameters/locals are accepted.
 
 This is whole-record ownership with acyclic branch joins and the documented stable-loop boundary. Ordinary records enter through
-by-value parameters, ordinary call results, or KD-035 construction. Direct named-owner
-Copy-field reads and KD-038 direct Copy-field assignment preserve whole-record ownership. Broader field mutation, destructuring, partial moves, Copy customization, Clone, destruction,
-and runtime resource release remain unsupported. KED-006 adds mutable owned locals
+by-value parameters, ordinary call results, or BD-035 construction. Direct named-owner
+Copy-field reads and BD-038 direct Copy-field assignment preserve whole-record ownership. Broader field mutation, destructuring, partial moves, Copy customization, Clone, destruction,
+and runtime resource release remain unsupported. BED-006 adds mutable owned locals
 and references within the restricted borrowing model below.
 In particular, ordinary record equality and arithmetic remain type errors.
 The existing verified mutable state and top-level record harness are excluded
@@ -246,7 +246,7 @@ does not execute ordinary functions, verify their contracts/ranges, or implement
 the complete future memory-safety model. OQ-023 retains Copy customization, cloning,
 partial moves, and destruction. Advanced borrowing remains open under OQ-024.
 
-## Core borrowing and reference semantics (KED-006)
+## Core borrowing and reference semantics (BED-006)
 
 ```bowfin
 fn inspect(ticket: &Ticket) -> bool { return true; }
@@ -278,8 +278,8 @@ Borrow expressions are exactly `&name`, `&mut name`, or `&mutable name`, where
 name resolves to an existing owned ordinary ParameterId or LocalId. Calls,
 parenthesized targets, literals, fields, and existing reference values cannot be
 borrowed. `let mut name = expression;` and `let mutable name = expression;` mark
-an owned local as eligible for exclusive borrowing. KED-006 itself introduced no
-reassignment; KED-011 now permits the narrow Copy-safe form described below.
+an owned local as eligible for exclusive borrowing. BED-006 itself introduced no
+reassignment; BED-011 now permits the narrow Copy-safe form described below.
 Reference-valued locals remain immutable bindings even for `&mut T`; marking
 such a binding `let mut` is a type error. Ordinary owned parameters remain
 immutable places; mutable owned parameter syntax is not implemented.
@@ -316,12 +316,12 @@ and are not attached to public HIR or printed in diagnostics.
 `examples/borrow_fail.bow` intentionally moves an owner before a later shared use.
 Ordinary borrowing does not execute or prove functions. The verified battery's
 existing special state-reference semantics and harness remain unchanged and are
-excluded from ordinary loan analysis. KD-021 settles this core; OQ-024 retains
+excluded from ordinary loan analysis. BD-021 settles this core; OQ-024 retains
 reference returns, lifetimes, reborrowing, auto-dereference, fields, partial borrowing,
 advanced reference mutation, temporaries, general control flow, and advanced borrowing.
-KED-007 adds only the explicit Copy-safe access described below.
+BED-007 adds only the explicit Copy-safe access described below.
 
-## Explicit dereference and Copy-safe mutation (KED-007)
+## Explicit dereference and Copy-safe mutation (BED-007)
 
 ```bowfin
 fn read(value: &Percent) -> Percent {
@@ -346,7 +346,7 @@ other existing expressions; they do not generalize its operand.
 A Copy referent (Bool or named range) can be read through either shared or mutable
 references. The referent is copied; the handle is used, not moved, and no loan or
 reborrow is created. Repeated mutable-reference reads are therefore valid.
-Transferring that handle through a binding or call still moves it under KED-006;
+Transferring that handle through a binding or call still moves it under BED-006;
 subsequent reads/writes report the existing use-after-move diagnostic.
 A record dereference types as that record, but ownership rejects every by-value
 materialization: local initialization, argument, or return. No implicit clone or
@@ -355,7 +355,7 @@ move out of borrowed non-Copy storage occurs.
 `*reference = expression;` is a dedicated ordinary statement with no value.
 Typing requires an exclusive mutable reference and an exactly matching RHS
 referent type. Shared writes, nominal mismatches, owned/reference mismatches,
-are Type errors. KD-037 permits in-bounds direct literals for range writes. Bool literals already
+are Type errors. BD-037 permits in-bounds direct literals for range writes. Bool literals already
 materialize as Bool. Ownership rejects non-Copy replacement even with the correct
 reference capability and RHS type, because displacement/destruction semantics
 are unresolved. No old value is implicitly dropped, leaked, or relocated.
@@ -373,7 +373,7 @@ Normal last-use expiry then permits direct owner recovery.
 
 Passing `*access` to a Copy parameter passes a copied referent, so it does not
 call-hold the reference loan. Passing `access` to a reference parameter retains
-KED-006 transfer and complete-call hold behavior. Deterministic analysis does not
+BED-006 transfer and complete-call hold behavior. Deterministic analysis does not
 settle the full future runtime assignment evaluation-order specification.
 
 See `examples/deref_mutation.bow` and intentional failure
@@ -382,10 +382,10 @@ not executed, interpreted, code-generated, contract-proven, or range-enforced at
 runtime. The verified battery state/field `-=` machinery is unchanged and separate.
 No direct local/reference-binding reassignment, assignment expressions, compound
 assignment, field mutation, auto-deref, reborrowing, or destruction
-is introduced by KED-007. KED-008 allows these existing Copy-safe writes inside branches. KD-022 settles this narrow core; OQ-025 retains general mutation
+is introduced by BED-007. BED-008 allows these existing Copy-safe writes inside branches. BD-022 settles this narrow core; OQ-025 retains general mutation
 and replacement, OQ-023 destruction, and OQ-024 advanced reference behavior.
 
-## Statement conditionals and ordinary MIR (KED-008)
+## Statement conditionals and ordinary MIR (BED-008)
 
 ```bowfin
 fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
@@ -403,15 +403,15 @@ fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
 `if condition { ... }` is a statement; `else { ... }` is optional. Braces are
 required, parenthesized conditions use existing expression syntax, and nesting
 is supported. Conditions must type exactly as Bool, including ordinary calls
-returning Bool. No truthiness conversion is permitted. Conditional values are initializer-only under KED-010, described below.
+returning Bool. No truthiness conversion is permitted. Conditional values are initializer-only under BED-010, described below.
 Branches contain lets, existing dereference writes, direct Copy assignment, return, and nested if/while statements; within while they may also end with unlabeled continue or break.
 Each branch is a lexical child scope: outer bindings remain visible, locals enter
 only after their initializer, visible-name shadowing is rejected, and branch
 locals cannot escape or cross into siblings. Siblings may reuse a spelling with
-distinct canonical LocalIds. Returns may terminate branch paths under KD-033.
+distinct canonical LocalIds. Returns may terminate branch paths under BD-033.
 `else if` shorthand is rejected, as are
 match and expression statements. Unlabeled continue/break are supported only inside while. Copy-safe local reassignment
-is permitted under KED-011.
+is permitted under BED-011.
 
 Ownership evaluates the condition once before splitting state. Both branches
 start independently from that post-condition state. A non-Copy place visible at
@@ -423,7 +423,7 @@ remain Copy. Both branches may separately consume the same incoming owner if
 there is no subsequent joined use.
 
 Branch-local reference handles/loans cannot escape and end no later than branch
-exit. KED-009 refines borrowing with path-sensitive liveness, described below.
+exit. BED-009 refines borrowing with path-sensitive liveness, described below.
 Call-held references and write-held loans retain their existing protection inside
 branches. No generalized CFG borrow solver, reference-valued branch result, or
 destruction is implied.
@@ -439,18 +439,18 @@ the false join edge. Every fallthrough is explicit, and every explicit source re
 is a terminator. All-return conditionals have no synthetic join or final return. Allocation order is deterministic, without making block numbering
 source semantics. `MirFunction::validate()` checks targets, entry, reachability,
 Bool conditions, and hidden conditional values. Indexed tables give unique IDs; the block type
-requires one terminator. KED-012 adds cycle-safe visited tracking; validation accepts
+requires one terminator. BED-012 adds cycle-safe visited tracking; validation accepts
 cycles and does not claim that Return is reached.
 
 The CLI exercises MIR lowering before success. There is no MIR source-error phase,
 execution, interpretation, code generation, or proof of ordinary logic. The verified
 battery path remains HIR-only and excludes ordinary conditionals. MIR has no phi,
 block parameters/results, SSA, temporary flattening, cleanup, backend, or
-verification consumer. KD-023 settles this boundary; OQ-026 retains broader
+verification consumer. BD-023 settles this boundary; OQ-026 retains broader
 conditional expressions, control flow, and dataflow. See `examples/if_control_flow.bow`
 and intentional Ownership failure `examples/if_move_fail.bow`.
 
-## Copy-safe direct local reassignment (KED-011)
+## Copy-safe direct local reassignment (BED-011)
 
 ```bowfin
 fn next(value: Percent) -> Percent { return value; }
@@ -466,7 +466,7 @@ fn update(start: Percent) -> Percent {
 must be a previously declared in-scope mutable local; it retains the same canonical
 LocalId. Parameters and immutable locals are Type errors. The RHS requires exact
 concrete nominal identity; equal range bounds do not permit assignment between
-distinct declarations. KD-037 permits direct literals at established range targets.
+distinct declarations. BD-037 permits direct literals at established range targets.
 
 The RHS evaluates first against the old value. Complete RHS calls retain their
 reference holds, then existing last-use expiry runs before the write. The actual
@@ -480,31 +480,31 @@ self-assignment, repeated writes, borrowing, and returning.
 
 Reference-local reassignment is a Type error; provenance replacement remains
 unresolved. Exact-typed record replacement is an Ownership error before consuming
-either owner, because displacement/destruction semantics remain undefined. KED-011
+either owner, because displacement/destruction semantics remain undefined. BED-011
 adds no drop, clone, leak, swap, take, or replace semantics.
 
 Assignment remains statement-only and directly named. No assignment expressions,
 chained/compound forms, parameters, projected/field/index targets, auto-deref,
 reference replacement, or non-Copy replacement are added. Its RHS uses the existing
-ordinary expression grammar, so `current = if ...` remains rejected. KED-010
+ordinary expression grammar, so `current = if ...` remains rejected. BED-010
 conditional initialization is separate: a mutable Copy destination may subsequently
 be assigned, but its mutually exclusive MIR Let leaves remain initialization.
-Existing explicit `*reference = expression;` retains KED-007 write holds and rules.
+Existing explicit `*reference = expression;` retains BED-007 write holds and rules.
 
 AST/HIR `ValueStatement` and MIR `Statement` publicly add `Assign`; exhaustive
 library matches must handle the new variant. HIR/MIR retain a canonical LocalId,
 typed RHS, and complete statement span. MIR emits a distinct Assign in the current
-block, adds no blocks for straight-line writes, and remains deterministic. KED-012 adds cyclic control flow.
+block, adds no blocks for straight-line writes, and remains deterministic. BED-012 adds cyclic control flow.
 Validation rejects hidden IfValue nodes in assignment RHSs. `compile_source` and
 `mir::lower` signatures remain unchanged. No generalized place/dataflow model,
 general cyclic ownership/lifetime inference, SSA, phi/block parameters, result slots, definite assignment,
 execution, or ordinary verification is introduced.
 
 See `examples/local_reassignment.bow` and the intentional future-use loan conflict
-`examples/local_reassignment_borrow_fail.bow`. KD-026 settles this boundary;
+`examples/local_reassignment_borrow_fail.bow`. BD-026 settles this boundary;
 OQ-022/OQ-024/OQ-025/OQ-026 retain broader mutation and control-flow design.
 
-## Conditional value initialization (KED-010)
+## Conditional value initialization (BED-010)
 
 ```bowfin
 fn choose(flag: bool, first: Percent, second: Percent) -> Percent {
@@ -522,13 +522,13 @@ scope only after its initializer resolves, so self-reference remains forbidden.
 Conditions require Bool; branches require exactly the same concrete Bool, range,
 or record identity. Identical bounds or structure do not make distinct nominal
 types compatible. Integer literals gain no contextual range type. Reference-valued
-results are rejected, while Copy dereference values retain KD-022 rules.
+results are rejected, while Copy dereference values retain BD-022 rules.
 
 Copy sources remain available. Record sources move only on their selected path;
 a source moved on any possible path is unavailable after the join. Selecting the
 same record on both branches is valid, but later source use is not. The destination
 becomes available after every path initializes it. Conditions run before branch
-splitting for ownership analysis. KD-024 path-specific future uses, post-join loan
+splitting for ownership analysis. BD-024 path-specific future uses, post-join loan
 requirements, and existing call/write holds remain intact.
 
 AST and typed HIR publicly add `ExprKind::IfValue`; exhaustive library matches
@@ -546,10 +546,10 @@ value blocks, reference joins, and general definite assignment
 remain unresolved. Statement `if` retains its existing grammar and optional else.
 Ordinary functions remain non-executable and unverified; the battery proof path
 is unchanged. See `examples/conditional_value.bow` and the joined-move rejection
-`examples/conditional_value_move_fail.bow`. KD-025 settles this narrow boundary;
+`examples/conditional_value_move_fail.bow`. BD-025 settles this narrow boundary;
 OQ-022/OQ-024/OQ-026 retain broader conditional value and lifetime design.
 
-## Path-sensitive acyclic loan liveness (KED-009)
+## Path-sensitive acyclic loan liveness (BED-009)
 
 ```bowfin
 fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
@@ -565,7 +565,7 @@ fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
 }
 ```
 
-This was rejected by KED-008's whole-conditional loan hold and is now accepted.
+This was rejected by BED-008's whole-conditional loan hold and is now accepted.
 **Lexical coexistence of reference bindings does not imply overlapping loans;
 only control-flow paths with future uses keep a loan active.** The then path
 needs the shared loan through `*view`. On the else edge, no use of `view` remains,
@@ -597,15 +597,15 @@ escape, and unrelated sibling-created provenance is never merged.
 
 These rules belong to the existing ownership checker over typed HIR, before MIR.
 `compile_source`, HIR, and MIR APIs are unchanged; newly accepted programs lower
-to the same validated acyclic CFG forms. KD-024 settles only whole-value loans
+to the same validated acyclic CFG forms. BD-024 settles only whole-value loans
 across the structured acyclic subset. Cyclic loan analysis, arbitrary CFG lifetime inference,
 reborrowing, reference returns, lifetime syntax, field/partial borrowing, reference-valued conditional
-results, destruction, execution, and code generation remain unsupported. KD-033 adds structured early returns.
+results, destruction, execution, and code generation remain unsupported. BD-033 adds structured early returns.
 See `examples/path_sensitive_borrowing.bow` and the intentional post-join-loan
 failure `examples/path_sensitive_borrowing_fail.bow`. OQ-024/OQ-026 retain the
 broader lifetime and control-flow questions.
 
-## Core expressions and types (KED-003)
+## Core expressions and types (BED-003)
 
 Primary expressions are `true`, `false`, signed i64 literals, parameters,
 `state.field`, `old(state.field)`, and parenthesized expressions. Ordinary functions additionally support locals and
@@ -747,8 +747,8 @@ replacement are ownership errors. Non-reference dereference, shared writes, and
 RHS mismatches are Type errors. Names and spans
 remain available for source diagnostics; internal IDs are not printed.
 
-This implements KD-012, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, KD-033, and KD-034 only for the documented subset.
-General type inference, advanced borrowing/ownership, advanced effects beyond KED-030, MIR backend/verification lowering, VIR,
+This implements BD-012, BD-018, BD-019, BD-020, BD-021, BD-022, BD-023, BD-024, BD-025, BD-026, BD-027, BD-028, BD-029, BD-030, BD-031, BD-032, BD-033, and BD-034 only for the documented subset.
+General type inference, advanced borrowing/ownership, advanced effects beyond BED-030, MIR backend/verification lowering, VIR,
 and broader HIR features remain future work.
 
 ## What the proof establishes
@@ -810,29 +810,29 @@ consume(&mut battery, 50); // rejected: 50 <= 30 is false
 
 The prototype does not implement ownership beyond core ordinary moves and
 whole-value acyclic loans, reference returns, explicit lifetimes, reborrowing,
-auto-dereference, non-Copy replacement, field/reference mutation beyond KD-038/KD-040 direct
+auto-dereference, non-Copy replacement, field/reference mutation beyond BD-038/BD-040 direct
 Copy-field assignment and Copy-safe whole-value writes, partial borrowing, general replacement, destruction,
-advanced effects beyond KED-030, runtime contracts, expressions beyond this subset, general cyclic ownership/loans, quantifiers,
+advanced effects beyond BED-030, runtime contracts, expressions beyond this subset, general cyclic ownership/loans, quantifiers,
 multi-field verified/harness state, record invariants, SMT/VIR or MIR backend/verification lowering, or machine-code generation. In particular,
 `examples/effects.bow` is illustrative and is rejected rather than analyzed.
 A successful prototype result must not be described as establishing those
 unimplemented properties or unspecified program correctness.
 
-KD-036 implements ordinary records with one or more named-range fields and complete
+BD-036 implements ordinary records with one or more named-range fields and complete
 named construction; specialized verified and harness state still requires exactly one field.
 
-This work implements portions of KD-005, KD-006, KD-012, KD-013, KD-014, KD-015, KD-018, KD-019, KD-020, KD-021, KD-022, KD-023, KD-024, KD-025, KD-026, KD-027, KD-028, KD-029, KD-030, KD-031, KD-032, KD-033, KD-034, KD-035, KD-036, KD-037, KD-038, KD-039, and KD-040,
-subject to KD-017 and DP-008/DP-009. It does not reopen accepted language decisions
+This work implements portions of BD-005, BD-006, BD-012, BD-013, BD-014, BD-015, BD-018, BD-019, BD-020, BD-021, BD-022, BD-023, BD-024, BD-025, BD-026, BD-027, BD-028, BD-029, BD-030, BD-031, BD-032, BD-033, BD-034, BD-035, BD-036, BD-037, BD-038, BD-039, and BD-040,
+subject to BD-017 and DP-008/DP-009. It does not reopen accepted language decisions
 or freeze the broader language's syntax (OQ-018). Mixed assurance boundaries,
 general mutation framing, and snapshot semantics beyond this one-field subset
 remain design work under OQ-019/OQ-020. OQ-022 records remaining ordinary-function
-and local-value questions; KD-020 now settles core moves, while OQ-023 retains
-Copy customization, partial moves, cloning, and destruction. KD-021 settles only
-core borrowing, and KD-022 explicit Copy-safe access; OQ-024/OQ-025 retain advanced
+and local-value questions; BD-020 now settles core moves, while OQ-023 retains
+Copy customization, partial moves, cloning, and destruction. BD-021 settles only
+core borrowing, and BD-022 explicit Copy-safe access; OQ-024/OQ-025 retain advanced
 reference/lifetime and general mutation/replacement questions.
 
-KED-001 clarifies the nominal arithmetic boundary under KD-005; KED-003 applies
-nominal identity to expression typing. KD-018 records that direction, while
+BED-001 clarifies the nominal arithmetic boundary under BD-005; BED-003 applies
+nominal identity to expression typing. BD-018 records that direction, while
 OQ-021 retains broader constrained arithmetic questions.
 The same-declaration restriction, enforced by `RangeTypeId` equality, does not
 settle future generalized arithmetic,
@@ -895,7 +895,7 @@ The failing examples are intentional:
 - `deref_mutation_fail.bow`: replacing a non-Copy record before displacement/destruction semantics exist.
 
 
-## Statement while and cyclic MIR (KED-012)
+## Statement while and cyclic MIR (BED-012)
 
 ```bowfin
 fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
@@ -914,19 +914,19 @@ This is a pre-test, zero-or-more-iteration statement with an exact Bool conditio
 Braces are mandatory, without a trailing semicolon. Nested while and statement
 if/else compose; bodies are lexical child scopes with ordered declarations, no
 visible-name shadowing, and static canonical LocalIds. Body locals cannot escape.
-KD-033 permits loop-local return, with structural completeness still requiring
+BD-033 permits loop-local return, with structural completeness still requiring
 the while condition-false path to reach an explicit return. While expressions,
-for/unconditional loop and labels remain unsupported. KD-031/KD-032 add unlabeled statement continue/break.
+for/unconditional loop and labels remain unsupported. BD-031/BD-032 add unlabeled statement continue/break.
 
-KED-012 initially allowed only owned Copy Bool/named-range activity in conditions and bodies:
-Copy calls/reads/locals, direct mutable-local reassignment, and KED-010 Copy
+BED-012 initially allowed only owned Copy Bool/named-range activity in conditions and bodies:
+Copy calls/reads/locals, direct mutable-local reassignment, and BED-010 Copy
 conditional initialization. All reference activity (including shared Copy handles,
 borrow creation, arguments, aliases, dereference and write-through) and non-Copy
 record activity (including fresh call results) was rejected by ownership with an
 explanation that cyclic ownership/lifetime analysis is future work. Existing
-Type restrictions can reject malformed operations earlier. KED-013 permits
+Type restrictions can reject malformed operations earlier. BED-013 permits
 iteration-local Move activity in bodies as described below; conditions and
-pre-existing-handle and condition restrictions remain. KED-014 permits new body
+pre-existing-handle and condition restrictions remain. BED-014 permits new body
 borrowing as described below. Constant false does not bypass checks.
 
 The HIR ownership checker analyzes one permitted iteration and requires equal
@@ -936,7 +936,7 @@ same invariant. Untouched outside records and references remain valid. Outside
 loans with post-loop handle uses remain live and constrain Copy owner reads/writes
 inside the loop; last pre-loop use can end a loan before entry. Dead loans never
 resurrect. Finite future-use counts are only finite traversal/continuation bookkeeping;
-KD-030 retains recurrent loans separately, never by counting syntax once.
+BD-030 retains recurrent loans separately, never by counting syntax once.
 
 MIR lowers through existing terminators: preheader Goto header; header Branch Bool
 to body or exit; completed body Goto header; exit continues to the final Return.
@@ -955,7 +955,7 @@ unchanged. See `examples/while_copy.bow`, `examples/while_nested.bow`, and inten
 failures `examples/while_reference_fail.bow` / `examples/while_move_fail.bow`.
 
 
-## Iteration-local Move ownership (KED-013)
+## Iteration-local Move ownership (BED-013)
 
 A fresh non-Copy call result may now be bound and transferred inside one while
 iteration using existing Move rules:
@@ -971,7 +971,7 @@ while running {
 
 Calls remain expressions, so Copy results use existing let/assignment statements;
 no general expression-statement syntax is added. The example helpers have ordinary
-owned signatures. KED-013 originally had no ordinary record construction; its historical
+owned signatures. BED-013 originally had no ordinary record construction; its historical
 frontend fixture `examples/while_iteration_move.bow` uses a recursive record-returning
 factory. This demonstrates typing/ownership/MIR structure, not executable value
 creation or termination.
@@ -989,10 +989,10 @@ before an inner loop cannot move within the inner loop, but may remain untouched
 there and be consumed afterward in the outer iteration. Body-local state is removed
 before comparing header/backedge state. Static LocalIds remain unchanged across
 iterations; names/spans are diagnostic metadata. Outside ownership and loans stay
-protected. KED-014 subsequently permits iteration-local body borrowing;
-KD-030 subsequently permits stable carried access; non-Copy replacement remains
+protected. BED-014 subsequently permits iteration-local body borrowing;
+BD-030 subsequently permits stable carried access; non-Copy replacement remains
 forbidden.
-Conditions retain KED-012's Copy-only restriction, including nested call arguments.
+Conditions retain BED-012's Copy-only restriction, including nested call arguments.
 
 AST/parser/resolver/type/HIR/MIR representations and public APIs are unchanged.
 Ownership remains the existing HIR-stage, one-iteration stability check without
@@ -1002,11 +1002,11 @@ No execution, verification, destruction or termination claim is made.
 
 See `examples/while_iteration_move.bow` and intentional failures
 `examples/while_carried_move_fail.bow` / `examples/while_nested_carried_move_fail.bow`.
-KD-028 settles this refinement; OQ-022/OQ-023/OQ-024/OQ-025/OQ-026 retain broader
+BD-028 settles this refinement; OQ-022/OQ-023/OQ-024/OQ-025/OQ-026 retain broader
 control flow, destruction/replacement, and cyclic ownership/lifetime questions.
 
 
-## Iteration-local borrowing (KED-014)
+## Iteration-local borrowing (BED-014)
 
 ```bowfin
 fn update(flag: bool, value: Percent, replacement: Percent) -> Percent {
@@ -1027,10 +1027,10 @@ New body references may borrow both pre-existing owners and iteration-local Move
 owners. Existing shared copies, mutable-handle moves, call/write holds, dereference,
 Copy-safe mutation and path-sensitive acyclic last-use behavior apply. Local records
 may move after their final borrow use. Conditions remain reference-free. Handles
-already present at the current loop header could persist untouched under KED-014
-but could not be used there; KED-015 permits stable body access as described below. Their active loans still constrain new borrows
+already present at the current loop header could persist untouched under BED-014
+but could not be used there; BED-015 permits stable body access as described below. Their active loans still constrain new borrows
 and owner access; dead loans never resurrect. An outer-created handle is pre-existing
-at an inner header; KED-015 permits its stable inner use, while outer-local
+at an inner header; BED-015 permits its stable inner use, while outer-local
 provenance must still die before the outer backedge. No constant-condition pruning bypasses these rules.
 
 Lexical cleanup removes body-local handles/availability and expires loans. The
@@ -1045,14 +1045,14 @@ See `examples/while_iteration_borrow.bow`, `examples/while_iteration_mut_borrow.
 and `examples/while_iteration_move_borrow.bow`. Intentional failures
 `examples/while_carried_reference_fail.bow` and
 `examples/while_nested_reference_fail.bow` demonstrate relative header boundaries.
-KD-029 settles this subset; KD-030 adds stable carried access. OQ-024/OQ-026 retain
+BD-029 settles this subset; BD-030 adds stable carried access. OQ-024/OQ-026 retain
 generalized cyclic lifetimes. Reference returns/results/reassignment,
 reborrowing, implicit coercions, partial loans, non-Copy dereference/replacement,
 destruction and execution remain unsupported. The specialized battery verifier
 and independent 1,800-case mathematical cross-check are unchanged.
 
 
-## Stable loop-carried references (KED-015)
+## Stable loop-carried references (BED-015)
 
 ```bowfin
 fn update(flag: bool, replacement: bool) -> bool {
@@ -1096,17 +1096,17 @@ See `examples/while_carried_shared.bow`, `examples/while_carried_mutable.bow`,
 `examples/while_carried_nested.bow`, and intentional conflict
 `examples/while_recurrent_borrow_fail.bow`. Older carried-reference failure examples
 now isolate mutable-handle transfer, which remains forbidden.
-KD-030 adds no syntax, generalized cyclic NLL/fixed-point solver, second checker,
+BD-030 adds no syntax, generalized cyclic NLL/fixed-point solver, second checker,
 MIR lifetime analysis, reference conditions/reassignment/returns/results, reborrowing,
 coercions, non-Copy replacement, destruction, execution or termination proof.
 The existing cyclic MIR and specialized battery proof path are unchanged.
 
 
-## Structured continue (KED-016 / KD-031)
+## Structured continue (BED-016 / BD-031)
 
 An unlabeled `continue;` is an ordinary statement inside while or its nested
 statement branches. It targets the innermost while header. The semicolon is
-mandatory; values, labels, expressions, and verified loops remain unsupported. KD-032 separately adds break below.
+mandatory; values, labels, expressions, and verified loops remain unsupported. BD-032 separately adds break below.
 Direct continue must end its lexical block. A conditional whose arms both continue
 also terminates that block; any following statement is rejected structurally.
 A loop itself still has its real condition-false exit and may have a suffix.
@@ -1145,7 +1145,7 @@ Iteration-local Move values may be scoped away without runtime destruction.
 
 When all body paths continue, the separately checked header false edge still
 provides the loop exit. False-exit processing removes the current recurrent
-frame (KD-032 also discharges it on independently checked break exits); enclosing frames and post-loop finite uses remain authoritative. Constant
+frame (BD-032 also discharges it on independently checked break exits); enclosing frames and post-loop finite uses remain authoritative. Constant
 conditions and apparently one-shot loops receive the same checks. Nested continue
 targets the inner header; after inner false exit, outer continue targets the outer
 header. MIR uses the existing Goto and optional live tails; no unreachable join or
@@ -1159,7 +1159,7 @@ policy, destruction, or termination proof. The verified battery path and its
 1,800-case affine numerical cross-check are unchanged.
 
 
-## Structured break (KED-017 / KD-032)
+## Structured break (BED-017 / BD-032)
 
 An unlabeled `break;` exits the innermost ordinary while. It has no value and must
 end its lexical statement block. It may appear inside nested statement if/else.
@@ -1219,7 +1219,7 @@ MIR borrowing, reborrowing, arbitrary unreachable-code analysis, destruction,
 and termination proof remain open under OQ-022/OQ-024/OQ-025/OQ-026.
 
 
-## Structured early return (KED-018 / KD-033)
+## Structured early return (BED-018 / BD-033)
 
 `return expression;` may terminate any ordinary statement path: the function
 block, a branch, or a while body. Returns end their lexical block; a direct
@@ -1278,7 +1278,7 @@ are unchanged. See `examples/early_return.bow`, `examples/early_return_move.bow`
 and the intentional failure `examples/early_return_recurrent_fail.bow`.
 
 
-## No-value ordinary functions and call statements (KED-019 / KD-034)
+## No-value ordinary functions and call statements (BED-019 / BD-034)
 
 ```bowfin
 fn reset(flag: &mut bool) {
@@ -1313,16 +1313,16 @@ NoValue functions; value return only in Value(T) functions, with exact T.
 Only the actual top-level NoValue boundary permits normal completion. Different
 terminal ownership states do not join at a synthetic function exit. Surviving
 branch suffixes retain the all-path Move rule. Loop false exits, break/continue
-targets, recurrence, and KD-033 value-return semantics remain unchanged.
+targets, recurrence, and BD-033 value-return semantics remain unchanged.
 
-K19-01 gives each statement call a complete prepared-entry ownership transaction:
+B19-01 gives each statement call a complete prepared-entry ownership transaction:
 all ordered arguments, receiving/nested call holds, hold release, expiry, and
 fallible completion validation. Failure restores availability, reference mappings,
 loans/provenance/holds, finite uses, allocator, recurrence, loop context, and
 terminal-permission context. Nested expression calls release only their own holds.
 Statement-call arguments participate in both finite-use and recurrent-reference
 traversal, including nested calls and loops. Statement calls never inherit
-KD-033 terminal-expression Move permission, even immediately before `return;`.
+BD-033 terminal-expression Move permission, even immediately before `return;`.
 
 Bare return installs an empty finite continuation and performs ordinary expiry
 before taking its transaction snapshot. All current/enclosing recurrent obligations
@@ -1347,7 +1347,7 @@ RAII, runtime cleanup or resource-release ordering. The specialized verified
 function and top-level battery harness paths are unchanged.
 
 
-## Ordinary record construction and Copy-field reads (KED-020 / KD-035)
+## Ordinary record construction and Copy-field reads (BED-020 / BD-035)
 
 ```bowfin
 type Percent = range 0..100;
@@ -1364,9 +1364,9 @@ fn inspect_and_forward(battery: Battery) -> Battery {
 ```
 
 See `examples/ordinary_records.bow`, `examples/ordinary_record_move_fail.bow`
-and `examples/ordinary_record_condition_fail.bow`. KED-020 originally permitted exactly one named-range field; KD-036 now permits
+and `examples/ordinary_record_condition_fail.bow`. BED-020 originally permitted exactly one named-range field; BD-036 now permits
 one or more fields as described below. An initializer must have that exact nominal
-type; equal numeric bounds confer no conversion. KD-037 now permits
+type; equal numeric bounds confer no conversion. BD-037 now permits
 `Battery { charge: 80 }` when 80 is inside Percent's inclusive bounds.
 Already range-typed arithmetic may initialize the field, without proving bounds.
 Construction may be a local initializer, return operand, ordinary call argument
@@ -1377,8 +1377,8 @@ identifier conditions and their blocks without parser type-name lookup.
 Construction retains canonical RecordId/FieldId plus its typed initializer. It
 produces a fresh Move record without a harness binding, anonymous public local,
 new type, reference provenance, hidden loan, allocation or runtime constructor.
-The existing complete-expression transaction handles initializer effects; KD-033
-return and KD-034 whole-call rollback boundaries remain authoritative. A later
+The existing complete-expression transaction handles initializer effects; BD-033
+return and BD-034 whole-call rollback boundaries remain authoritative. A later
 well-typed ownership failure commits none of a successful initializer prefix.
 Static nominal type failure precedes ownership and is not rollback evidence.
 Both finite-use and recurrent-reference traversal descend construction children.
@@ -1396,7 +1396,7 @@ Repeated reads preserve stable loop state. `while battery.charge <= threshold`
 is legal when its owner is available and loans permit the read. Construction is
 rejected anywhere within a recurring condition, even as an argument to a Bool
 call. Loop-local construction is an ordinary iteration-local Move value; it
-cannot sanitize a prohibited pre-existing Move initializer or grant KD-033
+cannot sanitize a prohibited pre-existing Move initializer or grant BD-033
 terminal permission outside an actual return operand.
 
 Typed-HIR publication performs a table-aware record-expression invariant check,
@@ -1409,16 +1409,16 @@ that field reads create no partial availability. Public declaration-boundary
 rejections do not demonstrate partial-move checking.
 
 Reference roots (`&T`/`&mut T`), temporary/nested projection, field borrowing,
-field mutation beyond KD-038, broader field types, partial moves, structural compatibility,
+field mutation beyond BD-038, broader field types, partial moves, structural compatibility,
 implicit nominal/literal conversion, invariant enforcement and replacement remain
 unsupported. Ordinary functions remain checked/lowered, not executed or proven.
 Verified battery contracts, diagnostics, counts and literal harness behavior are
 unchanged. Construction implies no destruction, cleanup, allocation or runtime
-general ordering guarantee outside record initializers; KD-036 specifies written
+general ordering guarantee outside record initializers; BD-036 specifies written
 initializer order for multi-field construction.
 
 
-## Multiple-field records and complete named construction (KED-021 / KD-036)
+## Multiple-field records and complete named construction (BED-021 / BD-036)
 
 ```bowfin
 type Percent = range 0..100;
@@ -1439,7 +1439,7 @@ optional. Complete construction supplies each declared field exactly once.
 Unknown/duplicate entries diagnose their written occurrence before completeness;
 missing fields are listed in declaration order; exact type errors follow written
 initializer order. Equal range bounds confer no nominal conversion, and integer
-literals may now form at exact field boundaries under KD-037. Values copied from another record may initialize
+literals may now form at exact field boundaries under BD-037. Values copied from another record may initialize
 a field of the exact same named-range type; record identities remain distinct.
 
 Declarations preserve canonical FieldIds in declaration order. AST/resolved/HIR
@@ -1448,7 +1448,7 @@ Ownership evaluates every initializer in that written order in the existing
 expression transaction. A late failure restores the complete prepared entry,
 including successful prefix effects, and publishes no destination. Completion
 creates no balancing check, hold or permission and preserves inherited call/write
-holds and recurrence. KD-033 return and KD-034 whole-call transactions still apply.
+holds and recurrence. BD-033 return and BD-034 whole-call transactions still apply.
 Successful construction is one fresh whole-record Move result with no field
 owners, partial state, field provenance/loans or anonymous public locals.
 
@@ -1473,14 +1473,14 @@ Construction and reads are transparent data primitives. No factory, builder,
 getter/setter or executable property is generated or required. Readability,
 constructibility and mutability are separate future authorities. Empty/default/
 positional/spread construction, broader field types, invariants, visibility,
-field borrowing, mutation beyond KD-038, partial moves, reference/temporary/nested projection,
+field borrowing, mutation beyond BD-038, partial moves, reference/temporary/nested projection,
 general contextual propagation, layout, destruction, generalized cyclic inference, execution
 and code generation are not implemented. Ordinary records are checked and lowered,
 not executed or proven. This decision specifies record initializer ordering only;
 it does not settle general argument/operator sequencing or runtime cleanup.
 
 
-## Contextual named-range literal formation (KED-022 / KD-037)
+## Contextual named-range literal formation (BED-022 / BD-037)
 
 A direct signed integer literal may form a Copy value at an existing ordinary
 boundary independently requiring one exact canonical named range: ordinary return,
@@ -1526,7 +1526,7 @@ Verified-body constants and top-level harness literals retain their separate
 representation, eligibility gates, diagnostics, proofs and call-state behavior.
 
 
-## Direct Copy-field assignment (KED-023 / KD-038)
+## Direct Copy-field assignment (BED-023 / BD-038)
 
 ```bowfin
 type Percent = range 0..100;
@@ -1545,7 +1545,7 @@ previously declared mutable owned ordinary record local. Parameter, immutable,
 reference and non-record roots reject; so do temporary/nested projection, compound
 assignment, assignment expressions and reference-field mutation. Canonical field
 selection uses the actual record; exact nominal range typing applies even to equal
-bounds. KD-037 forms direct in-bounds literals at the selected field boundary,
+bounds. BD-037 forms direct in-bounds literals at the selected field boundary,
 without propagating expectations into arbitrary RHS expressions.
 
 The complete RHS evaluates first, with no destination reservation, loan or hold.
@@ -1565,7 +1565,7 @@ loan, handle or terminal permission. Bounds/type failures occur before ownership
 static checker rollback is not a runtime rollback or destruction claim.
 
 Field assignment is a fallthrough statement in branches and stable loop bodies;
-all existing move joins, recurrent frames, backedges, break/continue and KD-033
+all existing move joins, recurrent frames, backedges, break/continue and BD-033
 return restrictions still apply. Only an actual return operand receives terminal
 Move permission, never a preceding assignment RHS. Finite/recurrent visitors traverse
 the RHS only, without a synthetic target use.
@@ -1586,7 +1586,7 @@ invariants, partial borrowing/moves, destruction and generalized cyclic analysis
 remain open under OQ-004/OQ-020/OQ-023/OQ-024/OQ-025/OQ-026.
 
 
-## Copy-field reads through named record references (KED-024 / KD-039)
+## Copy-field reads through named record references (BED-024 / BD-039)
 
 ```bowfin
 type Percent = range 0..100;
@@ -1604,8 +1604,8 @@ See `examples/reference_field_reads.bow` and the intentional live-loan conflict
 in `examples/reference_field_reads_fail.bow`. A directly named ordinary parameter
 or inferred local of exact `&Record` / `&mut Record` type can copy any declared
 named-range field. Field selection uses that referent's canonical record identity;
-result typing is exactly nominal. This extends the historical owned-only KD-035/
-KD-036 read boundary without changing owned reads or KD-038 owned-local writes.
+result typing is exactly nominal. This extends the historical owned-only BD-035/
+BD-036 read boundary without changing owned reads or BD-038 owned-local writes.
 
 The read uses an available handle and its existing validated whole-record loan.
 It preserves the loan's shared/exclusive permission, moves neither handle nor
@@ -1631,7 +1631,7 @@ canonical table relationships before ownership. MIR validates only the structura
 range-valued leaf and containing trees; canonical tables/loans are not its authority.
 Compilation and read-only Program inspection APIs are unchanged.
 
-KD-040 now permits `access.field = value` through named exclusive references.
+BD-040 now permits `access.field = value` through named exclusive references.
 `&view.field`, `(&owner).field`, call-result projection,
 `(*view).field`, nested projections, reference returns, reborrowing/coercions,
 field loans/partial moves, general places and record replacement remain unsupported.
@@ -1639,7 +1639,7 @@ This introduces no execution, runtime accessor/property or proof rule. Ordinary
 functions are checked/lowered only; verified state and harness remain single-field,
 with unchanged battery proofs, diagnostics and independent affine coverage.
 
-## Copy-field assignment through exclusive named record references (KED-025 / KD-040)
+## Copy-field assignment through exclusive named record references (BED-025 / BD-040)
 
 ```bowfin
 fn set_charge(access: &mut Battery, charge: Percent) {
@@ -1654,7 +1654,7 @@ named-range field. Its binding need not be mutable. Field selection uses the
 actual referent's canonical record; RHS typing is exact and nominal, with direct
 contextual literals at the selected field boundary.
 
-KD-038 owned-local writes remain RHS-first; KD-039 named-reference reads remain
+BD-038 owned-local writes remain RHS-first; BD-039 named-reference reads remain
 non-consuming. This new write retains the existing exclusive whole-record loan
 before the entire RHS, then checks the same handle's availability and live lineage
 resolving to the original LoanId before authorizing the write. Same-handle reads
@@ -1676,14 +1676,14 @@ whole-record replacement remain unsupported. Ordinary functions are checked and
 lowered only, without execution or proof. Specialized verified-state/harness
 eligibility, battery proofs and the affine kernel are unchanged.
 
-KED-026 Draft 3 adds the public `execution` module and CLI `run` through bounded
+BED-026 Draft 3 adds the public `execution` module and CLI `run` through bounded
 source/reader preparation into an opaque successful-ownership artifact. Explicit
 frames/continuations execute ordinary MIR, with ordered mutations, immediate
 widened range traps, deterministic fuel, and bound lowering origins. Existing
 check/verify paths retain their behavior. See `../docs/BOUNDED_EXECUTION.md` for
 limits, APIs, host-failure exclusions, and verifier isolation.
 
-## KED-027 private deterministic cleanup (KD-042)
+## BED-027 private deterministic cleanup (BD-042)
 
 The canonical resource catalog, structural internal field types and bounded shared
 cleanup plans live in `hir/resources.rs`. `mir/cleanup.rs` preserves scope entry,
@@ -1711,12 +1711,12 @@ retry, rollback or successful completion. Host bookkeeping disposal is not clean
 During K27-I01, local source edits and static checks are advisory. The four GitHub
 Actions workflows supply build, debug/release, doctest, Rustdoc, CLI and repository
 conformance evidence. The tests workflow reconciles all 1,581 baseline identities
-and 86 new KD-042 identities (76 original plus 10 repair regressions) separately in each profile. See the
-[implementation ledger](../docs/engineering/KED-027-IMPLEMENTATION-LEDGER.md).
+and 86 new BD-042 identities (76 original plus 10 repair regressions) separately in each profile. See the
+[implementation ledger](../docs/engineering/BED-027-IMPLEMENTATION-LEDGER.md).
 
-## KD-043 owned Move replacement
+## BD-043 owned Move replacement
 
-Accepted KED-028 Draft 1 permits exact-typed whole-value replacement of an available
+Accepted BED-028 Draft 1 permits exact-typed whole-value replacement of an available
 mutable owned record local:
 
 ```bowfin
@@ -1746,16 +1746,16 @@ cargo run --locked --bin bowfin -- run examples/owned_replacement.bow --function
 Expected result: `Reading { value: Percent(59) }`. `check` and `verify` continue to
 check ordinary code without executing it or proving its contracts. This adds no
 resource API, user destructor, take/swap, partial move, recoverable propagation,
-general ownership solver or verifier extension. See the [KED-028 implementation
-ledger](../docs/engineering/KED-028-IMPLEMENTATION-LEDGER.md) and [bounded execution
+general ownership solver or verifier extension. See the [BED-028 implementation
+ledger](../docs/engineering/BED-028-IMPLEMENTATION-LEDGER.md) and [bounded execution
 contract](../docs/BOUNDED_EXECUTION.md) for GitHub-executed evidence and terminal
 failure accounting. Greg accepted and human-merged PR #65 as commit
 `72c34593e79e7763ce16f0e18ad99595959a2454`, tree
 `2b9339fbe21f705cb8c5722ff681c34680870490`.
 
-## KD-044 expression temporaries
+## BD-044 expression temporaries
 
-The accepted KED-029 Draft 2 extension gives admitted resource-bearing intermediates explicit
+The accepted BED-029 Draft 2 extension gives admitted resource-bearing intermediates explicit
 bounded machine custody. Canonical source regions survive conditional-initializer
 CFG splits. Owned arguments preserve left-to-right evaluation and transfer once to
 callee parameters; remaining siblings clean in reverse creation order. Aggregates
@@ -1767,18 +1767,18 @@ Resource-bearing execution remains demonstrated through private synthetic fixtur
 this adds no public resource API or source syntax. Temporary borrowing, discarded
 value-returning calls and expanded recurring-while eligibility remain rejected.
 The existing ownership checker, exact correspondence and opaque execution approval
-remain the authority boundary. See the [KED-029 implementation ledger](../docs/engineering/KED-029-IMPLEMENTATION-LEDGER.md)
+remain the authority boundary. See the [BED-029 implementation ledger](../docs/engineering/BED-029-IMPLEMENTATION-LEDGER.md)
 and [bounded execution contract](../docs/BOUNDED_EXECUTION.md). GitHub Actions provides
 compilation and executable evidence; local Rust validation was unavailable because
 of confirmed Work-runtime corruption. Greg accepted and human-merged PR #67 as
 commit `5ce5dc5895efab7ba29a7cbc8e980ce58a7b24ab`, tree
 `e95fb9e69d7554719d86d9662cf22cbf5151b84b`.
 
-## Frozen KED-030 explicit ordinary effects
+## Frozen BED-030 explicit ordinary effects
 
 This branch implements frozen Draft 2 from [Issue #70](https://github.com/gregkrsak/klyxr/issues/70),
 with independent exact-head review and Greg's acceptance pending. It does not change
-KD-008's broader Direction Accepted status. Ordinary Value and NoValue functions
+BD-008's broader Direction Accepted status. Ordinary Value and NoValue functions
 support the same contextual clause for both keyword spellings:
 
 ```bowfin
@@ -1828,10 +1828,10 @@ rejects the three-function transitive edge missing `io`, including under `run`.
 The older `examples/effects.bow` remains future policy illustration and rejects.
 No production resource/effectful API, policy attribute, effect hierarchy, alias,
 polymorphism, unsafe construct, unwinding or effects-aware proof behavior is added.
-See the [implementation ledger](../docs/engineering/KED-030-IMPLEMENTATION-LEDGER.md)
+See the [implementation ledger](../docs/engineering/BED-030-IMPLEMENTATION-LEDGER.md)
 for exact GitHub workflow/commit evidence, predecessor identities and corrections.
 
-## Frozen KED-031 Result phase
+## Frozen BED-031 Result phase
 
 Ordinary functions can return and accept `Result<success: S, failure: F>`, with
 finite exact owned bool/range/record/nested Result payloads. `Ok(value)`,
@@ -1849,7 +1849,7 @@ reference payload, public record Result field, verified/harness Result, `?`, gen
 pattern system, implicit conversion or unwind is introduced. Result output and
 runtime custody remain bounded; tool failures are not source Error values.
 
-## KED-032 explicit Result propagation
+## BED-032 explicit Result propagation
 
 `let value = produce() or return;` is a local-initializer statement inside an
 ordinary Value function returning canonical Result. The initializer independently
@@ -1876,9 +1876,9 @@ Result-valued conditional initializers remain excluded.
 Run `examples/result_propagation.bow` with `--function demo` for
 `Ok(Reading(42))`, or `failure_demo` for `Error(ReadError(1))`. The nominally distinct
 failure types in `result_propagation_mismatch.bow` reject. Full authority, scope,
-conservation and bound evidence is recorded in the KED-032 implementation ledger.
+conservation and bound evidence is recorded in the BED-032 implementation ledger.
 
-## Frozen KED-033 selected trusted Sensor slice
+## Frozen BED-033 selected trusted Sensor slice
 
 The first public trusted Resource family is available only by explicit immutable
 sensor-demo selection. Run the real defining example with:
@@ -1888,13 +1888,13 @@ cargo run --locked --bin bowfin -- run examples/trusted_sensor.bow --function sa
 cargo run --locked --bin bowfin -- audit examples/trusted_sensor.bow --function sample --profile sensor-demo
 ```
 
-See the [trusted Sensor guide](../docs/engineering/KED-033-TRUSTED-SENSOR.md) for the
+See the [trusted Sensor guide](../docs/engineering/BED-033-TRUSTED-SENSOR.md) for the
 five deterministic scenarios, exact Error subsets, grant options, eligibility,
 persistent ExecutionSession API, bounded audit/execution and terminal custody.
-The [ledger](../docs/engineering/KED-033-IMPLEMENTATION-LEDGER.md) and evidence
+The [ledger](../docs/engineering/BED-033-IMPLEMENTATION-LEDGER.md) and evidence
 manifest separate frozen semantics, implementation tests and pending independent
 review. This is not a physical driver, general FFI or a new verifier claim.
-Release is cleanup-only; explicit fallible completion remains deferred to KED-034.
+Release is cleanup-only; explicit fallible completion remains deferred to BED-034.
 
 ## Sentinel reference application
 

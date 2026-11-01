@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Reconcile one complete Cargo profile against the exact KED-031 predecessor."""
+"""Reconcile one complete Cargo profile against the exact BED-027 predecessor."""
 import json
 from pathlib import Path
 import re
 import sys
 
 root = Path(__file__).resolve().parents[1]
-baseline = json.loads((root / "docs/engineering/ked-031-predecessors.json").read_text())
+baseline = json.loads((root / "docs/engineering/bed-027-predecessors.json").read_text())
 targets = []
 groups = []
 current = None
@@ -46,34 +46,23 @@ for target, group in zip(targets, groups):
         assert identity not in actual, "duplicate identity: " + identity
         assert outcome == "ok", identity + ": " + outcome
         actual[identity] = outcome
-manifest = json.loads((root / "docs/engineering/ked-031-evidence.json").read_text())
 expected = {r["id"]: r["outcome"] for r in baseline["identities"]}
-assert len(expected) == 1790, "exact KED-031 predecessor inventory required"
-assert manifest["migrations"] == {}, "no predecessor identity migrations authorized by this implementation"
-additions = manifest["additions"]
-assert len(additions) == len(set(additions)), "duplicate addition"
+assert len(expected) == 1581
 assert all(actual.get(k) == v for k, v in expected.items()), "missing/changed predecessor"
-assert set(actual) - set(expected) == set(additions), "unclassified or missing additions"
-assert len(actual) == sum(summaries) == 1790 + len(additions)
-repair = manifest["repair"]
-reviewed = set(repair["reviewed_additions"])
-new_repair = set(repair["new_identities"])
-assert repair["finding"] == "K31-MR01" and len(reviewed) == 46
-assert len(new_repair) == 10 and len(repair["new_identities"]) == 10
-assert not reviewed & new_repair and set(additions) == reviewed | new_repair
-assert all(actual.get(k) == "ok" for k in reviewed | new_repair)
-assert set(manifest["classifications"]) == set(additions)
-assert set(manifest["classifications"].values()) <= {"ordinary_source", "private_canonical_resources", "primitive_protocol"}
-for adaptation in manifest["fixture_adaptations"]:
-    assert adaptation["affected_identities"] and set(adaptation["affected_identities"]) <= set(expected)
-    assert adaptation["reason"]
-assert manifest["contract_corrections"] == []
-assert actual.get("lib.rs::verify::tests::affine_proofs_match_exhaustive_execution_on_small_domains") == "ok"
+new = sorted(set(actual) - set(expected))
+assert len(new) == 86, f"expected 86 BD-042 tests, found {len(new)}"
+assert all(k.startswith(("lib.rs::hir::resources::", "lib.rs::mir::cleanup::", "lib.rs::execution::machine::cleanup::")) for k in new), "unclassified new test"
+assert len(actual) == sum(summaries) == 1667
+affine = "lib.rs::verify::tests::affine_proofs_match_exhaustive_execution_on_small_domains"
+assert actual.get(affine) == "ok", "missing 1,800-case affine cross-check"
 doctests = [k for k in actual if k.startswith("doctest:")]
 assert len(doctests) == 1 and "CheckedExecutable - compile fail" in doctests[0]
-print(f"KED-031 reconciliation: 1,790 predecessors + {len(additions)} additions = {len(actual)} passed")
-print("identity migrations: 0; failed/ignored/filtered: 0/0/0")
-print("compile-fail authority doctest: passed; affine cross-check: 1,800 cases passed")
-print("evidence lanes:", {d: list(manifest["classifications"].values()).count(d) for d in sorted(set(manifest["classifications"].values()))})
-
-print(f"K31-MR01 reconciliation: 1,836 reviewed identities + {len(new_repair)} repairs = {len(actual)} passed")
+print("BED-027 reconciliation: 1,581 predecessors + 86 new = 1,667 passed")
+print("compile-fail doctest: passed; affine cross-check: 1,800 cases passed")
+print("failed/ignored/filtered: 0/0/0")
+categories = {}
+for identity in new:
+    category = identity.rsplit("::", 1)[0]
+    categories[category] = categories.get(category, 0) + 1
+for category, count in sorted(categories.items()):
+    print(f"new category: {category}: {count}")

@@ -1,6 +1,6 @@
 # Explicit fallible completion: implementation candidate
 
-KED-034 Draft 2 is frozen in Issue #82. This implementation is a candidate on
+BED-034 Draft 2 is frozen in Issue #82. This implementation is a candidate on
 draft PR #83, based on commit `372230df1d359b13d28f5c136130ac031507716a`, tree
 `a646e9576a9b7650ff9a95275f1080b591d06986`. Independent exact-head review and
 Greg's acceptance remain pending. Only a human may merge.
@@ -80,10 +80,10 @@ These commands are for the authorized GitHub Actions environment. No local Rust
 execution is authorized for this task.
 
 ```bash
-cargo run --locked --bin klyxr -- run examples/sensor_finish.bow --function sample --profile sensor-demo
-cargo run --locked --bin klyxr -- run examples/sensor_finish.bow --function sample --profile sensor-demo --scenario finish-io-failure
-cargo run --locked --bin klyxr -- run examples/sensor_finish.bow --function sample --profile sensor-demo --scenario finish-partial-io-failure
-cargo run --locked --bin klyxr -- audit examples/sensor_finish.bow --function sample --profile sensor-demo
+cargo run --locked --bin bowfin -- run examples/sensor_finish.bow --function sample --profile sensor-demo
+cargo run --locked --bin bowfin -- run examples/sensor_finish.bow --function sample --profile sensor-demo --scenario finish-io-failure
+cargo run --locked --bin bowfin -- run examples/sensor_finish.bow --function sample --profile sensor-demo --scenario finish-partial-io-failure
+cargo run --locked --bin bowfin -- audit examples/sensor_finish.bow --function sample --profile sensor-demo
 ```
 
 The CLI integration tests execute these real paths through the built binary.
@@ -101,8 +101,8 @@ runtime prefix. A source-formed receipt and a release-only path establish no fin
 
 ## Evidence and bounds
 
-The ledger and `ked-034-evidence.json` map frozen obligations to code and exact test
-identities. `verify-ked034-tests.py` reconciles every one of the 1,981 predecessors
+The ledger and `bed-034-evidence.json` map frozen obligations to code and exact test
+identities. `verify-bed034-tests.py` reconciles every one of the 1,981 predecessors
 and every classified addition in each complete unfiltered profile. M5 is separately
 preserved and reported before M6. All eight ordinary push/PR workflows remain
 required, including both 1,800-case affine checks and the authority doctest.
@@ -113,11 +113,11 @@ finish receiving growth gets a typed Host cut before dispatch. Fixed-release eve
 and work capacity are prepaid. A physical-token/sole-holder census covers every
 fuel cut for success, immediate Error and partial Error. Diagnostics preserve the
 existing bounded truncated fallback; its minimum size is checked separately.
-Actions logs contain JSON measurements from `verify-ked034-budgets.py` for each
+Actions logs contain JSON measurements from `verify-bed034-budgets.py` for each
 complete profile. These are exact finite-fixture test-build measurements at the
 real production seams, not portable byte constants or a proof over all programs.
 
-The existing predecessor catalog budget oracle remains unchanged. Selected KED-034
+The existing predecessor catalog budget oracle remains unchanged. Selected BED-034
 preparation adds explicit descriptor, protocol-copy, traversal and diagnostic
 terms through the same Context. No project limit or predecessor assertion is
 relaxed. A larger two-Result source fixture explicitly uses the existing supported

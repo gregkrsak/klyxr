@@ -1,4 +1,4 @@
-# KED-027 / KD-042 implementation ledger
+# BED-027 / BD-042 implementation ledger
 
 Issue: https://github.com/gregkrsak/klyxr/issues/60
 Branch: `ked-027-deterministic-scope-cleanup`

@@ -13,7 +13,7 @@ jobs:
       - name: Accept provable battery call
         run: cargo run --locked --quiet --bin bowfin -- verify examples/battery_ok.bow
 
-      - name: Reject unprovable battery call with Klyxr diagnostic
+      - name: Reject unprovable battery call with Bowfin diagnostic
         shell: bash
         run: |
           set +e
