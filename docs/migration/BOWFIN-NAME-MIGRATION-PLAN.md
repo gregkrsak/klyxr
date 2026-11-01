@@ -42,7 +42,6 @@ The following choices bind Draft 2 and later migration work:
 9. `.klx` input and the `klyxr` command alias remain supported until a future accepted BED explicitly removes them. New documentation and generated output use Bowfin identities after their phase gates.
 10. Existing canonical KED and KD files may move to BED and BD filenames and live headings through the manifest. Historical evidence fields retain their original tokens.
 11. The compiler repository and the separate AI-governance repository are distinct authority surfaces. Governance migration requires its own explicitly authorized branch and pull request; compiler-repository work cannot silently change governance authority.
-12. The current repository tree will contain only the Bowfin Gateway 2000-style advertisement after M5. The Klyxr advertisement is removed from the live tree but remains faithfully recoverable from Git history. It is not retained beside the Bowfin advertisement.
 13. Greg remains the sole merge authority during the migration. Base-target enforcement is therefore an explicit, recorded owner merge gate rather than a production-resident workflow or repository-settings control. If merge authority broadens or automated merging is introduced, migration work stops until this control is re-evaluated.
 
 These decisions select the destination. They do not authorize M1 or later implementation.
@@ -58,7 +57,7 @@ These decisions select the destination. They do not authorize M1 or later implem
 | `bowfin-m2-toolchain-identity` | Rust package, crate, binary, and control identities |
 | `bowfin-m3-source-extension` | Source extension, examples, and tooling hooks |
 | `bowfin-m4-docs-governance` | Decisions, documentation, AI context, and coordinated governance work |
-| `bowfin-m5-visual-identity` | Logo, banner, Gateway advertisement, and ephemera metadata |
+| `bowfin-m5-visual-identity` | Logo, banner, diagrams, and supporting visual identity |
 | `bowfin-m6-public-cutover` | External-cutover preparation only; no live switch before production acceptance |
 | `bowfin-m7-stabilization` | Exact-candidate stabilization, evidence, and release recommendation |
 
@@ -103,7 +102,6 @@ The only permitted staging-to-`prod` PR is the separately identified final produ
 | AI context | `KLYXR_CONTEXT.md`, `KLYXR_AI_CONTEXT_BUNDLE.md` | `BOWFIN_CONTEXT.md`, `BOWFIN_AI_CONTEXT_BUNDLE.md` | Rename canonical inputs, generator, and generated output atomically |
 | Repository | `gregkrsak/klyxr` | `gregkrsak/bowfin` | External cutover only |
 | Primary domain | `klyxr.com` | `bowfin-lang.com` | External cutover only; old domain retained |
-| Historical advertisement | `docs/ephemera/klyxr-1994-ad.jpeg` | `docs/ephemera/bowfin-1994-ad.jpeg` | Replace in live tree; original remains in Git history only |
 
 The `KLX` monogram and every spelling or case variant found in the repository or external inventory must receive an explicit row before implementation. `DP`, `OQ`, unrelated variables, units, prose letters, third-party identifiers, and externally defined names remain unchanged unless separately enumerated and accepted.
 
@@ -253,11 +251,10 @@ Coordinate a separately authorized governance-repository branch and PR. Record i
 
 ### M5 — Visual identity
 
-Replace live wordmarks and banners. Create `docs/ephemera/bowfin-1994-ad.jpeg`; remove `docs/ephemera/klyxr-1994-ad.jpeg` from the current tree. Git history remains the sole repository preservation of the original Klyxr raster.
+Replace live wordmarks, banners, and supporting visual identity assets.
 
-The Bowfin advertisement must contain only Bowfin-era branding and commands. Any quantitative test claim is tied in the ephemera index to an exact tested commit/tree and workflow evidence. M7 revalidates the claim against the production candidate; if it is no longer true, the advertisement is regenerated before that candidate is fixed. OCR plus manual inspection verifies raster text.
 
-**Exit:** the live tree contains one coherent Bowfin advertisement and no live Klyxr visual branding.
+**Exit:** the visible project identity is coherent and contains no live Klyxr branding.
 
 ### M6 — External-cutover preparation
 
